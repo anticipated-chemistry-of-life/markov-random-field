@@ -11,7 +11,7 @@ TTree::~TTree() = default;
 
 void TTree::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
-	coretools::TInputFile file(filename, coretools::FileType::Header, ",");
+	coretools::TInputFile file(filename, coretools::FileType::Header);
 
 	if (file.numCols() != 3) {
 		UERROR("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(), " !");
