@@ -1,0 +1,6 @@
+child,parent,length
+human,mammal,1
+chimp,mammal,1
+mosquito,insect,0.2
+mammal,animal,17.9
+denisovan,human,0.1

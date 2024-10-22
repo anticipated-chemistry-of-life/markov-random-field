@@ -11,7 +11,7 @@ TTree::~TTree() = default;
 
 void TTree::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
-	coretools::TInputFile file(filename, coretools::FileType::Header);
+	coretools::TInputFile file(filename, coretools::FileType::Header, ",");
 
 	if (file.numCols() != 3) {
 		UERROR("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(), " !");
@@ -28,10 +28,11 @@ void TTree::load_from_file(const std::string &filename) {
 		double branch_length = file.get<double>(2);
 
 		if (!in_tree(child) && !in_tree(parent)) {
+			// we add the parent
 			_nodes.emplace_back(parent, -1, -1, true);
-			TNode parent_node  = get_node(parent);
-			auto node_iterator = std::find(_nodes.begin(), _nodes.end(), parent_node.id());
-			int parent_index   = node_iterator - _nodes.begin();
+
+			// since we just added the parent, we know that it is at the last element of the vector
+			int parent_index = _nodes.size() - 1;
 			_nodes.emplace_back(child, branch_length, parent_index, false);
 			_nodes[parent_index].addChild(_nodes.size() - 1);
 		} else if (!in_tree(child) && in_tree(parent)) {
