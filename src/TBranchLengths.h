@@ -42,7 +42,7 @@ class TMatrices {
 private:
 	std::vector<TMatrix> _matrices;
 	TMatrix _matrix_alpha;
-	arma::mat _Lambda_c;
+	arma::mat _lambda_c;
 
 public:
 	TMatrices() = default;
@@ -68,7 +68,7 @@ class TBranchLengths {
 private:
 	coretools::Probability _a;
 	coretools::Probability _b;
-	double _Delta;
+	double _delta;
 
 	std::vector<TypeBinBranches> _binned_branch_lengths;
 	TMatrices _matrices;
@@ -87,7 +87,7 @@ public:
 		_matrices.resize(K);
 
 		// calculate Delta
-		_Delta = ((double)_b - (double)_a) / (double)K;
+		_delta = ((double)_b - (double)_a) / (double)K;
 	}
 
 	void set_branch_lengths(std::vector<double> BranchLengths) {
@@ -98,7 +98,7 @@ public:
 		// TODO: assign each branch length to its bin based on the grid
 	}
 
-	void update_branch_lengths(size_t ix_1, size_t ix_2){
+	void update_branch_lengths(size_t ix_1, size_t ix_2) {
 		// ...
 	}
 };

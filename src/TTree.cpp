@@ -4,6 +4,7 @@
 
 #include "TTree.h"
 #include "coretools/Files/TInputFile.h"
+#include "coretools/Main/TLog.h"
 #include <string>
 
 // Tree destructor implementation
@@ -23,22 +24,20 @@ void TTree::load_from_file(const std::string &filename) {
 		// if the child node (column 0) is not in the tree, we add the node,
 		// if the parent is not in the tree, we add the node and set the parent as root
 		// as long as it has no parents.
-		std::string child    = std::string(file.get(0));
-		std::string parent   = std::string(file.get(1));
-		double branch_length = file.get<double>(2);
+		std::string child  = std::string(file.get(0));
+		std::string parent = std::string(file.get(1));
+		auto branch_length = file.get<double>(2);
 
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
 			_nodes.emplace_back(parent, -1, -1, true);
 
 			// since we just added the parent, we know that it is at the last element of the vector
-			int parent_index = _nodes.size() - 1;
+			size_t parent_index = _nodes.size() - 1;
 			_nodes.emplace_back(child, branch_length, parent_index, false);
 			_nodes[parent_index].addChild(_nodes.size() - 1);
 		} else if (!in_tree(child) && in_tree(parent)) {
-			TNode parent_node  = get_node(parent);
-			auto node_iterator = std::find(_nodes.begin(), _nodes.end(), parent_node.id());
-			int parent_index   = node_iterator - _nodes.begin();
+			size_t parent_index = get_node_index(parent);
 			// we add the child node to the tree
 			_nodes.emplace_back(child, branch_length, parent_index, false);
 			_nodes[parent_index].addChild(_nodes.size() - 1);
@@ -46,27 +45,17 @@ void TTree::load_from_file(const std::string &filename) {
 			// if the child node was in the tree but not the parent
 			// that means that the child was a root and is now becoming
 			// a child of the new parent which will be added to the tree
-			TNode child_node   = get_node(child);
-			auto node_iterator = std::find(_nodes.begin(), _nodes.end(), child_node.id());
-			int child_index    = node_iterator - _nodes.begin();
+			size_t child_index = get_node_index(child);
 			_nodes[child_index].set_is_root(false);
 			_nodes[child_index].set_branch_length_to_parent(branch_length);
 			_nodes[child_index].set_parent_index(_nodes.size());
 			_nodes.emplace_back(parent, -1, -1, true);
 			_nodes[_nodes.size() - 1].addChild(child_index);
 		} else {
-			// if both nodes are in the tree we just need to add the child to the parent relationship
-			// and set the different requirements
-			TNode child_node     = get_node(child);
-			TNode parent_node    = get_node(parent);
-			auto child_iterator  = std::find(_nodes.begin(), _nodes.end(), child_node.id());
-			auto parent_iterator = std::find(_nodes.begin(), _nodes.end(), parent_node.id());
-			int child_index      = child_iterator - _nodes.begin();
-			int parent_index     = parent_iterator - _nodes.begin();
-			_nodes[child_index].set_is_root(false);
-			_nodes[child_index].set_branch_length_to_parent(branch_length);
-			_nodes[child_index].set_parent_index(parent_index);
-			_nodes[parent_index].addChild(child_index);
+			// if both nodes were already in the tree that means that the
+			// child would in theroy have two parents which is not allowed
+			// so we throw an error
+			UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
 		}
 	}
 
@@ -91,7 +80,7 @@ void TTree::load_from_file(const std::string &filename) {
 TNode TTree::get_node(std::string &Id) {
 	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), Id);
 	if (node_iterator == _nodes.end()) { UERROR("Node '", Id, "' does not exist !"); }
-	int node_index = node_iterator - _nodes.begin();
+	size_t node_index = node_iterator - _nodes.begin();
 	return _nodes[node_index];
 }
 
@@ -99,4 +88,10 @@ bool TTree::in_tree(const std::string &node) {
 	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), node);
 	if (node_iterator == _nodes.end()) { return false; }
 	return true;
+}
+
+size_t TTree::get_node_index(const std::string &Id) {
+	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), Id);
+	if (node_iterator == _nodes.end()) { UERROR("Node '", Id, "' does not exist !"); }
+	return node_iterator - _nodes.begin();
 }

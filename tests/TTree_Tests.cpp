@@ -6,7 +6,7 @@
 
 TEST(Tree_test, load_tree) {
 	TTree tree;
-	tree.load_from_file("../tests/test_data/loading_tree.csv"); // The path looks weird because we actually run the
+	tree.load_from_file("../tests/test_data/loading_tree.tsv"); // The path looks weird because we actually run the
 	                                                            // tests from the build directory
 	uint roots = tree.count_roots();
 	EXPECT_EQ(roots, 2);

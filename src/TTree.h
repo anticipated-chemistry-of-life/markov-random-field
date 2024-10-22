@@ -4,14 +4,10 @@
 
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
-#include "coretools/Main/TLog.h"
-#include "zconf.h"
-#include <cstddef>
-#include <set>
-#include <string>
-#include <unordered_map>
-#include <vector>
 #include "TBranchLengths.h"
+#include <cstddef>
+#include <string>
+#include <vector>
 
 class TNode {
 private:
@@ -60,6 +56,9 @@ public:
 
 	// Get node by its id
 	TNode get_node(std::string &Id);
+
+	// Get the node index by its id
+	size_t get_node_index(const std::string &Id);
 
 	// Method to load the tree from a file
 	void load_from_file(const std::string &filename);
