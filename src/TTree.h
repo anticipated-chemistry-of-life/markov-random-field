@@ -73,5 +73,12 @@ public:
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 
 	bool in_tree(const std::string &node);
+
+	std::vector<double> get_all_branch_lengths() const {
+		std::vector<double> branch_lengths;
+		branch_lengths.resize(_nodes.size());
+		for (size_t i = 0; i < _nodes.size(); i++) { branch_lengths[i] = _nodes[i].branchLengthToParent(); }
+		return branch_lengths;
+	}
 };
 #endif // METABOLITE_INFERENCE_TREE_H

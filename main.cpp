@@ -29,10 +29,10 @@ void addTask(coretools::TMain &main) {
 // Existing Integration tests
 //---------------------------------------------------------------------------
 
-void addTests(coretools::TMain &){
-    // Use main.addTest to add integration tests
+void addTests(coretools::TMain &) {
+	// Use main.addTest to add integration tests
 
-    // Use main.addTestSuite to add test suites
+	// Use main.addTestSuite to add test suites
 };
 
 //---------------------------------------------------------------------------
@@ -43,7 +43,8 @@ int main(int argc, char *argv[]) {
 	// Create main by providing a program name, a version, an
 	// affiliation, link to repo and contact email
 	coretools::TMain main("acol", "0.1", "University of Fribourg",
-	                      "https://bitbucket.org/wegmannlab/metabolite_inference", "marco.visani@unifr.ch");
+	                      "https://github.com/anticipated-chemistry-of-life/random-markov-field",
+	                      "marco.visani@unifr.ch");
 
 	// add existing tasks and tests
 	addTask(main);

@@ -30,7 +30,7 @@ void TTree::load_from_file(const std::string &filename) {
 
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
-			_nodes.emplace_back(parent, -1, -1, true);
+			_nodes.emplace_back(parent, 0.0, -1, true);
 
 			// since we just added the parent, we know that it is at the last element of the vector
 			size_t parent_index = _nodes.size() - 1;
@@ -49,7 +49,7 @@ void TTree::load_from_file(const std::string &filename) {
 			_nodes[child_index].set_is_root(false);
 			_nodes[child_index].set_branch_length_to_parent(branch_length);
 			_nodes[child_index].set_parent_index(_nodes.size());
-			_nodes.emplace_back(parent, -1, -1, true);
+			_nodes.emplace_back(parent, 0.0, -1, true);
 			_nodes[_nodes.size() - 1].addChild(child_index);
 		} else {
 			// if both nodes were already in the tree that means that the
