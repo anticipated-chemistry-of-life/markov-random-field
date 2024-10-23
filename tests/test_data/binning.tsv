@@ -1,0 +1,5 @@
+child	parent	length
+human	mammal	1
+chimp	mammal	2
+mosquito	insect	3
+mammal	animal	4

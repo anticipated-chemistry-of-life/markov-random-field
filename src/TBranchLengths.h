@@ -9,7 +9,12 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Types/probability.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
+#include <algorithm>
 #include <armadillo>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
 #include <vector>
 
 class TMatrix {
@@ -55,11 +60,14 @@ public:
 
 	void set(double a, double Delta) {
 		// calculate matrix exponential for first bin
-		// P0 = ... TODO complete
+		TMatrix P_0;
+		P_0.set_from_matrix_exponential(_lambda_c * a);
 
 		// calculate matrix exponential of scaling matrix
-		// TODO complete
+		TMatrix _matrix_alpha;
+		_matrix_alpha.set_from_matrix_exponential(_lambda_c * Delta);
 
+		_matrices[0] = P_0;
 		// do recursion
 		for (size_t k = 1; k < _matrices.size(); ++k) {
 			_matrices[k].set_from_product(_matrices[k - 1], _matrix_alpha);
@@ -76,12 +84,36 @@ private:
 	std::vector<TypeBinBranches> _binned_branch_lengths;
 	TMatrices _matrices;
 
+	void _discretize_branch_lengths(std::vector<double> BranchLengths) {
+		// normalize such that they sum to one
+		coretools::normalize(BranchLengths);
+
+		std::vector<double> grid(_matrices.size());
+		for (size_t k = 0; k < _matrices.size(); ++k) { grid[k] = (_a + _delta * (k + 1)); }
+
+		_binned_branch_lengths.resize(BranchLengths.size());
+
+		for (size_t i = 0; i < BranchLengths.size(); ++i) {
+			// find bin
+			auto it = std::lower_bound(grid.begin(), grid.end(), BranchLengths[i]);
+			if (it == grid.end()) {
+				// last bin
+				_binned_branch_lengths[i] = grid.size() - 1;
+			} else {
+				_binned_branch_lengths[i] = std::distance(grid.begin(), it);
+			}
+		}
+	}
+
 public:
-	TBranchLengths() {
+	TBranchLengths() = default;
+
+	void initialize(const std::vector<double> &branch_length) {
 		// read a, b and K from command-line
-		_a       = coretools::instances::parameters().get("a", coretools::Probability(0.0));
-		_b       = coretools::instances::parameters().get("b", coretools::Probability(0.1));
-		size_t K = coretools::instances::parameters().get("K", 100);
+		_a               = coretools::instances::parameters().get("a", coretools::Probability(0.0));
+		double default_b = std::min(1.0, 1.0 / (double)branch_length.size() * 10);
+		_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
+		size_t K         = coretools::instances::parameters().get("K", 100);
 		if (K >= (size_t)std::numeric_limits<TypeBinBranches>::max()) {
 			UERROR("More bins (", K, ") required than type allows (", std::numeric_limits<TypeBinBranches>::max(),
 			       ")! Please decrease K or change type of bins.");
@@ -91,35 +123,13 @@ public:
 
 		// calculate Delta
 		_delta = ((double)_b - (double)_a) / (double)K;
+
+		_discretize_branch_lengths(branch_length);
 	}
 
-	void discretize_branch_lengths(std::vector<double> BranchLengths) {
-		if (_matrices.size() > BranchLengths.size()) {
-			UERROR("Number of bins (", _matrices.size(), ") is larger than number of branch lengths (",
-			       BranchLengths.size(), ")! Please decrease K or provide a bigger graph.");
-		}
-		// normalize such that they sum to one
-		coretools::normalize(BranchLengths);
+	[[nodiscard]] size_t size() const { return _binned_branch_lengths.size(); }
 
-		std::vector<double> grid;
-		double upper_bound = _a;
-		while (upper_bound < _b) {
-			grid.push_back(upper_bound);
-			upper_bound += _delta;
-		}
-		grid.push_back(_b);
-		grid.push_back(std::numeric_limits<double>::max());
-
-		// assign each branch length to its bin
-		_binned_branch_lengths.resize(BranchLengths.size());
-
-		for (size_t i = 0; i < BranchLengths.size(); ++i) {
-			// find bin
-			auto it                   = std::lower_bound(grid.begin(), grid.end(), BranchLengths[i]);
-			size_t bin                = std::distance(grid.begin(), it);
-			_binned_branch_lengths[i] = bin;
-		}
-	}
+	const std::vector<TypeBinBranches> &get_binned_branch_lengths() const { return _binned_branch_lengths; }
 
 	void update_branch_lengths(size_t ix_1, size_t ix_2) {
 		// ...

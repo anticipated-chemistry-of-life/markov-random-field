@@ -44,7 +44,8 @@ public:
 
 class TTree {
 private:
-	std::vector<TNode> _nodes; // a map to store nodes with their ids
+	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
+	std::unordered_map<std::string, size_t> _node_map; // for fast access to nodes
 	std::vector<size_t> _leaves;
 	std::vector<size_t> _roots;
 	std::vector<size_t> _leafIndices;
@@ -55,10 +56,10 @@ public:
 	~TTree();
 
 	// Get node by its id
-	TNode get_node(std::string &Id);
+	TNode get_node(const std::string &Id) const;
 
 	// Get the node index by its id
-	size_t get_node_index(const std::string &Id);
+	size_t get_node_index(const std::string &Id) const;
 
 	// Method to load the tree from a file
 	void load_from_file(const std::string &filename);
@@ -72,7 +73,7 @@ public:
 	// Method to get all the root nodes
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 
-	bool in_tree(const std::string &node);
+	bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
 
 	std::vector<double> get_all_branch_lengths() const {
 		std::vector<double> branch_lengths;

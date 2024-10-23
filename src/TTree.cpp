@@ -5,6 +5,7 @@
 #include "TTree.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
+#include <iostream>
 #include <string>
 
 // Tree destructor implementation
@@ -31,15 +32,18 @@ void TTree::load_from_file(const std::string &filename) {
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
 			_nodes.emplace_back(parent, 0.0, -1, true);
+			_node_map[parent] = _nodes.size() - 1;
 
 			// since we just added the parent, we know that it is at the last element of the vector
 			size_t parent_index = _nodes.size() - 1;
 			_nodes.emplace_back(child, branch_length, parent_index, false);
+			_node_map[child] = _nodes.size() - 1;
 			_nodes[parent_index].addChild(_nodes.size() - 1);
 		} else if (!in_tree(child) && in_tree(parent)) {
 			size_t parent_index = get_node_index(parent);
 			// we add the child node to the tree
 			_nodes.emplace_back(child, branch_length, parent_index, false);
+			_node_map[child] = _nodes.size() - 1;
 			_nodes[parent_index].addChild(_nodes.size() - 1);
 		} else if (in_tree(child) && !in_tree(parent)) {
 			// if the child node was in the tree but not the parent
@@ -50,6 +54,7 @@ void TTree::load_from_file(const std::string &filename) {
 			_nodes[child_index].set_branch_length_to_parent(branch_length);
 			_nodes[child_index].set_parent_index(_nodes.size());
 			_nodes.emplace_back(parent, 0.0, -1, true);
+			_node_map[parent] = _nodes.size() - 1;
 			_nodes[_nodes.size() - 1].addChild(child_index);
 		} else {
 			// if both nodes were already in the tree that means that the
@@ -74,24 +79,18 @@ void TTree::load_from_file(const std::string &filename) {
 
 	coretools::instances::logfile().done();
 	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),
-	                                         " are roots and ", _leaves.size(), " are leaves.");
+	                                         " are roots and ", _leaves.size(), " are leaves and ",
+	                                         _nodes.size() - _roots.size() - _leaves.size(), " are internal nodes.");
 }
 
-TNode TTree::get_node(std::string &Id) {
-	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), Id);
-	if (node_iterator == _nodes.end()) { UERROR("Node '", Id, "' does not exist !"); }
-	size_t node_index = node_iterator - _nodes.begin();
-	return _nodes[node_index];
+TNode TTree::get_node(const std::string &Id) const {
+	auto it = _node_map.find(Id);
+	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist!"); }
+	return _nodes[it->second]; // Retrieve node from vector using the index
 }
 
-bool TTree::in_tree(const std::string &node) {
-	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), node);
-	if (node_iterator == _nodes.end()) { return false; }
-	return true;
-}
-
-size_t TTree::get_node_index(const std::string &Id) {
-	auto node_iterator = std::find(_nodes.begin(), _nodes.end(), Id);
-	if (node_iterator == _nodes.end()) { UERROR("Node '", Id, "' does not exist !"); }
-	return node_iterator - _nodes.begin();
+size_t TTree::get_node_index(const std::string &Id) const {
+	auto it = _node_map.find(Id);
+	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist!"); }
+	return it->second; // Return the index from the map
 }

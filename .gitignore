@@ -55,3 +55,4 @@ Thumbs.db
 *.wmv
 
 .cache/
+tests/test_data/ott_taxonomy.tsv
