@@ -41,7 +41,7 @@ public:
 	};
 
 	void set_to_one(int32_t coordinate) {
-		assert(0 < coordinte && "Coordinate must be positive");
+		assert(0 < coordinate && "Coordinate must be positive");
 		const int32_t abs_coordinate = std::abs(coordinate);
 		auto [found, index]          = _binary_search(abs_coordinate);
 		if (found) {

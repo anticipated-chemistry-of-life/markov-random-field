@@ -49,7 +49,7 @@ class TMatrices {
 private:
 	std::vector<TMatrix> _matrices;
 	TMatrix _matrix_alpha;
-	arma::mat _lambda_c;
+	arma::mat _lambda_c = arma::zeros(2, 2);
 
 public:
 	TMatrices() = default;
@@ -57,6 +57,14 @@ public:
 
 	void resize(size_t NumBins) { _matrices.resize(NumBins); }
 	[[nodiscard]] size_t size() const { return _matrices.size(); }
+	const std::vector<TMatrix> &get_matrices() const { return _matrices; }
+
+	void set_lambda(double mu_c_1, double mu_c_0) {
+		_lambda_c[0] = -mu_c_1;
+		_lambda_c[1] = mu_c_0;
+		_lambda_c[2] = mu_c_1;
+		_lambda_c[3] = -mu_c_0;
+	}
 
 	void set(double a, double Delta) {
 		// calculate matrix exponential for first bin
@@ -107,6 +115,12 @@ private:
 
 public:
 	TBranchLengths() = default;
+	[[nodiscard]] double get_a() const { return (double)_a; }
+	[[nodiscard]] double get_b() const { return (double)_b; }
+	[[nodiscard]] double get_delta() const { return _delta; }
+	void compute_matrices() { _matrices.set((double)_a, _delta); }
+	void set_lambda(double mu_c_1, double mu_c_0) { _matrices.set_lambda(mu_c_1, mu_c_0); }
+	const TMatrices &get_matrices() const { return _matrices; }
 
 	void initialize(const std::vector<double> &branch_length) {
 		// read a, b and K from command-line
