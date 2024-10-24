@@ -1,0 +1,75 @@
+\doxysection{TStorage\+Y.\+h}
+\hypertarget{_t_storage_y_8h_source}{}\label{_t_storage_y_8h_source}\index{src/TStorageY.h@{src/TStorageY.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{//}}
+\DoxyCodeLine{00002\ \textcolor{comment}{//\ Created\ by\ VISANI\ Marco\ on\ 17.10.2024.}}
+\DoxyCodeLine{00003\ \textcolor{comment}{//}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#ifndef\ TSTORAGEY\_H}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#define\ TSTORAGEY\_H}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00008\ \textcolor{comment}{/*\ TStorage\ Y\ is\ the\ class\ to\ store\ a\ single\ value\ Y\ of\ the\ Random\ Markov\ Field}}
+\DoxyCodeLine{00009\ \textcolor{comment}{\ *\ We\ store\ in\ a\ single\ 64\ bits\ integer\ (8\ bytes)\ the\ following\ information:}}
+\DoxyCodeLine{00010\ \textcolor{comment}{\ *\ -\/\ the\ first\ 16\ bits\ are\ the\ counter\ of\ the\ number\ of\ times\ the\ element\ was\ a\ one\ in\ the\ MCMC}}
+\DoxyCodeLine{00011\ \textcolor{comment}{\ *\ -\/\ the\ 17th\ (position\ 16\ )\ is\ the\ current\ state\ of\ the\ element\ (0\ or\ 1)}}
+\DoxyCodeLine{00012\ \textcolor{comment}{\ *\ -\/\ the\ rest\ is\ the\ position\ of\ the\ element\ Y\ in\ the\ multidimensional\ linearized\ Y\ vector\ of\ leaves}}
+\DoxyCodeLine{00013\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00014\ }
+\DoxyCodeLine{00015\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_storage_y}{TStorageY}}\ \{}
+\DoxyCodeLine{00016\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00017\ \ \ \ \ uint64\_t\ \_value\ =\ 0;}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00019\ \ \ \ \ \textcolor{comment}{/*\ to\ take\ the\ last\ 47\ bits\ of\ our\ 64\ bits\ integer\ we\ apply}}
+\DoxyCodeLine{00020\ \textcolor{comment}{\ \ \ \ \ *\ a\ mask\ of\ 17\ zeros\ and\ 47\ ones.\ This\ is\ done}}
+\DoxyCodeLine{00021\ \textcolor{comment}{\ \ \ \ \ *\ by\ shifting\ 1\ to\ the\ left\ by\ 47\ and\ subtracting\ 1}}
+\DoxyCodeLine{00022\ \textcolor{comment}{\ \ \ \ \ */}}
+\DoxyCodeLine{00023\ \ \ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint64\_t\ \_counter\_mask\ \ \ \ =\ \string~((1ULL\ <<\ 48)\ -\/\ 1);}
+\DoxyCodeLine{00024\ \ \ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint64\_t\ \_state\_mask\ \ \ \ \ \ =\ (1ULL\ <<\ 47);}
+\DoxyCodeLine{00025\ \ \ \ \ \textcolor{keyword}{static}\ \textcolor{keyword}{constexpr}\ uint64\_t\ \_coordinate\_mask\ =\ (1ULL\ <<\ 47)\ -\/\ 1;}
+\DoxyCodeLine{00026\ }
+\DoxyCodeLine{00027\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00028\ \ \ \ \ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00029\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}(\textcolor{keyword}{const}\ uint64\_t\ coordinate)\ \{}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ we\ construct\ a\ TStorageY,\ that\ means\ that\ by\ default\ we\ will\ set\ the\ state\ to\ 1}}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ with\ coordinate\ "{}coordinate"{}}}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ set\_coordinate(coordinate);}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ set\_state(\textcolor{keyword}{true});}
+\DoxyCodeLine{00034\ \ \ \ \ \}}
+\DoxyCodeLine{00035\ \ \ \ \ [[nodiscard]]\ uint64\_t\ value()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_value;\ \};}
+\DoxyCodeLine{00036\ }
+\DoxyCodeLine{00037\ \ \ \ \ uint64\_t\ get\_coordinate()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_value\ \&\ \_coordinate\_mask;\ \};}
+\DoxyCodeLine{00038\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_coordinate(\textcolor{keyword}{const}\ uint64\_t\ coordinate)\ \{}
+\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \_value\ =\ (\_value\ \&\ \string~\_coordinate\_mask)\ |\ (coordinate\ \&\ \_coordinate\_mask);}
+\DoxyCodeLine{00040\ \ \ \ \ \}}
+\DoxyCodeLine{00041\ }
+\DoxyCodeLine{00042\ \ \ \ \ \textcolor{keywordtype}{bool}\ is\_one()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ (\_value\ \&\ \_state\_mask)\ >>\ 47;\ \}}
+\DoxyCodeLine{00043\ }
+\DoxyCodeLine{00044\ \ \ \ \ \textcolor{comment}{/*\ The\ state\ is\ stored\ in\ the\ 17th\ bit\ of\ our\ 64\ bits\ integer.}}
+\DoxyCodeLine{00045\ \textcolor{comment}{\ \ \ \ \ *\ If\ set\_state(true)\ then\ we\ set\ the\ 17th\ bit\ to\ 1.}}
+\DoxyCodeLine{00046\ \textcolor{comment}{\ \ \ \ \ *\ If\ set\_state(false)\ then\ we\ set\ the\ 17th\ bit\ to\ 0.}}
+\DoxyCodeLine{00047\ \textcolor{comment}{\ \ \ \ \ */}}
+\DoxyCodeLine{00048\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_state(\textcolor{keyword}{const}\ \textcolor{keywordtype}{bool}\ state)\ \{\ \_value\ =\ (\_value\ \&\ \string~\_state\_mask)\ |\ (\textcolor{keyword}{static\_cast<}uint64\_t\textcolor{keyword}{>}(state))\ <<\ 47;\ \}}
+\DoxyCodeLine{00049\ }
+\DoxyCodeLine{00050\ \ \ \ \ uint16\_t\ get\_counter()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_value\ >>\ 48;\ \}}
+\DoxyCodeLine{00051\ }
+\DoxyCodeLine{00052\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_counter(\textcolor{keyword}{const}\ uint16\_t\ counter)\ \{}
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \_value\ =\ (\string~\_counter\_mask\ \&\ \_value)\ |\ (\textcolor{keyword}{static\_cast<}uint64\_t\textcolor{keyword}{>}(counter)\ <<\ 48);}
+\DoxyCodeLine{00054\ \ \ \ \ \}}
+\DoxyCodeLine{00055\ }
+\DoxyCodeLine{00056\ \ \ \ \ \textcolor{keywordtype}{void}\ update\_counter()\ \{}
+\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (is\_one())\ \{\ set\_counter(get\_counter()\ +\ 1);\ \}}
+\DoxyCodeLine{00058\ \ \ \ \ \}}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00060\ \ \ \ \ \textcolor{comment}{/*\ we\ reset\ the\ counter\ (this\ will\ be\ used\ after\ the\ burn-\/in\ period\ of\ the\ MCMC)\ */}}
+\DoxyCodeLine{00061\ \ \ \ \ \textcolor{keywordtype}{void}\ reset\_counter()\ \{\ set\_counter(0);\ \}}
+\DoxyCodeLine{00062\ }
+\DoxyCodeLine{00063\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator<(\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}\ \&right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ <\ right.get\_coordinate();\ \}}
+\DoxyCodeLine{00064\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator<(\textcolor{keyword}{const}\ uint64\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ <\ right;\ \}}
+\DoxyCodeLine{00065\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator==(\textcolor{keyword}{const}\ uint64\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ ==\ right;\ \}}
+\DoxyCodeLine{00066\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator!=(\textcolor{keyword}{const}\ uint64\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ !=\ right;\ \}}
+\DoxyCodeLine{00067\ \};}
+\DoxyCodeLine{00068\ }
+\DoxyCodeLine{00069\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEY\_H}}
+
+\end{DoxyCode}

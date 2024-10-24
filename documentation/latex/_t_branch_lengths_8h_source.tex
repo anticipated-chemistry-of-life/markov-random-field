@@ -1,0 +1,160 @@
+\doxysection{TBranch\+Lengths.\+h}
+\hypertarget{_t_branch_lengths_8h_source}{}\label{_t_branch_lengths_8h_source}\index{src/TBranchLengths.h@{src/TBranchLengths.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{//}}
+\DoxyCodeLine{00002\ \textcolor{comment}{//\ Created\ by\ madleina\ on\ 22.10.24.}}
+\DoxyCodeLine{00003\ \textcolor{comment}{//}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#ifndef\ ACOL\_TBRANCHLENGTHS\_H}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#define\ ACOL\_TBRANCHLENGTHS\_H}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}Types.h"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}coretools/Main/TParameters.h"{}}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ "{}coretools/Types/probability.h"{}}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}coretools/algorithms.h"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}coretools/devtools.h"{}}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ <algorithm>}}
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ <armadillo>}}
+\DoxyCodeLine{00015\ \textcolor{preprocessor}{\#include\ <cstddef>}}
+\DoxyCodeLine{00016\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00017\ \textcolor{preprocessor}{\#include\ <iostream>}}
+\DoxyCodeLine{00018\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00019\ }
+\DoxyCodeLine{00020\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \{}
+\DoxyCodeLine{00021\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00022\ \ \ \ \ arma::mat\ \_mat;}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00024\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00025\ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}()\ \{\ \_mat.zeros(2,\ 2);\ \}}
+\DoxyCodeLine{00026\ }
+\DoxyCodeLine{00027\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_from\_matrix\_exponential(\textcolor{keyword}{const}\ arma::mat\ \&Lambda)\ \{\ \_mat\ =\ arma::expmat(Lambda);\ \}}
+\DoxyCodeLine{00028\ \ \ \ \ arma::mat\ get\_matrix()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_mat;\ \}}
+\DoxyCodeLine{00029\ }
+\DoxyCodeLine{00030\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_from\_product(\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \&First,\ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \&Second)\ \{}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ do\ matrix\ multiplication}}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ \_mat(0,0)\ =\ First(0,0)\ *\ Second(0,0)\ +\ First(0,1)\ *\ Second(1,0)}}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \_mat[0]\ =\ First[0]\ *\ Second[0]\ +\ First[2]\ *\ Second[1];}
+\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \_mat[2]\ =\ 1.0\ -\/\ \_mat[0];}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \_mat[1]\ =\ First[1]\ *\ Second[0]\ +\ First[3]\ *\ Second[1];}
+\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \_mat[3]\ =\ 1.0\ -\/\ \_mat[1];}
+\DoxyCodeLine{00037\ \ \ \ \ \}}
+\DoxyCodeLine{00038\ }
+\DoxyCodeLine{00039\ \ \ \ \ \textcolor{keyword}{constexpr}\ \textcolor{keywordtype}{double}\ operator()(\textcolor{keywordtype}{size\_t}\ i,\ \textcolor{keywordtype}{size\_t}\ j)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ get\ element\ from\ matrix}}
+\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ 0\ \ 2}}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ 1\ \ 3}}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \_mat[i\ +\ 2\ *\ j];}
+\DoxyCodeLine{00044\ \ \ \ \ \}}
+\DoxyCodeLine{00045\ }
+\DoxyCodeLine{00046\ \ \ \ \ \textcolor{keywordtype}{double}\ operator[](\textcolor{keywordtype}{size\_t}\ i)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_mat[i];\ \}}
+\DoxyCodeLine{00047\ \};}
+\DoxyCodeLine{00048\ }
+\DoxyCodeLine{00049\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \{}
+\DoxyCodeLine{00050\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00051\ \ \ \ \ std::vector<TMatrix>\ \_matrices;}
+\DoxyCodeLine{00052\ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \_matrix\_alpha;}
+\DoxyCodeLine{00053\ \ \ \ \ arma::mat\ \_lambda\_c\ =\ arma::zeros(2,\ 2);}
+\DoxyCodeLine{00054\ }
+\DoxyCodeLine{00055\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00056\ \ \ \ \ \mbox{\hyperlink{class_t_matrices}{TMatrices}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00057\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_matrices}{TMatrices}}(\textcolor{keywordtype}{size\_t}\ NumBins)\ \{\ resize(NumBins);\ \}}
+\DoxyCodeLine{00058\ }
+\DoxyCodeLine{00059\ \ \ \ \ \textcolor{keywordtype}{void}\ resize(\textcolor{keywordtype}{size\_t}\ NumBins)\ \{\ \_matrices.resize(NumBins);\ \}}
+\DoxyCodeLine{00060\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_matrices.size();\ \}}
+\DoxyCodeLine{00061\ \ \ \ \ \textcolor{keyword}{const}\ std::vector<TMatrix>\ \&get\_matrices()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_matrices;\ \}}
+\DoxyCodeLine{00062\ }
+\DoxyCodeLine{00063\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_lambda(\textcolor{keywordtype}{double}\ mu\_c\_1,\ \textcolor{keywordtype}{double}\ mu\_c\_0)\ \{}
+\DoxyCodeLine{00064\ \ \ \ \ \ \ \ \ \_lambda\_c[0]\ =\ -\/mu\_c\_1;}
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \_lambda\_c[1]\ =\ mu\_c\_0;}
+\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \_lambda\_c[2]\ =\ mu\_c\_1;}
+\DoxyCodeLine{00067\ \ \ \ \ \ \ \ \ \_lambda\_c[3]\ =\ -\/mu\_c\_0;}
+\DoxyCodeLine{00068\ \ \ \ \ \}}
+\DoxyCodeLine{00069\ }
+\DoxyCodeLine{00070\ \ \ \ \ \textcolor{keywordtype}{void}\ set(\textcolor{keywordtype}{double}\ a,\ \textcolor{keywordtype}{double}\ Delta)\ \{}
+\DoxyCodeLine{00071\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ calculate\ matrix\ exponential\ for\ first\ bin}}
+\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ P\_0;}
+\DoxyCodeLine{00073\ \ \ \ \ \ \ \ \ P\_0.set\_from\_matrix\_exponential(\_lambda\_c\ *\ a);}
+\DoxyCodeLine{00074\ }
+\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ calculate\ matrix\ exponential\ of\ scaling\ matrix}}
+\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \_matrix\_alpha;}
+\DoxyCodeLine{00077\ \ \ \ \ \ \ \ \ \_matrix\_alpha.set\_from\_matrix\_exponential(\_lambda\_c\ *\ Delta);}
+\DoxyCodeLine{00078\ }
+\DoxyCodeLine{00079\ \ \ \ \ \ \ \ \ \_matrices[0]\ =\ P\_0;}
+\DoxyCodeLine{00080\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ do\ recursion}}
+\DoxyCodeLine{00081\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{size\_t}\ k\ =\ 1;\ k\ <\ \_matrices.size();\ ++k)\ \{}
+\DoxyCodeLine{00082\ \ \ \ \ \ \ \ \ \ \ \ \ \_matrices[k].set\_from\_product(\_matrices[k\ -\/\ 1],\ \_matrix\_alpha);}
+\DoxyCodeLine{00083\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00084\ \ \ \ \ \}}
+\DoxyCodeLine{00085\ \};}
+\DoxyCodeLine{00086\ }
+\DoxyCodeLine{00087\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_branch_lengths}{TBranchLengths}}\ \{}
+\DoxyCodeLine{00088\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00089\ \ \ \ \ coretools::Probability\ \_a;}
+\DoxyCodeLine{00090\ \ \ \ \ coretools::Probability\ \_b;}
+\DoxyCodeLine{00091\ \ \ \ \ \textcolor{keywordtype}{double}\ \_delta;}
+\DoxyCodeLine{00092\ }
+\DoxyCodeLine{00093\ \ \ \ \ std::vector<TypeBinBranches>\ \_binned\_branch\_lengths;}
+\DoxyCodeLine{00094\ \ \ \ \ \mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \_matrices;}
+\DoxyCodeLine{00095\ }
+\DoxyCodeLine{00096\ \ \ \ \ \textcolor{keywordtype}{void}\ \_discretize\_branch\_lengths(std::vector<double>\ BranchLengths)\ \{}
+\DoxyCodeLine{00097\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ normalize\ such\ that\ they\ sum\ to\ one}}
+\DoxyCodeLine{00098\ \ \ \ \ \ \ \ \ coretools::normalize(BranchLengths);}
+\DoxyCodeLine{00099\ }
+\DoxyCodeLine{00100\ \ \ \ \ \ \ \ \ std::vector<double>\ grid(\_matrices.size());}
+\DoxyCodeLine{00101\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{size\_t}\ k\ =\ 0;\ k\ <\ \_matrices.size();\ ++k)\ \{\ grid[k]\ =\ (\_a\ +\ \_delta\ *\ (k\ +\ 1));\ \}}
+\DoxyCodeLine{00102\ }
+\DoxyCodeLine{00103\ \ \ \ \ \ \ \ \ \_binned\_branch\_lengths.resize(BranchLengths.size());}
+\DoxyCodeLine{00104\ }
+\DoxyCodeLine{00105\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{size\_t}\ i\ =\ 0;\ i\ <\ BranchLengths.size();\ ++i)\ \{}
+\DoxyCodeLine{00106\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ find\ bin}}
+\DoxyCodeLine{00107\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ it\ =\ std::lower\_bound(grid.begin(),\ grid.end(),\ BranchLengths[i]);}
+\DoxyCodeLine{00108\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (it\ ==\ grid.end())\ \{}
+\DoxyCodeLine{00109\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ last\ bin}}
+\DoxyCodeLine{00110\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_binned\_branch\_lengths[i]\ =\ grid.size()\ -\/\ 1;}
+\DoxyCodeLine{00111\ \ \ \ \ \ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{00112\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_binned\_branch\_lengths[i]\ =\ std::distance(grid.begin(),\ it);}
+\DoxyCodeLine{00113\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00114\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00115\ \ \ \ \ \}}
+\DoxyCodeLine{00116\ }
+\DoxyCodeLine{00117\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00118\ \ \ \ \ \mbox{\hyperlink{class_t_branch_lengths}{TBranchLengths}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00119\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{double}\ get\_a()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ (\textcolor{keywordtype}{double})\_a;\ \}}
+\DoxyCodeLine{00120\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{double}\ get\_b()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ (\textcolor{keywordtype}{double})\_b;\ \}}
+\DoxyCodeLine{00121\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{double}\ get\_delta()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_delta;\ \}}
+\DoxyCodeLine{00122\ \ \ \ \ \textcolor{keywordtype}{void}\ compute\_matrices()\ \{\ \_matrices.set((\textcolor{keywordtype}{double})\_a,\ \_delta);\ \}}
+\DoxyCodeLine{00123\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_lambda(\textcolor{keywordtype}{double}\ mu\_c\_1,\ \textcolor{keywordtype}{double}\ mu\_c\_0)\ \{\ \_matrices.set\_lambda(mu\_c\_1,\ mu\_c\_0);\ \}}
+\DoxyCodeLine{00124\ \ \ \ \ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \&get\_matrices()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_matrices;\ \}}
+\DoxyCodeLine{00125\ }
+\DoxyCodeLine{00126\ \ \ \ \ \textcolor{keywordtype}{void}\ initialize(\textcolor{keyword}{const}\ std::vector<double>\ \&branch\_length)\ \{}
+\DoxyCodeLine{00127\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ read\ a,\ b\ and\ K\ from\ command-\/line}}
+\DoxyCodeLine{00128\ \ \ \ \ \ \ \ \ \_a\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ coretools::instances::parameters().get(\textcolor{stringliteral}{"{}a"{}},\ coretools::Probability(0.0));}
+\DoxyCodeLine{00129\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{double}\ default\_b\ =\ std::min(1.0,\ 1.0\ /\ (\textcolor{keywordtype}{double})branch\_length.size()\ *\ 10);}
+\DoxyCodeLine{00130\ \ \ \ \ \ \ \ \ \_b\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ coretools::instances::parameters().get(\textcolor{stringliteral}{"{}b"{}},\ coretools::Probability(default\_b));}
+\DoxyCodeLine{00131\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ K\ \ \ \ \ \ \ \ \ =\ coretools::instances::parameters().get(\textcolor{stringliteral}{"{}K"{}},\ 100);}
+\DoxyCodeLine{00132\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (K\ >=\ (\textcolor{keywordtype}{size\_t})std::numeric\_limits<TypeBinBranches>::max())\ \{}
+\DoxyCodeLine{00133\ \ \ \ \ \ \ \ \ \ \ \ \ UERROR(\textcolor{stringliteral}{"{}More\ bins\ ("{}},\ K,\ \textcolor{stringliteral}{"{})\ required\ than\ type\ allows\ ("{}},\ std::numeric\_limits<TypeBinBranches>::max(),}
+\DoxyCodeLine{00134\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{stringliteral}{"{})!\ Please\ decrease\ K\ or\ change\ type\ of\ bins."{}});}
+\DoxyCodeLine{00135\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00136\ }
+\DoxyCodeLine{00137\ \ \ \ \ \ \ \ \ \_matrices.resize(K);}
+\DoxyCodeLine{00138\ }
+\DoxyCodeLine{00139\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ calculate\ Delta}}
+\DoxyCodeLine{00140\ \ \ \ \ \ \ \ \ \_delta\ =\ ((double)\_b\ -\/\ (double)\_a)\ /\ (\textcolor{keywordtype}{double})K;}
+\DoxyCodeLine{00141\ }
+\DoxyCodeLine{00142\ \ \ \ \ \ \ \ \ \_discretize\_branch\_lengths(branch\_length);}
+\DoxyCodeLine{00143\ \ \ \ \ \}}
+\DoxyCodeLine{00144\ }
+\DoxyCodeLine{00145\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_binned\_branch\_lengths.size();\ \}}
+\DoxyCodeLine{00146\ }
+\DoxyCodeLine{00151\ \ \ \ \ \textcolor{keyword}{const}\ std::vector<TypeBinBranches>\ \&\mbox{\hyperlink{class_t_branch_lengths_a4ae912ce166b50a14aeef7802db15b25}{get\_binned\_branch\_lengths}}()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_binned\_branch\_lengths;\ \}}
+\DoxyCodeLine{00152\ }
+\DoxyCodeLine{00153\ \ \ \ \ \textcolor{keywordtype}{void}\ update\_branch\_lengths(\textcolor{keywordtype}{size\_t}\ ix\_1,\ \textcolor{keywordtype}{size\_t}\ ix\_2)\ \{}
+\DoxyCodeLine{00154\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ ...}}
+\DoxyCodeLine{00155\ \ \ \ \ \}}
+\DoxyCodeLine{00156\ \};}
+\DoxyCodeLine{00157\ }
+\DoxyCodeLine{00158\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ ACOL\_TBRANCHLENGTHS\_H}}
+
+\end{DoxyCode}

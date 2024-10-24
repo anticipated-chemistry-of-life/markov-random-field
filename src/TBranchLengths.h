@@ -144,6 +144,10 @@ public:
 
 	[[nodiscard]] size_t size() const { return _binned_branch_lengths.size(); }
 
+	/**
+	 * Get the binned branch lengths
+	 * @return vector of binned branch lengths
+	 */
 	const std::vector<TypeBinBranches> &get_binned_branch_lengths() const { return _binned_branch_lengths; }
 
 	void update_branch_lengths(size_t ix_1, size_t ix_2) {

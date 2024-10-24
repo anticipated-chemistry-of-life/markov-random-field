@@ -1,0 +1,55 @@
+\doxysection{TCore.\+h}
+\hypertarget{_t_core_8h_source}{}\label{_t_core_8h_source}\index{src/TCore.h@{src/TCore.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{/*}}
+\DoxyCodeLine{00002\ \textcolor{comment}{\ *\ TExampleTask.h}}
+\DoxyCodeLine{00003\ \textcolor{comment}{\ *}}
+\DoxyCodeLine{00004\ \textcolor{comment}{\ *\ \ Created\ on:\ Nov\ 30,\ 2020}}
+\DoxyCodeLine{00005\ \textcolor{comment}{\ *\ \ \ \ \ \ Author:\ phaentu}}
+\DoxyCodeLine{00006\ \textcolor{comment}{\ */}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#ifndef\ TEXAMPLETASK\_H\_}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#define\ TEXAMPLETASK\_H\_}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ "{}TStorageYVector.h"{}}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ "{}TTree.h"{}}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ "{}coretools/Main/TParameters.h"{}}}
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ "{}coretools/Main/TTask.h"{}}}
+\DoxyCodeLine{00015\ \textcolor{preprocessor}{\#include\ "{}coretools/Types/TStringHash.h"{}}}
+\DoxyCodeLine{00016\ \textcolor{preprocessor}{\#include\ "{}stattools/DAG/TDAGBuilder.h"{}}}
+\DoxyCodeLine{00017\ \textcolor{preprocessor}{\#include\ "{}stattools/ParametersObservations/TNodeBase.h"{}}}
+\DoxyCodeLine{00018\ \textcolor{preprocessor}{\#include\ "{}stattools/ParametersObservations/TObservation.h"{}}}
+\DoxyCodeLine{00019\ \textcolor{preprocessor}{\#include\ "{}stattools/ParametersObservations/TParameter.h"{}}}
+\DoxyCodeLine{00020\ \textcolor{preprocessor}{\#include\ "{}stattools/ParametersObservations/spec.h"{}}}
+\DoxyCodeLine{00021\ \textcolor{preprocessor}{\#include\ "{}stattools/Priors/TPriorBernoulli.h"{}}}
+\DoxyCodeLine{00022\ \textcolor{preprocessor}{\#include\ "{}stattools/Priors/TPriorExponential.h"{}}}
+\DoxyCodeLine{00023\ \textcolor{preprocessor}{\#include\ "{}stattools/Priors/TPriorNormal.h"{}}}
+\DoxyCodeLine{00024\ \textcolor{preprocessor}{\#include\ "{}stattools/Priors/TPriorPoisson.h"{}}}
+\DoxyCodeLine{00025\ \textcolor{preprocessor}{\#include\ <memory>}}
+\DoxyCodeLine{00026\ }
+\DoxyCodeLine{00027\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_core}{TCore}}\ \{}
+\DoxyCodeLine{00028\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00029\ \ \ \ \ \textcolor{keywordtype}{void}\ infer()\{\};}
+\DoxyCodeLine{00030\ \};}
+\DoxyCodeLine{00031\ }
+\DoxyCodeLine{00032\ \textcolor{comment}{//-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/}}
+\DoxyCodeLine{00033\ \textcolor{comment}{//\ Tasks}}
+\DoxyCodeLine{00034\ \textcolor{comment}{//-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/-\/}}
+\DoxyCodeLine{00035\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_task__infer}{TTask\_infer}}\ :\ \textcolor{keyword}{public}\ coretools::TTask\ \{}
+\DoxyCodeLine{00036\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00037\ \ \ \ \ \textcolor{comment}{//\ constructor\ must\ fill\ explanation\ shown\ to\ users}}
+\DoxyCodeLine{00038\ \ \ \ \ \mbox{\hyperlink{class_t_task__infer}{TTask\_infer}}()\ :\ coretools::TTask(\textcolor{stringliteral}{"{}Inferring\ metabolite\ presence\ in\ all\ the\ species\ there\ are\ on\ this\ planet!!"{}})\{\};}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \ \ \ \ \textcolor{comment}{//\ a\ task\ must\ overload\ the\ run\ function\ that\ takes\ two\ arguments:}}
+\DoxyCodeLine{00041\ \ \ \ \ \textcolor{comment}{//\ coretools::TParameters\ \&\ Parameters,\ coretools::TLog*\ Logfile\ Usually,\ a}}
+\DoxyCodeLine{00042\ \ \ \ \ \textcolor{comment}{//\ task\ creates\ an\ object\ and\ calls\ its\ function}}
+\DoxyCodeLine{00043\ \ \ \ \ \textcolor{keywordtype}{void}\ run()\textcolor{keyword}{\ override\ }\{}
+\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{class_t_core}{TCore}}\ core;}
+\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ core.infer();}
+\DoxyCodeLine{00046\ \ \ \ \ \};}
+\DoxyCodeLine{00047\ \};}
+\DoxyCodeLine{00048\ }
+\DoxyCodeLine{00049\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{/*\ TEXAMPLETASK\_H\_\ */}\textcolor{preprocessor}{}}
+
+\end{DoxyCode}

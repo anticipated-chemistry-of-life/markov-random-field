@@ -1,0 +1,46 @@
+\doxysection{TStorage\+Z.\+h}
+\hypertarget{_t_storage_z_8h_source}{}\label{_t_storage_z_8h_source}\index{src/TStorageZ.h@{src/TStorageZ.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{//}}
+\DoxyCodeLine{00002\ \textcolor{comment}{//\ Created\ by\ VISANI\ Marco\ on\ 17.10.2024.}}
+\DoxyCodeLine{00003\ \textcolor{comment}{//}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#ifndef\ TSTORAGEZ\_H}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#define\ TSTORAGEZ\_H}}
+\DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ <cmath>}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <cstdint>}}
+\DoxyCodeLine{00009\ }
+\DoxyCodeLine{00010\ \textcolor{comment}{//\ TODO\ :\ Change\ from\ uint32\ to\ int32\ with\ sign\ checking}}
+\DoxyCodeLine{00011\ }
+\DoxyCodeLine{00012\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_storage_z}{TStorageZ}}\ \{}
+\DoxyCodeLine{00013\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00014\ \ \ \ \ int32\_t\ \_coordinate\ =\ 0;}
+\DoxyCodeLine{00015\ }
+\DoxyCodeLine{00016\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00017\ \ \ \ \ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00018\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}(\textcolor{keyword}{const}\ int32\_t\ coordinate)\ \{}
+\DoxyCodeLine{00019\ \ \ \ \ \ \ \ \ set\_coordinate(coordinate);}
+\DoxyCodeLine{00020\ \ \ \ \ \ \ \ \ set\_state(\textcolor{keyword}{true});}
+\DoxyCodeLine{00021\ \ \ \ \ \}}
+\DoxyCodeLine{00022\ \ \ \ \ [[nodiscard]]\ uint32\_t\ get\_coordinate()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ std::abs(\_coordinate);\ \};}
+\DoxyCodeLine{00023\ }
+\DoxyCodeLine{00024\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_coordinate(\textcolor{keyword}{const}\ int32\_t\ coordinate)\ \{\ \_coordinate\ =\ coordinate;\ \}}
+\DoxyCodeLine{00025\ }
+\DoxyCodeLine{00026\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{bool}\ is\_one()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ !std::signbit(\_coordinate);\ \}\ \textcolor{comment}{//\ this\ should\ be\ ok}}
+\DoxyCodeLine{00027\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_state(\textcolor{keyword}{const}\ \textcolor{keywordtype}{bool}\ state)\ \{}
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ we\ want\ to\ set\ the\ state\ this\ is\ given}}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ so\ if\ the\ state\ is\ false,\ the\ coordinate\ should\ be\ negative}}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ the\ state\ is\ true,\ we\ set\ the\ state\ to\ positive}}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \_coordinate\ =\ (state\ *\ 2\ -\/\ 1)\ *\ std::abs(\_coordinate);}
+\DoxyCodeLine{00032\ \ \ \ \ \}}
+\DoxyCodeLine{00033\ }
+\DoxyCodeLine{00034\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator<(\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}\ \&right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ <\ right.get\_coordinate();\ \}}
+\DoxyCodeLine{00035\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator<(\textcolor{keyword}{const}\ uint32\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ <\ right;\ \}}
+\DoxyCodeLine{00036\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator==(\textcolor{keyword}{const}\ uint32\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ ==\ right;\ \}}
+\DoxyCodeLine{00037\ \ \ \ \ \textcolor{keywordtype}{bool}\ operator!=(\textcolor{keyword}{const}\ uint32\_t\ right)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ get\_coordinate()\ !=\ right;\ \}}
+\DoxyCodeLine{00038\ \};}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEZ\_H}}
+
+\end{DoxyCode}
