@@ -25,6 +25,7 @@ public:
 	TMatrix() { _mat.zeros(2, 2); }
 
 	void set_from_matrix_exponential(const arma::mat &Lambda) { _mat = arma::expmat(Lambda); }
+	arma::mat get_matrix() const { return _mat; }
 
 	void set_from_product(const TMatrix &First, const TMatrix &Second) {
 		// do matrix multiplication
