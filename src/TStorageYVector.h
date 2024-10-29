@@ -5,7 +5,9 @@
 #ifndef TSTORAGEYVECTOR_H
 #define TSTORAGEYVECTOR_H
 #include "TStorageY.h"
+#include "coretools/algorithms.h"
 
+#include <cstddef>
 #include <vector>
 
 class TStorageYVector {
@@ -13,6 +15,7 @@ private:
 	size_t _thinning_factor;
 	size_t _total_counts;
 	std::vector<TStorageY> _vec;
+	std::vector<size_t> _dimensions;
 	[[nodiscard]] std::pair<bool, size_t> _binary_search(uint64_t coordinate) const {
 
 		// lower_bound return the first element that is not less than the value
@@ -34,10 +37,11 @@ private:
 	};
 
 public:
-	explicit TStorageYVector(const size_t n_iterations) {
+	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions) {
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
+		_dimensions                  = dimensions;
 	};
 
 	// we want to check if coordinate exists in the vector or not.
@@ -49,6 +53,8 @@ public:
 		if (found) { return _vec[index].is_one(); }
 		return false;
 	};
+
+	bool is_one(const std::vector<size_t> &multi_dim_index) const { return is_one(get_coordinate(multi_dim_index)); }
 
 	/* set_to_one will set the element at the coordinate to 1
 	 * if the element is already in the vector, we just set it to 1
@@ -93,6 +99,10 @@ public:
 	void remove_zeros() {
 		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageY &elem) { return !elem.is_one(); }),
 		           _vec.end());
+	}
+
+	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
+		return coretools::getLinearIndex(multi_dim_index, _dimensions);
 	}
 };
 
