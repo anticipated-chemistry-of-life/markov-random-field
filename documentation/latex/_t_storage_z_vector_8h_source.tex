@@ -9,65 +9,71 @@
 \DoxyCodeLine{00005\ \textcolor{preprocessor}{\#ifndef\ TSTORAGEZVECTOR\_H}}
 \DoxyCodeLine{00006\ \textcolor{preprocessor}{\#define\ TSTORAGEZVECTOR\_H}}
 \DoxyCodeLine{00007\ \textcolor{preprocessor}{\#include\ "{}TStorageZ.h"{}}}
-\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ <cassert>}}
-\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <vector>}}
-\DoxyCodeLine{00010\ }
-\DoxyCodeLine{00011\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}\ \{}
-\DoxyCodeLine{00012\ \textcolor{keyword}{private}:}
-\DoxyCodeLine{00013\ \ \ \ \ std::vector<TStorageZ>\ \_vec;}
-\DoxyCodeLine{00014\ \ \ \ \ [[nodiscard]]\ std::pair<bool,\ size\_t>\ \_binary\_search(uint32\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00015\ }
-\DoxyCodeLine{00016\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ lower\_bound\ return\ the\ first\ element\ that\ is\ not\ less\ than\ the\ value}}
-\DoxyCodeLine{00017\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ it\ =\ std::lower\_bound(\_vec.begin(),\ \_vec.end(),\ coordinate);}
-\DoxyCodeLine{00018\ }
-\DoxyCodeLine{00019\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ our\ coordinate\ is\ bigger\ than\ the\ biggest\ element\ in\ the\ vector}}
-\DoxyCodeLine{00020\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ we\ say\ that\ we\ haven't\ found\ our\ element\ and\ that\ if\ we\ want\ to}}
-\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ insert\ it,\ we\ should\ insert\ it\ at\ the\ end\ of\ the\ vector}}
-\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (it\ ==\ \_vec.end())\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ \_vec.size()\};\ \}}
-\DoxyCodeLine{00023\ }
-\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ else\ our\ coordinate\ is\ in\ the\ range\ of\ the\ coordinates\ in\ the\ vector}}
-\DoxyCodeLine{00025\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ meaning\ that\ if\ we\ haven't\ found\ it,\ we\ will\ insert\ it\ at\ that\ position}}
-\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ to\ keep\ the\ vector\ sorted}}
-\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ index\ =\ std::distance(\_vec.begin(),\ it);}
-\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (*it\ !=\ coordinate)\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ index\};\ \}}
-\DoxyCodeLine{00029\ }
-\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ we\ found\ the\ coordinate\ we\ return\ the\ index\ and\ true}}
-\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{true},\ index\};}
-\DoxyCodeLine{00032\ \ \ \ \ \};}
-\DoxyCodeLine{00033\ }
-\DoxyCodeLine{00034\ \textcolor{keyword}{public}:}
-\DoxyCodeLine{00035\ \ \ \ \ \mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}()\ =\ \textcolor{keywordflow}{default};}
-\DoxyCodeLine{00036\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{bool}\ is\_one(\textcolor{keyword}{const}\ int32\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00037\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ int32\_t\ abs\_coordinate\ =\ std::abs(coordinate);}
-\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ \ \ \ \ \ \ \ \ \ =\ \_binary\_search(abs\_coordinate);}
-\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \textcolor{keywordflow}{return}\ \_vec[index].is\_one();\ \}}
-\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{false};}
-\DoxyCodeLine{00041\ \ \ \ \ \};}
-\DoxyCodeLine{00042\ }
-\DoxyCodeLine{00043\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_one(int32\_t\ coordinate)\ \{}
-\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ assert(0\ <\ coordinate\ \&\&\ \textcolor{stringliteral}{"{}Coordinate\ must\ be\ positive"{}});}
-\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ int32\_t\ abs\_coordinate\ =\ std::abs(coordinate);}
-\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ \ \ \ \ \ \ \ \ \ =\ \_binary\_search(abs\_coordinate);}
-\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{}
-\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec[index].set\_state(\textcolor{keyword}{true});}
-\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
-\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.insert(\_vec.begin()\ +\ index,\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}(coordinate));}
-\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00052\ \ \ \ \ \}}
-\DoxyCodeLine{00053\ }
-\DoxyCodeLine{00054\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_zero(int32\_t\ coordinate)\ \{}
-\DoxyCodeLine{00055\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ int32\_t\ abs\_coordinate\ =\ std::abs(coordinate);}
-\DoxyCodeLine{00056\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ \ \ \ \ \ \ \ \ \ =\ \_binary\_search(abs\_coordinate);}
-\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \_vec[index].set\_state(\textcolor{keyword}{false});\ \}}
-\DoxyCodeLine{00058\ \ \ \ \ \}}
-\DoxyCodeLine{00059\ }
-\DoxyCodeLine{00060\ \ \ \ \ \textcolor{keywordtype}{void}\ remove\_zeros()\ \{}
-\DoxyCodeLine{00061\ \ \ \ \ \ \ \ \ \_vec.erase(std::remove\_if(\_vec.begin(),\ \_vec.end(),\ [](\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}\ \&storage)\ \{\ return\ !storage.is\_one();\ \}),}
-\DoxyCodeLine{00062\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.end());}
-\DoxyCodeLine{00063\ \ \ \ \ \}}
-\DoxyCodeLine{00064\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_vec.size();\ \}}
-\DoxyCodeLine{00065\ \};}
-\DoxyCodeLine{00066\ }
-\DoxyCodeLine{00067\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEZVECTOR\_H}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}coretools/algorithms.h"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ <cassert>}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00011\ }
+\DoxyCodeLine{00012\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}\ \{}
+\DoxyCodeLine{00013\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00014\ \ \ \ \ std::vector<size\_t>\ \_dimensions;}
+\DoxyCodeLine{00015\ \ \ \ \ std::vector<TStorageZ>\ \_vec;}
+\DoxyCodeLine{00016\ \ \ \ \ [[nodiscard]]\ std::pair<bool,\ size\_t>\ \_binary\_search(uint32\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00017\ }
+\DoxyCodeLine{00018\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ lower\_bound\ return\ the\ first\ element\ that\ is\ not\ less\ than\ the\ value}}
+\DoxyCodeLine{00019\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ it\ =\ std::lower\_bound(\_vec.begin(),\ \_vec.end(),\ coordinate);}
+\DoxyCodeLine{00020\ }
+\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ our\ coordinate\ is\ bigger\ than\ the\ biggest\ element\ in\ the\ vector}}
+\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ we\ say\ that\ we\ haven't\ found\ our\ element\ and\ that\ if\ we\ want\ to}}
+\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ insert\ it,\ we\ should\ insert\ it\ at\ the\ end\ of\ the\ vector}}
+\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (it\ ==\ \_vec.end())\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ \_vec.size()\};\ \}}
+\DoxyCodeLine{00025\ }
+\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ else\ our\ coordinate\ is\ in\ the\ range\ of\ the\ coordinates\ in\ the\ vector}}
+\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ meaning\ that\ if\ we\ haven't\ found\ it,\ we\ will\ insert\ it\ at\ that\ position}}
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ to\ keep\ the\ vector\ sorted}}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ index\ =\ std::distance(\_vec.begin(),\ it);}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (*it\ !=\ coordinate)\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ index\};\ \}}
+\DoxyCodeLine{00031\ }
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ we\ found\ the\ coordinate\ we\ return\ the\ index\ and\ true}}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{true},\ index\};}
+\DoxyCodeLine{00034\ \ \ \ \ \};}
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00036\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00037\ \ \ \ \ \mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00038\ \ \ \ \ \mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&dimensions)\ :\ \_dimensions(dimensions)\ \{\}}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{bool}\ is\_one(\textcolor{keyword}{const}\ uint32\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \textcolor{keywordflow}{return}\ \_vec[index].is\_one();\ \}}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{false};}
+\DoxyCodeLine{00044\ \ \ \ \ \};}
+\DoxyCodeLine{00045\ }
+\DoxyCodeLine{00046\ \ \ \ \ \textcolor{keywordtype}{bool}\ is\_one(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ is\_one(get\_coordinate(multi\_dim\_index));\ \}}
+\DoxyCodeLine{00047\ }
+\DoxyCodeLine{00048\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_one(uint32\_t\ coordinate)\ \{}
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{}
+\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec[index].set\_state(\textcolor{keyword}{true});}
+\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.insert(\_vec.begin()\ +\ index,\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}((int32\_t)coordinate));}
+\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00055\ \ \ \ \ \}}
+\DoxyCodeLine{00056\ }
+\DoxyCodeLine{00057\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_zero(uint32\_t\ coordinate)\ \{}
+\DoxyCodeLine{00058\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00059\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \_vec[index].set\_state(\textcolor{keyword}{false});\ \}}
+\DoxyCodeLine{00060\ \ \ \ \ \}}
+\DoxyCodeLine{00061\ }
+\DoxyCodeLine{00062\ \ \ \ \ \textcolor{keywordtype}{void}\ remove\_zeros()\ \{}
+\DoxyCodeLine{00063\ \ \ \ \ \ \ \ \ \_vec.erase(std::remove\_if(\_vec.begin(),\ \_vec.end(),\ [](\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_z}{TStorageZ}}\ \&storage)\ \{\ return\ !storage.is\_one();\ \}),}
+\DoxyCodeLine{00064\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.end());}
+\DoxyCodeLine{00065\ \ \ \ \ \}}
+\DoxyCodeLine{00066\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_vec.size();\ \}}
+\DoxyCodeLine{00067\ }
+\DoxyCodeLine{00068\ \ \ \ \ uint64\_t\ get\_coordinate(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00069\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ coretools::getLinearIndex(multi\_dim\_index,\ \_dimensions);}
+\DoxyCodeLine{00070\ \ \ \ \ \}}
+\DoxyCodeLine{00071\ \};}
+\DoxyCodeLine{00072\ }
+\DoxyCodeLine{00073\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEZVECTOR\_H}}
 
 \end{DoxyCode}

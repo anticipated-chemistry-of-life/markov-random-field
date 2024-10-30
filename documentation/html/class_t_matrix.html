@@ -90,17 +90,22 @@ $(function(){ initResizable(false); });
   <div class="headertitle"><div class="title">TMatrix Class Reference</div></div>
 </div><!--header-->
 <div class="contents">
+
+<p>Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for each bin.  
+ <a href="#details">More...</a></p>
+
+<p><code>#include &lt;<a class="el" href="_t_clique_8h_source.html">TClique.h</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a8f7c929a5c0ff23991d19ca968ad81bc" id="r_a8f7c929a5c0ff23991d19ca968ad81bc"><td class="memItemLeft" align="right" valign="top"><a id="a8f7c929a5c0ff23991d19ca968ad81bc" name="a8f7c929a5c0ff23991d19ca968ad81bc"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>set_from_matrix_exponential</b> (const arma::mat &amp;Lambda)</td></tr>
+<tr class="memitem:a8f7c929a5c0ff23991d19ca968ad81bc" id="r_a8f7c929a5c0ff23991d19ca968ad81bc"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8f7c929a5c0ff23991d19ca968ad81bc">set_from_matrix_exponential</a> (const arma::mat &amp;Lambda)</td></tr>
+<tr class="memdesc:a8f7c929a5c0ff23991d19ca968ad81bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set _mat to the matrix exponential of the provided matrix.  <br /></td></tr>
 <tr class="separator:a8f7c929a5c0ff23991d19ca968ad81bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a430c8c42ca6a68c94c7f1b85346cb308" id="r_a430c8c42ca6a68c94c7f1b85346cb308"><td class="memItemLeft" align="right" valign="top"><a id="a430c8c42ca6a68c94c7f1b85346cb308" name="a430c8c42ca6a68c94c7f1b85346cb308"></a>
-arma::mat&#160;</td><td class="memItemRight" valign="bottom"><b>get_matrix</b> () const</td></tr>
+<tr class="memitem:a430c8c42ca6a68c94c7f1b85346cb308" id="r_a430c8c42ca6a68c94c7f1b85346cb308"><td class="memItemLeft" align="right" valign="top">arma::mat&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a430c8c42ca6a68c94c7f1b85346cb308">get_matrix</a> () const</td></tr>
+<tr class="memdesc:a430c8c42ca6a68c94c7f1b85346cb308"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the matrix.  <br /></td></tr>
 <tr class="separator:a430c8c42ca6a68c94c7f1b85346cb308"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ade1c02711f7b285b37f91e27c02b623f" id="r_ade1c02711f7b285b37f91e27c02b623f"><td class="memItemLeft" align="right" valign="top"><a id="ade1c02711f7b285b37f91e27c02b623f" name="ade1c02711f7b285b37f91e27c02b623f"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>set_from_product</b> (const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;First, const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;Second)</td></tr>
+<tr class="memitem:ade1c02711f7b285b37f91e27c02b623f" id="r_ade1c02711f7b285b37f91e27c02b623f"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ade1c02711f7b285b37f91e27c02b623f">set_from_product</a> (const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;First, const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;Second)</td></tr>
+<tr class="memdesc:ade1c02711f7b285b37f91e27c02b623f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second value of the row can easily be calculted.  <br /></td></tr>
 <tr class="separator:ade1c02711f7b285b37f91e27c02b623f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a893e1bee4dc596a7bc70eb88e5463461" id="r_a893e1bee4dc596a7bc70eb88e5463461"><td class="memItemLeft" align="right" valign="top"><a id="a893e1bee4dc596a7bc70eb88e5463461" name="a893e1bee4dc596a7bc70eb88e5463461"></a>
 constexpr double&#160;</td><td class="memItemRight" valign="bottom"><b>operator()</b> (size_t i, size_t j) const</td></tr>
@@ -109,8 +114,110 @@ constexpr double&#160;</td><td class="memItemRight" valign="bottom"><b>operator(
 double&#160;</td><td class="memItemRight" valign="bottom"><b>operator[]</b> (size_t i) const</td></tr>
 <tr class="separator:a961e99fa59dd7a315380c5e8abeec9e6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
+<a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for each bin. </p>
+</div><h2 class="groupheader">Member Function Documentation</h2>
+<a id="a430c8c42ca6a68c94c7f1b85346cb308" name="a430c8c42ca6a68c94c7f1b85346cb308"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a430c8c42ca6a68c94c7f1b85346cb308">&#9670;&#160;</a></span>get_matrix()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">arma::mat TMatrix::get_matrix </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Get the matrix. </p>
+<dl class="section return"><dt>Returns</dt><dd>Matrix. </dd></dl>
+
+</div>
+</div>
+<a id="a8f7c929a5c0ff23991d19ca968ad81bc" name="a8f7c929a5c0ff23991d19ca968ad81bc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f7c929a5c0ff23991d19ca968ad81bc">&#9670;&#160;</a></span>set_from_matrix_exponential()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TMatrix::set_from_matrix_exponential </td>
+          <td>(</td>
+          <td class="paramtype">const arma::mat &amp;</td>          <td class="paramname"><span class="paramname"><em>Lambda</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Set _mat to the matrix exponential of the provided matrix. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">Lambda</td><td>Matrix to calculate the matrix exponential from. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ade1c02711f7b285b37f91e27c02b623f" name="ade1c02711f7b285b37f91e27c02b623f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ade1c02711f7b285b37f91e27c02b623f">&#9670;&#160;</a></span>set_from_product()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TMatrix::set_from_product </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>First</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="class_t_matrix.html">TMatrix</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>Second</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second value of the row can easily be calculted. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">First</td><td></td></tr>
+    <tr><td class="paramname">Second</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>src/<a class="el" href="_t_branch_lengths_8h_source.html">TBranchLengths.h</a></li>
+<li>src/<a class="el" href="_t_clique_8h_source.html">TClique.h</a></li>
 </ul>
 </div><!-- contents -->
 <!-- start footer part -->

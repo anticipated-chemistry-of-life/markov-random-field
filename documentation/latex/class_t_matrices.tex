@@ -1,28 +1,113 @@
 \doxysection{TMatrices Class Reference}
 \hypertarget{class_t_matrices}{}\label{class_t_matrices}\index{TMatrices@{TMatrices}}
+
+
+Class to store the matrices for each bin.  
+
+
+
+
+{\ttfamily \#include $<$TClique.\+h$>$}
+
 \doxysubsubsection*{Public Member Functions}
 \begin{DoxyCompactItemize}
 \item 
 \Hypertarget{class_t_matrices_a2dc6b013f7f08ebb18400e10531bafb8}\label{class_t_matrices_a2dc6b013f7f08ebb18400e10531bafb8} 
 {\bfseries TMatrices} (size\+\_\+t Num\+Bins)
 \item 
-\Hypertarget{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}\label{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62} 
-void {\bfseries resize} (size\+\_\+t Num\+Bins)
-\item 
-\Hypertarget{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa}\label{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa} 
-size\+\_\+t {\bfseries size} () const
-\item 
-\Hypertarget{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2}\label{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2} 
-const std\+::vector$<$ \mbox{\hyperlink{class_t_matrix}{TMatrix}} $>$ \& {\bfseries get\+\_\+matrices} () const
-\item 
-\Hypertarget{class_t_matrices_a7014dd2e15405b0f2dd0263220340594}\label{class_t_matrices_a7014dd2e15405b0f2dd0263220340594} 
-void {\bfseries set\+\_\+lambda} (double mu\+\_\+c\+\_\+1, double mu\+\_\+c\+\_\+0)
-\item 
-\Hypertarget{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29}\label{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29} 
-void {\bfseries set} (double a, double Delta)
-\end{DoxyCompactItemize}
+void \mbox{\hyperlink{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}{resize}} (size\+\_\+t Num\+Bins)
+\begin{DoxyCompactList}\small\item\em Resize the vector of matrices to the given number of bins. \end{DoxyCompactList}\item 
+size\+\_\+t \mbox{\hyperlink{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa}{size}} () const
+\begin{DoxyCompactList}\small\item\em Get the number of matrices. \end{DoxyCompactList}\item 
+const std\+::vector$<$ \mbox{\hyperlink{class_t_matrix}{TMatrix}} $>$ \& \mbox{\hyperlink{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2}{get\+\_\+matrices}} () const
+\begin{DoxyCompactList}\small\item\em Get the vector of matrices. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{class_t_matrices_a7014dd2e15405b0f2dd0263220340594}{set\+\_\+lambda}} (double mu\+\_\+c\+\_\+1, double mu\+\_\+c\+\_\+0)
+\begin{DoxyCompactList}\small\item\em Set the matrix lambda for the clique given the two rate parameters. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29}{set}} (double a, double Delta)
+\begin{DoxyCompactList}\small\item\em Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is mathematically equevalent to calculating the matrix exponential for each bin. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Class to store the matrices for each bin. 
+
+\doxysubsection{Member Function Documentation}
+\Hypertarget{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2}\index{TMatrices@{TMatrices}!get\_matrices@{get\_matrices}}
+\index{get\_matrices@{get\_matrices}!TMatrices@{TMatrices}}
+\doxysubsubsection{\texorpdfstring{get\_matrices()}{get\_matrices()}}
+{\footnotesize\ttfamily \label{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2} 
+const std\+::vector$<$ \mbox{\hyperlink{class_t_matrix}{TMatrix}} $>$ \& TMatrices\+::get\+\_\+matrices (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Get the vector of matrices. 
+
+\begin{DoxyReturn}{Returns}
+Vector of matrices. 
+\end{DoxyReturn}
+\Hypertarget{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}\index{TMatrices@{TMatrices}!resize@{resize}}
+\index{resize@{resize}!TMatrices@{TMatrices}}
+\doxysubsubsection{\texorpdfstring{resize()}{resize()}}
+{\footnotesize\ttfamily \label{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62} 
+void TMatrices\+::resize (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{Num\+Bins}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Resize the vector of matrices to the given number of bins. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em Num\+Bins} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29}\index{TMatrices@{TMatrices}!set@{set}}
+\index{set@{set}!TMatrices@{TMatrices}}
+\doxysubsubsection{\texorpdfstring{set()}{set()}}
+{\footnotesize\ttfamily \label{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29} 
+void TMatrices\+::set (\begin{DoxyParamCaption}\item[{double}]{a}{, }\item[{double}]{Delta}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is mathematically equevalent to calculating the matrix exponential for each bin. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em a} & \\
+\hline
+{\em Delta} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_matrices_a7014dd2e15405b0f2dd0263220340594}\index{TMatrices@{TMatrices}!set\_lambda@{set\_lambda}}
+\index{set\_lambda@{set\_lambda}!TMatrices@{TMatrices}}
+\doxysubsubsection{\texorpdfstring{set\_lambda()}{set\_lambda()}}
+{\footnotesize\ttfamily \label{class_t_matrices_a7014dd2e15405b0f2dd0263220340594} 
+void TMatrices\+::set\+\_\+lambda (\begin{DoxyParamCaption}\item[{double}]{mu\+\_\+c\+\_\+1}{, }\item[{double}]{mu\+\_\+c\+\_\+0}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Set the matrix lambda for the clique given the two rate parameters. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em mu\+\_\+c\+\_\+1} & \\
+\hline
+{\em mu\+\_\+c\+\_\+0} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa}\index{TMatrices@{TMatrices}!size@{size}}
+\index{size@{size}!TMatrices@{TMatrices}}
+\doxysubsubsection{\texorpdfstring{size()}{size()}}
+{\footnotesize\ttfamily \label{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa} 
+size\+\_\+t TMatrices\+::size (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+
+
+Get the number of matrices. 
+
+\begin{DoxyReturn}{Returns}
+Number of matrices. 
+\end{DoxyReturn}
 
 
 The documentation for this class was generated from the following file\+:\begin{DoxyCompactItemize}
 \item 
-src/TBranch\+Lengths.\+h\end{DoxyCompactItemize}
+src/TClique.\+h\end{DoxyCompactItemize}

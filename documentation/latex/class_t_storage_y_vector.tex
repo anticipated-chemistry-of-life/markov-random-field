@@ -3,11 +3,14 @@
 \doxysubsubsection*{Public Member Functions}
 \begin{DoxyCompactItemize}
 \item 
-\Hypertarget{class_t_storage_y_vector_a86796962373ae8d4ffcbb634e79ba02b}\label{class_t_storage_y_vector_a86796962373ae8d4ffcbb634e79ba02b} 
-{\bfseries TStorage\+YVector} (const size\+\_\+t n\+\_\+iterations)
+\Hypertarget{class_t_storage_y_vector_a9f00eefb2a1bfe6c2101119363e07e81}\label{class_t_storage_y_vector_a9f00eefb2a1bfe6c2101119363e07e81} 
+{\bfseries TStorage\+YVector} (const size\+\_\+t n\+\_\+iterations, const std\+::vector$<$ size\+\_\+t $>$ \&dimensions)
 \item 
 \Hypertarget{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}\label{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b} 
 bool {\bfseries is\+\_\+one} (const uint64\+\_\+t coordinate) const
+\item 
+\Hypertarget{class_t_storage_y_vector_a508b0d0520729e33985bc1865fad7dca}\label{class_t_storage_y_vector_a508b0d0520729e33985bc1865fad7dca} 
+bool {\bfseries is\+\_\+one} (const std\+::vector$<$ size\+\_\+t $>$ \&multi\+\_\+dim\+\_\+index) const
 \item 
 \Hypertarget{class_t_storage_y_vector_ade9453d1dddd2b5d8a14d627bf103e3f}\label{class_t_storage_y_vector_ade9453d1dddd2b5d8a14d627bf103e3f} 
 void {\bfseries set\+\_\+to\+\_\+one} (uint64\+\_\+t coordinate)
@@ -32,6 +35,9 @@ void {\bfseries reset\+\_\+counts} ()
 \item 
 \Hypertarget{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4}\label{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4} 
 void {\bfseries remove\+\_\+zeros} ()
+\item 
+\Hypertarget{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}\label{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a} 
+uint64\+\_\+t {\bfseries get\+\_\+coordinate} (const std\+::vector$<$ size\+\_\+t $>$ \&multi\+\_\+dim\+\_\+index) const
 \end{DoxyCompactItemize}
 
 

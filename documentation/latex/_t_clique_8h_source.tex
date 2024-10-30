@@ -1,0 +1,123 @@
+\doxysection{TClique.\+h}
+\hypertarget{_t_clique_8h_source}{}\label{_t_clique_8h_source}\index{src/TClique.h@{src/TClique.h}}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{comment}{//}}
+\DoxyCodeLine{00002\ \textcolor{comment}{//\ Created\ by\ madleina\ on\ 22.10.24.}}
+\DoxyCodeLine{00003\ \textcolor{comment}{//}}
+\DoxyCodeLine{00004\ }
+\DoxyCodeLine{00005\ \textcolor{preprocessor}{\#ifndef\ ACOL\_TBRANCHLENGTHS\_H}}
+\DoxyCodeLine{00006\ \textcolor{preprocessor}{\#define\ ACOL\_TBRANCHLENGTHS\_H}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#include\ "{}TStorageYVector.h"{}}}
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#include\ "{}TStorageZVector.h"{}}}
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ <armadillo>}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <cstddef>}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00013\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_tree}{TTree}};\ \textcolor{comment}{//\ forward\ declaration}}
+\DoxyCodeLine{00014\ }
+\DoxyCodeLine{00019\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \{}
+\DoxyCodeLine{00020\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00021\ \ \ \ \ arma::mat\ \_mat;}
+\DoxyCodeLine{00022\ }
+\DoxyCodeLine{00023\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00024\ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}()\ \{\ \_mat.zeros(2,\ 2);\ \}}
+\DoxyCodeLine{00025\ }
+\DoxyCodeLine{00029\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}{set\_from\_matrix\_exponential}}(\textcolor{keyword}{const}\ arma::mat\ \&Lambda)\ \{\ \_mat\ =\ arma::expmat(Lambda);\ \}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00034\ \ \ \ \ [[nodiscard]]\ arma::mat\ \mbox{\hyperlink{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308}{get\_matrix}}()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_mat;\ \}}
+\DoxyCodeLine{00035\ }
+\DoxyCodeLine{00041\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f}{set\_from\_product}}(\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \&First,\ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \&Second)\ \{}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ do\ matrix\ multiplication}}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ \_mat(0,0)\ =\ First(0,0)\ *\ Second(0,0)\ +\ First(0,1)\ *\ Second(1,0)}}
+\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \_mat[0]\ =\ First[0]\ *\ Second[0]\ +\ First[2]\ *\ Second[1];}
+\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \_mat[2]\ =\ 1.0\ -\/\ \_mat[0];}
+\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \_mat[1]\ =\ First[1]\ *\ Second[0]\ +\ First[3]\ *\ Second[1];}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \_mat[3]\ =\ 1.0\ -\/\ \_mat[1];}
+\DoxyCodeLine{00048\ \ \ \ \ \}}
+\DoxyCodeLine{00049\ }
+\DoxyCodeLine{00050\ \ \ \ \ \textcolor{keyword}{constexpr}\ \textcolor{keywordtype}{double}\ operator()(\textcolor{keywordtype}{size\_t}\ i,\ \textcolor{keywordtype}{size\_t}\ j)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ get\ element\ from\ matrix}}
+\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ 0\ \ 2}}
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ 1\ \ 3}}
+\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \_mat[i\ +\ 2\ *\ j];}
+\DoxyCodeLine{00055\ \ \ \ \ \}}
+\DoxyCodeLine{00056\ }
+\DoxyCodeLine{00057\ \ \ \ \ \textcolor{keywordtype}{double}\ operator[](\textcolor{keywordtype}{size\_t}\ i)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_mat[i];\ \}}
+\DoxyCodeLine{00058\ \};}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00062\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \{}
+\DoxyCodeLine{00063\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00064\ \ \ \ \ std::vector<TMatrix>\ \_matrices;}
+\DoxyCodeLine{00065\ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \_matrix\_alpha;}
+\DoxyCodeLine{00066\ \ \ \ \ arma::mat\ \_lambda\_c\ =\ arma::zeros(2,\ 2);}
+\DoxyCodeLine{00067\ }
+\DoxyCodeLine{00068\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00069\ \ \ \ \ \mbox{\hyperlink{class_t_matrices}{TMatrices}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00070\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_matrices}{TMatrices}}(\textcolor{keywordtype}{size\_t}\ NumBins)\ \{\ \mbox{\hyperlink{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}{resize}}(NumBins);\ \}}
+\DoxyCodeLine{00071\ }
+\DoxyCodeLine{00075\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}{resize}}(\textcolor{keywordtype}{size\_t}\ NumBins)\ \{\ \_matrices.resize(NumBins);\ \}}
+\DoxyCodeLine{00076\ }
+\DoxyCodeLine{00080\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{size\_t}\ \mbox{\hyperlink{class_t_matrices_a1187f6dd85a851d129a63ff7b0b320fa}{size}}()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_matrices.size();\ \}}
+\DoxyCodeLine{00081\ }
+\DoxyCodeLine{00085\ \ \ \ \ \textcolor{keyword}{const}\ std::vector<TMatrix>\ \&\mbox{\hyperlink{class_t_matrices_af5acf6bf1817a0bad701c76c5ffe43d2}{get\_matrices}}()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_matrices;\ \}}
+\DoxyCodeLine{00086\ }
+\DoxyCodeLine{00091\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_matrices_a7014dd2e15405b0f2dd0263220340594}{set\_lambda}}(\textcolor{keywordtype}{double}\ mu\_c\_1,\ \textcolor{keywordtype}{double}\ mu\_c\_0)\ \{}
+\DoxyCodeLine{00092\ \ \ \ \ \ \ \ \ \_lambda\_c[0]\ =\ -\/mu\_c\_1;}
+\DoxyCodeLine{00093\ \ \ \ \ \ \ \ \ \_lambda\_c[1]\ =\ mu\_c\_0;}
+\DoxyCodeLine{00094\ \ \ \ \ \ \ \ \ \_lambda\_c[2]\ =\ mu\_c\_1;}
+\DoxyCodeLine{00095\ \ \ \ \ \ \ \ \ \_lambda\_c[3]\ =\ -\/mu\_c\_0;}
+\DoxyCodeLine{00096\ \ \ \ \ \}}
+\DoxyCodeLine{00097\ }
+\DoxyCodeLine{00104\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29}{set}}(\textcolor{keywordtype}{double}\ a,\ \textcolor{keywordtype}{double}\ Delta)\ \{}
+\DoxyCodeLine{00105\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ calculate\ matrix\ exponential\ for\ first\ bin}}
+\DoxyCodeLine{00106\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ P\_0;}
+\DoxyCodeLine{00107\ \ \ \ \ \ \ \ \ P\_0.\mbox{\hyperlink{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}{set\_from\_matrix\_exponential}}(\_lambda\_c\ *\ a);}
+\DoxyCodeLine{00108\ }
+\DoxyCodeLine{00109\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ calculate\ matrix\ exponential\ of\ scaling\ matrix}}
+\DoxyCodeLine{00110\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{class_t_matrix}{TMatrix}}\ \_matrix\_alpha;}
+\DoxyCodeLine{00111\ \ \ \ \ \ \ \ \ \_matrix\_alpha.\mbox{\hyperlink{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}{set\_from\_matrix\_exponential}}(\_lambda\_c\ *\ Delta);}
+\DoxyCodeLine{00112\ }
+\DoxyCodeLine{00113\ \ \ \ \ \ \ \ \ \_matrices[0]\ =\ P\_0;}
+\DoxyCodeLine{00114\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ do\ recursion}}
+\DoxyCodeLine{00115\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{size\_t}\ k\ =\ 1;\ k\ <\ \_matrices.size();\ ++k)\ \{}
+\DoxyCodeLine{00116\ \ \ \ \ \ \ \ \ \ \ \ \ \_matrices[k].set\_from\_product(\_matrices[k\ -\/\ 1],\ \_matrix\_alpha);}
+\DoxyCodeLine{00117\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00118\ \ \ \ \ \}}
+\DoxyCodeLine{00119\ \};}
+\DoxyCodeLine{00120\ }
+\DoxyCodeLine{00126\ \textcolor{keyword}{class\ }\mbox{\hyperlink{class_t_clique}{TClique}}\ \{}
+\DoxyCodeLine{00127\ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00128\ \ \ \ \ \mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \_matrices;}
+\DoxyCodeLine{00129\ \ \ \ \ \textcolor{keywordtype}{double}\ \_mu\_c\_1;}
+\DoxyCodeLine{00130\ \ \ \ \ \textcolor{keywordtype}{double}\ \_mu\_c\_0;}
+\DoxyCodeLine{00131\ \ \ \ \ std::vector<size\_t>\ \_start\_index;}
+\DoxyCodeLine{00132\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \_variable\_dimension;}
+\DoxyCodeLine{00133\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \_n\_nodes;}
+\DoxyCodeLine{00134\ }
+\DoxyCodeLine{00135\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00136\ \ \ \ \ \mbox{\hyperlink{class_t_clique}{TClique}}()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{00137\ \ \ \ \ \mbox{\hyperlink{class_t_clique}{TClique}}(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&start\_index,\ \textcolor{keywordtype}{size\_t}\ variable\_dimension,\ \textcolor{keywordtype}{size\_t}\ n\_nodes)\ \{}
+\DoxyCodeLine{00138\ \ \ \ \ \ \ \ \ \_start\_index\ \ \ \ \ \ \ \ =\ start\_index;}
+\DoxyCodeLine{00139\ \ \ \ \ \ \ \ \ \_variable\_dimension\ =\ variable\_dimension;}
+\DoxyCodeLine{00140\ \ \ \ \ \ \ \ \ \_n\_nodes\ \ \ \ \ \ \ \ \ \ \ \ =\ n\_nodes;}
+\DoxyCodeLine{00141\ \ \ \ \ \};}
+\DoxyCodeLine{00142\ }
+\DoxyCodeLine{00147\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_clique_a241333981d86a157f03aee5abf6862bf}{initialize}}(\textcolor{keywordtype}{double}\ a,\ \textcolor{keywordtype}{double}\ delta,\ \textcolor{keywordtype}{size\_t}\ n\_bins)\ \{}
+\DoxyCodeLine{00148\ \ \ \ \ \ \ \ \ \_matrices.\mbox{\hyperlink{class_t_matrices_a2522aa2f8daf3aeecff5c8b19c0fef62}{resize}}(n\_bins);}
+\DoxyCodeLine{00149\ \ \ \ \ \ \ \ \ \_matrices.\mbox{\hyperlink{class_t_matrices_a0a2cda86e6a3da84035fd9db0f6adb29}{set}}(a,\ delta);}
+\DoxyCodeLine{00150\ \ \ \ \ \}}
+\DoxyCodeLine{00151\ }
+\DoxyCodeLine{00155\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_clique_acda18204f57357bcff9af2361cb119af}{set\_lambda}}()\ \{\ \_matrices.\mbox{\hyperlink{class_t_matrices_a7014dd2e15405b0f2dd0263220340594}{set\_lambda}}(\_mu\_c\_1,\ \_mu\_c\_0);\ \}}
+\DoxyCodeLine{00156\ }
+\DoxyCodeLine{00159\ \ \ \ \ [[nodiscard]]}
+\DoxyCodeLine{00160\ \ \ \ \ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_matrices}{TMatrices}}\ \&\mbox{\hyperlink{class_t_clique_a4fe54a6968ea1cec8b9e870a9d3b5e52}{get\_matrices}}()\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00161\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \_matrices;}
+\DoxyCodeLine{00162\ \ \ \ \ \}}
+\DoxyCodeLine{00163\ }
+\DoxyCodeLine{00164\ \ \ \ \ \textcolor{keywordtype}{void}\ update\_Z(\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_y_vector}{TStorageYVector}}\ \&Y,\ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_z_vector}{TStorageZVector}}\ \&Z,\ \textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_tree}{TTree}}\ \&tree);}
+\DoxyCodeLine{00165\ \};}
+\DoxyCodeLine{00166\ }
+\DoxyCodeLine{00167\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ ACOL\_TBRANCHLENGTHS\_H}}
+
+\end{DoxyCode}

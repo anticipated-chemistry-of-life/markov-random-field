@@ -90,30 +90,203 @@ $(function(){ initResizable(false); });
   <div class="headertitle"><div class="title">TMatrices Class Reference</div></div>
 </div><!--header-->
 <div class="contents">
+
+<p>Class to store the matrices for each bin.  
+ <a href="#details">More...</a></p>
+
+<p><code>#include &lt;<a class="el" href="_t_clique_8h_source.html">TClique.h</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a2dc6b013f7f08ebb18400e10531bafb8" id="r_a2dc6b013f7f08ebb18400e10531bafb8"><td class="memItemLeft" align="right" valign="top"><a id="a2dc6b013f7f08ebb18400e10531bafb8" name="a2dc6b013f7f08ebb18400e10531bafb8"></a>
 &#160;</td><td class="memItemRight" valign="bottom"><b>TMatrices</b> (size_t NumBins)</td></tr>
 <tr class="separator:a2dc6b013f7f08ebb18400e10531bafb8"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a2522aa2f8daf3aeecff5c8b19c0fef62" id="r_a2522aa2f8daf3aeecff5c8b19c0fef62"><td class="memItemLeft" align="right" valign="top"><a id="a2522aa2f8daf3aeecff5c8b19c0fef62" name="a2522aa2f8daf3aeecff5c8b19c0fef62"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>resize</b> (size_t NumBins)</td></tr>
+<tr class="memitem:a2522aa2f8daf3aeecff5c8b19c0fef62" id="r_a2522aa2f8daf3aeecff5c8b19c0fef62"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a2522aa2f8daf3aeecff5c8b19c0fef62">resize</a> (size_t NumBins)</td></tr>
+<tr class="memdesc:a2522aa2f8daf3aeecff5c8b19c0fef62"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resize the vector of matrices to the given number of bins.  <br /></td></tr>
 <tr class="separator:a2522aa2f8daf3aeecff5c8b19c0fef62"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1187f6dd85a851d129a63ff7b0b320fa" id="r_a1187f6dd85a851d129a63ff7b0b320fa"><td class="memItemLeft" align="right" valign="top"><a id="a1187f6dd85a851d129a63ff7b0b320fa" name="a1187f6dd85a851d129a63ff7b0b320fa"></a>
-size_t&#160;</td><td class="memItemRight" valign="bottom"><b>size</b> () const</td></tr>
+<tr class="memitem:a1187f6dd85a851d129a63ff7b0b320fa" id="r_a1187f6dd85a851d129a63ff7b0b320fa"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1187f6dd85a851d129a63ff7b0b320fa">size</a> () const</td></tr>
+<tr class="memdesc:a1187f6dd85a851d129a63ff7b0b320fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the number of matrices.  <br /></td></tr>
 <tr class="separator:a1187f6dd85a851d129a63ff7b0b320fa"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:af5acf6bf1817a0bad701c76c5ffe43d2" id="r_af5acf6bf1817a0bad701c76c5ffe43d2"><td class="memItemLeft" align="right" valign="top"><a id="af5acf6bf1817a0bad701c76c5ffe43d2" name="af5acf6bf1817a0bad701c76c5ffe43d2"></a>
-const std::vector&lt; <a class="el" href="class_t_matrix.html">TMatrix</a> &gt; &amp;&#160;</td><td class="memItemRight" valign="bottom"><b>get_matrices</b> () const</td></tr>
+<tr class="memitem:af5acf6bf1817a0bad701c76c5ffe43d2" id="r_af5acf6bf1817a0bad701c76c5ffe43d2"><td class="memItemLeft" align="right" valign="top">const std::vector&lt; <a class="el" href="class_t_matrix.html">TMatrix</a> &gt; &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af5acf6bf1817a0bad701c76c5ffe43d2">get_matrices</a> () const</td></tr>
+<tr class="memdesc:af5acf6bf1817a0bad701c76c5ffe43d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the vector of matrices.  <br /></td></tr>
 <tr class="separator:af5acf6bf1817a0bad701c76c5ffe43d2"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a7014dd2e15405b0f2dd0263220340594" id="r_a7014dd2e15405b0f2dd0263220340594"><td class="memItemLeft" align="right" valign="top"><a id="a7014dd2e15405b0f2dd0263220340594" name="a7014dd2e15405b0f2dd0263220340594"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>set_lambda</b> (double mu_c_1, double mu_c_0)</td></tr>
+<tr class="memitem:a7014dd2e15405b0f2dd0263220340594" id="r_a7014dd2e15405b0f2dd0263220340594"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7014dd2e15405b0f2dd0263220340594">set_lambda</a> (double mu_c_1, double mu_c_0)</td></tr>
+<tr class="memdesc:a7014dd2e15405b0f2dd0263220340594"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the matrix lambda for the clique given the two rate parameters.  <br /></td></tr>
 <tr class="separator:a7014dd2e15405b0f2dd0263220340594"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0a2cda86e6a3da84035fd9db0f6adb29" id="r_a0a2cda86e6a3da84035fd9db0f6adb29"><td class="memItemLeft" align="right" valign="top"><a id="a0a2cda86e6a3da84035fd9db0f6adb29" name="a0a2cda86e6a3da84035fd9db0f6adb29"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>set</b> (double a, double Delta)</td></tr>
+<tr class="memitem:a0a2cda86e6a3da84035fd9db0f6adb29" id="r_a0a2cda86e6a3da84035fd9db0f6adb29"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0a2cda86e6a3da84035fd9db0f6adb29">set</a> (double a, double Delta)</td></tr>
+<tr class="memdesc:a0a2cda86e6a3da84035fd9db0f6adb29"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is mathematically equevalent to calculating the matrix exponential for each bin.  <br /></td></tr>
 <tr class="separator:a0a2cda86e6a3da84035fd9db0f6adb29"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
+<a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Class to store the matrices for each bin. </p>
+</div><h2 class="groupheader">Member Function Documentation</h2>
+<a id="af5acf6bf1817a0bad701c76c5ffe43d2" name="af5acf6bf1817a0bad701c76c5ffe43d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af5acf6bf1817a0bad701c76c5ffe43d2">&#9670;&#160;</a></span>get_matrices()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const std::vector&lt; <a class="el" href="class_t_matrix.html">TMatrix</a> &gt; &amp; TMatrices::get_matrices </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Get the vector of matrices. </p>
+<dl class="section return"><dt>Returns</dt><dd>Vector of matrices. </dd></dl>
+
+</div>
+</div>
+<a id="a2522aa2f8daf3aeecff5c8b19c0fef62" name="a2522aa2f8daf3aeecff5c8b19c0fef62"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2522aa2f8daf3aeecff5c8b19c0fef62">&#9670;&#160;</a></span>resize()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TMatrices::resize </td>
+          <td>(</td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>NumBins</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Resize the vector of matrices to the given number of bins. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">NumBins</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a0a2cda86e6a3da84035fd9db0f6adb29" name="a0a2cda86e6a3da84035fd9db0f6adb29"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0a2cda86e6a3da84035fd9db0f6adb29">&#9670;&#160;</a></span>set()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TMatrices::set </td>
+          <td>(</td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>a</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>Delta</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is mathematically equevalent to calculating the matrix exponential for each bin. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">a</td><td></td></tr>
+    <tr><td class="paramname">Delta</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a7014dd2e15405b0f2dd0263220340594" name="a7014dd2e15405b0f2dd0263220340594"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7014dd2e15405b0f2dd0263220340594">&#9670;&#160;</a></span>set_lambda()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TMatrices::set_lambda </td>
+          <td>(</td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>mu_c_1</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>mu_c_0</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Set the matrix lambda for the clique given the two rate parameters. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mu_c_1</td><td></td></tr>
+    <tr><td class="paramname">mu_c_0</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a1187f6dd85a851d129a63ff7b0b320fa" name="a1187f6dd85a851d129a63ff7b0b320fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1187f6dd85a851d129a63ff7b0b320fa">&#9670;&#160;</a></span>size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t TMatrices::size </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Get the number of matrices. </p>
+<dl class="section return"><dt>Returns</dt><dd>Number of matrices. </dd></dl>
+
+</div>
+</div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>src/<a class="el" href="_t_branch_lengths_8h_source.html">TBranchLengths.h</a></li>
+<li>src/<a class="el" href="_t_clique_8h_source.html">TClique.h</a></li>
 </ul>
 </div><!-- contents -->
 <!-- start footer part -->

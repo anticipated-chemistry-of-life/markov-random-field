@@ -1,17 +1,23 @@
 \doxysection{TMatrix Class Reference}
 \hypertarget{class_t_matrix}{}\label{class_t_matrix}\index{TMatrix@{TMatrix}}
+
+
+Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for each bin.  
+
+
+
+
+{\ttfamily \#include $<$TClique.\+h$>$}
+
 \doxysubsubsection*{Public Member Functions}
 \begin{DoxyCompactItemize}
 \item 
-\Hypertarget{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}\label{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc} 
-void {\bfseries set\+\_\+from\+\_\+matrix\+\_\+exponential} (const arma\+::mat \&Lambda)
-\item 
-\Hypertarget{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308}\label{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308} 
-arma\+::mat {\bfseries get\+\_\+matrix} () const
-\item 
-\Hypertarget{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f}\label{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f} 
-void {\bfseries set\+\_\+from\+\_\+product} (const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&First, const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&Second)
-\item 
+void \mbox{\hyperlink{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}{set\+\_\+from\+\_\+matrix\+\_\+exponential}} (const arma\+::mat \&Lambda)
+\begin{DoxyCompactList}\small\item\em Set \+\_\+mat to the matrix exponential of the provided matrix. \end{DoxyCompactList}\item 
+arma\+::mat \mbox{\hyperlink{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308}{get\+\_\+matrix}} () const
+\begin{DoxyCompactList}\small\item\em Get the matrix. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f}{set\+\_\+from\+\_\+product}} (const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&First, const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&Second)
+\begin{DoxyCompactList}\small\item\em Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second value of the row can easily be calculted. \end{DoxyCompactList}\item 
 \Hypertarget{class_t_matrix_a893e1bee4dc596a7bc70eb88e5463461}\label{class_t_matrix_a893e1bee4dc596a7bc70eb88e5463461} 
 constexpr double {\bfseries operator()} (size\+\_\+t i, size\+\_\+t j) const
 \item 
@@ -20,6 +26,57 @@ double {\bfseries operator\mbox{[}$\,$\mbox{]}} (size\+\_\+t i) const
 \end{DoxyCompactItemize}
 
 
+\doxysubsection{Detailed Description}
+Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for each bin. 
+
+\doxysubsection{Member Function Documentation}
+\Hypertarget{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308}\index{TMatrix@{TMatrix}!get\_matrix@{get\_matrix}}
+\index{get\_matrix@{get\_matrix}!TMatrix@{TMatrix}}
+\doxysubsubsection{\texorpdfstring{get\_matrix()}{get\_matrix()}}
+{\footnotesize\ttfamily \label{class_t_matrix_a430c8c42ca6a68c94c7f1b85346cb308} 
+arma\+::mat TMatrix\+::get\+\_\+matrix (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+
+
+Get the matrix. 
+
+\begin{DoxyReturn}{Returns}
+Matrix. 
+\end{DoxyReturn}
+\Hypertarget{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc}\index{TMatrix@{TMatrix}!set\_from\_matrix\_exponential@{set\_from\_matrix\_exponential}}
+\index{set\_from\_matrix\_exponential@{set\_from\_matrix\_exponential}!TMatrix@{TMatrix}}
+\doxysubsubsection{\texorpdfstring{set\_from\_matrix\_exponential()}{set\_from\_matrix\_exponential()}}
+{\footnotesize\ttfamily \label{class_t_matrix_a8f7c929a5c0ff23991d19ca968ad81bc} 
+void TMatrix\+::set\+\_\+from\+\_\+matrix\+\_\+exponential (\begin{DoxyParamCaption}\item[{const arma\+::mat \&}]{Lambda}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Set \+\_\+mat to the matrix exponential of the provided matrix. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em Lambda} & Matrix to calculate the matrix exponential from. \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f}\index{TMatrix@{TMatrix}!set\_from\_product@{set\_from\_product}}
+\index{set\_from\_product@{set\_from\_product}!TMatrix@{TMatrix}}
+\doxysubsubsection{\texorpdfstring{set\_from\_product()}{set\_from\_product()}}
+{\footnotesize\ttfamily \label{class_t_matrix_ade1c02711f7b285b37f91e27c02b623f} 
+void TMatrix\+::set\+\_\+from\+\_\+product (\begin{DoxyParamCaption}\item[{const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&}]{First}{, }\item[{const \mbox{\hyperlink{class_t_matrix}{TMatrix}} \&}]{Second}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second value of the row can easily be calculted. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em First} & \\
+\hline
+{\em Second} & \\
+\hline
+\end{DoxyParams}
+
+
 The documentation for this class was generated from the following file\+:\begin{DoxyCompactItemize}
 \item 
-src/TBranch\+Lengths.\+h\end{DoxyCompactItemize}
+src/TClique.\+h\end{DoxyCompactItemize}

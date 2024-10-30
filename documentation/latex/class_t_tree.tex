@@ -3,30 +3,174 @@
 \doxysubsubsection*{Public Member Functions}
 \begin{DoxyCompactItemize}
 \item 
-\Hypertarget{class_t_tree_abf78d35acdc5bbb8b14ba0e1dee6e4bd}\label{class_t_tree_abf78d35acdc5bbb8b14ba0e1dee6e4bd} 
-\mbox{\hyperlink{class_t_node}{TNode}} {\bfseries get\+\_\+node} (const std\+::string \&Id) const
+\Hypertarget{class_t_tree_aafd46eff1330de95a22ba25f2998ede1}\label{class_t_tree_aafd46eff1330de95a22ba25f2998ede1} 
+{\bfseries TTree} (size\+\_\+t dimension)
 \item 
-\Hypertarget{class_t_tree_a62209d5e2c58b52f52f505027cbdfa19}\label{class_t_tree_a62209d5e2c58b52f52f505027cbdfa19} 
-size\+\_\+t {\bfseries get\+\_\+node\+\_\+index} (const std\+::string \&Id) const
+const \mbox{\hyperlink{class_t_node}{TNode}} \& \mbox{\hyperlink{class_t_tree_a81e04d234b0e66bb6b2d7b29ebb8435d}{get\+\_\+node}} (const std\+::string \&Id) const
 \item 
-\Hypertarget{class_t_tree_a3db263b6bd7d41550cc5504c7e895ab6}\label{class_t_tree_a3db263b6bd7d41550cc5504c7e895ab6} 
-void {\bfseries load\+\_\+from\+\_\+file} (const std\+::string \&filename)
+const \mbox{\hyperlink{class_t_node}{TNode}} \& \mbox{\hyperlink{class_t_tree_a133c7cf6fe164d71a1b7beb05cc2d455}{get\+\_\+node}} (size\+\_\+t index) const
 \item 
-\Hypertarget{class_t_tree_abbd9d0b44af7c9f81acdd24607148916}\label{class_t_tree_abbd9d0b44af7c9f81acdd24607148916} 
-size\+\_\+t {\bfseries count\+\_\+roots} () const
+size\+\_\+t \mbox{\hyperlink{class_t_tree_a62209d5e2c58b52f52f505027cbdfa19}{get\+\_\+node\+\_\+index}} (const std\+::string \&Id) const
 \item 
-\Hypertarget{class_t_tree_af78b9659205076cb453cf01ce88f3330}\label{class_t_tree_af78b9659205076cb453cf01ce88f3330} 
-const std\+::vector$<$ size\+\_\+t $>$ \& {\bfseries get\+\_\+leaf\+\_\+nodes} () const
+void \mbox{\hyperlink{class_t_tree_a3db263b6bd7d41550cc5504c7e895ab6}{load\+\_\+from\+\_\+file}} (const std\+::string \&filename)
 \item 
-\Hypertarget{class_t_tree_a9b56aad5f7c501cb0c1b4b523358d7bc}\label{class_t_tree_a9b56aad5f7c501cb0c1b4b523358d7bc} 
-const std\+::vector$<$ size\+\_\+t $>$ \& {\bfseries get\+\_\+root\+\_\+nodes} () const
+size\+\_\+t \mbox{\hyperlink{class_t_tree_abbd9d0b44af7c9f81acdd24607148916}{count\+\_\+roots}} () const
 \item 
-\Hypertarget{class_t_tree_ad05d445b07010f048b8fc85f9094aa14}\label{class_t_tree_ad05d445b07010f048b8fc85f9094aa14} 
-bool {\bfseries in\+\_\+tree} (const std\+::string \&node\+\_\+id) const
+const std\+::vector$<$ size\+\_\+t $>$ \& \mbox{\hyperlink{class_t_tree_af78b9659205076cb453cf01ce88f3330}{get\+\_\+leaf\+\_\+nodes}} () const
 \item 
-\Hypertarget{class_t_tree_a9605961cb24128485ddea43c4de7cc4c}\label{class_t_tree_a9605961cb24128485ddea43c4de7cc4c} 
-std\+::vector$<$ double $>$ {\bfseries get\+\_\+all\+\_\+branch\+\_\+lengths} () const
+size\+\_\+t \mbox{\hyperlink{class_t_tree_ada9b0f865d40d6182819179a82de944e}{get\+\_\+number\+\_\+of\+\_\+leaves}} () const
+\item 
+size\+\_\+t \mbox{\hyperlink{class_t_tree_aea5cba05985c65ebbf9273edbe238ea9}{get\+\_\+index\+\_\+within\+\_\+leaves}} (size\+\_\+t node\+\_\+index) const
+\item 
+size\+\_\+t \mbox{\hyperlink{class_t_tree_afae13a3b2754ad607f96276db7987d2f}{get\+\_\+index\+\_\+within\+\_\+internal\+\_\+nodes}} (size\+\_\+t node\+\_\+index) const
+\item 
+const std\+::vector$<$ size\+\_\+t $>$ \& \mbox{\hyperlink{class_t_tree_a9b56aad5f7c501cb0c1b4b523358d7bc}{get\+\_\+root\+\_\+nodes}} () const
+\item 
+bool \mbox{\hyperlink{class_t_tree_ad05d445b07010f048b8fc85f9094aa14}{in\+\_\+tree}} (const std\+::string \&node\+\_\+id) const
+\item 
+\Hypertarget{class_t_tree_afffab4813f4d7063d985bb1f7b9b3458}\label{class_t_tree_afffab4813f4d7063d985bb1f7b9b3458} 
+std\+::vector$<$ Type\+Bin\+Branches $>$ {\bfseries get\+\_\+all\+\_\+binned\+\_\+branch\+\_\+lengths} () const
+\item 
+\Hypertarget{class_t_tree_a4a9a19e4ee4ee0cf57b6d8ce58edb0fe}\label{class_t_tree_a4a9a19e4ee4ee0cf57b6d8ce58edb0fe} 
+void {\bfseries initialize\+\_\+cliques} (const std\+::vector$<$ \mbox{\hyperlink{class_t_tree}{TTree}} $>$ \&trees)
 \end{DoxyCompactItemize}
+
+
+\doxysubsection{Member Function Documentation}
+\Hypertarget{class_t_tree_abbd9d0b44af7c9f81acdd24607148916}\index{TTree@{TTree}!count\_roots@{count\_roots}}
+\index{count\_roots@{count\_roots}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{count\_roots()}{count\_roots()}}
+{\footnotesize\ttfamily \label{class_t_tree_abbd9d0b44af7c9f81acdd24607148916} 
+size\+\_\+t TTree\+::count\+\_\+roots (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+Gives the number of roots within the tree \begin{DoxyReturn}{Returns}
+the number of roots 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_afae13a3b2754ad607f96276db7987d2f}\index{TTree@{TTree}!get\_index\_within\_internal\_nodes@{get\_index\_within\_internal\_nodes}}
+\index{get\_index\_within\_internal\_nodes@{get\_index\_within\_internal\_nodes}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_index\_within\_internal\_nodes()}{get\_index\_within\_internal\_nodes()}}
+{\footnotesize\ttfamily \label{class_t_tree_afae13a3b2754ad607f96276db7987d2f} 
+size\+\_\+t TTree\+::get\+\_\+index\+\_\+within\+\_\+internal\+\_\+nodes (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{node\+\_\+index}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+\begin{DoxyParams}{Parameters}
+{\em node\+\_\+index} & the index of the node within the tree \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+The index of the node within the internal nodes vector (which is smaller than the total number of nodes in the tree). If the node is not an internal node, the function will return -\/1. 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_aea5cba05985c65ebbf9273edbe238ea9}\index{TTree@{TTree}!get\_index\_within\_leaves@{get\_index\_within\_leaves}}
+\index{get\_index\_within\_leaves@{get\_index\_within\_leaves}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_index\_within\_leaves()}{get\_index\_within\_leaves()}}
+{\footnotesize\ttfamily \label{class_t_tree_aea5cba05985c65ebbf9273edbe238ea9} 
+size\+\_\+t TTree\+::get\+\_\+index\+\_\+within\+\_\+leaves (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{node\+\_\+index}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+\begin{DoxyParams}{Parameters}
+{\em node\+\_\+index} & the index of the node within the tree \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+The index of the node within the leaves vector (which is smaller than the total number of nodes in the tree). If the node is not a leaf, the function will return -\/1. 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_af78b9659205076cb453cf01ce88f3330}\index{TTree@{TTree}!get\_leaf\_nodes@{get\_leaf\_nodes}}
+\index{get\_leaf\_nodes@{get\_leaf\_nodes}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_leaf\_nodes()}{get\_leaf\_nodes()}}
+{\footnotesize\ttfamily \label{class_t_tree_af78b9659205076cb453cf01ce88f3330} 
+const std\+::vector$<$ size\+\_\+t $>$ \& TTree\+::get\+\_\+leaf\+\_\+nodes (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+Method to get all the leaves of the tree. \begin{DoxyReturn}{Returns}
+Returns a vector of length equal to the number of leaves in the tree. Each element of the vector is the index of the leaf node within the tree. 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_a81e04d234b0e66bb6b2d7b29ebb8435d}\index{TTree@{TTree}!get\_node@{get\_node}}
+\index{get\_node@{get\_node}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_node()}{get\_node()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily \label{class_t_tree_a81e04d234b0e66bb6b2d7b29ebb8435d} 
+const \mbox{\hyperlink{class_t_node}{TNode}} \& TTree\+::get\+\_\+node (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{Id}{}\end{DoxyParamCaption}) const}
+
+Get node by its id 
+\begin{DoxyParams}{Parameters}
+{\em Id} & the id of the node \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+a reference to the node with the given id 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_a133c7cf6fe164d71a1b7beb05cc2d455}\index{TTree@{TTree}!get\_node@{get\_node}}
+\index{get\_node@{get\_node}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_node()}{get\_node()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily \label{class_t_tree_a133c7cf6fe164d71a1b7beb05cc2d455} 
+const \mbox{\hyperlink{class_t_node}{TNode}} \& TTree\+::get\+\_\+node (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{index}{}\end{DoxyParamCaption}) const}
+
+Get node by its index 
+\begin{DoxyParams}{Parameters}
+{\em Id} & the index of the node wihtin the tree \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+a reference to the Node with the given id 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_a62209d5e2c58b52f52f505027cbdfa19}\index{TTree@{TTree}!get\_node\_index@{get\_node\_index}}
+\index{get\_node\_index@{get\_node\_index}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_node\_index()}{get\_node\_index()}}
+{\footnotesize\ttfamily \label{class_t_tree_a62209d5e2c58b52f52f505027cbdfa19} 
+size\+\_\+t TTree\+::get\+\_\+node\+\_\+index (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{Id}{}\end{DoxyParamCaption}) const}
+
+Get the index of a node by its id 
+\begin{DoxyParams}{Parameters}
+{\em Id} & the id of the node \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+the index of the node with the given id 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_ada9b0f865d40d6182819179a82de944e}\index{TTree@{TTree}!get\_number\_of\_leaves@{get\_number\_of\_leaves}}
+\index{get\_number\_of\_leaves@{get\_number\_of\_leaves}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_number\_of\_leaves()}{get\_number\_of\_leaves()}}
+{\footnotesize\ttfamily \label{class_t_tree_ada9b0f865d40d6182819179a82de944e} 
+size\+\_\+t TTree\+::get\+\_\+number\+\_\+of\+\_\+leaves (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+\begin{DoxyReturn}{Returns}
+the number of leaves in the tree 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_a9b56aad5f7c501cb0c1b4b523358d7bc}\index{TTree@{TTree}!get\_root\_nodes@{get\_root\_nodes}}
+\index{get\_root\_nodes@{get\_root\_nodes}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{get\_root\_nodes()}{get\_root\_nodes()}}
+{\footnotesize\ttfamily \label{class_t_tree_a9b56aad5f7c501cb0c1b4b523358d7bc} 
+const std\+::vector$<$ size\+\_\+t $>$ \& TTree\+::get\+\_\+root\+\_\+nodes (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+\begin{DoxyReturn}{Returns}
+The root nodes of the tree 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_ad05d445b07010f048b8fc85f9094aa14}\index{TTree@{TTree}!in\_tree@{in\_tree}}
+\index{in\_tree@{in\_tree}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{in\_tree()}{in\_tree()}}
+{\footnotesize\ttfamily \label{class_t_tree_ad05d445b07010f048b8fc85f9094aa14} 
+bool TTree\+::in\+\_\+tree (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{node\+\_\+id}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+Checks whether a node is in the tree 
+\begin{DoxyParams}{Parameters}
+{\em node\+\_\+id} & the id of the node \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+true if the node is in the tree, false otherwise 
+\end{DoxyReturn}
+\Hypertarget{class_t_tree_a3db263b6bd7d41550cc5504c7e895ab6}\index{TTree@{TTree}!load\_from\_file@{load\_from\_file}}
+\index{load\_from\_file@{load\_from\_file}!TTree@{TTree}}
+\doxysubsubsection{\texorpdfstring{load\_from\_file()}{load\_from\_file()}}
+{\footnotesize\ttfamily \label{class_t_tree_a3db263b6bd7d41550cc5504c7e895ab6} 
+void TTree\+::load\+\_\+from\+\_\+file (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{filename}{}\end{DoxyParamCaption})}
+
+Load a tree from a file 
+\begin{DoxyParams}{Parameters}
+{\em filename} & the name of the file to load the tree from. This should contain three columns\+: child, parent, branch\+\_\+length. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+the loaded tree 
+\end{DoxyReturn}
 
 
 The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}

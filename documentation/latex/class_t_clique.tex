@@ -1,0 +1,82 @@
+\doxysection{TClique Class Reference}
+\hypertarget{class_t_clique}{}\label{class_t_clique}\index{TClique@{TClique}}
+
+
+{\ttfamily \#include $<$TClique.\+h$>$}
+
+\doxysubsubsection*{Public Member Functions}
+\begin{DoxyCompactItemize}
+\item 
+\Hypertarget{class_t_clique_af93e4996251ede33ca945f7a2f611c56}\label{class_t_clique_af93e4996251ede33ca945f7a2f611c56} 
+{\bfseries TClique} (const std\+::vector$<$ size\+\_\+t $>$ \&start\+\_\+index, size\+\_\+t variable\+\_\+dimension, size\+\_\+t n\+\_\+nodes)
+\item 
+void \mbox{\hyperlink{class_t_clique_a241333981d86a157f03aee5abf6862bf}{initialize}} (double a, double delta, size\+\_\+t n\+\_\+bins)
+\begin{DoxyCompactList}\small\item\em Initialize the matrices for the clique. \end{DoxyCompactList}\item 
+void \mbox{\hyperlink{class_t_clique_acda18204f57357bcff9af2361cb119af}{set\+\_\+lambda}} ()
+\begin{DoxyCompactList}\small\item\em Set the rate parameters for the clique. \end{DoxyCompactList}\item 
+const \mbox{\hyperlink{class_t_matrices}{TMatrices}} \& \mbox{\hyperlink{class_t_clique_a4fe54a6968ea1cec8b9e870a9d3b5e52}{get\+\_\+matrices}} () const
+\begin{DoxyCompactList}\small\item\em Returns the matrices for the clique. \end{DoxyCompactList}\item 
+\Hypertarget{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9}\label{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9} 
+void {\bfseries update\+\_\+Z} (const \mbox{\hyperlink{class_t_storage_y_vector}{TStorage\+YVector}} \&Y, const \mbox{\hyperlink{class_t_storage_z_vector}{TStorage\+ZVector}} \&Z, const \mbox{\hyperlink{class_t_tree}{TTree}} \&tree)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Class representing a clique in our model. A clique is defined as having a set of nodes that are all leaves in all dimensions except one. Each clique has a set of matrices, the change rate parameters, and the start index of the nodes in the tree. The start index, the variable dimension, and the number of nodes are needed to get the correct indices in our multidimensional space Y and Z. 
+
+\doxysubsection{Member Function Documentation}
+\Hypertarget{class_t_clique_a4fe54a6968ea1cec8b9e870a9d3b5e52}\index{TClique@{TClique}!get\_matrices@{get\_matrices}}
+\index{get\_matrices@{get\_matrices}!TClique@{TClique}}
+\doxysubsubsection{\texorpdfstring{get\_matrices()}{get\_matrices()}}
+{\footnotesize\ttfamily \label{class_t_clique_a4fe54a6968ea1cec8b9e870a9d3b5e52} 
+const \mbox{\hyperlink{class_t_matrices}{TMatrices}} \& TClique\+::get\+\_\+matrices (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+
+
+Returns the matrices for the clique. 
+
+\begin{DoxyReturn}{Returns}
+Matrices. 
+\end{DoxyReturn}
+\Hypertarget{class_t_clique_a241333981d86a157f03aee5abf6862bf}\index{TClique@{TClique}!initialize@{initialize}}
+\index{initialize@{initialize}!TClique@{TClique}}
+\doxysubsubsection{\texorpdfstring{initialize()}{initialize()}}
+{\footnotesize\ttfamily \label{class_t_clique_a241333981d86a157f03aee5abf6862bf} 
+void TClique\+::initialize (\begin{DoxyParamCaption}\item[{double}]{a}{, }\item[{double}]{delta}{, }\item[{size\+\_\+t}]{n\+\_\+bins}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Initialize the matrices for the clique. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em a} & The lower bound of the bin. \\
+\hline
+{\em delta} & The bin width. \\
+\hline
+{\em n\+\_\+bins} & The number of bins. \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_clique_acda18204f57357bcff9af2361cb119af}\index{TClique@{TClique}!set\_lambda@{set\_lambda}}
+\index{set\_lambda@{set\_lambda}!TClique@{TClique}}
+\doxysubsubsection{\texorpdfstring{set\_lambda()}{set\_lambda()}}
+{\footnotesize\ttfamily \label{class_t_clique_acda18204f57357bcff9af2361cb119af} 
+void TClique\+::set\+\_\+lambda (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Set the rate parameters for the clique. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em mu\+\_\+c\+\_\+1} & \\
+\hline
+{\em mu\+\_\+c\+\_\+0} & \\
+\hline
+\end{DoxyParams}
+
+
+The documentation for this class was generated from the following files\+:\begin{DoxyCompactItemize}
+\item 
+src/TClique.\+h\item 
+src/TClique.\+cpp\end{DoxyCompactItemize}

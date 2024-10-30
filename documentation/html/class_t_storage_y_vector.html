@@ -93,12 +93,15 @@ $(function(){ initResizable(false); });
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a86796962373ae8d4ffcbb634e79ba02b" id="r_a86796962373ae8d4ffcbb634e79ba02b"><td class="memItemLeft" align="right" valign="top"><a id="a86796962373ae8d4ffcbb634e79ba02b" name="a86796962373ae8d4ffcbb634e79ba02b"></a>
-&#160;</td><td class="memItemRight" valign="bottom"><b>TStorageYVector</b> (const size_t n_iterations)</td></tr>
-<tr class="separator:a86796962373ae8d4ffcbb634e79ba02b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9f00eefb2a1bfe6c2101119363e07e81" id="r_a9f00eefb2a1bfe6c2101119363e07e81"><td class="memItemLeft" align="right" valign="top"><a id="a9f00eefb2a1bfe6c2101119363e07e81" name="a9f00eefb2a1bfe6c2101119363e07e81"></a>
+&#160;</td><td class="memItemRight" valign="bottom"><b>TStorageYVector</b> (const size_t n_iterations, const std::vector&lt; size_t &gt; &amp;dimensions)</td></tr>
+<tr class="separator:a9f00eefb2a1bfe6c2101119363e07e81"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a104cba43f1c9199ac3d25a91cb59147b" id="r_a104cba43f1c9199ac3d25a91cb59147b"><td class="memItemLeft" align="right" valign="top"><a id="a104cba43f1c9199ac3d25a91cb59147b" name="a104cba43f1c9199ac3d25a91cb59147b"></a>
 bool&#160;</td><td class="memItemRight" valign="bottom"><b>is_one</b> (const uint64_t coordinate) const</td></tr>
 <tr class="separator:a104cba43f1c9199ac3d25a91cb59147b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a508b0d0520729e33985bc1865fad7dca" id="r_a508b0d0520729e33985bc1865fad7dca"><td class="memItemLeft" align="right" valign="top"><a id="a508b0d0520729e33985bc1865fad7dca" name="a508b0d0520729e33985bc1865fad7dca"></a>
+bool&#160;</td><td class="memItemRight" valign="bottom"><b>is_one</b> (const std::vector&lt; size_t &gt; &amp;multi_dim_index) const</td></tr>
+<tr class="separator:a508b0d0520729e33985bc1865fad7dca"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ade9453d1dddd2b5d8a14d627bf103e3f" id="r_ade9453d1dddd2b5d8a14d627bf103e3f"><td class="memItemLeft" align="right" valign="top"><a id="ade9453d1dddd2b5d8a14d627bf103e3f" name="ade9453d1dddd2b5d8a14d627bf103e3f"></a>
 void&#160;</td><td class="memItemRight" valign="bottom"><b>set_to_one</b> (uint64_t coordinate)</td></tr>
 <tr class="separator:ade9453d1dddd2b5d8a14d627bf103e3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -123,6 +126,9 @@ void&#160;</td><td class="memItemRight" valign="bottom"><b>reset_counts</b> ()</
 <tr class="memitem:a3ed702764ab269961c9988f33964b2e4" id="r_a3ed702764ab269961c9988f33964b2e4"><td class="memItemLeft" align="right" valign="top"><a id="a3ed702764ab269961c9988f33964b2e4" name="a3ed702764ab269961c9988f33964b2e4"></a>
 void&#160;</td><td class="memItemRight" valign="bottom"><b>remove_zeros</b> ()</td></tr>
 <tr class="separator:a3ed702764ab269961c9988f33964b2e4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa45e2ca10348eb128977742f5ad58c3a" id="r_aa45e2ca10348eb128977742f5ad58c3a"><td class="memItemLeft" align="right" valign="top"><a id="aa45e2ca10348eb128977742f5ad58c3a" name="aa45e2ca10348eb128977742f5ad58c3a"></a>
+uint64_t&#160;</td><td class="memItemRight" valign="bottom"><b>get_coordinate</b> (const std::vector&lt; size_t &gt; &amp;multi_dim_index) const</td></tr>
+<tr class="separator:aa45e2ca10348eb128977742f5ad58c3a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <hr/>The documentation for this class was generated from the following file:<ul>
 <li>src/<a class="el" href="_t_storage_y_vector_8h_source.html">TStorageYVector.h</a></li>

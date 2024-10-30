@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['get_5fbinned_5fbranch_5flengths_0',['get_binned_branch_lengths',['../class_t_branch_lengths.html#a4ae912ce166b50a14aeef7802db15b25',1,'TBranchLengths']]]
+  ['count_5froots_0',['count_roots',['../class_t_tree.html#abbd9d0b44af7c9f81acdd24607148916',1,'TTree']]]
 ];

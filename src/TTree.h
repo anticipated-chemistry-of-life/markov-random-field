@@ -73,27 +73,66 @@ public:
 	// Destructor, deletes all nodes
 	~TTree();
 
-	// Get node by its id
+	/** Get node by its id
+	 * @param Id: the id of the node
+	 * @return a reference to the node with the given id
+	 */
 	const TNode &get_node(const std::string &Id) const;
+
+	/** Get node by its index
+	 * @param Id: the index of the node wihtin the tree
+	 * @return a reference to the Node with the given id
+	 */
 	const TNode &get_node(size_t index) const;
 
-	// Get the node index by its id
+	/** Get the index of a node by its id
+	 * @param Id: the id of the node
+	 * @return the index of the node with the given id
+	 */
 	size_t get_node_index(const std::string &Id) const;
 
-	// Method to load the tree from a file
+	/** Load a tree from a file
+	 * @param filename: the name of the file to load the tree from. This should contain three columns: child, parent,
+	 * branch_length.
+	 * @return the loaded tree
+	 */
 	void load_from_file(const std::string &filename);
 
-	// Find the number of roots in the tree
+	/** Gives the number of roots within the tree
+	 * @return the number of roots
+	 */
 	[[nodiscard]] size_t count_roots() const { return _roots.size(); }
 
-	// Method to get all the leaves of the tree
+	/** Method to get all the leaves of the tree.
+	 * @return Returns a vector of length equal to the number of leaves in the tree. Each element of the vector is the
+	 * index of the leaf node within the tree.
+	 */
 	[[nodiscard]] const std::vector<size_t> &get_leaf_nodes() const { return _leaves; }
+
+	/** @return the number of leaves in the tree
+	 */
 	size_t get_number_of_leaves() const { return _leaves.size(); }
+
+	/** @param node_index: the index of the node within the tree
+	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
+	 * tree). If the node is not a leaf, the function will return -1.
+	 */
 	size_t get_index_within_leaves(size_t node_index) const { return _leafIndices[node_index]; }
+
+	/** @param node_index: the index of the node within the tree
+	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
+	 * in the tree). If the node is not an internal node, the function will return -1.
+	 */
 	size_t get_index_within_internal_nodes(size_t node_index) const { return _internalIndices[node_index]; }
-	// Method to get all the root nodes
+
+	/** @return The root nodes of the tree
+	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 
+	/** Checks whether a node is in the tree
+	 * @param node_id: the id of the node
+	 * @return true if the node is in the tree, false otherwise
+	 */
 	bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
 
 	std::vector<TypeBinBranches> get_all_binned_branch_lengths() const {
