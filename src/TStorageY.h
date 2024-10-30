@@ -46,7 +46,7 @@ public:
 		_value = (_value & ~_coordinate_mask) | (coordinate & _coordinate_mask);
 	}
 
-	/**@return Wheter the element is one or zero. */
+	/** @return Wheter the element is one or zero. */
 	bool is_one() const { return (_value & _state_mask) >> 47; }
 
 	/** The state is stored in the 17th bit of our 64 bits integer.

@@ -16,9 +16,8 @@ void \mbox{\hyperlink{class_t_clique_acda18204f57357bcff9af2361cb119af}{set\+\_\
 \begin{DoxyCompactList}\small\item\em Set the rate parameters for the clique. \end{DoxyCompactList}\item 
 const \mbox{\hyperlink{class_t_matrices}{TMatrices}} \& \mbox{\hyperlink{class_t_clique_a4fe54a6968ea1cec8b9e870a9d3b5e52}{get\+\_\+matrices}} () const
 \begin{DoxyCompactList}\small\item\em Returns the matrices for the clique. \end{DoxyCompactList}\item 
-\Hypertarget{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9}\label{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9} 
-void {\bfseries update\+\_\+Z} (const \mbox{\hyperlink{class_t_storage_y_vector}{TStorage\+YVector}} \&Y, const \mbox{\hyperlink{class_t_storage_z_vector}{TStorage\+ZVector}} \&Z, const \mbox{\hyperlink{class_t_tree}{TTree}} \&tree)
-\end{DoxyCompactItemize}
+void \mbox{\hyperlink{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9}{update\+\_\+Z}} (const \mbox{\hyperlink{class_t_storage_y_vector}{TStorage\+YVector}} \&Y, const \mbox{\hyperlink{class_t_storage_z_vector}{TStorage\+ZVector}} \&Z, const \mbox{\hyperlink{class_t_tree}{TTree}} \&tree)
+\begin{DoxyCompactList}\small\item\em Update the Z dimension for this clique. \end{DoxyCompactList}\end{DoxyCompactItemize}
 
 
 \doxysubsection{Detailed Description}
@@ -36,7 +35,7 @@ const \mbox{\hyperlink{class_t_matrices}{TMatrices}} \& TClique\+::get\+\_\+matr
 Returns the matrices for the clique. 
 
 \begin{DoxyReturn}{Returns}
-Matrices. 
+The class containing the matrices. 
 \end{DoxyReturn}
 \Hypertarget{class_t_clique_a241333981d86a157f03aee5abf6862bf}\index{TClique@{TClique}!initialize@{initialize}}
 \index{initialize@{initialize}!TClique@{TClique}}
@@ -72,6 +71,25 @@ Set the rate parameters for the clique.
 {\em mu\+\_\+c\+\_\+1} & \\
 \hline
 {\em mu\+\_\+c\+\_\+0} & \\
+\hline
+\end{DoxyParams}
+\Hypertarget{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9}\index{TClique@{TClique}!update\_Z@{update\_Z}}
+\index{update\_Z@{update\_Z}!TClique@{TClique}}
+\doxysubsubsection{\texorpdfstring{update\_Z()}{update\_Z()}}
+{\footnotesize\ttfamily \label{class_t_clique_a1fe0c315375b9c0e2f04b6b19d2c4cc9} 
+void TClique\+::update\+\_\+Z (\begin{DoxyParamCaption}\item[{const \mbox{\hyperlink{class_t_storage_y_vector}{TStorage\+YVector}} \&}]{Y}{, }\item[{const \mbox{\hyperlink{class_t_storage_z_vector}{TStorage\+ZVector}} \&}]{Z}{, }\item[{const \mbox{\hyperlink{class_t_tree}{TTree}} \&}]{tree}{}\end{DoxyParamCaption})}
+
+
+
+Update the Z dimension for this clique. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em Y} & The current state of the Y dimension. \\
+\hline
+{\em Z} & The current state of the Z dimension. \\
+\hline
+{\em tree} & The tree. \\
 \hline
 \end{DoxyParams}
 

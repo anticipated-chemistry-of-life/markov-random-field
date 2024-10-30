@@ -19,97 +19,94 @@
 \DoxyCodeLine{00015\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \_thinning\_factor;}
 \DoxyCodeLine{00016\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ \_total\_counts;}
 \DoxyCodeLine{00017\ \ \ \ \ std::vector<TStorageY>\ \_vec;}
-\DoxyCodeLine{00018\ \ \ \ \ std::vector<size\_t>\ \_dimensions;}
-\DoxyCodeLine{00019\ \ \ \ \ [[nodiscard]]\ std::pair<bool,\ size\_t>\ \_binary\_search(uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00020\ }
-\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ lower\_bound\ return\ the\ first\ element\ that\ is\ not\ less\ than\ the\ value}}
-\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ it\ =\ std::lower\_bound(\_vec.begin(),\ \_vec.end(),\ coordinate);}
-\DoxyCodeLine{00023\ }
-\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ our\ coordinate\ is\ bigger\ than\ the\ biggest\ element\ in\ the\ vector}}
-\DoxyCodeLine{00025\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ we\ say\ that\ we\ haven't\ found\ our\ element\ and\ that\ if\ we\ want\ to}}
-\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ insert\ it,\ we\ should\ insert\ it\ at\ the\ end\ of\ the\ vector}}
-\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (it\ ==\ \_vec.end())\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ \_vec.size()\};\ \}}
+\DoxyCodeLine{00018\ }
+\DoxyCodeLine{00021\ \ \ \ \ std::vector<size\_t>\ \_dimensions;}
+\DoxyCodeLine{00022\ }
+\DoxyCodeLine{00024\ \ \ \ \ [[nodiscard]]\ std::pair<bool,\ size\_t>\ \_binary\_search(uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00025\ }
+\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ lower\_bound\ return\ the\ first\ element\ that\ is\ not\ less\ than\ the\ value}}
+\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ it\ =\ std::lower\_bound(\_vec.begin(),\ \_vec.end(),\ coordinate);}
 \DoxyCodeLine{00028\ }
-\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ else\ our\ coordinate\ is\ in\ the\ range\ of\ the\ coordinates\ in\ the\ vector}}
-\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ meaning\ that\ if\ we\ haven't\ found\ it,\ we\ will\ insert\ it\ at\ that\ position}}
-\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ to\ keep\ the\ vector\ sorted}}
-\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ index\ =\ std::distance(\_vec.begin(),\ it);}
-\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (*it\ !=\ coordinate)\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ index\};\ \}}
-\DoxyCodeLine{00034\ }
-\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ we\ found\ the\ coordinate\ we\ return\ the\ index\ and\ true}}
-\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{true},\ index\};}
-\DoxyCodeLine{00037\ \ \ \ \ \};}
-\DoxyCodeLine{00038\ }
-\DoxyCodeLine{00039\ \textcolor{keyword}{public}:}
-\DoxyCodeLine{00040\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_storage_y_vector}{TStorageYVector}}(\textcolor{keyword}{const}\ \textcolor{keywordtype}{size\_t}\ n\_iterations,\ \textcolor{keyword}{const}\ std::vector<size\_t>\ \&dimensions)\ \{}
-\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \textcolor{keyword}{constexpr}\ uint16\_t\ max\_value\ =\ std::numeric\_limits<uint16\_t>::max();}
-\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \_thinning\_factor\ \ \ \ \ \ \ \ \ \ \ \ \ =\ std::ceil(\textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(n\_iterations)\ /\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(max\_value));}
-\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \_total\_counts\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ n\_iterations\ /\ \_thinning\_factor;}
-\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \_dimensions\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ dimensions;}
-\DoxyCodeLine{00045\ \ \ \ \ \};}
-\DoxyCodeLine{00046\ }
-\DoxyCodeLine{00047\ \ \ \ \ \textcolor{comment}{//\ we\ want\ to\ check\ if\ coordinate\ exists\ in\ the\ vector\ or\ not.}}
-\DoxyCodeLine{00048\ \ \ \ \ \textcolor{comment}{//\ the\ coordinate\ is\ the\ position\ of\ the\ element\ in\ the\ Y\ dimension}}
-\DoxyCodeLine{00049\ \ \ \ \ \textcolor{comment}{//\ so\ if\ an\ element\ is\ in\ the\ vector\ that\ means\ it\ is\ currently\ a\ one\ or}}
-\DoxyCodeLine{00050\ \ \ \ \ \textcolor{comment}{//\ it\ has\ been\ in\ the\ past\ iteration.}}
-\DoxyCodeLine{00051\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{bool}\ is\_one(\textcolor{keyword}{const}\ uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
-\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \textcolor{keywordflow}{return}\ \_vec[index].is\_one();\ \}}
-\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{false};}
-\DoxyCodeLine{00055\ \ \ \ \ \};}
-\DoxyCodeLine{00056\ }
-\DoxyCodeLine{00057\ \ \ \ \ \textcolor{keywordtype}{bool}\ is\_one(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ is\_one(get\_coordinate(multi\_dim\_index));\ \}}
-\DoxyCodeLine{00058\ }
-\DoxyCodeLine{00059\ \ \ \ \ \textcolor{comment}{/*\ set\_to\_one\ will\ set\ the\ element\ at\ the\ coordinate\ to\ 1}}
-\DoxyCodeLine{00060\ \textcolor{comment}{\ \ \ \ \ *\ if\ the\ element\ is\ already\ in\ the\ vector,\ we\ just\ set\ it\ to\ 1}}
-\DoxyCodeLine{00061\ \textcolor{comment}{\ \ \ \ \ *\ if\ the\ element\ is\ not\ in\ the\ vector,\ we\ insert\ it\ in\ the\ vector}}
-\DoxyCodeLine{00062\ \textcolor{comment}{\ \ \ \ \ *\ and\ set\ it\ to\ 1}}
-\DoxyCodeLine{00063\ \textcolor{comment}{\ \ \ \ \ */}}
-\DoxyCodeLine{00064\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_one(uint64\_t\ coordinate)\ \{}
-\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
-\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{}
-\DoxyCodeLine{00067\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec[index].set\_state(\textcolor{keyword}{true});}
-\DoxyCodeLine{00068\ \ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
-\DoxyCodeLine{00069\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.insert(\_vec.begin()\ +\ index,\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}(coordinate));}
-\DoxyCodeLine{00070\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00071\ \ \ \ \ \}}
-\DoxyCodeLine{00072\ }
-\DoxyCodeLine{00073\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_zero(uint64\_t\ coordinate)\ \{}
-\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
-\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \_vec[index].set\_state(\textcolor{keyword}{false});\ \}}
-\DoxyCodeLine{00076\ \ \ \ \ \}}
-\DoxyCodeLine{00077\ }
-\DoxyCodeLine{00078\ \ \ \ \ \textcolor{keywordtype}{void}\ add\_to\_counter(\textcolor{keywordtype}{size\_t}\ iteration)\ \{}
-\DoxyCodeLine{00079\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (iteration\ \%\ \_thinning\_factor\ ==\ 0)\ \{}
-\DoxyCodeLine{00080\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keyword}{auto}\ \&elem\ :\ \_vec)\ \{\ elem.update\_counter();\ \}}
-\DoxyCodeLine{00081\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00082\ \ \ \ \ \}}
-\DoxyCodeLine{00083\ }
-\DoxyCodeLine{00084\ \ \ \ \ \textcolor{keywordtype}{double}\ get\_fraction\_of\_ones(uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00085\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
-\DoxyCodeLine{00086\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!found)\ \{\ \textcolor{keywordflow}{return}\ 0.0;\ \}}
-\DoxyCodeLine{00087\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(\_vec[index].get\_counter())\ /\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(\_total\_counts);}
-\DoxyCodeLine{00088\ \ \ \ \ \}}
-\DoxyCodeLine{00089\ }
-\DoxyCodeLine{00090\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ get\_total\_counts()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_total\_counts;\ \}}
-\DoxyCodeLine{00091\ }
-\DoxyCodeLine{00092\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_vec.size();\ \}}
-\DoxyCodeLine{00093\ }
-\DoxyCodeLine{00094\ \ \ \ \ \textcolor{keywordtype}{void}\ reset\_counts()\ \{}
-\DoxyCodeLine{00095\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keyword}{auto}\ \&elem\ :\ \_vec)\ \{\ elem.reset\_counter();\ \}}
-\DoxyCodeLine{00096\ \ \ \ \ \}}
-\DoxyCodeLine{00097\ }
-\DoxyCodeLine{00098\ \ \ \ \ \textcolor{comment}{//\ we\ want\ to\ remove\ all\ the\ elements\ that\ have\ the\ element\ to\ zero}}
-\DoxyCodeLine{00099\ \ \ \ \ \textcolor{keywordtype}{void}\ remove\_zeros()\ \{}
-\DoxyCodeLine{00100\ \ \ \ \ \ \ \ \ \_vec.erase(std::remove\_if(\_vec.begin(),\ \_vec.end(),\ [](\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}\ \&elem)\ \{\ return\ !elem.is\_one();\ \}),}
-\DoxyCodeLine{00101\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.end());}
-\DoxyCodeLine{00102\ \ \ \ \ \}}
-\DoxyCodeLine{00103\ }
-\DoxyCodeLine{00104\ \ \ \ \ uint64\_t\ get\_coordinate(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{}
-\DoxyCodeLine{00105\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ coretools::getLinearIndex(multi\_dim\_index,\ \_dimensions);}
-\DoxyCodeLine{00106\ \ \ \ \ \}}
-\DoxyCodeLine{00107\ \};}
-\DoxyCodeLine{00108\ }
-\DoxyCodeLine{00109\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEYVECTOR\_H}}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ our\ coordinate\ is\ bigger\ than\ the\ biggest\ element\ in\ the\ vector}}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ we\ say\ that\ we\ haven't\ found\ our\ element\ and\ that\ if\ we\ want\ to}}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ insert\ it,\ we\ should\ insert\ it\ at\ the\ end\ of\ the\ vector}}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (it\ ==\ \_vec.end())\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ \_vec.size()\};\ \}}
+\DoxyCodeLine{00033\ }
+\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ else\ our\ coordinate\ is\ in\ the\ range\ of\ the\ coordinates\ in\ the\ vector}}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ meaning\ that\ if\ we\ haven't\ found\ it,\ we\ will\ insert\ it\ at\ that\ position}}
+\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ to\ keep\ the\ vector\ sorted}}
+\DoxyCodeLine{00037\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ index\ =\ std::distance(\_vec.begin(),\ it);}
+\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (*it\ !=\ coordinate)\ \{\ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{false},\ index\};\ \}}
+\DoxyCodeLine{00039\ }
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ if\ we\ found\ the\ coordinate\ we\ return\ the\ index\ and\ true}}
+\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \{\textcolor{keyword}{true},\ index\};}
+\DoxyCodeLine{00042\ \ \ \ \ \};}
+\DoxyCodeLine{00043\ }
+\DoxyCodeLine{00044\ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00045\ \ \ \ \ \textcolor{keyword}{explicit}\ \mbox{\hyperlink{class_t_storage_y_vector}{TStorageYVector}}(\textcolor{keyword}{const}\ \textcolor{keywordtype}{size\_t}\ n\_iterations,\ \textcolor{keyword}{const}\ std::vector<size\_t>\ \&dimensions)\ \{}
+\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \textcolor{keyword}{constexpr}\ uint16\_t\ max\_value\ =\ std::numeric\_limits<uint16\_t>::max();}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \_thinning\_factor\ \ \ \ \ \ \ \ \ \ \ \ \ =\ std::ceil(\textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(n\_iterations)\ /\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(max\_value));}
+\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ \_total\_counts\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ n\_iterations\ /\ \_thinning\_factor;}
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \_dimensions\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ dimensions;}
+\DoxyCodeLine{00050\ \ \ \ \ \};}
+\DoxyCodeLine{00051\ }
+\DoxyCodeLine{00058\ \ \ \ \ [[nodiscard]]\ \textcolor{keywordtype}{bool}\ \mbox{\hyperlink{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}{is\_one}}(\textcolor{keyword}{const}\ uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00059\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00060\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \textcolor{keywordflow}{return}\ \_vec[index].is\_one();\ \}}
+\DoxyCodeLine{00061\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{false};}
+\DoxyCodeLine{00062\ \ \ \ \ \};}
+\DoxyCodeLine{00063\ }
+\DoxyCodeLine{00064\ \ \ \ \ \textcolor{keywordtype}{bool}\ \mbox{\hyperlink{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}{is\_one}}(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \mbox{\hyperlink{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}{is\_one}}(\mbox{\hyperlink{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}{get\_coordinate}}(multi\_dim\_index));\ \}}
+\DoxyCodeLine{00065\ }
+\DoxyCodeLine{00066\ \ \ \ \ \textcolor{comment}{/*\ set\_to\_one\ will\ set\ the\ element\ at\ the\ coordinate\ to\ 1}}
+\DoxyCodeLine{00067\ \textcolor{comment}{\ \ \ \ \ *\ if\ the\ element\ is\ already\ in\ the\ vector,\ we\ just\ set\ it\ to\ 1}}
+\DoxyCodeLine{00068\ \textcolor{comment}{\ \ \ \ \ *\ if\ the\ element\ is\ not\ in\ the\ vector,\ we\ insert\ it\ in\ the\ vector}}
+\DoxyCodeLine{00069\ \textcolor{comment}{\ \ \ \ \ *\ and\ set\ it\ to\ 1}}
+\DoxyCodeLine{00070\ \textcolor{comment}{\ \ \ \ \ */}}
+\DoxyCodeLine{00071\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_one(uint64\_t\ coordinate)\ \{}
+\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00073\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{}
+\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec[index].set\_state(\textcolor{keyword}{true});}
+\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.insert(\_vec.begin()\ +\ index,\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}(coordinate));}
+\DoxyCodeLine{00077\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00078\ \ \ \ \ \}}
+\DoxyCodeLine{00079\ }
+\DoxyCodeLine{00080\ \ \ \ \ \textcolor{keywordtype}{void}\ set\_to\_zero(uint64\_t\ coordinate)\ \{}
+\DoxyCodeLine{00081\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00082\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (found)\ \{\ \_vec[index].set\_state(\textcolor{keyword}{false});\ \}}
+\DoxyCodeLine{00083\ \ \ \ \ \}}
+\DoxyCodeLine{00084\ }
+\DoxyCodeLine{00085\ \ \ \ \ \textcolor{keywordtype}{void}\ add\_to\_counter(\textcolor{keywordtype}{size\_t}\ iteration)\ \{}
+\DoxyCodeLine{00086\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (iteration\ \%\ \_thinning\_factor\ ==\ 0)\ \{}
+\DoxyCodeLine{00087\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keyword}{auto}\ \&elem\ :\ \_vec)\ \{\ elem.update\_counter();\ \}}
+\DoxyCodeLine{00088\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00089\ \ \ \ \ \}}
+\DoxyCodeLine{00090\ }
+\DoxyCodeLine{00091\ \ \ \ \ \textcolor{keywordtype}{double}\ get\_fraction\_of\_ones(uint64\_t\ coordinate)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00092\ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ [found,\ index]\ =\ \_binary\_search(coordinate);}
+\DoxyCodeLine{00093\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!found)\ \{\ \textcolor{keywordflow}{return}\ 0.0;\ \}}
+\DoxyCodeLine{00094\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(\_vec[index].get\_counter())\ /\ \textcolor{keyword}{static\_cast<}\textcolor{keywordtype}{double}\textcolor{keyword}{>}(\_total\_counts);}
+\DoxyCodeLine{00095\ \ \ \ \ \}}
+\DoxyCodeLine{00096\ }
+\DoxyCodeLine{00097\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ get\_total\_counts()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_total\_counts;\ \}}
+\DoxyCodeLine{00098\ }
+\DoxyCodeLine{00099\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ size()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ \_vec.size();\ \}}
+\DoxyCodeLine{00100\ }
+\DoxyCodeLine{00101\ \ \ \ \ \textcolor{keywordtype}{void}\ reset\_counts()\ \{}
+\DoxyCodeLine{00102\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keyword}{auto}\ \&elem\ :\ \_vec)\ \{\ elem.reset\_counter();\ \}}
+\DoxyCodeLine{00103\ \ \ \ \ \}}
+\DoxyCodeLine{00104\ }
+\DoxyCodeLine{00107\ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4}{remove\_zeros}}()\ \{}
+\DoxyCodeLine{00108\ \ \ \ \ \ \ \ \ \_vec.erase(std::remove\_if(\_vec.begin(),\ \_vec.end(),\ [](\textcolor{keyword}{const}\ \mbox{\hyperlink{class_t_storage_y}{TStorageY}}\ \&elem)\ \{\ return\ !elem.is\_one();\ \}),}
+\DoxyCodeLine{00109\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \_vec.end());}
+\DoxyCodeLine{00110\ \ \ \ \ \}}
+\DoxyCodeLine{00111\ }
+\DoxyCodeLine{00115\ \ \ \ \ uint64\_t\ \mbox{\hyperlink{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}{get\_coordinate}}(\textcolor{keyword}{const}\ std::vector<size\_t>\ \&multi\_dim\_index)\textcolor{keyword}{\ const\ }\{}
+\DoxyCodeLine{00116\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ coretools::getLinearIndex(multi\_dim\_index,\ \_dimensions);}
+\DoxyCodeLine{00117\ \ \ \ \ \}}
+\DoxyCodeLine{00118\ \};}
+\DoxyCodeLine{00119\ }
+\DoxyCodeLine{00120\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ TSTORAGEYVECTOR\_H}}
 
 \end{DoxyCode}

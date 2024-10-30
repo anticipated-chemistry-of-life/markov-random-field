@@ -15,7 +15,12 @@ private:
 	size_t _thinning_factor;
 	size_t _total_counts;
 	std::vector<TStorageY> _vec;
+
+	/// Gives the number of dimensions of our model. This should usually be 2 (species and molecules) but as we have
+	/// defined in our model, this can be more.
 	std::vector<size_t> _dimensions;
+
+	/// @brief Binary search to find the coordinate in the vector
 	[[nodiscard]] std::pair<bool, size_t> _binary_search(uint64_t coordinate) const {
 
 		// lower_bound return the first element that is not less than the value
@@ -44,22 +49,30 @@ public:
 		_dimensions                  = dimensions;
 	};
 
-	// we want to check if coordinate exists in the vector or not.
-	// the coordinate is the position of the element in the Y dimension
-	// so if an element is in the vector that means it is currently a one or
-	// it has been in the past iteration.
+	/// we want to check if coordinate exists in the vector or not.
+	/// the coordinate is the position of the element in the Y dimension
+	/// so if an element is in the vector that means it is currently a one or
+	/// it has been in the past iteration.
+	/// @param coordinate the position of the element in the Y vector.
+	/// @return true if the element is one, false otherwise.
 	[[nodiscard]] bool is_one(const uint64_t coordinate) const {
 		auto [found, index] = _binary_search(coordinate);
 		if (found) { return _vec[index].is_one(); }
 		return false;
 	};
 
-	bool is_one(const std::vector<size_t> &multi_dim_index) const { return is_one(get_coordinate(multi_dim_index)); }
+	/// Overload of the is_one function that takes a multi-dimensional index
+	/// @param multi_dim_index the multi-dimensional index
+	/// @return true if the element is one, false otherwise.
+	[[nodiscard]] bool is_one(const std::vector<size_t> &multi_dim_index) const {
+		return is_one(get_coordinate(multi_dim_index));
+	}
 
-	/* set_to_one will set the element at the coordinate to 1
+	/** set_to_one will set the element at the coordinate to 1
 	 * if the element is already in the vector, we just set it to 1
 	 * if the element is not in the vector, we insert it in the vector
 	 * and set it to 1
+	 * @param coordinate the position of the element in the Y vector
 	 */
 	void set_to_one(uint64_t coordinate) {
 		auto [found, index] = _binary_search(coordinate);
@@ -70,6 +83,8 @@ public:
 		}
 	}
 
+	/// Does the same as set_to_one but sets the element to zero
+	/// @param coordinate the position of the element in the Y vector
 	void set_to_zero(uint64_t coordinate) {
 		auto [found, index] = _binary_search(coordinate);
 		if (found) { _vec[index].set_state(false); }
@@ -95,12 +110,16 @@ public:
 		for (auto &elem : _vec) { elem.reset_counter(); }
 	}
 
-	// we want to remove all the elements that have the element to zero
+	/// Remove all the elements that have the state to zero.
+	/// @return void
 	void remove_zeros() {
 		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageY &elem) { return !elem.is_one(); }),
 		           _vec.end());
 	}
 
+	/// Given a multi-dimensional index, we want to get its linear index.
+	/// @param multi_dim_index the multi-dimensional index
+	/// @return the linear index
 	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
 		return coretools::getLinearIndex(multi_dim_index, _dimensions);
 	}

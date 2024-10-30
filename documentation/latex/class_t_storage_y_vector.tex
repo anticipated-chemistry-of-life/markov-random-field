@@ -6,8 +6,7 @@
 \Hypertarget{class_t_storage_y_vector_a9f00eefb2a1bfe6c2101119363e07e81}\label{class_t_storage_y_vector_a9f00eefb2a1bfe6c2101119363e07e81} 
 {\bfseries TStorage\+YVector} (const size\+\_\+t n\+\_\+iterations, const std\+::vector$<$ size\+\_\+t $>$ \&dimensions)
 \item 
-\Hypertarget{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}\label{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b} 
-bool {\bfseries is\+\_\+one} (const uint64\+\_\+t coordinate) const
+bool \mbox{\hyperlink{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}{is\+\_\+one}} (const uint64\+\_\+t coordinate) const
 \item 
 \Hypertarget{class_t_storage_y_vector_a508b0d0520729e33985bc1865fad7dca}\label{class_t_storage_y_vector_a508b0d0520729e33985bc1865fad7dca} 
 bool {\bfseries is\+\_\+one} (const std\+::vector$<$ size\+\_\+t $>$ \&multi\+\_\+dim\+\_\+index) const
@@ -33,12 +32,50 @@ size\+\_\+t {\bfseries size} () const
 \Hypertarget{class_t_storage_y_vector_a3517b20665ead59c22561fff4203c834}\label{class_t_storage_y_vector_a3517b20665ead59c22561fff4203c834} 
 void {\bfseries reset\+\_\+counts} ()
 \item 
-\Hypertarget{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4}\label{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4} 
-void {\bfseries remove\+\_\+zeros} ()
+void \mbox{\hyperlink{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4}{remove\+\_\+zeros}} ()
 \item 
-\Hypertarget{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}\label{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a} 
-uint64\+\_\+t {\bfseries get\+\_\+coordinate} (const std\+::vector$<$ size\+\_\+t $>$ \&multi\+\_\+dim\+\_\+index) const
+uint64\+\_\+t \mbox{\hyperlink{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}{get\+\_\+coordinate}} (const std\+::vector$<$ size\+\_\+t $>$ \&multi\+\_\+dim\+\_\+index) const
 \end{DoxyCompactItemize}
+
+
+\doxysubsection{Member Function Documentation}
+\Hypertarget{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a}\index{TStorageYVector@{TStorageYVector}!get\_coordinate@{get\_coordinate}}
+\index{get\_coordinate@{get\_coordinate}!TStorageYVector@{TStorageYVector}}
+\doxysubsubsection{\texorpdfstring{get\_coordinate()}{get\_coordinate()}}
+{\footnotesize\ttfamily \label{class_t_storage_y_vector_aa45e2ca10348eb128977742f5ad58c3a} 
+uint64\+\_\+t TStorage\+YVector\+::get\+\_\+coordinate (\begin{DoxyParamCaption}\item[{const std\+::vector$<$ size\+\_\+t $>$ \&}]{multi\+\_\+dim\+\_\+index}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}}
+
+Given a multi-\/dimensional index, we want to get its linear index. 
+\begin{DoxyParams}{Parameters}
+{\em multi\+\_\+dim\+\_\+index} & the multi-\/dimensional index \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+the linear index 
+\end{DoxyReturn}
+\Hypertarget{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b}\index{TStorageYVector@{TStorageYVector}!is\_one@{is\_one}}
+\index{is\_one@{is\_one}!TStorageYVector@{TStorageYVector}}
+\doxysubsubsection{\texorpdfstring{is\_one()}{is\_one()}}
+{\footnotesize\ttfamily \label{class_t_storage_y_vector_a104cba43f1c9199ac3d25a91cb59147b} 
+bool TStorage\+YVector\+::is\+\_\+one (\begin{DoxyParamCaption}\item[{const uint64\+\_\+t}]{coordinate}{}\end{DoxyParamCaption}) const\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [nodiscard]}}
+
+we want to check if coordinate exists in the vector or not. the coordinate is the position of the element in the Y dimension so if an element is in the vector that means it is currently a one or it has been in the past iteration. 
+\begin{DoxyParams}{Parameters}
+{\em coordinate} & the position of the element in the Y vector. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+true if the element is one, false otherwise. 
+\end{DoxyReturn}
+\Hypertarget{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4}\index{TStorageYVector@{TStorageYVector}!remove\_zeros@{remove\_zeros}}
+\index{remove\_zeros@{remove\_zeros}!TStorageYVector@{TStorageYVector}}
+\doxysubsubsection{\texorpdfstring{remove\_zeros()}{remove\_zeros()}}
+{\footnotesize\ttfamily \label{class_t_storage_y_vector_a3ed702764ab269961c9988f33964b2e4} 
+void TStorage\+YVector\+::remove\+\_\+zeros (\begin{DoxyParamCaption}{}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+Remove all the elements that have the element to zero \begin{DoxyReturn}{Returns}
+void 
+\end{DoxyReturn}
 
 
 The documentation for this class was generated from the following file\+:\begin{DoxyCompactItemize}

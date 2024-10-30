@@ -7,8 +7,6 @@
 #include <cmath>
 #include <cstdint>
 
-// TODO : Change from uint32 to int32 with sign checking
-
 class TStorageZ {
 private:
 	int32_t _coordinate = 0;

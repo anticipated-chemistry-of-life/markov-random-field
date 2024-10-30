@@ -107,8 +107,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a4fe54a6968ea1cec8b9e870a9d3b5e52" id="r_a4fe54a6968ea1cec8b9e870a9d3b5e52"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="class_t_matrices.html">TMatrices</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4fe54a6968ea1cec8b9e870a9d3b5e52">get_matrices</a> () const</td></tr>
 <tr class="memdesc:a4fe54a6968ea1cec8b9e870a9d3b5e52"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the matrices for the clique.  <br /></td></tr>
 <tr class="separator:a4fe54a6968ea1cec8b9e870a9d3b5e52"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a1fe0c315375b9c0e2f04b6b19d2c4cc9" id="r_a1fe0c315375b9c0e2f04b6b19d2c4cc9"><td class="memItemLeft" align="right" valign="top"><a id="a1fe0c315375b9c0e2f04b6b19d2c4cc9" name="a1fe0c315375b9c0e2f04b6b19d2c4cc9"></a>
-void&#160;</td><td class="memItemRight" valign="bottom"><b>update_Z</b> (const <a class="el" href="class_t_storage_y_vector.html">TStorageYVector</a> &amp;Y, const <a class="el" href="class_t_storage_z_vector.html">TStorageZVector</a> &amp;Z, const <a class="el" href="class_t_tree.html">TTree</a> &amp;tree)</td></tr>
+<tr class="memitem:a1fe0c315375b9c0e2f04b6b19d2c4cc9" id="r_a1fe0c315375b9c0e2f04b6b19d2c4cc9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1fe0c315375b9c0e2f04b6b19d2c4cc9">update_Z</a> (const <a class="el" href="class_t_storage_y_vector.html">TStorageYVector</a> &amp;Y, const <a class="el" href="class_t_storage_z_vector.html">TStorageZVector</a> &amp;Z, const <a class="el" href="class_t_tree.html">TTree</a> &amp;tree)</td></tr>
+<tr class="memdesc:a1fe0c315375b9c0e2f04b6b19d2c4cc9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Update the Z dimension for this clique.  <br /></td></tr>
 <tr class="separator:a1fe0c315375b9c0e2f04b6b19d2c4cc9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
@@ -138,7 +138,7 @@ void&#160;</td><td class="memItemRight" valign="bottom"><b>update_Z</b> (const <
 </div><div class="memdoc">
 
 <p>Returns the matrices for the clique. </p>
-<dl class="section return"><dt>Returns</dt><dd>Matrices. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The class containing the matrices. </dd></dl>
 
 </div>
 </div>
@@ -214,6 +214,42 @@ void&#160;</td><td class="memItemRight" valign="bottom"><b>update_Z</b> (const <
   <table class="params">
     <tr><td class="paramname">mu_c_1</td><td></td></tr>
     <tr><td class="paramname">mu_c_0</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a1fe0c315375b9c0e2f04b6b19d2c4cc9" name="a1fe0c315375b9c0e2f04b6b19d2c4cc9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1fe0c315375b9c0e2f04b6b19d2c4cc9">&#9670;&#160;</a></span>update_Z()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void TClique::update_Z </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="class_t_storage_y_vector.html">TStorageYVector</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>Y</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="class_t_storage_z_vector.html">TStorageZVector</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>Z</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="class_t_tree.html">TTree</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>tree</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Update the Z dimension for this clique. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">Y</td><td>The current state of the Y dimension. </td></tr>
+    <tr><td class="paramname">Z</td><td>The current state of the Z dimension. </td></tr>
+    <tr><td class="paramname">tree</td><td>The tree. </td></tr>
   </table>
   </dd>
 </dl>

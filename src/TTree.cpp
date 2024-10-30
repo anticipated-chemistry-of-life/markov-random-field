@@ -150,10 +150,20 @@ size_t TTree::get_node_index(const std::string &Id) const {
 }
 
 void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
+
+	// we initialize the number of leaves we have in each tree
 	std::vector<size_t> num_leaves_per_tree(all_trees.size());
+
+	// we get the number of leaves for each tree
 	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i].get_number_of_leaves(); }
+
+	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
 	num_leaves_per_tree[_dimension] = 1;
-	size_t n_cliques                = coretools::containerProduct(num_leaves_per_tree);
+
+	// we then caclulate how many cliques we will have in total for that tree. Which is the product of the number of
+	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
+	size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
+
 	for (size_t i = 0; i < n_cliques; ++i) {
 		std::vector<size_t> multi_dim_index = coretools::getSubscripts(i, num_leaves_per_tree);
 		_cliques.emplace_back(multi_dim_index, _dimension, _nodes.size());

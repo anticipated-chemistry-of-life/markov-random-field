@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['get_5fcoordinate_0',['get_coordinate',['../class_t_storage_y.html#a87bab53421844453fdc9d7864aa40ea7',1,'TStorageY']]],
+  ['get_5fcoordinate_0',['get_coordinate',['../class_t_storage_y.html#a87bab53421844453fdc9d7864aa40ea7',1,'TStorageY::get_coordinate()'],['../class_t_storage_y_vector.html#aa45e2ca10348eb128977742f5ad58c3a',1,'TStorageYVector::get_coordinate()']]],
   ['get_5fcounter_1',['get_counter',['../class_t_storage_y.html#a9d81a325c98ab176792998804c8562e8',1,'TStorageY']]],
   ['get_5findex_5fwithin_5finternal_5fnodes_2',['get_index_within_internal_nodes',['../class_t_tree.html#afae13a3b2754ad607f96276db7987d2f',1,'TTree']]],
   ['get_5findex_5fwithin_5fleaves_3',['get_index_within_leaves',['../class_t_tree.html#aea5cba05985c65ebbf9273edbe238ea9',1,'TTree']]],

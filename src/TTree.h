@@ -143,5 +143,10 @@ public:
 	}
 
 	void initialize_cliques(const std::vector<TTree> &trees);
+
+	coretools::Probability get_a() const { return _a; }
+	coretools::Probability get_b() const { return _b; }
+	double get_delta() const { return _delta; }
+	size_t get_number_of_bins() const { return _number_of_bins; }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

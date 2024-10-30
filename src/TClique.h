@@ -158,7 +158,7 @@ public:
 	/// @return The class containing the matrices.
 	[[nodiscard]] const TMatrices &get_matrices() const { return _matrices; }
 
-	/// @bried Update the Z dimension for this clique.
+	/// @brief Update the Z dimension for this clique.
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
