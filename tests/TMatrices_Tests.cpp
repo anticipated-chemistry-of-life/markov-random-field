@@ -15,8 +15,8 @@ TEST(TMatrices_tests, test_matrix) {
 	TTree tree(0);
 	tree.load_from_file("../tests/test_data/binning.tsv");
 	TClique clique;
-	clique.initialize(tree.get_a(), tree.get_delta(), tree.get_number_of_bins());
 	clique.set_lambda();
+	clique.initialize(tree.get_a(), tree.get_delta(), tree.get_number_of_bins());
 	branchLengths.compute_matrices();
 	auto p1           = clique.get_matrices().get_matrices()[1].get_matrix();
 	arma::mat p1_true = arma::zeros(2, 2);

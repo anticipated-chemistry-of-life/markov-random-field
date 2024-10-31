@@ -134,11 +134,14 @@ private:
 
 public:
 	TClique() = default;
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes) {
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, double mu_c_1,
+	        double mu_c_0) {
 		_start_index        = start_index;
 		_variable_dimension = variable_dimension;
 		_n_nodes            = n_nodes;
-	};
+		_mu_c_1             = mu_c_1;
+		_mu_c_0             = mu_c_0;
+	}
 
 	/// @brief Initialize the matrices for the clique.
 	/// @param a The lower bound of the bin.
