@@ -20,27 +20,6 @@ private:
 	/// defined in our model, this can be more.
 	std::vector<size_t> _dimensions;
 
-	/// @brief Binary search to find the coordinate in the vector
-	[[nodiscard]] std::pair<bool, size_t> _binary_search(uint64_t coordinate) const {
-
-		// lower_bound return the first element that is not less than the value
-		auto it = std::lower_bound(_vec.begin(), _vec.end(), coordinate);
-
-		// if our coordinate is bigger than the biggest element in the vector
-		// we say that we haven't found our element and that if we want to
-		// insert it, we should insert it at the end of the vector
-		if (it == _vec.end()) { return {false, _vec.size()}; }
-
-		// else our coordinate is in the range of the coordinates in the vector
-		// meaning that if we haven't found it, we will insert it at that position
-		// to keep the vector sorted
-		size_t index = std::distance(_vec.begin(), it);
-		if (*it != coordinate) { return {false, index}; }
-
-		// if we found the coordinate we return the index and true
-		return {true, index};
-	};
-
 public:
 	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions) {
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
@@ -56,7 +35,7 @@ public:
 	/// @param coordinate the position of the element in the Y vector.
 	/// @return true if the element is one, false otherwise.
 	[[nodiscard]] bool is_one(const uint64_t coordinate) const {
-		auto [found, index] = _binary_search(coordinate);
+		auto [found, index] = binary_search(coordinate);
 		if (found) { return _vec[index].is_one(); }
 		return false;
 	};
@@ -75,7 +54,7 @@ public:
 	 * @param coordinate the position of the element in the Y vector
 	 */
 	void set_to_one(uint64_t coordinate) {
-		auto [found, index] = _binary_search(coordinate);
+		auto [found, index] = binary_search(coordinate);
 		if (found) {
 			_vec[index].set_state(true);
 		} else {
@@ -86,7 +65,7 @@ public:
 	/// Does the same as set_to_one but sets the element to zero
 	/// @param coordinate the position of the element in the Y vector
 	void set_to_zero(uint64_t coordinate) {
-		auto [found, index] = _binary_search(coordinate);
+		auto [found, index] = binary_search(coordinate);
 		if (found) { _vec[index].set_state(false); }
 	}
 
@@ -97,7 +76,7 @@ public:
 	}
 
 	double get_fraction_of_ones(uint64_t coordinate) const {
-		auto [found, index] = _binary_search(coordinate);
+		auto [found, index] = binary_search(coordinate);
 		if (!found) { return 0.0; }
 		return static_cast<double>(_vec[index].get_counter()) / static_cast<double>(_total_counts);
 	}
@@ -122,6 +101,31 @@ public:
 	/// @return the linear index
 	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
 		return coretools::getLinearIndex(multi_dim_index, _dimensions);
+	}
+
+	/// @brief Binary search to find the coordinate in the vector
+	[[nodiscard]] std::pair<bool, size_t> binary_search(uint64_t coordinate) const {
+
+		// lower_bound return the first element that is not less than the value
+		auto it = std::lower_bound(_vec.begin(), _vec.end(), coordinate);
+
+		// if our coordinate is bigger than the biggest element in the vector
+		// we say that we haven't found our element and that if we want to
+		// insert it, we should insert it at the end of the vector
+		if (it == _vec.end()) { return {false, _vec.size()}; }
+
+		// else our coordinate is in the range of the coordinates in the vector
+		// meaning that if we haven't found it, we will insert it at that position
+		// to keep the vector sorted
+		size_t index = std::distance(_vec.begin(), it);
+		if (*it != coordinate) { return {false, index}; }
+
+		// if we found the coordinate we return the index and true
+		return {true, index};
+	};
+
+	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
+		return binary_search(get_coordinate(multi_dim_index));
 	}
 };
 

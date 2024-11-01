@@ -83,6 +83,7 @@ public:
 	 * @return Vector of matrices.
 	 */
 	const std::vector<TMatrix> &get_matrices() const { return _matrices; }
+	const TMatrix &operator[](size_t i) const { return _matrices[i]; }
 
 	/** @brief Set the matrix lambda for the clique given the two rate parameters.
 	 * @param mu_c_1
@@ -134,13 +135,10 @@ private:
 
 public:
 	TClique() = default;
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, double mu_c_1,
-	        double mu_c_0) {
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes) {
 		_start_index        = start_index;
 		_variable_dimension = variable_dimension;
 		_n_nodes            = n_nodes;
-		_mu_c_1             = mu_c_1;
-		_mu_c_0             = mu_c_0;
 	}
 
 	/// @brief Initialize the matrices for the clique.
@@ -150,6 +148,19 @@ public:
 	void initialize(double a, double delta, size_t n_bins) {
 		_matrices.resize(n_bins);
 		_matrices.set(a, delta);
+	}
+
+	void set_mus(double mu_c_1, double mu_c_0) {
+		_mu_c_1 = mu_c_1;
+		_mu_c_0 = mu_c_0;
+	}
+
+	double get_stationary_probability(bool state) const {
+		if (state) {
+			return _mu_c_1 / (_mu_c_1 + _mu_c_0);
+		} else {
+			return _mu_c_0 / (_mu_c_1 + _mu_c_0);
+		}
 	}
 
 	/// @brief Set the rate parameters for the clique.
@@ -166,6 +177,8 @@ public:
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
 	void update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
+
+	std::vector<bool> update_Z_test(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
 };
 
 #endif // ACOL_TBRANCHLENGTHS_H

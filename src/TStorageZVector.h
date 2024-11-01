@@ -13,7 +13,44 @@ class TStorageZVector {
 private:
 	std::vector<size_t> _dimensions;
 	std::vector<TStorageZ> _vec;
-	[[nodiscard]] std::pair<bool, size_t> _binary_search(uint32_t coordinate) const {
+
+public:
+	TStorageZVector() = default;
+	TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {}
+
+	[[nodiscard]] bool is_one(const uint32_t coordinate) const {
+		auto [found, index] = binary_search(coordinate);
+		if (found) { return _vec[index].is_one(); }
+		return false;
+	};
+
+	bool is_one(const std::vector<size_t> &multi_dim_index) const { return is_one(get_coordinate(multi_dim_index)); }
+
+	void set_to_one(uint32_t coordinate) {
+		auto [found, index] = binary_search(coordinate);
+		if (found) {
+			_vec[index].set_state(true);
+		} else {
+			_vec.insert(_vec.begin() + index, TStorageZ((int32_t)coordinate));
+		}
+	}
+
+	void set_to_zero(uint32_t coordinate) {
+		auto [found, index] = binary_search(coordinate);
+		if (found) { _vec[index].set_state(false); }
+	}
+
+	void remove_zeros() {
+		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageZ &storage) { return !storage.is_one(); }),
+		           _vec.end());
+	}
+	size_t size() const { return _vec.size(); }
+
+	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
+		return coretools::getLinearIndex(multi_dim_index, _dimensions);
+	}
+
+	[[nodiscard]] std::pair<bool, size_t> binary_search(uint32_t coordinate) const {
 
 		// lower_bound return the first element that is not less than the value
 		auto it = std::lower_bound(_vec.begin(), _vec.end(), coordinate);
@@ -33,40 +70,8 @@ private:
 		return {true, index};
 	};
 
-public:
-	TStorageZVector() = default;
-	TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {}
-
-	[[nodiscard]] bool is_one(const uint32_t coordinate) const {
-		auto [found, index] = _binary_search(coordinate);
-		if (found) { return _vec[index].is_one(); }
-		return false;
-	};
-
-	bool is_one(const std::vector<size_t> &multi_dim_index) const { return is_one(get_coordinate(multi_dim_index)); }
-
-	void set_to_one(uint32_t coordinate) {
-		auto [found, index] = _binary_search(coordinate);
-		if (found) {
-			_vec[index].set_state(true);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ((int32_t)coordinate));
-		}
-	}
-
-	void set_to_zero(uint32_t coordinate) {
-		auto [found, index] = _binary_search(coordinate);
-		if (found) { _vec[index].set_state(false); }
-	}
-
-	void remove_zeros() {
-		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageZ &storage) { return !storage.is_one(); }),
-		           _vec.end());
-	}
-	size_t size() const { return _vec.size(); }
-
-	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
-		return coretools::getLinearIndex(multi_dim_index, _dimensions);
+	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
+		return binary_search(get_coordinate(multi_dim_index));
 	}
 };
 

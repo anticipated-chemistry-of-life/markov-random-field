@@ -9,7 +9,7 @@
 
 class TStorageZ {
 private:
-	int32_t _coordinate = 0;
+	int32_t _value = 0;
 
 public:
 	TStorageZ() = default;
@@ -17,16 +17,16 @@ public:
 		set_coordinate(coordinate);
 		set_state(true);
 	}
-	[[nodiscard]] uint32_t get_coordinate() const { return std::abs(_coordinate); };
+	[[nodiscard]] uint32_t get_coordinate() const { return std::abs(_value); };
 
-	void set_coordinate(const int32_t coordinate) { _coordinate = coordinate; }
+	void set_coordinate(const int32_t coordinate) { _value = coordinate; }
 
-	[[nodiscard]] bool is_one() const { return !std::signbit(_coordinate); } // this should be ok
+	[[nodiscard]] bool is_one() const { return !std::signbit(_value); } // this should be ok
 	void set_state(const bool state) {
 		// we want to set the state this is given
 		// so if the state is false, the coordinate should be negative
 		// the state is true, we set the state to positive
-		_coordinate = (state * 2 - 1) * std::abs(_coordinate);
+		_value = (state * 2 - 1) * std::abs(_value);
 	}
 
 	bool operator<(const TStorageZ &right) const { return get_coordinate() < right.get_coordinate(); }

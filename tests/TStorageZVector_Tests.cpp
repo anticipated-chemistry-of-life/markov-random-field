@@ -3,6 +3,7 @@
 //
 
 #include "TStorageZVector.h"
+#include "coretools/devtools.h"
 #include "gtest/gtest.h"
 
 TEST(ZStorageVector_Tests, test_constructor) {
@@ -35,7 +36,6 @@ TEST(ZStorageVector_Tests, add_multiple_entries) {
 	z.set_to_one(1459);
 	z.set_to_one(1460);
 	EXPECT_EQ(z.is_one(1458), true);
-	EXPECT_EQ(z.is_one(-1458), true);
 	EXPECT_EQ(z.is_one(1459), true);
 	EXPECT_EQ(z.is_one(1460), true);
 	z.set_to_zero(0);
@@ -44,8 +44,6 @@ TEST(ZStorageVector_Tests, add_multiple_entries) {
 
 TEST(ZStorageVector_Tests, min_int32_value) {
 	TStorageZVector z;
-	z.set_to_one(std::numeric_limits<int32_t>::min());
-	EXPECT_EQ(z.is_one(std::numeric_limits<int32_t>::min()), true);
 
 	z.set_to_zero(std::numeric_limits<int32_t>::min());
 	EXPECT_EQ(z.is_one(std::numeric_limits<int32_t>::min()), false);

@@ -4,26 +4,32 @@
 
 #include "TStorageYVector.h"
 #include "gtest/gtest.h"
+#include <cstddef>
+#include <vector>
 
 TEST(YStorageVector_Tests, test_constructor) {
-	const TStorageYVector y(1000);
+	std::vector<size_t> vec(1, 1);
+	const TStorageYVector y(1000, vec);
 	EXPECT_EQ(y.is_one(1458), false);
 }
 
 TEST(YStorageVector_Tests, set_to_one) {
-	TStorageYVector y(1000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(1000, vec);
 	y.set_to_one(1458);
 	EXPECT_EQ(y.is_one(1458), true);
 }
 
 TEST(YStorageVector_Tests, set_to_zero) {
-	TStorageYVector y(1000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(1000, vec);
 	y.set_to_zero(1458);
 	EXPECT_EQ(y.is_one(1458), false);
 }
 
 TEST(YStorageVector_Tests, set_to_one_and_zero) {
-	TStorageYVector y(1000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(1000, vec);
 	y.set_to_one(1458);
 	EXPECT_EQ(y.is_one(1458), true);
 	y.set_to_zero(1458);
@@ -31,7 +37,8 @@ TEST(YStorageVector_Tests, set_to_one_and_zero) {
 }
 
 TEST(YStorageVector_Tests, get_size_of_vector) {
-	TStorageYVector y(100000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(100000, vec);
 	EXPECT_EQ(y.size(), 0);
 	y.set_to_one(1458);
 	EXPECT_EQ(y.size(), 1);
@@ -44,7 +51,8 @@ TEST(YStorageVector_Tests, get_size_of_vector) {
 }
 
 TEST(YStorageVector_Tests, get_fraction_of_ones) {
-	TStorageYVector y(100000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(100000, vec);
 	y.set_to_one(1458);
 	y.set_to_one(16);
 	y.set_to_one(17);
@@ -69,7 +77,8 @@ TEST(YStorageVector_Tests, get_fraction_of_ones) {
 }
 
 TEST(YStorageVector_Tests, reset_counter) {
-	TStorageYVector y(100000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(100000, vec);
 	y.set_to_one(1458);
 	y.set_to_one(16);
 	y.set_to_one(17);
@@ -86,7 +95,8 @@ TEST(YStorageVector_Tests, reset_counter) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_from_vector) {
-	TStorageYVector y(100000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(100000, vec);
 	y.set_to_one(1458);
 	y.set_to_one(16);
 	y.set_to_one(17);
@@ -102,7 +112,8 @@ TEST(YStorageVector_Tests, remove_zeros_from_vector) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_from_vector_2) {
-	TStorageYVector y(100000);
+	std::vector<size_t> vec(1, 1);
+	TStorageYVector y(100000, vec);
 	y.set_to_one(1458);
 	y.set_to_zero(16);
 	y.set_to_one(17);

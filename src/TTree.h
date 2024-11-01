@@ -73,6 +73,8 @@ public:
 	// Destructor, deletes all nodes
 	~TTree();
 
+	size_t size() const { return _nodes.size(); };
+
 	/** Get node by its id
 	 * @param Id: the id of the node
 	 * @return a reference to the node with the given id

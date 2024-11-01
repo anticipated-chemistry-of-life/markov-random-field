@@ -13,7 +13,7 @@
 using namespace testing;
 
 TEST(Tree_test, load_tree) {
-	TTree tree;
+	TTree tree(0);
 	tree.load_from_file("../tests/test_data/loading_tree.tsv"); // The path looks weird because we actually run the
 	                                                            // tests from the build directory
 	uint roots = tree.count_roots();
@@ -21,15 +21,13 @@ TEST(Tree_test, load_tree) {
 	std::string mammal                 = std::string("mammal");
 	const std::vector<size_t> children = tree.get_node(mammal).children();
 	EXPECT_EQ(children.size(), 2);
-	EXPECT_EQ(tree.get_node(mammal).branchLengthToParent(), 0.8);
+	EXPECT_EQ(tree.get_node(mammal).get_branch_length_bin(), 24);
 }
 
 TEST(Tree_test, test_discretisation_of_branch_length) {
 	coretools::instances::parameters().add("K", 10);
-	TTree tree;
+	TTree tree(0);
 	tree.load_from_file("../tests/test_data/binning.tsv");
-	TBranchLengths branchLengths;
-	branchLengths.initialize(tree.get_all_branch_lengths());
-	std::vector<TypeBinBranches> vector = branchLengths.get_binned_branch_lengths();
+	std::vector<TypeBinBranches> vector = tree.get_all_binned_branch_lengths();
 	EXPECT_THAT(vector, ElementsAre(3, 0, 1, 0, 2, 0));
 }
