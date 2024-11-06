@@ -77,25 +77,38 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, const TSto
 		UERROR("The number of nodes in the clique is different from the number of linear indices of the clique !");
 	}
 	std::vector<bool> current_state(n_nodes_in_Y_clique, false);
-	size_t lower_bound = 0;
-	size_t upper_bound = linear_indices_of_clique[0];
-	auto [found, index_in_Y, index_in_full_Y] =
-	    binary_search(Y, linear_indices_of_clique, Y.begin(), linear_indices_of_clique[0] + 1);
-	if (found) {
-		current_state[0] = true;
-		index_in_Y += 1;
-		index_in_full_Y = Y[index_in_Y].get_coordinate();
-		lower_bound     = upper_bound;
-	}
-	for (size_t i = 1; i < n_nodes_in_Y_clique; ++i) {
-		if (linear_indices_of_clique[i] < index_in_full_Y) {
-			continue;
-		} else if (linear_indices_of_clique[i] == index_in_full_Y) {
-			current_state[i] = true;
-			index_in_Y += 1;
-			index_in_full_Y = Y[index_in_Y].get_coordinate();
-			lower_bound     = linear_indices_of_clique[i];
-		}
+	size_t prev_index = 0;
 
-		return current_state;
+	for (size_t i = 0; i < linear_indices_of_clique.size(); ++i) {
+		size_t curr_index = linear_indices_of_clique[i];
+		auto n            = curr_index - prev_index;
+		double p          = double(Y.size()) / double(coretools::containerProduct(number_of_leaves_in_each_dimension));
+		auto upper_bound  = static_cast<size_t>(curr_index + std::ceil(n * p + 2 * std::sqrt(n * p * (1 - p))));
+		auto curr_index_multi_dim = coretools::getSubscripts(curr_index, number_of_leaves_in_each_dimension);
+		auto [found, index_in_Y, index_in_full_Y] = binary_search(Y, curr_index_multi_dim, upper_bound, Y.end());
+		if (found) {
+			current_state[i] = true;
+			prev_index       = curr_index;
+			continue;
+		}
+		auto lower_bound =
+		    static_cast<size_t>(std::floor(curr_index + std::floor(n * p - 2 * std::sqrt(n * p * (1 - p)))));
+		if (index_in_full_Y > lower_bound) {
+			auto [found, index_in_Y, index_in_full_Y] =
+			    binary_search(Y, curr_index_multi_dim, lower_bound, upper_bound);
+			if (found) {
+				current_state[i] = true;
+				prev_index       = curr_index;
+				continue;
+			}
+		} else {
+			auto [found, index_in_Y, index_in_full_Y] = binary_search(Y, curr_index_multi_dim, Y.begin(), lower_bound);
+			if (found) {
+				current_state[i] = true;
+				prev_index       = curr_index;
+				continue;
+			}
+		}
 	}
+	return current_state;
+}

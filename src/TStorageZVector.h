@@ -15,16 +15,13 @@ private:
 	std::vector<TStorageZ> _vec;
 
 public:
+	using value_type  = uint32_t;
 	TStorageZVector() = default;
-	TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {}
+	TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {
+		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
+	}
 
-	[[nodiscard]] bool is_one(const uint32_t coordinate) const {
-		auto [found, index] = binary_search(coordinate);
-		if (found) { return _vec[index].is_one(); }
-		return false;
-	};
-
-	bool is_one(const std::vector<size_t> &multi_dim_index) const { return is_one(get_coordinate(multi_dim_index)); }
+	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const { return _vec[index_in_Z].is_one(); };
 
 	void set_to_one(uint32_t coordinate) {
 		auto [found, index] = binary_search(coordinate);
@@ -45,6 +42,8 @@ public:
 		           _vec.end());
 	}
 	size_t size() const { return _vec.size(); }
+	auto begin() const { return _vec.begin(); }
+	auto end() const { return _vec.end(); }
 
 	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
 		return coretools::getLinearIndex(multi_dim_index, _dimensions);

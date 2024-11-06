@@ -178,7 +178,9 @@ public:
 	/// @param tree The tree.
 	void update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
 
-	std::vector<bool> update_Z_test(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
+	std::vector<bool> fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) const;
+
+	size_t get_number_of_nodes() const { return _n_nodes; }
 };
 
 #endif // ACOL_TBRANCHLENGTHS_H

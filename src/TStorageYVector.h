@@ -8,6 +8,7 @@
 #include "coretools/algorithms.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 class TStorageYVector {
@@ -21,7 +22,10 @@ private:
 	std::vector<size_t> _dimensions;
 
 public:
+	using value_type     = uint64_t;
+	using const_iterator = typename std::vector<TStorageY>::const_iterator;
 	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions) {
+		// TODO : NOTE that dimensions correspond to the number of leaf nodes in each dimension !!!
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
@@ -34,18 +38,7 @@ public:
 	/// it has been in the past iteration.
 	/// @param coordinate the position of the element in the Y vector.
 	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] bool is_one(const uint64_t coordinate) const {
-		auto [found, index] = binary_search(coordinate);
-		if (found) { return _vec[index].is_one(); }
-		return false;
-	};
-
-	/// Overload of the is_one function that takes a multi-dimensional index
-	/// @param multi_dim_index the multi-dimensional index
-	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] bool is_one(const std::vector<size_t> &multi_dim_index) const {
-		return is_one(get_coordinate(multi_dim_index));
-	}
+	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const { return _vec[index_in_Y].is_one(); };
 
 	/** set_to_one will set the element at the coordinate to 1
 	 * if the element is already in the vector, we just set it to 1
@@ -84,6 +77,10 @@ public:
 	size_t get_total_counts() const { return _total_counts; }
 
 	size_t size() const { return _vec.size(); }
+	auto begin() const { return _vec.begin(); }
+	auto end() const { return _vec.end(); }
+	const std::vector<TStorageY> &get_vector() const { return _vec; }
+	const TStorageY &operator[](size_t index) const { return _vec[index]; }
 
 	void reset_counts() {
 		for (auto &elem : _vec) { elem.reset_counter(); }
@@ -99,7 +96,7 @@ public:
 	/// Given a multi-dimensional index, we want to get its linear index.
 	/// @param multi_dim_index the multi-dimensional index
 	/// @return the linear index
-	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
+	uint64_t get_linear_coordinate(const std::vector<size_t> &multi_dim_index) const {
 		return coretools::getLinearIndex(multi_dim_index, _dimensions);
 	}
 

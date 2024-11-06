@@ -8,7 +8,10 @@
 #include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/devtools.h"
+#include "update_current_state.h"
 #include <cstddef>
+#include <filesystem>
 #include <vector>
 
 void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) {
@@ -54,7 +57,8 @@ void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const
 	}
 }
 
-std::vector<bool> TClique::update_Z_test(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) {
+std::vector<bool> TClique::fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
+                                              const TTree &tree) const {
 	std::vector<bool> current_state(_n_nodes, false);
 	for (size_t i = 0; i < _n_nodes; ++i) {
 		if (tree.get_node(i).isLeaf()) {

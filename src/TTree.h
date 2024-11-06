@@ -114,6 +114,7 @@ public:
 	/** @return the number of leaves in the tree
 	 */
 	size_t get_number_of_leaves() const { return _leaves.size(); }
+	size_t get_number_of_nodes() const { return _nodes.size(); }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
@@ -150,5 +151,6 @@ public:
 	coretools::Probability get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
+	const std::vector<TClique> &get_cliques() const { return _cliques; }
 };
 #endif // METABOLITE_INFERENCE_TREE_H
