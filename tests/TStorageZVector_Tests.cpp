@@ -7,8 +7,9 @@
 #include "gtest/gtest.h"
 
 TEST(ZStorageVector_Tests, test_constructor) {
-	const TStorageZVector z;
-	EXPECT_EQ(z.is_one(1458), false);
+	TStorageZVector z;
+	z.set_to_one(1458);
+	EXPECT_EQ(z.is_one(1458), true);
 }
 
 TEST(ZStorageVector_Tests, set_to_one) {
@@ -19,7 +20,7 @@ TEST(ZStorageVector_Tests, set_to_one) {
 
 TEST(ZStorageVector_Tests, set_to_zero) {
 	TStorageZVector z;
-	z.set_to_zero(-1458);
+	z.set_to_zero(1458);
 	EXPECT_EQ(z.is_one(1458), false);
 }
 

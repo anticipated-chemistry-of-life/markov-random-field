@@ -16,18 +16,18 @@
 
 void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) {
 	std::vector<bool> current_state(_n_nodes, false);
-	for (size_t i = 0; i < _n_nodes; ++i) {
-		if (tree.get_node(i).isLeaf()) {
-			std::vector<size_t> multi_dim_index_in_Y  = _start_index;
-			multi_dim_index_in_Y[_variable_dimension] = tree.get_index_within_leaves(i);
-			const auto [found, index]                 = Y.binary_search(multi_dim_index_in_Y);
-			current_state[i]                          = Y.is_one(multi_dim_index_in_Y);
-		} else {
-			std::vector<size_t> multi_dim_index_in_Z  = _start_index;
-			multi_dim_index_in_Z[_variable_dimension] = tree.get_index_within_internal_nodes(i);
-			current_state[i]                          = Z.is_one(multi_dim_index_in_Z);
-		}
-	}
+	// for (size_t i = 0; i < _n_nodes; ++i) {
+	// 	if (tree.get_node(i).isLeaf()) {
+	// 		std::vector<size_t> multi_dim_index_in_Y  = _start_index;
+	// 		multi_dim_index_in_Y[_variable_dimension] = tree.get_index_within_leaves(i);
+	// 		const auto [found, index]                 = Y.binary_search(multi_dim_index_in_Y);
+	// 		current_state[i]                          = Y.is_one(multi_dim_index_in_Y);
+	// 	} else {
+	// 		std::vector<size_t> multi_dim_index_in_Z  = _start_index;
+	// 		multi_dim_index_in_Z[_variable_dimension] = tree.get_index_within_internal_nodes(i);
+	// 		current_state[i]                          = Z.is_one(multi_dim_index_in_Z);
+	// 	}
+	// }
 
 	double stationary_0 = get_stationary_probability(false);
 	double stationary_1 = get_stationary_probability(true);
@@ -59,18 +59,18 @@ void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const
 
 std::vector<bool> TClique::fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
                                               const TTree &tree) const {
-	std::vector<bool> current_state(_n_nodes, false);
-	for (size_t i = 0; i < _n_nodes; ++i) {
-		if (tree.get_node(i).isLeaf()) {
-			std::vector<size_t> multi_dim_index_in_Y  = _start_index;
-			multi_dim_index_in_Y[_variable_dimension] = tree.get_index_within_leaves(i);
-			const auto [found, index]                 = Y.binary_search(multi_dim_index_in_Y);
-			current_state[i]                          = Y.is_one(multi_dim_index_in_Y);
-		} else {
-			std::vector<size_t> multi_dim_index_in_Z  = _start_index;
-			multi_dim_index_in_Z[_variable_dimension] = tree.get_index_within_internal_nodes(i);
-			current_state[i]                          = Z.is_one(multi_dim_index_in_Z);
-		}
-	}
-	return current_state;
+	// std::vector<bool> current_state(_n_nodes, false);
+	// for (size_t i = 0; i < _n_nodes; ++i) {
+	// 	if (tree.get_node(i).isLeaf()) {
+	// 		std::vector<size_t> multi_dim_index_in_Y  = _start_index;
+	// 		multi_dim_index_in_Y[_variable_dimension] = tree.get_index_within_leaves(i);
+	// 		const auto [found, index]                 = Y.binary_search(multi_dim_index_in_Y);
+	// 		current_state[i]                          = Y.is_one(Y.get_linear_coordinate(mul));
+	// 	} else {
+	// 		std::vector<size_t> multi_dim_index_in_Z  = _start_index;
+	// 		multi_dim_index_in_Z[_variable_dimension] = tree.get_index_within_internal_nodes(i);
+	// 		current_state[i]                          = Z.is_one(multi_dim_index_in_Z);
+	// 	}
+	// }
+	// return current_state;
 }

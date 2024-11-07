@@ -21,7 +21,11 @@ public:
 		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
 	}
 
-	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const { return _vec[index_in_Z].is_one(); };
+	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const {
+		auto [found, index] = binary_search(index_in_Z);
+		if (found) { return _vec[index].is_one(); }
+		return false;
+	};
 
 	void set_to_one(uint32_t coordinate) {
 		auto [found, index] = binary_search(coordinate);

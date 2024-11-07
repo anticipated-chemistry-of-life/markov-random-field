@@ -9,7 +9,8 @@
 
 TEST(YStorageVector_Tests, test_constructor) {
 	std::vector<size_t> vec(1, 1);
-	const TStorageYVector y(1000, vec);
+	TStorageYVector y(1000, vec);
+	y.set_to_zero(1458);
 	EXPECT_EQ(y.is_one(1458), false);
 }
 

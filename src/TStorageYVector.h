@@ -32,13 +32,17 @@ public:
 		_dimensions                  = dimensions;
 	};
 
-	/// we want to check if coordinate exists in the vector or not.
+	/// We want to check if coordinate exists in the vector or not.
 	/// the coordinate is the position of the element in the Y dimension
 	/// so if an element is in the vector that means it is currently a one or
 	/// it has been in the past iteration.
 	/// @param coordinate the position of the element in the Y vector.
 	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const { return _vec[index_in_Y].is_one(); };
+	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const {
+		auto [found, index] = binary_search(index_in_Y);
+		if (found) { return _vec[index].is_one(); }
+		return false;
+	};
 
 	/** set_to_one will set the element at the coordinate to 1
 	 * if the element is already in the vector, we just set it to 1
@@ -122,7 +126,7 @@ public:
 	};
 
 	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
-		return binary_search(get_coordinate(multi_dim_index));
+		return binary_search(get_linear_coordinate(multi_dim_index));
 	}
 };
 
