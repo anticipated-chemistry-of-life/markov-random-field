@@ -1,19 +1,18 @@
-#pragma once
 
+#ifndef TUPDATE_CURRENT_STATE_H
+#define TUPDATE_CURRENT_STATE_H
 #include "TStorageY.h"
 #include "TStorageYVector.h"
-#include "TTree.h"
 #include "coretools/Main/TError.h"
-#include "coretools/algorithms.h"
 #include <cmath>
+#include <cstddef>
 #include <variant>
 #include <vector>
 
 template<typename T, typename Underlying = typename T::value_type>
-std::tuple<bool, size_t, Underlying> binary_search(const T &vec, const std::vector<size_t> &multi_dim_index,
-                                                   std::variant<size_t, typename T::const_iterator> lower_interval,
-                                                   std::variant<size_t, typename T::const_iterator> upper_interval) {
-	auto coordinate = vec.get_linear_coordinate(multi_dim_index);
+inline std::tuple<bool, size_t, Underlying, bool>
+binary_search(const T &vec, size_t linear_index, std::variant<size_t, typename T::const_iterator> lower_interval,
+              std::variant<size_t, typename T::const_iterator> upper_interval) {
 
 	// Determine the upper bound based on the type of upper_interval
 	auto begin_it = std::holds_alternative<size_t>(lower_interval)
@@ -22,47 +21,55 @@ std::tuple<bool, size_t, Underlying> binary_search(const T &vec, const std::vect
 	auto end_it   = std::holds_alternative<size_t>(upper_interval) ? vec.begin() + std::get<size_t>(upper_interval)
 	                                                               : std::get<typename T::const_iterator>(upper_interval);
 
+	if (end_it > vec.end()) { end_it = vec.end(); }
+
 	// lower_bound return the first element that is not less than the value
-	auto it = std::lower_bound(begin_it, end_it, coordinate);
+	auto it = std::lower_bound(begin_it, end_it, linear_index);
 
 	// if our coordinate is bigger than the biggest element in the vector
 	// we say that we haven't found our element and that if we want to
 	// insert it, we should insert it at the end of the vector
-	if (it == vec.end()) { return {false, vec.size(), vec.size()}; }
+	if (it == vec.end()) { return {false, vec.size(), vec.size(), true}; }
 
 	// else our coordinate is in the range of the coordinates in the vector
 	// meaning that if we haven't found it, we will insert it at that position
 	// to keep the vector sorted
-	if (it->get_coordinate() != coordinate) { return {false, vec.size(), it->get_coordinate()}; }
+	auto distance = std::distance(vec.begin(), it);
+	if (it->get_coordinate() != linear_index) { return {false, distance, it->get_coordinate(), false}; }
 
 	// if we found the coordinate we return the index and true
-	return {true, std::distance(vec.begin(), it), it->get_coordinate()};
+	return {true, distance, it->get_coordinate(), distance == vec.size() - 1};
 };
 
-std::vector<bool> fill_current_state_easy(const TStorageYVector &Y, const std::vector<size_t> &start_multidim_index,
-                                          size_t n_nodes_in_Y_clique) {
+inline std::vector<bool> fill_current_state_easy(const TStorageYVector &Y,
+                                                 const std::vector<size_t> &start_multidim_index,
+                                                 size_t n_nodes_in_Y_clique) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
 	// index in the Y vector by 1 and get the next element in the Y vector.
 	std::vector<bool> current_state(n_nodes_in_Y_clique, false);
+	auto start_linear_index = Y.get_linear_coordinate(start_multidim_index);
 
-	auto [found, index_in_Y, index_in_full_Y] =
-	    binary_search(Y, start_multidim_index, Y.begin(), Y.get_linear_coordinate(start_multidim_index) + 1);
+	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+	    binary_search(Y, start_linear_index, Y.begin(), start_linear_index + 1);
 	if (found) {
 		current_state[0] = true;
+		if (is_last_element) { return current_state; }
 		index_in_Y += 1;
 		index_in_full_Y = Y[index_in_Y].get_coordinate();
 	}
-	auto start_index_linear = Y.get_linear_coordinate(start_multidim_index);
+	if (is_last_element) { return current_state; }
+
 	for (size_t i = 1; i < n_nodes_in_Y_clique; ++i) {
-		auto linear_index = start_index_linear + i;
+		auto linear_index = start_linear_index + i;
 		if (linear_index < index_in_full_Y) {
 			continue;
 		} else if (linear_index == index_in_full_Y) {
 			current_state[i] = true;
 			index_in_Y += 1;
-		} else {
+			if (index_in_Y == Y.size()) { return current_state; }
 			index_in_full_Y = Y[index_in_Y].get_coordinate();
+		} else {
 			UERROR("The linear index can't be bigger than the upper bound ! That means that there are more elements in "
 			       "Y than in the total possible combinations of Y !");
 		}
@@ -70,45 +77,65 @@ std::vector<bool> fill_current_state_easy(const TStorageYVector &Y, const std::v
 	return current_state;
 }
 
-std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, const TStorageYVector &Y,
-                                          const std::vector<size_t> &number_of_leaves_in_each_dimension,
-                                          const std::vector<size_t> &linear_indices_of_clique) {
-	if (n_nodes_in_Y_clique != linear_indices_of_clique.size()) {
-		UERROR("The number of nodes in the clique is different from the number of linear indices of the clique !");
-	}
+inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, const TStorageYVector &Y,
+                                                 const std::vector<size_t> &multi_dim_start_index, size_t increment,
+                                                 size_t total_size_Y) {
 	std::vector<bool> current_state(n_nodes_in_Y_clique, false);
-	size_t prev_index = 0;
+	auto linear_start_index = Y.get_linear_coordinate(multi_dim_start_index);
 
-	for (size_t i = 0; i < linear_indices_of_clique.size(); ++i) {
-		size_t curr_index = linear_indices_of_clique[i];
-		auto n            = curr_index - prev_index;
-		double p          = double(Y.size()) / double(coretools::containerProduct(number_of_leaves_in_each_dimension));
-		auto upper_bound  = static_cast<size_t>(curr_index + std::ceil(n * p + 2 * std::sqrt(n * p * (1 - p))));
-		auto curr_index_multi_dim = coretools::getSubscripts(curr_index, number_of_leaves_in_each_dimension);
-		auto [found, index_in_Y, index_in_full_Y] = binary_search(Y, curr_index_multi_dim, upper_bound, Y.end());
-		if (found) {
-			current_state[i] = true;
-			prev_index       = curr_index;
+	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+	    binary_search(Y, linear_start_index, Y.begin(), linear_start_index + 1);
+
+	const double p                      = (double)Y.size() / (double)total_size_Y;
+	const double increment_p            = increment * p;
+	const double two_standard_deviation = 2 * std::sqrt(increment_p * (1 - p));
+	const size_t jump_right             = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
+	const size_t jump_left = static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
+
+	for (size_t i = 1; i < n_nodes_in_Y_clique; ++i) {
+		auto curr_index_in_full_Y = linear_start_index + i * increment;
+
+		// take care of previous iteration if we found the element or not
+		if (found) { current_state[i - 1] = true; }
+		if (curr_index_in_full_Y < index_in_full_Y) { continue; }
+		if (is_last_element) { return current_state; }
+
+		auto upper_bound = index_in_Y + jump_right;
+		if (upper_bound >= Y.size()) { upper_bound = Y.size() - 1; }
+		auto upper_index_in_full_Y = Y[upper_bound].get_coordinate();
+
+		if (curr_index_in_full_Y == upper_index_in_full_Y) {
+			found           = true;
+			index_in_full_Y = upper_index_in_full_Y;
 			continue;
 		}
-		auto lower_bound =
-		    static_cast<size_t>(std::floor(curr_index + std::floor(n * p - 2 * std::sqrt(n * p * (1 - p)))));
-		if (index_in_full_Y > lower_bound) {
-			auto [found, index_in_Y, index_in_full_Y] =
-			    binary_search(Y, curr_index_multi_dim, lower_bound, upper_bound);
-			if (found) {
-				current_state[i] = true;
-				prev_index       = curr_index;
-				continue;
-			}
+		if (curr_index_in_full_Y > upper_index_in_full_Y) {
+			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+			    binary_search(Y, curr_index_in_full_Y, upper_bound, Y.end());
+			if (found) { continue; }
+		}
+
+		auto lower_bound = index_in_Y + jump_left;
+
+		auto lower_index_in_full_Y = Y[lower_bound].get_coordinate();
+		if (curr_index_in_full_Y == lower_index_in_full_Y) {
+			found           = true;
+			index_in_full_Y = lower_index_in_full_Y;
+			continue;
+		}
+
+		if (curr_index_in_full_Y > lower_index_in_full_Y) {
+			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+			    binary_search(Y, curr_index_in_full_Y, lower_bound, upper_bound);
+			if (found) { continue; }
 		} else {
-			auto [found, index_in_Y, index_in_full_Y] = binary_search(Y, curr_index_multi_dim, Y.begin(), lower_bound);
-			if (found) {
-				current_state[i] = true;
-				prev_index       = curr_index;
-				continue;
-			}
+			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+			    binary_search(Y, curr_index_in_full_Y, Y.begin(), lower_bound);
+			if (found) { continue; }
 		}
 	}
+	if (found) { current_state.back() = true; }
 	return current_state;
 }
+
+#endif // TUPDATE_CURRENT_STATE_H
