@@ -85,6 +85,7 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 
 	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 	    binary_search(Y, linear_start_index, Y.begin(), linear_start_index + 1);
+	if (found) { current_state[0] = true; }
 
 	const double p                      = (double)Y.size() / (double)total_size_Y;
 	const double increment_p            = increment * p;
@@ -95,8 +96,6 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 	for (size_t i = 1; i < n_nodes_in_Y_clique; ++i) {
 		auto curr_index_in_full_Y = linear_start_index + i * increment;
 
-		// take care of previous iteration if we found the element or not
-		if (found) { current_state[i - 1] = true; }
 		if (curr_index_in_full_Y < index_in_full_Y) { continue; }
 		if (is_last_element) { return current_state; }
 
@@ -105,36 +104,46 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 		auto upper_index_in_full_Y = Y[upper_bound].get_coordinate();
 
 		if (curr_index_in_full_Y == upper_index_in_full_Y) {
-			found           = true;
-			index_in_full_Y = upper_index_in_full_Y;
+			found            = true;
+			index_in_full_Y  = upper_index_in_full_Y;
+			current_state[i] = true;
 			continue;
 		}
 		if (curr_index_in_full_Y > upper_index_in_full_Y) {
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, upper_bound, Y.end());
-			if (found) { continue; }
+			if (found) {
+				current_state[i] = true;
+				continue;
+			}
 		}
 
 		auto lower_bound = index_in_Y + jump_left;
 
 		auto lower_index_in_full_Y = Y[lower_bound].get_coordinate();
 		if (curr_index_in_full_Y == lower_index_in_full_Y) {
-			found           = true;
-			index_in_full_Y = lower_index_in_full_Y;
+			found            = true;
+			index_in_full_Y  = lower_index_in_full_Y;
+			current_state[i] = true;
 			continue;
 		}
 
 		if (curr_index_in_full_Y > lower_index_in_full_Y) {
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, lower_bound, upper_bound);
-			if (found) { continue; }
+			if (found) {
+				current_state[i] = true;
+				continue;
+			}
 		} else {
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, Y.begin(), lower_bound);
-			if (found) { continue; }
+			if (found) {
+				current_state[i] = true;
+				continue;
+			}
 		}
 	}
-	if (found) { current_state.back() = true; }
 	return current_state;
 }
 
