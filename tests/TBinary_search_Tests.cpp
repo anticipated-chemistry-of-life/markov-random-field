@@ -75,12 +75,15 @@ TEST(Binary_search, hard_function) {
 
 	std::vector<long long> vec_duration_1;
 	std::vector<long long> vec_duration_2;
+	std::vector<int> vec_lower_chunk;
+	std::vector<int> vec_middle_chunk;
+	std::vector<int> vec_upper_chunk;
 	for (size_t j = 0; j < dimensions[1]; ++j) {
 		std::vector<size_t> multi_index_start{0, j};
-		auto t1               = std::chrono::high_resolution_clock::now();
-		std::vector<bool> res = fill_current_state_hard(dimensions[0], Y, multi_index_start, dimensions[1],
-		                                                coretools::containerProduct(dimensions));
-		auto t2               = std::chrono::high_resolution_clock::now();
+		auto t1                                            = std::chrono::high_resolution_clock::now();
+		auto [res, lower_chunk, middle_chunk, upper_chunk] = fill_current_state_hard(
+		    dimensions[0], Y, multi_index_start, dimensions[1], coretools::containerProduct(dimensions));
+		auto t2 = std::chrono::high_resolution_clock::now();
 		std::vector<bool> truth;
 		truth.clear();
 		auto linear_index = Y.get_linear_coordinate(multi_index_start);
@@ -93,11 +96,23 @@ TEST(Binary_search, hard_function) {
 		auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 		vec_duration_1.push_back(duration1);
 		vec_duration_2.push_back(duration2);
+		vec_lower_chunk.push_back(lower_chunk);
+		vec_middle_chunk.push_back(middle_chunk);
+		vec_upper_chunk.push_back(upper_chunk);
 	}
 	std::cout << "Average duration for fill_current_state_hard: "
 	          << std::accumulate(vec_duration_1.begin(), vec_duration_1.end(), 0) / vec_duration_1.size() << " ms"
 	          << std::endl;
-	std::cout << "Average duration for standard binaty search: "
+	std::cout << "Average duration for standard binary search: "
 	          << std::accumulate(vec_duration_2.begin(), vec_duration_2.end(), 0) / vec_duration_2.size() << " ms"
+	          << std::endl;
+	std::cout << "Average lower chunk: "
+	          << std::accumulate(vec_lower_chunk.begin(), vec_lower_chunk.end(), 0) / vec_lower_chunk.size()
+	          << std::endl;
+	std::cout << "Average middle chunk: "
+	          << std::accumulate(vec_middle_chunk.begin(), vec_middle_chunk.end(), 0) / vec_middle_chunk.size()
+	          << std::endl;
+	std::cout << "Average upper chunk: "
+	          << std::accumulate(vec_upper_chunk.begin(), vec_upper_chunk.end(), 0) / vec_upper_chunk.size()
 	          << std::endl;
 }

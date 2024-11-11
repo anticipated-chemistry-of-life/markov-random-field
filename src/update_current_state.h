@@ -6,6 +6,7 @@
 #include "coretools/Main/TError.h"
 #include <cmath>
 #include <cstddef>
+#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -77,9 +78,9 @@ inline std::vector<bool> fill_current_state_easy(const TStorageYVector &Y,
 	return current_state;
 }
 
-inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, const TStorageYVector &Y,
-                                                 const std::vector<size_t> &multi_dim_start_index, size_t increment,
-                                                 size_t total_size_Y) {
+inline std::tuple<std::vector<bool>, int, int, int>
+fill_current_state_hard(size_t n_nodes_in_Y_clique, const TStorageYVector &Y,
+                        const std::vector<size_t> &multi_dim_start_index, size_t increment, size_t total_size_Y) {
 	std::vector<bool> current_state(n_nodes_in_Y_clique, false);
 	auto linear_start_index = Y.get_linear_coordinate(multi_dim_start_index);
 
@@ -93,11 +94,14 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 	const size_t jump_right             = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
 	const size_t jump_left = static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
 
+	int lower_chunk  = 0;
+	int upper_chunk  = 0;
+	int middle_chunk = 0;
 	for (size_t i = 1; i < n_nodes_in_Y_clique; ++i) {
 		auto curr_index_in_full_Y = linear_start_index + i * increment;
 
 		if (curr_index_in_full_Y < index_in_full_Y) { continue; }
-		if (is_last_element) { return current_state; }
+		if (is_last_element) { return {current_state, lower_chunk, middle_chunk, upper_chunk}; }
 
 		auto upper_bound = index_in_Y + jump_right;
 		if (upper_bound >= Y.size()) { upper_bound = Y.size() - 1; }
@@ -110,6 +114,7 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 			continue;
 		}
 		if (curr_index_in_full_Y > upper_index_in_full_Y) {
+			upper_chunk++;
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, upper_bound, Y.end());
 			if (found) {
@@ -129,6 +134,7 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 		}
 
 		if (curr_index_in_full_Y > lower_index_in_full_Y) {
+			middle_chunk++;
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, lower_bound, upper_bound);
 			if (found) {
@@ -136,6 +142,7 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 				continue;
 			}
 		} else {
+			lower_chunk++;
 			auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 			    binary_search(Y, curr_index_in_full_Y, Y.begin(), lower_bound);
 			if (found) {
@@ -144,7 +151,7 @@ inline std::vector<bool> fill_current_state_hard(size_t n_nodes_in_Y_clique, con
 			}
 		}
 	}
-	return current_state;
+	return {current_state, lower_chunk, middle_chunk, upper_chunk};
 }
 
 #endif // TUPDATE_CURRENT_STATE_H
