@@ -15,7 +15,7 @@
 #include <vector>
 
 void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) {
-	TCurrentState current_state(_start_index, _increment, Y, Z, tree);
+	TCurrentState current_state(this->_start_index, this->_increment, Y, Z, tree);
 
 	double stationary_0 = get_stationary_probability(false);
 	double stationary_1 = get_stationary_probability(true);
@@ -29,7 +29,7 @@ void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const
 		sum_log_1.add(stationary_1);
 		for (const auto &child_index : node.children()) {
 			auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
-			const auto &matrix_for_bin = _matrices[bin_length];
+			const auto &matrix_for_bin = this->_matrices[bin_length];
 			double prob_0_to_child     = matrix_for_bin(0, current_state.get(child_index));
 			double prob_1_to_child     = matrix_for_bin(1, current_state.get(child_index));
 			sum_log_0.add(prob_0_to_child);
@@ -47,7 +47,7 @@ void TClique::update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const
 		coretools::TSumLogProbability sum_log_1;
 		const auto &parent         = tree.get_node(node.parentIndex());
 		auto bin_length            = parent.get_branch_length_bin();
-		const auto &matrix_for_bin = _matrices[bin_length];
+		const auto &matrix_for_bin = this->_matrices[bin_length];
 		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 0);
 		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 1);
 		sum_log_0.add(prob_0_to_parent);
