@@ -113,6 +113,7 @@ void TTree::load_from_file(const std::string &filename) {
 	_leafIndices.resize(_nodes.size(), -1);
 	_rootIndices.resize(_nodes.size(), -1);
 	_internalIndices.resize(_nodes.size(), -1);
+	this->_internalIndicesWithoutRoots.resize(_nodes.size(), -1);
 	for (auto it = _nodes.begin(); it != _nodes.end(); ++it) {
 		if (it->isLeaf()) {
 			_leafIndices[it - _nodes.begin()] = _leaves.size();
@@ -123,6 +124,9 @@ void TTree::load_from_file(const std::string &filename) {
 			if (it->isRoot()) {
 				_rootIndices[it - _nodes.begin()] = _roots.size();
 				_roots.push_back(it - _nodes.begin());
+			} else if (it->isInternalNode()) {
+				_internalIndicesWithoutRoots[it - _nodes.begin()] = _internal_nodes_without_roots.size();
+				_internal_nodes_without_roots.push_back(it - _nodes.begin());
 			}
 		}
 	}
@@ -165,8 +169,10 @@ void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
 	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
 	size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
 
+	size_t increment = 1;
+	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].size(); }
 	for (size_t i = 0; i < n_cliques; ++i) {
 		std::vector<size_t> multi_dim_index = coretools::getSubscripts(i, num_leaves_per_tree);
-		_cliques.emplace_back(multi_dim_index, _dimension, _nodes.size());
+		_cliques.emplace_back(multi_dim_index, _dimension, _nodes.size(), increment);
 	}
 }

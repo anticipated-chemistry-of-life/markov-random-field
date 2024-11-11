@@ -15,9 +15,10 @@ private:
 	std::vector<TStorageZ> _vec;
 
 public:
-	using value_type  = uint32_t;
-	TStorageZVector() = default;
-	TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {
+	using value_type     = uint32_t;
+	using const_iterator = typename std::vector<TStorageZ>::const_iterator;
+	TStorageZVector()    = default;
+	explicit TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {
 		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
 	}
 
@@ -47,9 +48,12 @@ public:
 	}
 	size_t size() const { return _vec.size(); }
 	auto begin() const { return _vec.begin(); }
+	auto cbegin() const { return _vec.cbegin(); }
+	auto cend() const { return _vec.cend(); }
 	auto end() const { return _vec.end(); }
+	TStorageZ operator[](size_t index) const { return _vec[index]; }
 
-	uint64_t get_coordinate(const std::vector<size_t> &multi_dim_index) const {
+	[[nodiscard]] uint64_t get_linear_coordinate(const std::vector<size_t> &multi_dim_index) const {
 		return coretools::getLinearIndex(multi_dim_index, _dimensions);
 	}
 
@@ -74,7 +78,7 @@ public:
 	};
 
 	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
-		return binary_search(get_coordinate(multi_dim_index));
+		return binary_search(get_linear_coordinate(multi_dim_index));
 	}
 };
 

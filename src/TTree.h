@@ -34,6 +34,7 @@ public:
 	[[nodiscard]] const std::vector<size_t> &children() const { return _children; };
 	[[nodiscard]] bool isLeaf() const { return _children.empty(); };
 	[[nodiscard]] bool isRoot() const { return _is_root; };
+	[[nodiscard]] bool isInternalNode() const { return !_is_root && !_children.empty(); };
 	[[nodiscard]] TypeBinBranches get_branch_length_bin() const { return _binned_branch_length; };
 	void set_is_root(bool is_root) { _is_root = is_root; }
 	void set_bin_branch_length_to_parent(TypeBinBranches branch_length) { _binned_branch_length = branch_length; }
@@ -49,9 +50,11 @@ private:
 	std::vector<size_t> _leaves;
 	std::vector<size_t> _roots;
 	std::vector<size_t> _internal_nodes;
+	std::vector<size_t> _internal_nodes_without_roots;
 	std::vector<size_t> _leafIndices;
 	std::vector<size_t> _rootIndices;
 	std::vector<size_t> _internalIndices;
+	std::vector<size_t> _internalIndicesWithoutRoots;
 
 	// For binning branch lengths
 	coretools::Probability _a;
@@ -115,6 +118,7 @@ public:
 	 */
 	size_t get_number_of_leaves() const { return _leaves.size(); }
 	size_t get_number_of_nodes() const { return _nodes.size(); }
+	size_t get_number_of_internal_nodes() const { return _internal_nodes.size(); }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
@@ -131,6 +135,8 @@ public:
 	/** @return The root nodes of the tree
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
+	const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
+	const std::vector<size_t> &get_internal_nodes_without_roots() const { return _internal_nodes_without_roots; }
 
 	/** Checks whether a node is in the tree
 	 * @param node_id: the id of the node

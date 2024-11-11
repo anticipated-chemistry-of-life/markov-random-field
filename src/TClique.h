@@ -132,13 +132,14 @@ private:
 	std::vector<size_t> _start_index;
 	size_t _variable_dimension;
 	size_t _n_nodes;
+	size_t _increment;
 
 public:
-	TClique() = default;
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes) {
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {
 		_start_index        = start_index;
 		_variable_dimension = variable_dimension;
 		_n_nodes            = n_nodes;
+		_increment          = increment;
 	}
 
 	/// @brief Initialize the matrices for the clique.
