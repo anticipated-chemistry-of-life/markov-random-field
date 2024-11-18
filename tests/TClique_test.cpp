@@ -2,11 +2,10 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "TTree.h"
-#include "coretools/devtools.h"
 #include "gtest/gtest.h"
 #include <vector>
 
-// TEST(TCliqueTest, Get_Z_state_at_bigger_index) {
+// TEST(TCliqueTest, get_z) {
 // 	// Set up the TTree
 // 	TTree tree(0);
 // 	TTree tree_2(1);

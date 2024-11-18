@@ -73,7 +73,7 @@ TEST(Binary_search, hard_function) {
 		if (sample) { Y.set_to_one(i); }
 	}
 
-	std::vector<long long> vec_duration_1;
+	std::vector<long long> vec_duration_1; // we create a vector to store the duration of each iteration
 	std::vector<long long> vec_duration_2;
 	for (size_t j = 0; j < dimensions[1]; ++j) {
 		std::vector<size_t> multi_index_start{0, j};
