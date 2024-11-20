@@ -10,7 +10,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
-class TClique;
+class TClique; // forward declaration
 
 class TNode {
 private:
