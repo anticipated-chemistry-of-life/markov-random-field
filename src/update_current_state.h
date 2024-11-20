@@ -45,51 +45,67 @@ binary_search(const T &vec, size_t linear_index, std::variant<size_t, typename T
 };
 
 template<typename Container>
-std::vector<bool> fill_current_state_easy(const Container &container, const std::vector<size_t> &start_multidim_index,
-                                          size_t n_nodes_in_container_clique) {
+std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+fill_current_state_easy(const Container &container, const std::vector<size_t> &start_multidim_index,
+                        size_t n_nodes_in_container_clique) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
 	// index in the Y vector by 1 and get the next element in the Y vector.
 	std::vector<bool> current_state(n_nodes_in_container_clique, false);
+	std::vector<bool> where_you_in_Y(n_nodes_in_container_clique, false);
+	std::vector<size_t> index_in_Y_vector;
 	auto start_linear_index = container.get_linear_coordinate(start_multidim_index);
 
 	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 	    binary_search(container, start_linear_index, container.begin(), start_linear_index + 1);
 	if (found) {
-		current_state[0] = container[index_in_Y].is_one();
-		if (is_last_element) { return current_state; }
+		current_state[0]  = container.is_one(index_in_Y);
+		where_you_in_Y[0] = true;
+		index_in_Y_vector.push_back(index_in_Y);
+		if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 		index_in_Y += 1;
 		index_in_full_Y = container[index_in_Y].get_coordinate();
 	}
-	if (is_last_element) { return current_state; }
+	if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 
 	for (size_t i = 1; i < n_nodes_in_container_clique; ++i) {
 		auto linear_index = start_linear_index + i;
 		if (linear_index < index_in_full_Y) {
 			continue;
 		} else if (linear_index == index_in_full_Y) {
-			current_state[i] = true;
+			current_state[i]  = container.is_one(index_in_Y);
+			where_you_in_Y[i] = true;
+			index_in_Y_vector.push_back(linear_index);
 			index_in_Y += 1;
-			if (index_in_Y == container.size()) { return current_state; }
+			if (index_in_Y == container.size()) {
+				return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector);
+			}
 			index_in_full_Y = container[index_in_Y].get_coordinate();
 		} else {
 			UERROR("The linear index can't be bigger than the upper bound ! That means that there are more elements in "
 			       "the container than in the total possible combinations of container !");
 		}
 	}
-	return current_state;
+	return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector);
 }
 
 template<typename Container>
-std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, const Container &container,
-                                          const std::vector<size_t> &multi_dim_start_index, size_t increment,
-                                          size_t total_size_of_container) {
+std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+fill_current_state_hard(size_t n_nodes_in_container_clique, const Container &container,
+                        const std::vector<size_t> &multi_dim_start_index, size_t increment,
+                        size_t total_size_of_container) {
 	std::vector<bool> current_state(n_nodes_in_container_clique, false);
+	std::vector<bool> where_you_in_Y(n_nodes_in_container_clique, false);
+	std::vector<size_t> index_in_Y_vector;
 	auto linear_start_index = container.get_linear_coordinate(multi_dim_start_index);
 
 	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 	    binary_search(container, linear_start_index, container.begin(), linear_start_index + 1);
-	if (found) { current_state[0] = container[index_in_Y].is_one(); }
+	if (found) {
+		current_state[0]  = container[index_in_Y].is_one();
+		where_you_in_Y[0] = true;
+		index_in_Y_vector.push_back(index_in_Y);
+	}
 
 	const double p                      = (double)container.size() / (double)total_size_of_container;
 	const double increment_p            = increment * p;
@@ -101,7 +117,7 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, co
 		auto curr_index_in_full_Y = linear_start_index + i * increment;
 
 		if (curr_index_in_full_Y < index_in_full_Y) { continue; }
-		if (is_last_element) { return current_state; }
+		if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 
 		// calculate the upper bound
 		auto upper_bound = index_in_Y + jump_right;
@@ -113,15 +129,19 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, co
 		auto lower_index_in_full_Y = container[lower_bound].get_coordinate();
 
 		if (curr_index_in_full_Y == upper_index_in_full_Y) {
-			index_in_Y       = upper_bound;
-			index_in_full_Y  = upper_index_in_full_Y;
-			current_state[i] = true;
+			index_in_Y        = upper_bound;
+			index_in_full_Y   = upper_index_in_full_Y;
+			current_state[i]  = container[index_in_Y].is_one();
+			where_you_in_Y[i] = true;
+			index_in_Y_vector.push_back(index_in_Y);
 			continue;
 		}
 		if (curr_index_in_full_Y == lower_index_in_full_Y) {
-			index_in_Y       = lower_bound;
-			index_in_full_Y  = lower_index_in_full_Y;
-			current_state[i] = true;
+			index_in_Y        = lower_bound;
+			index_in_full_Y   = lower_index_in_full_Y;
+			current_state[i]  = container[index_in_Y].is_one();
+			where_you_in_Y[i] = true;
+			index_in_Y_vector.push_back(index_in_Y);
 			continue;
 		}
 
@@ -130,32 +150,42 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, co
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, upper_bound, container.end());
 			if (found) {
-				current_state[i] = container[index_in_Y].is_one();
+				current_state[i]  = container[index_in_Y].is_one();
+				where_you_in_Y[i] = true;
+				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		} else if (curr_index_in_full_Y > lower_index_in_full_Y && curr_index_in_full_Y < upper_index_in_full_Y) {
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, lower_bound, upper_bound);
 			if (found) {
-				current_state[i] = container[index_in_Y].is_one();
+				current_state[i]  = container[index_in_Y].is_one();
+				where_you_in_Y[i] = true;
+				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		} else {
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, index_in_Y, lower_bound);
 			if (found) {
-				current_state[i] = container[index_in_Y].is_one();
+				current_state[i]  = container[index_in_Y].is_one();
+				where_you_in_Y[i] = true;
+				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		}
 	}
-	return current_state;
+	return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector);
 }
 
 class TCurrentState {
 private:
 	std::vector<bool> _current_state_Y;
+	std::vector<bool> _where_you_in_Y;
+	std::vector<size_t> _index_in_Y_vector;
 	std::vector<bool> _current_state_Z;
+	std::vector<bool> _where_you_in_Z;
+	std::vector<size_t> _index_in_Z_vector;
 	const std::vector<size_t> _start_index;
 	size_t _increment;
 	const TTree &_tree;
@@ -165,12 +195,14 @@ public:
 	              const TStorageZVector &Z, const TTree &tree)
 	    : _start_index(start_index), _increment(increment), _tree(tree) {
 		if (increment == 1) {
-			_current_state_Y = fill_current_state_easy(Y, _start_index, tree.get_number_of_leaves());
-			_current_state_Z = fill_current_state_easy(Z, _start_index, tree.get_number_of_internal_nodes());
+			auto [_current_state_Y, _where_you_in_Y, _index_in_Y_vector] =
+			    fill_current_state_easy(Y, _start_index, tree.get_number_of_leaves());
+			auto [_current_state_Z, _where_you_in_Z, _index_in_Z_vector] =
+			    fill_current_state_easy(Z, _start_index, tree.get_number_of_internal_nodes());
 		} else {
-			_current_state_Y =
+			auto [_current_state_Y, _where_you_in_Y, _index_in_Y_vector] =
 			    fill_current_state_hard(tree.get_number_of_leaves(), Y, _start_index, _increment, Y.size());
-			_current_state_Z =
+			auto [_current_state_Z, _where_you_in_Z, _index_in_Z_vector] =
 			    fill_current_state_hard(tree.get_number_of_internal_nodes(), Z, _start_index, _increment, Z.size());
 		}
 	}
