@@ -7,10 +7,13 @@
 
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
+#include "TTree.h"
+#include "coretools/Math/TAcceptOddsRation.h"
+#include "coretools/Math/TSumLog.h"
+#include "update_current_state.h"
 #include <armadillo>
 #include <cstddef>
 #include <vector>
-class TTree; // forward declaration
 
 /**
  * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for
@@ -134,6 +137,21 @@ private:
 	size_t _n_nodes;
 	size_t _increment;
 
+	bool _compute_new_state(TCurrentState &current_state, const TTree &tree, const TNode &node,
+	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) {
+		for (const auto &child_index : node.children()) {
+			auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
+			const auto &matrix_for_bin = _matrices[bin_length];
+			double prob_0_to_child     = matrix_for_bin(0, current_state.get(child_index));
+			double prob_1_to_child     = matrix_for_bin(1, current_state.get(child_index));
+			sum_log_0.add(prob_0_to_child);
+			sum_log_1.add(prob_1_to_child);
+		}
+		const double log_Q = sum_log_1.getSum() - sum_log_0.getSum();
+		bool new_state     = coretools::TAcceptOddsRatio::accept(log_Q);
+		return new_state;
+	};
+
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {
 		_start_index        = start_index;
@@ -177,9 +195,10 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	void update_Z(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
+	void update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
-	std::vector<bool> fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree) const;
+	// const std::vector<bool> &fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
+	//                                             const TTree &tree) const;
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 };

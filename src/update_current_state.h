@@ -56,7 +56,7 @@ std::vector<bool> fill_current_state_easy(const Container &container, const std:
 	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 	    binary_search(container, start_linear_index, container.begin(), start_linear_index + 1);
 	if (found) {
-		current_state[0] = true;
+		current_state[0] = container[index_in_Y].is_one();
 		if (is_last_element) { return current_state; }
 		index_in_Y += 1;
 		index_in_full_Y = container[index_in_Y].get_coordinate();
@@ -89,7 +89,7 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, co
 
 	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
 	    binary_search(container, linear_start_index, container.begin(), linear_start_index + 1);
-	if (found) { current_state[0] = true; }
+	if (found) { current_state[0] = container[index_in_Y].is_one(); }
 
 	const double p                      = (double)container.size() / (double)total_size_of_container;
 	const double increment_p            = increment * p;
@@ -130,21 +130,21 @@ std::vector<bool> fill_current_state_hard(size_t n_nodes_in_container_clique, co
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, upper_bound, container.end());
 			if (found) {
-				current_state[i] = true;
+				current_state[i] = container[index_in_Y].is_one();
 				continue;
 			}
 		} else if (curr_index_in_full_Y > lower_index_in_full_Y && curr_index_in_full_Y < upper_index_in_full_Y) {
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, lower_bound, upper_bound);
 			if (found) {
-				current_state[i] = true;
+				current_state[i] = container[index_in_Y].is_one();
 				continue;
 			}
 		} else {
 			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, index_in_Y, lower_bound);
 			if (found) {
-				current_state[i] = true;
+				current_state[i] = container[index_in_Y].is_one();
 				continue;
 			}
 		}

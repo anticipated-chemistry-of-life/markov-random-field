@@ -38,11 +38,7 @@ public:
 	/// it has been in the past iteration.
 	/// @param coordinate the position of the element in the Y vector.
 	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const {
-		auto [found, index] = binary_search(index_in_Y);
-		if (found) { return _vec[index].is_one(); }
-		return false;
-	};
+	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const { return _vec[index_in_Y].is_one(); };
 
 	/** set_to_one will set the element at the coordinate to 1
 	 * if the element is already in the vector, we just set it to 1
@@ -50,7 +46,9 @@ public:
 	 * and set it to 1
 	 * @param coordinate the position of the element in the Y vector
 	 */
-	void set_to_one(uint64_t coordinate) {
+	void set_to_one(uint64_t index) { _vec[index].set_state(true); }
+
+	void insert_one(uint64_t coordinate) {
 		auto [found, index] = binary_search(coordinate);
 		if (found) {
 			_vec[index].set_state(true);

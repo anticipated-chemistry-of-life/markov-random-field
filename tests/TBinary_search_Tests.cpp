@@ -24,7 +24,7 @@ TEST(Binary_search, easy_function) {
 	// We fill randomly the TStorageYVector where the values are between 0 and 100*100
 	for (size_t i = 0; i < coretools::containerProduct(dimensions); i++) {
 		auto sample = d(gen);
-		if (sample) { Y.set_to_one(i); }
+		if (sample) { Y.insert_one(i); }
 	}
 
 	std::vector<long long> vec_duration_1;

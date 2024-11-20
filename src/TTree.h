@@ -4,12 +4,13 @@
 
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
-#include "TClique.h"
+
 #include "Types.h"
 #include "coretools/Types/probability.h"
 #include <cstddef>
 #include <string>
 #include <vector>
+class TClique;
 
 class TNode {
 private:
@@ -44,37 +45,11 @@ public:
 };
 
 class TTree {
-private:
-	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
-	std::unordered_map<std::string, size_t> _node_map; // for fast access to nodes
-	std::vector<size_t> _leaves;
-	std::vector<size_t> _roots;
-	std::vector<size_t> _internal_nodes;
-	std::vector<size_t> _internal_nodes_without_roots;
-	std::vector<size_t> _leafIndices;
-	std::vector<size_t> _rootIndices;
-	std::vector<size_t> _internalIndices;
-	std::vector<size_t> _internalIndicesWithoutRoots;
-
-	// For binning branch lengths
-	coretools::Probability _a;
-	coretools::Probability _b;
-	double _delta          = 0.0;
-	size_t _number_of_bins = 0;
-
-	// cliques
-	std::vector<TClique> _cliques;
-
-	// dimension of the tree
-	size_t _dimension;
-
-	void _bin_branch_lengths(std::vector<double> &branch_lengths);
-	void _initialize_grid_branch_lengths(size_t number_of_branches);
-
 public:
-	explicit TTree(size_t dimension) { _dimension = dimension; };
+	explicit TTree(size_t dimension);
+	TTree()  = default;
 	// Destructor, deletes all nodes
-	~TTree();
+	~TTree() = default;
 
 	size_t size() const { return _nodes.size(); };
 
@@ -158,5 +133,32 @@ public:
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	const std::vector<TClique> &get_cliques() const { return _cliques; }
+
+private:
+	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
+	std::unordered_map<std::string, size_t> _node_map; // for fast access to nodes
+	std::vector<size_t> _leaves;
+	std::vector<size_t> _roots;
+	std::vector<size_t> _internal_nodes;
+	std::vector<size_t> _internal_nodes_without_roots;
+	std::vector<size_t> _leafIndices;
+	std::vector<size_t> _rootIndices;
+	std::vector<size_t> _internalIndices;
+	std::vector<size_t> _internalIndicesWithoutRoots;
+
+	// For binning branch lengths
+	coretools::Probability _a;
+	coretools::Probability _b;
+	double _delta          = 0.0;
+	size_t _number_of_bins = 0;
+
+	// cliques
+	std::vector<TClique> _cliques;
+
+	// dimension of the tree
+	size_t _dimension;
+
+	void _bin_branch_lengths(std::vector<double> &branch_lengths);
+	void _initialize_grid_branch_lengths(size_t number_of_branches);
 };
 #endif // METABOLITE_INFERENCE_TREE_H

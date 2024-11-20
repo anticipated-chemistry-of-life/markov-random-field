@@ -7,6 +7,7 @@
 #include "TStorageZ.h"
 #include "coretools/algorithms.h"
 #include <cassert>
+#include <cstdint>
 #include <vector>
 
 class TStorageZVector {
@@ -22,24 +23,19 @@ public:
 		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
 	}
 
-	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const {
-		auto [found, index] = binary_search(index_in_Z);
-		if (found) { return _vec[index].is_one(); }
-		return false;
-	};
+	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const { return _vec[index_in_Z].is_one(); };
 
-	void set_to_one(uint32_t coordinate) {
+	void set_to_one(uint32_t index) { _vec[index].set_state(true); }
+
+	void set_to_zero(uint32_t index) { _vec[index].set_state(false); }
+
+	void insert_one(uint32_t coordinate) {
 		auto [found, index] = binary_search(coordinate);
 		if (found) {
 			_vec[index].set_state(true);
 		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ((int32_t)coordinate));
+			_vec.insert(_vec.begin() + index, TStorageZ(coordinate));
 		}
-	}
-
-	void set_to_zero(uint32_t coordinate) {
-		auto [found, index] = binary_search(coordinate);
-		if (found) { _vec[index].set_state(false); }
 	}
 
 	void remove_zeros() {

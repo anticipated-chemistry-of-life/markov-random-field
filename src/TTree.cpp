@@ -3,6 +3,7 @@
 //
 
 #include "TTree.h"
+#include "TClique.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
@@ -12,9 +13,7 @@
 #include <string>
 #include <vector>
 
-// Tree destructor implementation
-TTree::~TTree() = default;
-
+TTree::TTree(size_t dimension) { _dimension = dimension; };
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
 	_a               = coretools::instances::parameters().get("a", coretools::Probability(0.0));
