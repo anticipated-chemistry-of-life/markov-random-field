@@ -9,6 +9,7 @@
 #include <random>
 #include <vector>
 
+// unit test for smart binary search
 TEST(Binary_search, easy_function) {
 	// create the engine
 	std::random_device rd{};
