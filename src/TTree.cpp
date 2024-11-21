@@ -136,7 +136,7 @@ void TTree::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().done();
 	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),
 	                                         " are roots and ", _leaves.size(), " are leaves and ",
-	                                         _nodes.size() - _roots.size() - _leaves.size(), " are internal nodes.");
+	                                         _internal_nodes_without_roots.size(), " are internal nodes.");
 }
 
 const TNode &TTree::get_node(const std::string &Id) const {

@@ -5,6 +5,7 @@
 #ifndef TSTORAGEZVECTOR_H
 #define TSTORAGEZVECTOR_H
 #include "TStorageZ.h"
+#include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
 #include <cassert>
 #include <cstdint>
@@ -23,11 +24,26 @@ public:
 		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
 	}
 
-	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const { return _vec[index_in_Z].is_one(); };
+	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const {
+		if (index_in_Z >= _vec.size()) {
+			UERROR("Index '", index_in_Z, "' is out of range. The length of the vector is : ", _vec.size());
+		}
+		return _vec[index_in_Z].is_one();
+	};
 
-	void set_to_one(uint32_t index) { _vec[index].set_state(true); }
+	void set_to_one(uint32_t index) {
+		if (index >= _vec.size()) {
+			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+		}
+		_vec[index].set_state(true);
+	}
 
-	void set_to_zero(uint32_t index) { _vec[index].set_state(false); }
+	void set_to_zero(uint32_t index) {
+		if (index >= _vec.size()) {
+			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+		}
+		_vec[index].set_state(false);
+	}
 
 	void insert_one(uint32_t coordinate) {
 		auto [found, index] = binary_search(coordinate);
@@ -35,6 +51,16 @@ public:
 			_vec[index].set_state(true);
 		} else {
 			_vec.insert(_vec.begin() + index, TStorageZ(coordinate));
+		}
+	}
+
+	void insert_zero(uint32_t coordinate) {
+		auto [found, index] = binary_search(coordinate);
+		if (found) {
+			_vec[index].set_state(false);
+		} else {
+			_vec.insert(_vec.begin() + index, TStorageZ(coordinate));
+			_vec[index].set_state(false);
 		}
 	}
 

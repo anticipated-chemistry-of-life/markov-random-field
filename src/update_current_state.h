@@ -55,32 +55,32 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 	std::vector<bool> where_you_in_Y(n_nodes_in_container_clique, false);
 	std::vector<size_t> index_in_Y_vector;
 	auto start_linear_index = container.get_linear_coordinate(start_multidim_index);
+	index_in_Y_vector.push_back(start_linear_index);
 
-	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+	auto [found, index_in_Y, coordinate_in_Y, is_last_element] =
 	    binary_search(container, start_linear_index, container.begin(), start_linear_index + 1);
 	if (found) {
 		current_state[0]  = container.is_one(index_in_Y);
 		where_you_in_Y[0] = true;
-		index_in_Y_vector.push_back(index_in_Y);
 		if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 		index_in_Y += 1;
-		index_in_full_Y = container[index_in_Y].get_coordinate();
+		coordinate_in_Y = container[index_in_Y].get_coordinate();
 	}
 	if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 
 	for (size_t i = 1; i < n_nodes_in_container_clique; ++i) {
 		auto linear_index = start_linear_index + i;
-		if (linear_index < index_in_full_Y) {
+		index_in_Y_vector.push_back(linear_index);
+		if (linear_index < coordinate_in_Y) {
 			continue;
-		} else if (linear_index == index_in_full_Y) {
+		} else if (linear_index == coordinate_in_Y) {
 			current_state[i]  = container.is_one(index_in_Y);
 			where_you_in_Y[i] = true;
-			index_in_Y_vector.push_back(linear_index);
 			index_in_Y += 1;
 			if (index_in_Y == container.size()) {
 				return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector);
 			}
-			index_in_full_Y = container[index_in_Y].get_coordinate();
+			coordinate_in_Y = container[index_in_Y].get_coordinate();
 		} else {
 			UERROR("The linear index can't be bigger than the upper bound ! That means that there are more elements in "
 			       "the container than in the total possible combinations of container !");
@@ -98,25 +98,26 @@ fill_current_state_hard(size_t n_nodes_in_container_clique, const Container &con
 	std::vector<bool> where_you_in_Y(n_nodes_in_container_clique, false);
 	std::vector<size_t> index_in_Y_vector;
 	auto linear_start_index = container.get_linear_coordinate(multi_dim_start_index);
+	index_in_Y_vector.push_back(linear_start_index);
 
-	auto [found, index_in_Y, index_in_full_Y, is_last_element] =
+	auto [found, index_in_Y, coordinate_in_Y, is_last_element] =
 	    binary_search(container, linear_start_index, container.begin(), linear_start_index + 1);
 	if (found) {
 		current_state[0]  = container[index_in_Y].is_one();
 		where_you_in_Y[0] = true;
-		index_in_Y_vector.push_back(index_in_Y);
 	}
 
 	const double p                      = (double)container.size() / (double)total_size_of_container;
-	const double increment_p            = increment * p;
+	const double increment_p            = (double)increment * p;
 	const double two_standard_deviation = 2 * std::sqrt(increment_p * (1 - p));
 	const size_t jump_right             = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
 	const size_t jump_left = static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
 
 	for (size_t i = 1; i < n_nodes_in_container_clique; ++i) {
 		auto curr_index_in_full_Y = linear_start_index + i * increment;
+		index_in_Y_vector.push_back(curr_index_in_full_Y);
 
-		if (curr_index_in_full_Y < index_in_full_Y) { continue; }
+		if (curr_index_in_full_Y < coordinate_in_Y) { continue; }
 		if (is_last_element) { return std::make_tuple(current_state, where_you_in_Y, index_in_Y_vector); }
 
 		// calculate the upper bound
@@ -130,47 +131,42 @@ fill_current_state_hard(size_t n_nodes_in_container_clique, const Container &con
 
 		if (curr_index_in_full_Y == upper_index_in_full_Y) {
 			index_in_Y        = upper_bound;
-			index_in_full_Y   = upper_index_in_full_Y;
+			coordinate_in_Y   = upper_index_in_full_Y;
 			current_state[i]  = container[index_in_Y].is_one();
 			where_you_in_Y[i] = true;
-			index_in_Y_vector.push_back(index_in_Y);
 			continue;
 		}
 		if (curr_index_in_full_Y == lower_index_in_full_Y) {
 			index_in_Y        = lower_bound;
-			index_in_full_Y   = lower_index_in_full_Y;
+			coordinate_in_Y   = lower_index_in_full_Y;
 			current_state[i]  = container[index_in_Y].is_one();
 			where_you_in_Y[i] = true;
-			index_in_Y_vector.push_back(index_in_Y);
 			continue;
 		}
 
 		if (curr_index_in_full_Y > upper_index_in_full_Y) {
 
-			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
+			std::tie(found, index_in_Y, coordinate_in_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, upper_bound, container.end());
 			if (found) {
 				current_state[i]  = container[index_in_Y].is_one();
 				where_you_in_Y[i] = true;
-				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		} else if (curr_index_in_full_Y > lower_index_in_full_Y && curr_index_in_full_Y < upper_index_in_full_Y) {
-			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
+			std::tie(found, index_in_Y, coordinate_in_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, lower_bound, upper_bound);
 			if (found) {
 				current_state[i]  = container[index_in_Y].is_one();
 				where_you_in_Y[i] = true;
-				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		} else {
-			std::tie(found, index_in_Y, index_in_full_Y, is_last_element) =
+			std::tie(found, index_in_Y, coordinate_in_Y, is_last_element) =
 			    binary_search(container, curr_index_in_full_Y, index_in_Y, lower_bound);
 			if (found) {
 				current_state[i]  = container[index_in_Y].is_one();
 				where_you_in_Y[i] = true;
-				index_in_Y_vector.push_back(index_in_Y);
 				continue;
 			}
 		}

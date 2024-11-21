@@ -4,7 +4,9 @@
 #include "coretools/devtools.h"
 #include "update_current_state.h"
 #include "gtest/gtest.h"
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -41,8 +43,8 @@ TEST(Binary_search, easy_function) {
 		auto linear_index = Y.get_linear_coordinate(multi_index_start);
 		auto t3           = std::chrono::high_resolution_clock::now();
 		for (size_t i = 0; i < dimensions[dimensions.size() - 1]; ++i) {
-			auto [truth_res, index] = Y.binary_search((linear_index + i));
-			truth.push_back(truth_res);
+			auto [is_one, index] = Y.binary_search((linear_index + i));
+			truth.push_back(is_one);
 		}
 		auto t4        = std::chrono::high_resolution_clock::now();
 		auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
