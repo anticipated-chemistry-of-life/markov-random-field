@@ -9,9 +9,11 @@
 #include "coretools/Math/TSumLog.h"
 #include "update_current_state.h"
 #include <cstddef>
+#include <vector>
 
-void TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) {
+std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
 	TCurrentState current_state(this->_start_index, this->_increment, Y, Z, tree);
+	std::vector<size_t> Z_indices_not_to_update_in_parallel;
 
 	double stationary_0 = this->get_stationary_probability(false);
 	double stationary_1 = this->get_stationary_probability(true);
@@ -23,8 +25,19 @@ void TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree
 		coretools::TSumLogProbability sum_log_1;
 		sum_log_0.add(stationary_0);
 		sum_log_1.add(stationary_1);
-		bool new_state = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
-		if (new_state != current_state.get(root_index)) { current_state.set(root_index, new_state); }
+		bool new_state  = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
+		auto coordinate = current_state.get_coordinate_in_container(root_index);
+		if (1 == current_state.get(root_index) && 0 == new_state) {
+			Z.set_to_zero(coordinate);
+			current_state.set(root_index, new_state);
+		}
+		if (0 == current_state.get(root_index) && 1 == new_state && current_state.is_in_container(root_index)) {
+			Z.set_to_zero(coordinate);
+			current_state.set(root_index, new_state);
+		} else if (0 == current_state.get(root_index) && 1 == new_state) {
+			Z_indices_not_to_update_in_parallel.push_back(coordinate);
+			current_state.set(root_index, new_state);
+		}
 	}
 
 	for (const auto internal_index : tree.get_internal_nodes_without_roots()) {
@@ -39,7 +52,19 @@ void TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree
 		sum_log_0.add(prob_0_to_parent);
 		sum_log_1.add(prob_1_to_parent);
 
-		bool new_state = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
-		if (new_state != current_state.get(internal_index)) { current_state.set(internal_index, new_state); }
+		bool new_state  = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
+		auto coordinate = current_state.get_coordinate_in_container(internal_index);
+		if (1 == current_state.get(internal_index) && 0 == new_state) {
+			Z.set_to_zero(coordinate);
+			current_state.set(internal_index, new_state);
+		}
+		if (0 == current_state.get(internal_index) && 1 == new_state && current_state.is_in_container(internal_index)) {
+			Z.set_to_zero(coordinate);
+			current_state.set(internal_index, new_state);
+		} else if (0 == current_state.get(internal_index) && 1 == new_state) {
+			Z_indices_not_to_update_in_parallel.push_back(coordinate);
+			current_state.set(internal_index, new_state);
+		}
 	}
+	return Z_indices_not_to_update_in_parallel;
 }

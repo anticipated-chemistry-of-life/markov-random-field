@@ -159,6 +159,6 @@ public:
 	coretools::Probability get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
-	const std::vector<TClique> &get_cliques() const { return _cliques; }
+	std::vector<TClique> &get_cliques() { return _cliques; }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

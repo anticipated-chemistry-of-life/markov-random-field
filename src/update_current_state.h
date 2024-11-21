@@ -191,15 +191,24 @@ public:
 	              const TStorageZVector &Z, const TTree &tree)
 	    : _start_index(start_index), _increment(increment), _tree(tree) {
 		if (increment == 1) {
-			auto [_current_state_Y, _where_you_in_Y, _index_in_Y_vector] =
-			    fill_current_state_easy(Y, _start_index, tree.get_number_of_leaves());
-			auto [_current_state_Z, _where_you_in_Z, _index_in_Z_vector] =
-			    fill_current_state_easy(Z, _start_index, tree.get_number_of_internal_nodes());
+			auto result_Y      = fill_current_state_easy(Y, _start_index, tree.get_number_of_leaves());
+			_current_state_Y   = std::get<0>(result_Y);
+			_where_you_in_Y    = std::get<1>(result_Y);
+			_index_in_Y_vector = std::get<2>(result_Y);
+			auto result_Z      = fill_current_state_easy(Z, _start_index, tree.get_number_of_internal_nodes());
+			_current_state_Z   = std::get<0>(result_Z);
+			_where_you_in_Z    = std::get<1>(result_Z);
+			_index_in_Z_vector = std::get<2>(result_Z);
 		} else {
-			auto [_current_state_Y, _where_you_in_Y, _index_in_Y_vector] =
-			    fill_current_state_hard(tree.get_number_of_leaves(), Y, _start_index, _increment, Y.size());
-			auto [_current_state_Z, _where_you_in_Z, _index_in_Z_vector] =
+			auto result_Y = fill_current_state_hard(tree.get_number_of_leaves(), Y, _start_index, _increment, Y.size());
+			_current_state_Y   = std::get<0>(result_Y);
+			_where_you_in_Y    = std::get<1>(result_Y);
+			_index_in_Y_vector = std::get<2>(result_Y);
+			auto result_Z =
 			    fill_current_state_hard(tree.get_number_of_internal_nodes(), Z, _start_index, _increment, Z.size());
+			_current_state_Z   = std::get<0>(result_Z);
+			_where_you_in_Z    = std::get<1>(result_Z);
+			_index_in_Z_vector = std::get<2>(result_Z);
 		}
 	}
 
@@ -215,6 +224,20 @@ public:
 		} else {
 			_current_state_Z[_tree.get_index_within_internal_nodes(index_in_clique)] = value;
 		}
+	}
+
+	size_t get_coordinate_in_container(size_t index_in_clique) const {
+		if (_tree.get_node(index_in_clique).isLeaf()) {
+			return _index_in_Y_vector[_tree.get_index_within_leaves(index_in_clique)];
+		}
+		return _index_in_Z_vector[_tree.get_index_within_internal_nodes(index_in_clique)];
+	}
+
+	bool is_in_container(size_t index_in_clique) const {
+		if (_tree.get_node(index_in_clique).isLeaf()) {
+			return _where_you_in_Y[_tree.get_index_within_leaves(index_in_clique)];
+		}
+		return _where_you_in_Z[_tree.get_index_within_internal_nodes(index_in_clique)];
 	}
 };
 

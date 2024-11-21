@@ -137,8 +137,8 @@ private:
 	size_t _n_nodes;
 	size_t _increment;
 
-	bool _compute_new_state(TCurrentState &current_state, const TTree &tree, const TNode &node,
-	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) {
+	bool _compute_new_state(const TCurrentState &current_state, const TTree &tree, const TNode &node,
+	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) const {
 		for (const auto &child_index : node.children()) {
 			auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
 			const auto &matrix_for_bin = _matrices[bin_length];
@@ -195,7 +195,7 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	void update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
+	std::vector<size_t> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
 
 	// const std::vector<bool> &fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
 	//                                             const TTree &tree) const;
