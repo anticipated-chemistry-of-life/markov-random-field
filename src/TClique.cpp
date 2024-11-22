@@ -7,8 +7,10 @@
 #include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/devtools.h"
 #include "update_current_state.h"
 #include <cstddef>
+#include <iostream>
 #include <vector>
 
 std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
@@ -20,6 +22,8 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 
 	// if you are a root, the probability is just the stationary probability (according to our model)
 	for (const auto root_index : tree.get_root_nodes()) {
+		OUT(root_index);
+		OUT(tree.get_index_within_internal_nodes(root_index));
 		const auto &node = tree.get_node(root_index);
 		coretools::TSumLogProbability sum_log_0;
 		coretools::TSumLogProbability sum_log_1;
@@ -27,6 +31,7 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		sum_log_1.add(stationary_1);
 		bool new_state  = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
 		auto coordinate = current_state.get_coordinate_in_container(root_index);
+		OUT(coordinate);
 		if (1 == current_state.get(root_index) && 0 == new_state) {
 			Z.set_to_zero(coordinate);
 			current_state.set(root_index, new_state);
@@ -44,11 +49,13 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		const auto &node = tree.get_node(internal_index);
 		coretools::TSumLogProbability sum_log_0;
 		coretools::TSumLogProbability sum_log_1;
-		const auto &parent         = tree.get_node(node.parentIndex());
-		auto bin_length            = parent.get_branch_length_bin();
+		const auto &parent = tree.get_node(node.parentIndex());
+		auto bin_length    = parent.get_branch_length_bin();
+		OUT(bin_length);
 		const auto &matrix_for_bin = this->_matrices[bin_length];
-		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 0);
-		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 1);
+		matrix_for_bin.print();
+		double prob_0_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 0);
+		double prob_1_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 1);
 		sum_log_0.add(prob_0_to_parent);
 		sum_log_1.add(prob_1_to_parent);
 

@@ -132,6 +132,7 @@ void TTree::load_from_file(const std::string &filename) {
 
 	// binned branches
 	_bin_branch_lengths(branch_lengths);
+	OUT(get_all_binned_branch_lengths());
 
 	coretools::instances::logfile().done();
 	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),

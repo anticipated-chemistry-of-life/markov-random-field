@@ -19,18 +19,17 @@ TEST(TCliqueTest, get_z) {
 	TStorageZVector Z({5, 5});
 
 	// Set some values in Y and Z
-	Y.insert_one(0);
-	Y.insert_one(1);
-	Z.insert_one(0);
-	Z.insert_one(1);
+	Y.insert_one(2);
+	Y.insert_one(4);
+	Z.insert_one(3);
+	Z.insert_one(5);
 
-	// Call the update_Z_test function
-	// std::vector<bool> result = clique.update_Z_test(Y, Z, tree);
 	tree_2.initialize_cliques({tree, tree_2});
 	auto &cliques = tree_2.get_cliques();
-	cliques[0].initialize(0.0, 0.5, 100);
-	cliques[0].set_mus(0.003, 0.5);
-	OUT(cliques[0].update_Z(Y, Z, tree));
+	cliques[0].set_mus(0.3, 0.2);
+	cliques[0].set_lambda();
+	cliques[0].initialize(tree.get_a(), tree.get_delta(), tree.get_number_of_bins());
+	OUT(cliques[0].update_Z(Y, Z, tree_2)); // should it be tree_2 ?
 
 	// // Verify the output
 	// std::vector<bool> expected = {false, false, true, true, true, true, false, false, false, false, false};

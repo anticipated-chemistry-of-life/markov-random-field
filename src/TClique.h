@@ -10,6 +10,7 @@
 #include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/devtools.h"
 #include "update_current_state.h"
 #include <armadillo>
 #include <cstddef>
@@ -58,6 +59,18 @@ public:
 	}
 
 	double operator[](size_t i) const { return _mat[i]; }
+
+	void print() const {
+		uint cols = _mat.n_cols;
+		uint rows = _mat.n_rows;
+
+		std::cout << "---------------" << std::endl;
+		for (uint i = 0; i < rows; i++) {
+			for (uint j = 0; j < cols; j++) { std::cout << _mat(i, j) << " "; }
+			std::cout << std::endl;
+		}
+		std::cout << "---------------" << std::endl;
+	}
 };
 
 /** @brief Class to store the matrices for each bin.
@@ -109,6 +122,7 @@ public:
 		// calculate matrix exponential for first bin
 		TMatrix P_0;
 		P_0.set_from_matrix_exponential(_lambda_c * a);
+		P_0.print();
 
 		// calculate matrix exponential of scaling matrix
 		TMatrix _matrix_alpha;
@@ -118,7 +132,19 @@ public:
 		// do recursion
 		for (size_t k = 1; k < _matrices.size(); ++k) {
 			_matrices[k].set_from_product(_matrices[k - 1], _matrix_alpha);
+			print_mat(_matrices[k]);
 		}
+	}
+	static void print_mat(TMatrix my_matrix) {
+		uint cols = my_matrix.get_matrix().n_cols;
+		uint rows = my_matrix.get_matrix().n_rows;
+
+		std::cout << "---------------" << std::endl;
+		for (uint i = 0; i < rows; i++) {
+			for (uint j = 0; j < cols; j++) { std::cout << my_matrix(i, j) << " "; }
+			std::cout << std::endl;
+		}
+		std::cout << "---------------" << std::endl;
 	}
 };
 
@@ -196,9 +222,6 @@ public:
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
 	std::vector<size_t> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
-
-	// const std::vector<bool> &fill_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
-	//                                             const TTree &tree) const;
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 };
