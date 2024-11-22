@@ -49,13 +49,12 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		const auto &node = tree.get_node(internal_index);
 		coretools::TSumLogProbability sum_log_0;
 		coretools::TSumLogProbability sum_log_1;
-		const auto &parent = tree.get_node(node.parentIndex());
-		auto bin_length    = parent.get_branch_length_bin();
+		auto bin_length = node.get_branch_length_bin();
 		OUT(bin_length);
 		const auto &matrix_for_bin = this->_matrices[bin_length];
 		matrix_for_bin.print();
-		double prob_0_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 0);
-		double prob_1_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 1);
+		double prob_0_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 0); // TODO : VERIFY
+		double prob_1_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 1); // TODO : VERIFY
 		sum_log_0.add(prob_0_to_parent);
 		sum_log_1.add(prob_1_to_parent);
 
