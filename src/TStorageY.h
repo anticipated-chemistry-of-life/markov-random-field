@@ -54,6 +54,7 @@ public:
 	 * If set_state(false) then we set the 17th bit to 0.
 	 */
 	void set_state(const bool state) { _value = (_value & ~_state_mask) | (static_cast<uint64_t>(state)) << 47; }
+	void switch_state() { _value ^= _state_mask; }
 
 	/** @return The counter of the number of times the element was a one in the MCMC */
 	uint16_t get_counter() const { return _value >> 48; }

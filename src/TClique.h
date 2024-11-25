@@ -10,7 +10,6 @@
 #include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
-#include "coretools/devtools.h"
 #include "update_current_state.h"
 #include <armadillo>
 #include <cstddef>
@@ -122,7 +121,6 @@ public:
 		// calculate matrix exponential for first bin
 		TMatrix P_0;
 		P_0.set_from_matrix_exponential(_lambda_c * a);
-		P_0.print();
 
 		// calculate matrix exponential of scaling matrix
 		TMatrix _matrix_alpha;
@@ -132,10 +130,9 @@ public:
 		// do recursion
 		for (size_t k = 1; k < _matrices.size(); ++k) {
 			_matrices[k].set_from_product(_matrices[k - 1], _matrix_alpha);
-			print_mat(_matrices[k]);
 		}
 	}
-	static void print_mat(TMatrix my_matrix) {
+	static void print_mat(const TMatrix &my_matrix) {
 		uint cols = my_matrix.get_matrix().n_cols;
 		uint rows = my_matrix.get_matrix().n_rows;
 

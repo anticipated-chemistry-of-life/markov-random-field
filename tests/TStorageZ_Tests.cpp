@@ -11,6 +11,18 @@ TEST(TStorageZ_Tests, test_constructor) {
 	EXPECT_EQ(z.get_coordinate(), 1000);
 }
 
+TEST(TStorageZ_Tests, flip_state) {
+	TStorageZ z(1000);
+	z.set_state(true);
+
+	EXPECT_EQ(z.is_one(), true);
+
+	z.switch_state();
+	EXPECT_EQ(z.is_one(), false);
+	z.switch_state();
+	EXPECT_EQ(z.is_one(), true);
+}
+
 TEST(TStorageZ_Tests, test_set_coordinate) {
 	TStorageZ z(1000);
 	z.set_coordinate(2000);

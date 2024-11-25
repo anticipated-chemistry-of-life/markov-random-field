@@ -14,7 +14,6 @@
 #include <vector>
 
 std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
-	for (auto i : Z) { std::cout << i.is_one() << std::endl; }
 	TCurrentState current_state(this->_start_index, this->_increment, Y, Z, tree);
 	std::vector<size_t> Z_indices_not_to_update_in_parallel;
 
@@ -30,23 +29,17 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		sum_log_1.add(stationary_1);
 		bool new_state  = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
 		auto coordinate = current_state.get_coordinate_in_container(root_index);
-		OUT(coordinate);
-		OUT(current_state.get(root_index));
-		OUT(new_state);
 		if (1 == current_state.get(root_index) && 0 == new_state) {
 			Z.set_to_zero(coordinate);
 			current_state.set(root_index, new_state);
-			std::cout << "set to zero" << std::endl;
 		}
 		if (0 == current_state.get(root_index) && 1 == new_state && current_state.is_in_container(root_index)) {
 			Z.set_to_zero(coordinate);
 			current_state.set(root_index, new_state);
-			std::cout << "set to one !" << std::endl;
 		}
 		if (0 == current_state.get(root_index) && 1 == new_state) {
 			Z_indices_not_to_update_in_parallel.push_back(coordinate);
 			current_state.set(root_index, new_state);
-			std::cout << "will update in parallel" << std::endl;
 		}
 	}
 
@@ -56,33 +49,25 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		coretools::TSumLogProbability sum_log_1;
 		auto bin_length            = node.get_branch_length_bin();
 		const auto &matrix_for_bin = this->_matrices[bin_length];
-		matrix_for_bin.print();
-		double prob_0_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 0); // TODO : VERIFY
-		double prob_1_to_parent = matrix_for_bin(current_state.get(node.parentIndex()), 1); // TODO : VERIFY
+		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 0);
+		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 1);
 		sum_log_0.add(prob_0_to_parent);
 		sum_log_1.add(prob_1_to_parent);
 
 		bool new_state  = this->_compute_new_state(current_state, tree, node, sum_log_0, sum_log_1);
 		auto coordinate = current_state.get_coordinate_in_container(internal_index);
-		OUT(coordinate);
-		OUT(current_state.get(internal_index));
-		OUT(new_state);
 		if (1 == current_state.get(internal_index) && 0 == new_state) {
 			Z.set_to_zero(coordinate);
 			current_state.set(internal_index, new_state);
-			std::cout << "set to zero" << std::endl;
 		}
 		if (0 == current_state.get(internal_index) && 1 == new_state && current_state.is_in_container(internal_index)) {
 			Z.set_to_zero(coordinate);
 			current_state.set(internal_index, new_state);
-			std::cout << "set to one !" << std::endl;
 		}
 		if (0 == current_state.get(internal_index) && 1 == new_state) {
 			Z_indices_not_to_update_in_parallel.push_back(coordinate);
 			current_state.set(internal_index, new_state);
-			std::cout << "will update in parallel" << std::endl;
 		}
 	}
-	for (auto i : Z) { std::cout << i.is_one() << std::endl; }
 	return Z_indices_not_to_update_in_parallel;
 }

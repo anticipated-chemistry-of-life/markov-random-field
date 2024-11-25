@@ -29,6 +29,8 @@ public:
 		_value = (state * 2 - 1) * std::abs(_value);
 	}
 
+	void switch_state() { _value = -_value; }
+
 	bool operator<(const TStorageZ &right) const { return get_coordinate() < right.get_coordinate(); }
 	bool operator<(const uint32_t right) const { return get_coordinate() < right; }
 	bool operator==(const uint32_t right) const { return get_coordinate() == right; }

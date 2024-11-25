@@ -40,6 +40,7 @@ public:
 	void set_is_root(bool is_root) { _is_root = is_root; }
 	void set_bin_branch_length_to_parent(TypeBinBranches branch_length) { _binned_branch_length = branch_length; }
 	void set_parent_index(size_t parent_index) { _parentIndex = parent_index; }
+	std::string get_id() const { return _id; };
 
 	bool operator==(const std::string &Id) const { return _id == Id; };
 };
@@ -160,5 +161,6 @@ public:
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques() { return _cliques; }
+	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

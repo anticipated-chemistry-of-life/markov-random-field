@@ -1,6 +1,21 @@
 #include "TStorageY.h"
 #include "gtest/gtest.h"
 
+TEST(YStorage_Tests, flip_state) {
+	TStorageY y;
+	y.set_state(true);
+	y.set_coordinate(25);
+	EXPECT_EQ(y.is_one(), true);
+	EXPECT_EQ(y.get_coordinate(), 25);
+	y.switch_state();
+
+	EXPECT_EQ(y.is_one(), false);
+	EXPECT_EQ(y.get_coordinate(), 25);
+	y.switch_state();
+	EXPECT_EQ(y.is_one(), true);
+	EXPECT_EQ(y.get_coordinate(), 25);
+}
+
 TEST(YStorage_Tests, set_counter) {
 	TStorageY y;
 	y.set_counter(1458);
