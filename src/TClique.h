@@ -10,9 +10,11 @@
 #include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
-#include "update_current_state.h"
+#include "coretools/devtools.h"
+#include "smart_binary_search.h"
 #include <armadillo>
 #include <cstddef>
+#include <tuple>
 #include <vector>
 
 /**
@@ -171,9 +173,50 @@ private:
 			sum_log_1.add(prob_1_to_child);
 		}
 		const double log_Q = sum_log_1.getSum() - sum_log_0.getSum();
-		bool new_state     = coretools::TAcceptOddsRatio::accept(log_Q);
+		OUT(log_Q);
+		bool new_state = coretools::TAcceptOddsRatio::accept(log_Q);
 		return new_state;
 	};
+
+	static void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index, bool new_state,
+	                                  std::vector<size_t> &Z_indices_not_to_update_in_parallel) {
+		auto coordinate = current_state.get_coordinate_in_container(index);
+		if (current_state.get(index) && !new_state) {
+			Z.set_to_zero(coordinate);
+			current_state.set(index, new_state);
+		}
+		if (!current_state.get(index) && new_state && current_state.is_in_container(index)) {
+			Z.set_to_zero(coordinate);
+			current_state.set(index, new_state);
+		}
+		if (!current_state.get(index) && new_state) {
+			Z_indices_not_to_update_in_parallel.push_back(coordinate);
+			current_state.set(index, new_state);
+		}
+	};
+
+	static std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
+	_compute_roots(double stationary_0, double stationary_1) {
+		coretools::TSumLogProbability sum_log_0;
+		coretools::TSumLogProbability sum_log_1;
+		sum_log_0.add(stationary_0);
+		sum_log_1.add(stationary_1);
+		return {sum_log_0, sum_log_1};
+	}
+
+	std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
+	_compute_internal_nodes(const TNode &node, const TCurrentState &current_state) const {
+		coretools::TSumLogProbability sum_log_0;
+		coretools::TSumLogProbability sum_log_1;
+		auto bin_length            = node.get_branch_length_bin();
+		const auto &matrix_for_bin = this->_matrices[bin_length];
+		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 0);
+		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 1);
+		sum_log_0.add(prob_0_to_parent);
+		sum_log_1.add(prob_1_to_parent);
+
+		return {sum_log_0, sum_log_1};
+	}
 
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {

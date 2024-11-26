@@ -8,6 +8,7 @@
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
+#include "omp.h"
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -26,6 +27,9 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
+
+	// read number of threads
+	this->_number_of_threads = coretools::getNumThreads();
 }
 
 void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
@@ -173,4 +177,17 @@ void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
 		std::vector<size_t> multi_dim_index = coretools::getSubscripts(i, num_leaves_per_tree);
 		_cliques.emplace_back(multi_dim_index, _dimension, _nodes.size(), increment);
 	}
+}
+
+void TTree::update_Z(const TStorageYVector &Y, TStorageZVector &Z) {
+	std::vector<std::vector<size_t>> indices_to_insert(this->_number_of_threads);
+
+#pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
+	for (size_t i = 0; i < _cliques.size(); ++i) {
+		auto vec = _cliques[i].update_Z(Y, Z, *this);
+		indices_to_insert[omp_get_thread_num()].insert(indices_to_insert[omp_get_thread_num()].end(), vec.begin(),
+		                                               vec.end());
+	}
+
+	Z.resize_Z(indices_to_insert);
 }

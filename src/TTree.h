@@ -5,6 +5,8 @@
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
 
+#include "TStorageYVector.h"
+#include "TStorageZVector.h"
 #include "Types.h"
 #include "coretools/Types/probability.h"
 #include <cstddef>
@@ -72,6 +74,9 @@ private:
 
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
+
+	// number of threads
+	size_t _number_of_threads;
 
 public:
 	explicit TTree(size_t dimension);
@@ -162,5 +167,6 @@ public:
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques() { return _cliques; }
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
+	void update_Z(const TStorageYVector &Y, TStorageZVector &Z);
 };
 #endif // METABOLITE_INFERENCE_TREE_H

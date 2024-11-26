@@ -1,6 +1,5 @@
 
-#ifndef TUPDATE_CURRENT_STATE_H
-#define TUPDATE_CURRENT_STATE_H
+#pragma once
 
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
@@ -249,5 +248,3 @@ public:
 		return _where_you_in_Z[_tree.get_index_within_internal_nodes(index_in_clique)];
 	}
 };
-
-#endif // TUPDATE_CURRENT_STATE_H

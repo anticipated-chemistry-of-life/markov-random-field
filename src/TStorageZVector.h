@@ -102,6 +102,11 @@ public:
 	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
 		return binary_search(get_linear_coordinate(multi_dim_index));
 	}
+
+	void resize_Z(const std::vector<std::vector<size_t>> &indices_to_insert) {
+		// TODO : create new vector with size equal to current vec + size the soze of each vector
+		// memcopy nad check until where I can copy and then insert the new elements
+	}
 };
 
 #endif // TSTORAGEZVECTOR_H
