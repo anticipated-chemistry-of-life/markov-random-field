@@ -120,6 +120,9 @@ public:
 	uint64_t get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
 	}
+	uint64_t get_linear_index_in_container_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
+		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
+	}
 
 	/// @brief Binary search to find the coordinate in the vector
 	[[nodiscard]] std::pair<bool, size_t> binary_search(uint64_t coordinate) const {

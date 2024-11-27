@@ -164,7 +164,7 @@ private:
 
 	bool _compute_new_state(const TCurrentState &current_state, const TTree &tree, const TNode &node,
 	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) const {
-		for (const auto &child_index : node.children()) {
+		for (const auto &child_index : node.children_indices_in_tree()) {
 			auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
 			const auto &matrix_for_bin = _matrices[bin_length];
 			double prob_0_to_child     = matrix_for_bin(0, current_state.get(child_index));
@@ -178,20 +178,19 @@ private:
 		return new_state;
 	};
 
-	static void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index, bool new_state,
-	                                  std::vector<size_t> &Z_coordinates_not_to_update_in_parallel) {
-		auto index_in_Z = current_state.get_index_in_container(index);
-		if (current_state.get(index) && !new_state) {
-			Z.set_to_zero(index_in_Z);
-			current_state.set(index, new_state);
-		}
-		if (!current_state.get(index) && new_state) {
-			if (current_state.is_in_container(index)) {
-				Z.set_to_zero(index_in_Z);
-				current_state.set(index, new_state);
+	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
+	                           bool new_state, std::vector<size_t> &linear_indices_in_Z_space_to_insert,
+	                           const TTree &tree) {
+		auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
+		if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
+		if (!current_state.get(index_in_tree) && new_state) {
+			if (current_state.exists_in_TStorageVector(index_in_tree)) {
+				Z.set_to_zero(index_in_TStorageZVector);
 			} else {
-				Z_coordinates_not_to_update_in_parallel.push_back(index_in_Z);
-				current_state.set(index, new_state);
+				auto multidim_index_in_Z_space                 = _start_index;
+				multidim_index_in_Z_space[_variable_dimension] = tree.get_index_within_internal_nodes(index_in_tree);
+				size_t linear_index_in_Z_space = Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
+				linear_indices_in_Z_space_to_insert.push_back(linear_index_in_Z_space);
 			}
 		}
 	};
@@ -211,8 +210,8 @@ private:
 		coretools::TSumLogProbability sum_log_1;
 		auto bin_length            = node.get_branch_length_bin();
 		const auto &matrix_for_bin = this->_matrices[bin_length];
-		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 0);
-		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex()), 1);
+		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex_in_tree()), 0);
+		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex_in_tree()), 1);
 		sum_log_0.add(prob_0_to_parent);
 		sum_log_1.add(prob_1_to_parent);
 

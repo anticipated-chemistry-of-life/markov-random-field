@@ -18,6 +18,7 @@ public:
 		set_state(true);
 	}
 	[[nodiscard]] uint32_t get_linear_index_in_Z_space() const { return std::abs(_value); };
+	[[nodiscard]] uint32_t get_linear_index_in_container_space() const { return get_linear_index_in_Z_space(); };
 
 	void set_linear_index_in_Z_space(const int32_t linear_index_in_Z_space) { _value = linear_index_in_Z_space; }
 

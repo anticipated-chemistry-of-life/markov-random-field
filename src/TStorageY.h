@@ -38,6 +38,7 @@ public:
 
 	/** @return The linear index of the element in the Y vector */
 	uint64_t get_linear_index_in_Y_space() const { return _value & _linear_index_mask; };
+	uint64_t get_linear_index_in_container_space() const { return get_linear_index_in_Y_space(); };
 
 	/** Set the linear index of the element in the Y vector
 	 * @param linear_index_in_Y_space The linear index of the element in the Y vector

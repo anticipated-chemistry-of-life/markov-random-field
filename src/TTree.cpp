@@ -185,8 +185,8 @@ void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const s
 	size_t increment = 1;
 	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].size(); }
 	for (size_t i = 0; i < n_cliques; ++i) {
-		std::vector<size_t> multi_dim_index = coretools::getSubscripts(i, num_leaves_per_tree);
-		_cliques.emplace_back(multi_dim_index, _dimension, _nodes.size(), increment);
+		std::vector<size_t> multi_dim_index_in_leaves_space = coretools::getSubscripts(i, num_leaves_per_tree);
+		_cliques.emplace_back(multi_dim_index_in_leaves_space, _dimension, _nodes.size(), increment);
 	}
 }
 

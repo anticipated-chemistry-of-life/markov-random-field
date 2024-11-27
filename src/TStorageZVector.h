@@ -92,6 +92,10 @@ public:
 		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
 	}
 
+	uint64_t get_linear_index_in_container_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
+		return get_linear_index_in_Z_space(multidim_index_in_Z_space);
+	}
+
 	[[nodiscard]] std::pair<bool, size_t> binary_search(uint32_t linear_index_in_Z_space) const {
 
 		// lower_bound return the first element that is not less than the value
