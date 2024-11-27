@@ -10,7 +10,6 @@
 #include "coretools/devtools.h"
 #include "smart_binary_search.h"
 #include <cstddef>
-#include <iostream>
 #include <vector>
 
 std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
@@ -23,7 +22,6 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 	// if you are a root, the probability is just the stationary probability (according to our model)
 	for (const auto index : tree.get_internal_nodes()) {
 		const auto &node = tree.get_node(index);
-		OUT(node.id());
 		if (node.isRoot()) {
 			auto sum_log   = TClique::_compute_roots(stationary_0, stationary_1);
 			auto sum_log_0 = std::get<0>(sum_log);
@@ -39,6 +37,5 @@ std::vector<size_t> TClique::update_Z(const TStorageYVector &Y, TStorageZVector 
 		}
 	}
 
-	OUT(Z_indices_not_to_update_in_parallel);
 	return Z_indices_not_to_update_in_parallel;
 }

@@ -7,59 +7,72 @@
 #include "TStorageZ.h"
 #include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <vector>
 
+/// There is one TStorageZVector per dimension `d`. The dimensions in Z space correspond
+/// to the number of leaves in each dimension except for dimension `d` where the
+/// dimension is given by the number of internal nodes.
+/// For example dimension of interest `d` where d = 2 and number of leaves
+/// in each dimension is [2, 3, 4, 5] and the number of internal nodes in dimension `d` is 17.
+/// then the dimensions in Z space are [2, 3, 17, 5].
 class TStorageZVector {
 private:
-	std::vector<size_t> _dimensions;
+	std::vector<size_t> _dimensions_in_Z_space;
 	std::vector<TStorageZ> _vec;
 
 public:
 	using value_type     = uint32_t;
 	using const_iterator = typename std::vector<TStorageZ>::const_iterator;
 	TStorageZVector()    = default;
-	explicit TStorageZVector(const std::vector<size_t> &dimensions) : _dimensions(dimensions) {
-		// TODO : NOTE that dimensions correspond to the number of internal nodes in each dimension !!!
+	explicit TStorageZVector(const std::vector<size_t> &dimensions_in_Z_space) {
+		initialize_dimensions(dimensions_in_Z_space);
 	}
 
-	[[nodiscard]] bool is_one(const uint32_t index_in_Z) const {
-		if (index_in_Z >= _vec.size()) {
-			UERROR("Index '", index_in_Z, "' is out of range. The length of the vector is : ", _vec.size());
+	void initialize_dimensions(const std::vector<size_t> &dimensions_in_Z_space) {
+		_dimensions_in_Z_space = dimensions_in_Z_space;
+	}
+	[[nodiscard]] bool is_one(const size_t index_in_TStorageZVector) const {
+		if (index_in_TStorageZVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageZVector,
+			       "' is out of range. The length of the vector is : ", _vec.size());
 		}
-		return _vec[index_in_Z].is_one();
+		return _vec[index_in_TStorageZVector].is_one();
 	};
 
-	void set_to_one(uint32_t index) {
-		if (index >= _vec.size()) {
-			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+	void set_to_one(size_t index_in_TStorageZVector) {
+		if (index_in_TStorageZVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageZVector,
+			       "' is out of range. The length of the vector is : ", _vec.size());
 		}
-		_vec[index].set_state(true);
+		_vec[index_in_TStorageZVector].set_state(true);
 	}
 
-	void set_to_zero(uint32_t index) {
-		if (index >= _vec.size()) {
-			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+	void set_to_zero(size_t index_in_TStorageZVector) {
+		if (index_in_TStorageZVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageZVector,
+			       "' is out of range. The length of the vector is : ", _vec.size());
 		}
-		_vec[index].set_state(false);
+		_vec[index_in_TStorageZVector].set_state(false);
 	}
 
-	void insert_one(uint32_t coordinate) {
-		auto [found, index] = binary_search(coordinate);
+	void insert_one(uint32_t linear_index_in_Z_space) {
+		auto [found, index] = binary_search(linear_index_in_Z_space);
 		if (found) {
 			_vec[index].set_state(true);
 		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ(coordinate));
+			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
 		}
 	}
 
-	void insert_zero(uint32_t coordinate) {
-		auto [found, index] = binary_search(coordinate);
+	void insert_zero(uint32_t linear_index_in_Z_space) {
+		auto [found, index] = binary_search(linear_index_in_Z_space);
 		if (found) {
 			_vec[index].set_state(false);
 		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ(coordinate));
+			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
 			_vec[index].set_state(false);
 		}
 	}
@@ -73,16 +86,16 @@ public:
 	auto cbegin() const { return _vec.cbegin(); }
 	auto cend() const { return _vec.cend(); }
 	auto end() const { return _vec.end(); }
-	TStorageZ operator[](size_t index) const { return _vec[index]; }
+	TStorageZ operator[](size_t index_in_TStorageZVector) const { return _vec[index_in_TStorageZVector]; }
 
-	[[nodiscard]] uint64_t get_linear_coordinate(const std::vector<size_t> &multi_dim_index) const {
-		return coretools::getLinearIndex(multi_dim_index, _dimensions);
+	[[nodiscard]] uint64_t get_linear_index_in_Z_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
+		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
 	}
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(uint32_t coordinate) const {
+	[[nodiscard]] std::pair<bool, size_t> binary_search(uint32_t linear_index_in_Z_space) const {
 
 		// lower_bound return the first element that is not less than the value
-		auto it = std::lower_bound(_vec.begin(), _vec.end(), coordinate);
+		auto it = std::lower_bound(_vec.begin(), _vec.end(), linear_index_in_Z_space);
 
 		// if our coordinate is bigger than the biggest element in the vector
 		// we say that we haven't found our element and that if we want to
@@ -93,19 +106,21 @@ public:
 		// meaning that if we haven't found it, we will insert it at that position
 		// to keep the vector sorted
 		size_t index = std::distance(_vec.begin(), it);
-		if (*it != coordinate) { return {false, index}; }
+		if (*it != linear_index_in_Z_space) { return {false, index}; }
 
 		// if we found the coordinate we return the index and true
 		return {true, index};
 	};
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
-		return binary_search(get_linear_coordinate(multi_dim_index));
+	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multidim_index_in_Z_space) const {
+		return binary_search(get_linear_index_in_Z_space(multidim_index_in_Z_space));
 	}
 
-	void resize_Z(const std::vector<std::vector<size_t>> &indices_to_insert) {
-		// TODO : create new vector with size equal to current vec + size the soze of each vector
+	void resize_Z(std::vector<size_t> &linear_indices_in_Z_space_to_insert) {
 		// memcopy nad check until where I can copy and then insert the new elements
+		std::sort(linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end());
+		size_t new_size = _vec.size() + linear_indices_in_Z_space_to_insert.size();
+		this->_vec.reserve(new_size);
 	}
 };
 

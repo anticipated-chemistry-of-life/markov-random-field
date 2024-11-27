@@ -83,14 +83,14 @@ void TTree::load_from_file(const std::string &filename) {
 			_nodes.emplace_back(child, parent_index, false);
 			branch_lengths.push_back(branch_length);
 			_node_map[child] = _nodes.size() - 1;
-			_nodes[parent_index].addChild(_nodes.size() - 1);
+			_nodes[parent_index].addChild_index_in_tree(_nodes.size() - 1);
 		} else if (!in_tree(child) && in_tree(parent)) {
 			size_t parent_index = get_node_index(parent);
 			// we add the child node to the tree
 			_nodes.emplace_back(child, parent_index, false);
 			branch_lengths.push_back(branch_length);
 			_node_map[child] = _nodes.size() - 1;
-			_nodes[parent_index].addChild(_nodes.size() - 1);
+			_nodes[parent_index].addChild_index_in_tree(_nodes.size() - 1);
 		} else if (in_tree(child) && !in_tree(parent)) {
 			// if the child node was in the tree but not the parent
 			// that means that the child was a root and is now becoming
@@ -98,11 +98,11 @@ void TTree::load_from_file(const std::string &filename) {
 			size_t child_index = get_node_index(child);
 			_nodes[child_index].set_is_root(false);
 			branch_lengths[child_index] = branch_length;
-			_nodes[child_index].set_parent_index(_nodes.size());
+			_nodes[child_index].set_parent_index_in_tree(_nodes.size());
 			_nodes.emplace_back(parent, -1, true);
 			branch_lengths.push_back(0.0);
 			_node_map[parent] = _nodes.size() - 1;
-			_nodes[_nodes.size() - 1].addChild(child_index);
+			_nodes[_nodes.size() - 1].addChild_index_in_tree(child_index);
 		} else {
 			// if both nodes were already in the tree that means that the
 			// child would in theroy have two parents which is not allowed
@@ -156,7 +156,7 @@ size_t TTree::get_node_index(const std::string &Id) const {
 	return it->second; // Return the index from the map
 }
 
-void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
+void TTree::initialize_cliques_and_Z(const std::vector<TTree> &all_trees) {
 
 	// we initialize the number of leaves we have in each tree
 	std::vector<size_t> num_leaves_per_tree(all_trees.size());
@@ -164,12 +164,23 @@ void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
 	// we get the number of leaves for each tree
 	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i].get_number_of_leaves(); }
 
+	_initialize_Z(num_leaves_per_tree);
+	_initialize_cliques(num_leaves_per_tree, all_trees);
+}
+
+void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
+	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
+
+	_Z.initialize_dimensions(num_leaves_per_tree);
+}
+
+void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees) {
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
 	num_leaves_per_tree[_dimension] = 1;
 
 	// we then caclulate how many cliques we will have in total for that tree. Which is the product of the number of
 	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
-	size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
+	const size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
 
 	size_t increment = 1;
 	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].size(); }
@@ -179,15 +190,14 @@ void TTree::initialize_cliques(const std::vector<TTree> &all_trees) {
 	}
 }
 
-void TTree::update_Z(const TStorageYVector &Y, TStorageZVector &Z) {
-	std::vector<std::vector<size_t>> indices_to_insert(this->_number_of_threads);
+void TTree::update_Z(const TStorageYVector &Y) {
+	std::vector<size_t> indices_to_insert(this->_number_of_threads);
 
 #pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
 	for (size_t i = 0; i < _cliques.size(); ++i) {
-		auto vec = _cliques[i].update_Z(Y, Z, *this);
-		indices_to_insert[omp_get_thread_num()].insert(indices_to_insert[omp_get_thread_num()].end(), vec.begin(),
-		                                               vec.end());
+		auto vec = _cliques[i].update_Z(Y, _Z, *this);
+#pragma omp critical {
+		indices_to_insert.insert(indices_to_insert.end(), vec.begin(), vec.end());
 	}
-
-	Z.resize_Z(indices_to_insert);
+	_Z.resize_Z(indices_to_insert);
 }

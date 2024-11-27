@@ -16,37 +16,38 @@ class TClique; // forward declaration
 
 class TNode {
 private:
-	std::string _id;                         // unique identifier for the node
-	size_t _parentIndex;                     // pointer to parent node
-	TypeBinBranches _binned_branch_length{}; // discretised branch length
-	std::vector<size_t> _children;           // vector to child nodes indices
+	std::string _id;                               // unique identifier for the node
+	size_t _parentIndex_in_tree;                   // pointer to parent node
+	TypeBinBranches _binned_branch_length{};       // discretised branch length
+	std::vector<size_t> _children_indices_in_tree; // vector to child nodes indices
 	bool _is_root;
 
 public:
 	// Constructor, initializes a TNode with id, _branchLengthToParent and parent node
-	TNode(std::string IdString, size_t Parent, bool is_root)
-	    : _id(std::move(IdString)), _parentIndex(Parent), _is_root(is_root) {};
+	TNode(std::string IdString, size_t Parent_index_in_tree, bool is_root)
+	    : _id(std::move(IdString)), _parentIndex_in_tree(Parent_index_in_tree), _is_root(is_root) {};
 
 	// Function to add child
-	void addChild(size_t ChildIndex) { _children.push_back(ChildIndex); };
+	void addChild_index_in_tree(size_t ChildIndex) { _children_indices_in_tree.push_back(ChildIndex); };
 
 	// Method to check if the node is a leaf (has no _children)
 	[[nodiscard]] const std::string &id() const { return _id; };
-	[[nodiscard]] size_t parentIndex() const { return _parentIndex; };
-	[[nodiscard]] size_t numChildren() const { return _children.size(); };
-	[[nodiscard]] const std::vector<size_t> &children() const { return _children; };
-	[[nodiscard]] bool isLeaf() const { return _children.empty(); };
+	[[nodiscard]] size_t parentIndex_in_tree() const { return _parentIndex_in_tree; };
+	[[nodiscard]] size_t numChildren() const { return _children_indices_in_tree.size(); };
+	[[nodiscard]] const std::vector<size_t> &children_indices_in_tree() const { return _children_indices_in_tree; };
+	[[nodiscard]] bool isLeaf() const { return _children_indices_in_tree.empty(); };
 	[[nodiscard]] bool isRoot() const { return _is_root; };
-	[[nodiscard]] bool isInternalNode() const { return !_is_root && !_children.empty(); };
+	[[nodiscard]] bool isInternalNode() const { return !_is_root && !_children_indices_in_tree.empty(); };
 	[[nodiscard]] TypeBinBranches get_branch_length_bin() const { return _binned_branch_length; };
 	void set_is_root(bool is_root) { _is_root = is_root; }
 	void set_bin_branch_length_to_parent(TypeBinBranches branch_length) { _binned_branch_length = branch_length; }
-	void set_parent_index(size_t parent_index) { _parentIndex = parent_index; }
+	void set_parent_index_in_tree(size_t parent_index_in_tree) { _parentIndex_in_tree = parent_index_in_tree; }
 	std::string get_id() const { return _id; };
 
 	bool operator==(const std::string &Id) const { return _id == Id; };
 };
 
+/// Note: All indices are within the tree itself
 class TTree {
 private:
 	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
@@ -55,6 +56,8 @@ private:
 	std::vector<size_t> _roots;
 	std::vector<size_t> _internal_nodes;
 	std::vector<size_t> _internal_nodes_without_roots;
+
+	// The four vectors below have size _nodes.size()
 	std::vector<size_t> _leafIndices;
 	std::vector<size_t> _rootIndices;
 	std::vector<size_t> _internalIndices;
@@ -71,12 +74,17 @@ private:
 
 	// dimension of the tree
 	size_t _dimension;
-
-	void _bin_branch_lengths(std::vector<double> &branch_lengths);
-	void _initialize_grid_branch_lengths(size_t number_of_branches);
-
 	// number of threads
 	size_t _number_of_threads;
+
+	// Set Z
+	TStorageZVector _Z;
+
+	// private functions
+	void _bin_branch_lengths(std::vector<double> &branch_lengths);
+	void _initialize_grid_branch_lengths(size_t number_of_branches);
+	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
+	void _initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees);
 
 public:
 	explicit TTree(size_t dimension);
@@ -114,7 +122,7 @@ public:
 	/** Gives the number of roots within the tree
 	 * @return the number of roots
 	 */
-	[[nodiscard]] size_t count_roots() const { return _roots.size(); }
+	[[nodiscard]] size_t number_of_roots() const { return _roots.size(); }
 
 	/** Method to get all the leaves of the tree.
 	 * @return Returns a vector of length equal to the number of leaves in the tree. Each element of the vector is the
@@ -159,7 +167,7 @@ public:
 		return branch_lengths;
 	}
 
-	void initialize_cliques(const std::vector<TTree> &trees);
+	void initialize_cliques_and_Z(const std::vector<TTree> &trees);
 
 	coretools::Probability get_a() const { return _a; }
 	coretools::Probability get_b() const { return _b; }
@@ -167,6 +175,6 @@ public:
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques() { return _cliques; }
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
-	void update_Z(const TStorageYVector &Y, TStorageZVector &Z);
+	void update_Z(const TStorageYVector &Y);
 };
 #endif // METABOLITE_INFERENCE_TREE_H

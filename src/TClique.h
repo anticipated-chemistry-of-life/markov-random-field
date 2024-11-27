@@ -179,19 +179,20 @@ private:
 	};
 
 	static void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index, bool new_state,
-	                                  std::vector<size_t> &Z_indices_not_to_update_in_parallel) {
-		auto coordinate = current_state.get_coordinate_in_container(index);
+	                                  std::vector<size_t> &Z_coordinates_not_to_update_in_parallel) {
+		auto index_in_Z = current_state.get_index_in_container(index);
 		if (current_state.get(index) && !new_state) {
-			Z.set_to_zero(coordinate);
-			current_state.set(index, new_state);
-		}
-		if (!current_state.get(index) && new_state && current_state.is_in_container(index)) {
-			Z.set_to_zero(coordinate);
+			Z.set_to_zero(index_in_Z);
 			current_state.set(index, new_state);
 		}
 		if (!current_state.get(index) && new_state) {
-			Z_indices_not_to_update_in_parallel.push_back(coordinate);
-			current_state.set(index, new_state);
+			if (current_state.is_in_container(index)) {
+				Z.set_to_zero(index_in_Z);
+				current_state.set(index, new_state);
+			} else {
+				Z_coordinates_not_to_update_in_parallel.push_back(index_in_Z);
+				current_state.set(index, new_state);
+			}
 		}
 	};
 

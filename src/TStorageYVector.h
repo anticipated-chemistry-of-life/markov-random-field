@@ -17,70 +17,68 @@ private:
 	size_t _total_counts;
 	std::vector<TStorageY> _vec;
 
-	/// Gives the number of dimensions of our model. This should usually be 2 (species and molecules) but as we have
-	/// defined in our model, this can be more.
-	std::vector<size_t> _dimensions;
+	/// _dimensions_Y_space is the number of leaf nodes in each dimension
+	std::vector<size_t> _dimensions_Y_space;
 
 public:
 	using value_type     = uint64_t;
 	using const_iterator = typename std::vector<TStorageY>::const_iterator;
-	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions) {
+	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
+
 		// NOTE that dimensions correspond to the number of leaf nodes in each dimension !!!
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
-		_dimensions                  = dimensions;
+		_dimensions_Y_space          = dimensions_Y_space;
 	};
 
-	/// We want to check if coordinate exists in the vector or not.
-	/// the coordinate is the position of the element in the Y dimension
-	/// so if an element is in the vector that means it is currently a one or
-	/// it has been in the past iteration.
-	/// @param coordinate the position of the element in the Y vector.
+	/// We want to check if element at position index_in_TStorageYVector is one.
+	/// This index *must* be previously obtained by a binary search.
+	/// @param index_in_TStorageYVector the position of the element in the Y vector.
 	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] bool is_one(const uint64_t index_in_Y) const {
-		if (index_in_Y >= _vec.size()) {
-			UERROR("Index '", index_in_Y, "' is out of range. The length of the vector is : ", _vec.size(), ".");
+	[[nodiscard]] bool is_one(const size_t index_in_TStorageYVector) const {
+		if (index_in_TStorageYVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageYVector,
+			       "' is out of range. The length of the vector is : ", _vec.size(), ".");
 		}
-		return _vec[index_in_Y].is_one();
+		return _vec[index_in_TStorageYVector].is_one();
 	};
 
-	/** set_to_one will set the element at the coordinate to 1
-	 * if the element is already in the vector, we just set it to 1
-	 * if the element is not in the vector, we insert it in the vector
-	 * and set it to 1
-	 * @param coordinate the position of the element in the Y vector
+	/** set_to_one will set the element at the index_in_TStorageYVector to 1.
+	 * @param index_in_TStorageYVector the position of the element in the Y vector
 	 */
-	void set_to_one(uint64_t index) {
-		if (index >= _vec.size()) {
-			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+	void set_to_one(size_t index_in_TStorageYVector) {
+		if (index_in_TStorageYVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageYVector,
+			       "' is out of range. The length of the vector is : ", _vec.size());
 		}
-		_vec[index].set_state(true);
+		_vec[index_in_TStorageYVector].set_state(true);
 	}
-	void set_to_zero(uint64_t index) {
-		if (index >= _vec.size()) {
-			UERROR("Index '", index, "' is out of range. The length of the vector is : ", _vec.size());
+	void set_to_zero(size_t index_in_TStorageYVector) {
+		if (index_in_TStorageYVector >= _vec.size()) {
+			UERROR("Index '", index_in_TStorageYVector,
+			       "' is out of range. The length of the vector is : ", _vec.size());
 		}
-		_vec[index].set_state(false);
+		_vec[index_in_TStorageYVector].set_state(false);
 	}
 
-	void insert_one(uint64_t coordinate) {
-		auto [found, index] = binary_search(coordinate);
+	void insert_one(uint64_t linear_index_in_Y_space) {
+		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (found) {
 			_vec[index].set_state(true);
 		} else {
-			_vec.insert(_vec.begin() + index, TStorageY(coordinate));
+			_vec.insert(_vec.begin() + index, TStorageY(linear_index_in_Y_space));
 		}
 	}
 
 	/// Does the same as set_to_one but sets the element to zero
 	/// @param coordinate the position of the element in the Y vector
-	void insert_zero(uint64_t coordinate) {
-		auto [found, index] = binary_search(coordinate);
+	void insert_zero(uint64_t linear_index_in_Y_space) {
+		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (found) {
 			_vec[index].set_state(false);
 		} else {
-			_vec.insert(_vec.begin() + index, TStorageY(coordinate));
+			_vec.insert(_vec.begin() + index, TStorageY(linear_index_in_Y_space));
 			_vec[index].set_state(false);
 		}
 	}
@@ -91,8 +89,8 @@ public:
 		}
 	}
 
-	double get_fraction_of_ones(uint64_t coordinate) const {
-		auto [found, index] = binary_search(coordinate);
+	double get_fraction_of_ones(uint64_t linear_index_in_Y_space) const {
+		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (!found) { return 0.0; }
 		return static_cast<double>(_vec[index].get_counter()) / static_cast<double>(_total_counts);
 	}
@@ -103,7 +101,7 @@ public:
 	auto begin() const { return _vec.begin(); }
 	auto end() const { return _vec.end(); }
 	const std::vector<TStorageY> &get_vector() const { return _vec; }
-	const TStorageY &operator[](size_t index) const { return _vec[index]; }
+	const TStorageY &operator[](size_t index_in_TStorageYVector) const { return _vec[index_in_TStorageYVector]; }
 
 	void reset_counts() {
 		for (auto &elem : _vec) { elem.reset_counter(); }
@@ -119,8 +117,8 @@ public:
 	/// Given a multi-dimensional index, we want to get its linear index.
 	/// @param multi_dim_index the multi-dimensional index
 	/// @return the linear index
-	uint64_t get_linear_coordinate(const std::vector<size_t> &multi_dim_index) const {
-		return coretools::getLinearIndex(multi_dim_index, _dimensions);
+	uint64_t get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
+		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
 	}
 
 	/// @brief Binary search to find the coordinate in the vector
@@ -144,8 +142,8 @@ public:
 		return {true, index};
 	};
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multi_dim_index) const {
-		return binary_search(get_linear_coordinate(multi_dim_index));
+	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multidim_index_in_Y_space) const {
+		return binary_search(get_linear_index_in_Y_space(multidim_index_in_Y_space));
 	}
 };
 

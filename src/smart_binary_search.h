@@ -5,7 +5,6 @@
 #include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Main/TError.h"
-#include "coretools/devtools.h"
 #include <cmath>
 #include <cstddef>
 #include <tuple>
@@ -234,7 +233,7 @@ public:
 		}
 	}
 
-	size_t get_coordinate_in_container(size_t index_in_clique) const {
+	size_t get_index_in_container(size_t index_in_clique) const {
 		if (_tree.get_node(index_in_clique).isLeaf()) {
 			return _index_in_Y_vector[_tree.get_index_within_leaves(index_in_clique)];
 		}
