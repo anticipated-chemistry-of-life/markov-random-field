@@ -4,16 +4,16 @@
 TEST(YStorage_Tests, flip_state) {
 	TStorageY y;
 	y.set_state(true);
-	y.set_coordinate(25);
+	y.set_linear_index_in_Y_space(25);
 	EXPECT_EQ(y.is_one(), true);
-	EXPECT_EQ(y.get_coordinate(), 25);
+	EXPECT_EQ(y.get_linear_index_in_container_space(), 25);
 	y.switch_state();
 
 	EXPECT_EQ(y.is_one(), false);
-	EXPECT_EQ(y.get_coordinate(), 25);
+	EXPECT_EQ(y.get_linear_index_in_container_space(), 25);
 	y.switch_state();
 	EXPECT_EQ(y.is_one(), true);
-	EXPECT_EQ(y.get_coordinate(), 25);
+	EXPECT_EQ(y.get_linear_index_in_container_space(), 25);
 }
 
 TEST(YStorage_Tests, set_counter) {
@@ -48,21 +48,21 @@ TEST(YStorage_Tests, set_state_false) {
 
 TEST(YStorage_Tests, set_coordinate) {
 	TStorageY y;
-	y.set_coordinate(18987);
-	EXPECT_EQ(y.get_coordinate(), 18987);
+	y.set_linear_index_in_Y_space(18987);
+	EXPECT_EQ(y.get_linear_index_in_Y_space(), 18987);
 }
 
 TEST(YStorage_Tests, set_coordinate_zero) {
 	TStorageY y;
-	y.set_coordinate(0);
-	EXPECT_EQ(y.get_coordinate(), 0);
+	y.set_linear_index_in_Y_space(0);
+	EXPECT_EQ(y.get_linear_index_in_Y_space(), 0);
 }
 
 TEST(YStorage_Tests, set_coordinate_max) {
 	TStorageY y;
 	const uint64_t max = std::pow(2, 47) - 1; // because we have set to 47 bits the maximal number of coordinates
-	y.set_coordinate(max);
-	EXPECT_EQ(y.get_coordinate(), max);
+	y.set_linear_index_in_Y_space(max);
+	EXPECT_EQ(y.get_linear_index_in_Y_space(), max);
 }
 
 TEST(YStorage_Tests, update_counter) {
@@ -120,7 +120,7 @@ TEST(YStorage_Tests, test_constructor) {
 	constexpr TStorageY y;
 	EXPECT_EQ(y.get_counter(), 0);
 	EXPECT_EQ(y.is_one(), false);
-	EXPECT_EQ(y.get_coordinate(), 0);
+	EXPECT_EQ(y.get_linear_index_in_Y_space(), 0);
 }
 
 TEST(YStorage_Tests, reset_counter) {

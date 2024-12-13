@@ -4,6 +4,7 @@
 
 #include "TTree.h"
 #include "TClique.h"
+#include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
@@ -191,13 +192,9 @@ void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const s
 }
 
 void TTree::update_Z(const TStorageYVector &Y) {
-	std::vector<size_t> indices_to_insert(this->_number_of_threads);
+	std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 #pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
-	for (size_t i = 0; i < _cliques.size(); ++i) {
-		auto vec = _cliques[i].update_Z(Y, _Z, *this);
-#pragma omp critical {
-		indices_to_insert.insert(indices_to_insert.end(), vec.begin(), vec.end());
-	}
-	_Z.resize_Z(indices_to_insert);
+	for (size_t i = 0; i < _cliques.size(); ++i) { indices_to_insert[i] = _cliques[i].update_Z(Y, _Z, *this); }
+	_Z.insert_in_Z(indices_to_insert);
 }

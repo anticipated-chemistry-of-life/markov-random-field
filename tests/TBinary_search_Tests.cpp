@@ -1,12 +1,9 @@
 
 #include "TStorageYVector.h"
 #include "coretools/algorithms.h"
-#include "coretools/devtools.h"
 #include "smart_binary_search.h"
 #include "gtest/gtest.h"
-#include <algorithm>
 #include <chrono>
-#include <cstdint>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -40,7 +37,7 @@ TEST(Binary_search, easy_function) {
 		auto t2 = std::chrono::high_resolution_clock::now();
 		std::vector<bool> truth;
 		truth.clear();
-		auto linear_index = Y.get_linear_coordinate(multi_index_start);
+		auto linear_index = Y.get_linear_index_in_container_space(multi_index_start);
 		auto t3           = std::chrono::high_resolution_clock::now();
 		for (size_t i = 0; i < dimensions[dimensions.size() - 1]; ++i) {
 			auto [is_one, index] = Y.binary_search((linear_index + i));
@@ -86,11 +83,11 @@ TEST(Binary_search, hard_function) {
 		std::vector<size_t> multi_index_start{0, j};
 		auto t1                                = std::chrono::high_resolution_clock::now();
 		auto [res, where_you_in_Y, index_in_Y] = fill_current_state_hard(
-		    dimensions[0], Y, multi_index_start, dimensions[1], coretools::containerProduct(dimensions));
+		    Y, dimensions[0], multi_index_start, dimensions[1], coretools::containerProduct(dimensions));
 		auto t2 = std::chrono::high_resolution_clock::now();
 		std::vector<bool> truth;
 		truth.clear();
-		auto linear_index = Y.get_linear_coordinate(multi_index_start);
+		auto linear_index = Y.get_linear_index_in_Y_space(multi_index_start);
 		auto t3           = std::chrono::high_resolution_clock::now();
 		for (size_t i = 0; i < dimensions[0]; ++i) {
 			auto [truth_res, index] = Y.binary_search((linear_index + i * dimensions[1]));

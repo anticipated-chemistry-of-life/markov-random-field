@@ -6,6 +6,7 @@
 #define ACOL_TBRANCHLENGTHS_H
 
 #include "TStorageYVector.h"
+#include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
@@ -179,8 +180,8 @@ private:
 	};
 
 	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
-	                           bool new_state, std::vector<size_t> &linear_indices_in_Z_space_to_insert,
-	                           const TTree &tree) {
+	                           bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
+	                           const TTree &tree) const {
 		auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
 		if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
 		if (!current_state.get(index_in_tree) && new_state) {
@@ -190,7 +191,7 @@ private:
 				auto multidim_index_in_Z_space                 = _start_index;
 				multidim_index_in_Z_space[_variable_dimension] = tree.get_index_within_internal_nodes(index_in_tree);
 				size_t linear_index_in_Z_space = Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
-				linear_indices_in_Z_space_to_insert.push_back(linear_index_in_Z_space);
+				linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
 			}
 		}
 	};
@@ -261,7 +262,7 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<size_t> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
+	std::vector<TStorageZ> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 };

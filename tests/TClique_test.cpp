@@ -27,7 +27,7 @@ TEST(TCliqueTest, get_z) {
 	Z.insert_one(5);
 	Z.insert_one(7);
 
-	tree_2.initialize_cliques({tree, tree_2});
+	tree_2.initialize_cliques_and_Z({tree, tree_2});
 	auto &cliques = tree_2.get_cliques();
 	cliques[0].set_mus(0.3, 0.2);
 	cliques[0].set_lambda();

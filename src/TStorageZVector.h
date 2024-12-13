@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <numeric>
 #include <vector>
 
 /// There is one TStorageZVector per dimension `d`. The dimensions in Z space correspond
@@ -120,11 +121,17 @@ public:
 		return binary_search(get_linear_index_in_Z_space(multidim_index_in_Z_space));
 	}
 
-	void resize_Z(std::vector<size_t> &linear_indices_in_Z_space_to_insert) {
-		// memcopy nad check until where I can copy and then insert the new elements
-		std::sort(linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end());
-		size_t new_size = _vec.size() + linear_indices_in_Z_space_to_insert.size();
-		this->_vec.reserve(new_size);
+	void insert_in_Z(const std::vector<std::vector<TStorageZ>> &linear_indices_in_Z_space_to_insert) {
+		auto size_to_insert =
+		    std::accumulate(linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end(), 0,
+		                    [](size_t sum, const std::vector<TStorageZ> &i) { return sum + i.size(); });
+
+		this->_vec.reserve(this->_vec.size() + size_to_insert);
+
+		for (const auto &vec : linear_indices_in_Z_space_to_insert) {
+			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
+		}
+		std::sort(_vec.begin(), _vec.end());
 	}
 };
 

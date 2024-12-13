@@ -8,7 +8,7 @@
 TEST(TStorageZ_Tests, test_constructor) {
 	const TStorageZ z(1000);
 	EXPECT_EQ(z.is_one(), true);
-	EXPECT_EQ(z.get_coordinate(), 1000);
+	EXPECT_EQ(z.get_linear_index_in_Z_space(), 1000);
 }
 
 TEST(TStorageZ_Tests, flip_state) {
@@ -25,8 +25,8 @@ TEST(TStorageZ_Tests, flip_state) {
 
 TEST(TStorageZ_Tests, test_set_coordinate) {
 	TStorageZ z(1000);
-	z.set_coordinate(2000);
-	EXPECT_EQ(z.get_coordinate(), 2000);
+	z.set_linear_index_in_Z_space(2000);
+	EXPECT_EQ(z.get_linear_index_in_Z_space(), 2000);
 }
 
 TEST(TStorageZ_Tests, test_set_state) {
