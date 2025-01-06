@@ -174,8 +174,7 @@ private:
 			sum_log_1.add(prob_1_to_child);
 		}
 		const double log_Q = sum_log_1.getSum() - sum_log_0.getSum();
-		OUT(log_Q);
-		bool new_state = coretools::TAcceptOddsRatio::accept(log_Q);
+		bool new_state     = coretools::TAcceptOddsRatio::accept(log_Q);
 		return new_state;
 	};
 

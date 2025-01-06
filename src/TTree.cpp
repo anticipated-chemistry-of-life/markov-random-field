@@ -198,3 +198,5 @@ void TTree::update_Z(const TStorageYVector &Y) {
 	for (size_t i = 0; i < _cliques.size(); ++i) { indices_to_insert[i] = _cliques[i].update_Z(Y, _Z, *this); }
 	_Z.insert_in_Z(indices_to_insert);
 }
+
+std::vector<TClique> &TTree::get_cliques() { return this->_cliques; }

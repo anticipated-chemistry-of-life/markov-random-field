@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
-class TClique; // forward declaration
+class TClique;
 
 class TNode {
 private:
@@ -173,7 +173,7 @@ public:
 	coretools::Probability get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
-	std::vector<TClique> &get_cliques() { return _cliques; }
+	std::vector<TClique> &get_cliques();
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 	void update_Z(const TStorageYVector &Y);
 };
