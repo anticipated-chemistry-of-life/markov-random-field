@@ -5,6 +5,7 @@
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
 
+#include "TClique.h"
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
@@ -12,7 +13,6 @@
 #include <cstddef>
 #include <string>
 #include <vector>
-class TClique;
 
 class TNode {
 private:

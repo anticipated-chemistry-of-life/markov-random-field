@@ -8,7 +8,6 @@
 #include "TStorageYVector.h"
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
-#include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
@@ -17,6 +16,8 @@
 #include <cstddef>
 #include <tuple>
 #include <vector>
+class TTree;
+class TNode;
 
 /**
  * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for
@@ -164,36 +165,11 @@ private:
 	size_t _increment;
 
 	bool _compute_new_state(const TCurrentState &current_state, const TTree &tree, const TNode &node,
-	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) const {
-		for (const auto &child_index : node.children_indices_in_tree()) {
-			auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
-			const auto &matrix_for_bin = _matrices[bin_length];
-			double prob_0_to_child     = matrix_for_bin(0, current_state.get(child_index));
-			double prob_1_to_child     = matrix_for_bin(1, current_state.get(child_index));
-			sum_log_0.add(prob_0_to_child);
-			sum_log_1.add(prob_1_to_child);
-		}
-		const double log_Q = sum_log_1.getSum() - sum_log_0.getSum();
-		bool new_state     = coretools::TAcceptOddsRatio::accept(log_Q);
-		return new_state;
-	};
+	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) const;
 
 	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
 	                           bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-	                           const TTree &tree) const {
-		auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
-		if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
-		if (!current_state.get(index_in_tree) && new_state) {
-			if (current_state.exists_in_TStorageVector(index_in_tree)) {
-				Z.set_to_zero(index_in_TStorageZVector);
-			} else {
-				auto multidim_index_in_Z_space                 = _start_index;
-				multidim_index_in_Z_space[_variable_dimension] = tree.get_index_within_internal_nodes(index_in_tree);
-				size_t linear_index_in_Z_space = Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
-				linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
-			}
-		}
-	};
+	                           const TTree &tree) const;
 
 	static std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
 	_compute_roots(double stationary_0, double stationary_1) {
@@ -205,18 +181,7 @@ private:
 	}
 
 	std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
-	_compute_internal_nodes(const TNode &node, const TCurrentState &current_state) const {
-		coretools::TSumLogProbability sum_log_0;
-		coretools::TSumLogProbability sum_log_1;
-		auto bin_length            = node.get_branch_length_bin();
-		const auto &matrix_for_bin = this->_matrices[bin_length];
-		double prob_0_to_parent    = matrix_for_bin(current_state.get(node.parentIndex_in_tree()), 0);
-		double prob_1_to_parent    = matrix_for_bin(current_state.get(node.parentIndex_in_tree()), 1);
-		sum_log_0.add(prob_0_to_parent);
-		sum_log_1.add(prob_1_to_parent);
-
-		return {sum_log_0, sum_log_1};
-	}
+	_compute_internal_nodes(const TNode &node, const TCurrentState &current_state) const;
 
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {
@@ -225,6 +190,7 @@ public:
 		_n_nodes            = n_nodes;
 		_increment          = increment;
 	}
+	~TClique() = default;
 
 	/// @brief Initialize the matrices for the clique.
 	/// @param a The lower bound of the bin.

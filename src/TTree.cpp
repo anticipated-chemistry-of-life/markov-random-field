@@ -9,6 +9,7 @@
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include "omp.h"
 #include <cstddef>
 #include <string>
@@ -97,6 +98,12 @@ void TTree::load_from_file(const std::string &filename) {
 			// that means that the child was a root and is now becoming
 			// a child of the new parent which will be added to the tree
 			size_t child_index = get_node_index(child);
+
+			if (!_nodes[child_index].isRoot()) {
+				// if the child was not a root and the parent was not in the tree
+				// we throw an error because the child already has a parent
+				UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+			}
 			_nodes[child_index].set_is_root(false);
 			branch_lengths[child_index] = branch_length;
 			_nodes[child_index].set_parent_index_in_tree(_nodes.size());
@@ -105,10 +112,24 @@ void TTree::load_from_file(const std::string &filename) {
 			_node_map[parent] = _nodes.size() - 1;
 			_nodes[_nodes.size() - 1].addChild_index_in_tree(child_index);
 		} else {
-			// if both nodes were already in the tree that means that the
-			// child would in theroy have two parents which is not allowed
-			// so we throw an error
-			UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+			size_t child_index  = get_node_index(child);
+			size_t parent_index = get_node_index(parent);
+			auto node           = _nodes[child_index];
+			auto node_parent    = _nodes[parent_index];
+			if (!node.isRoot()) {
+				// if the child was not a root and the parent was already in the tree
+				// we throw an error because the child already has a parent
+				UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+
+			} else {
+				// if the child was a root and the parent was already in the tree
+				// we set the parent as the parent of the child
+				size_t parent_index = get_node_index(parent);
+				_nodes[child_index].set_is_root(false);
+				branch_lengths[child_index] = branch_length;
+				_nodes[child_index].set_parent_index_in_tree(parent_index);
+				_nodes[parent_index].addChild_index_in_tree(child_index);
+			}
 		}
 	}
 

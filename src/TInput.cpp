@@ -1,6 +1,7 @@
 #include "TInput.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
+#include "coretools/devtools.h"
 #include <cstddef>
 #include <vector>
 
@@ -30,7 +31,9 @@ void TLinks::load_from_file(const std::string &filename) {
 
 		// we currently have the multidimensional index in the Y space. We need to convert it to a linear index in Y
 		// space and store it in the data_Y vector.
+		OUT(coordinate);
 		size_t linear_index_in_Y_space = this->_data_Y.get_linear_index_in_Y_space(coordinate);
+		OUT(linear_index_in_Y_space);
 		this->_data_Y.insert_one(linear_index_in_Y_space);
 	}
 };

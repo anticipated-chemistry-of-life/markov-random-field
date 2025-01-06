@@ -1,0 +1,7 @@
+child	parent	length
+cocaine	alkaloids	0.19
+glucose	sugars	0.2
+cholesterol	terpernoids	0.5
+alkaloids	molecules	0.10
+sugars	molecules	0.6
+terpernoids	molecules	0.7
