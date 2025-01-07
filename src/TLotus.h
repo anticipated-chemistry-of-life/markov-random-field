@@ -12,7 +12,8 @@ class TLotus {
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy them
 	const std::vector<TTree> &_trees;
-	TStorageYVector _data_L;
+	TStorageYVector _L_ms;
+	TStorageYVector _x_ms;
 	std::unordered_map<std::string, size_t> _species_counter;
 	std::unordered_map<std::string, size_t> _molecules_counter;
 
@@ -40,17 +41,21 @@ private:
 		UERROR("Node '", node_id, "' doesn't exist in any of the provided trees !");
 	}
 
+	/// To construct the _data_X_of_Lotus we will need to have as input a vector of TStorageYVector but this time with
+	/// as many dimensions as there are trees.
+	void fill_collapsed_x_ms(const TStorageYVector &Y);
+
 public:
 	// we add the trees when we construct the object.
-	explicit TLotus(const std::vector<TTree> &trees) : _trees(trees), _data_L(0, _get_dimensions_Lotus_space(trees)) {}
+	explicit TLotus(const std::vector<TTree> &trees)
+	    : _trees(trees), _L_ms(0, _get_dimensions_Lotus_space(trees)), _x_ms(0, _get_dimensions_Lotus_space(trees)) {}
 
 	// default destructor
 	~TLotus() = default;
 
 	void load_from_file(const std::string &filename);
 
-	[[nodiscard]] const TStorageYVector &get_TStorageYVector() const { return _data_L; }
+	[[nodiscard]] const TStorageYVector &get_TStorageYVector() const { return _L_ms; }
 
-	// To construct the _data_X_of_Lotus we will need to have as input a vector of TStorageYVector but this time with as
-	// many dimensions as there are trees.
+	double calculate_research_effort(const std::string &species, const std::string &molecule) const;
 };

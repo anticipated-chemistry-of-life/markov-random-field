@@ -2,6 +2,7 @@
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/devtools.h"
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -38,8 +39,8 @@ void TLotus::load_from_file(const std::string &filename) {
 		}
 		// we currently have the multidimensional index in the Y space. We need to convert it to a linear index in Y
 		// space and store it in the data_Y vector.
-		size_t linear_index_in_Y_space = this->_data_L.get_linear_index_in_container_space(coordinate);
-		this->_data_L.insert_one(linear_index_in_Y_space);
+		size_t linear_index_in_Y_space = this->_L_ms.get_linear_index_in_container_space(coordinate);
+		this->_L_ms.insert_one(linear_index_in_Y_space);
 
 		std::string species  = std::string(file.get(0));
 		std::string molecule = std::string(file.get(1));
@@ -57,6 +58,41 @@ void TLotus::load_from_file(const std::string &filename) {
 			_molecules_counter[molecule] = 1;
 		} else {
 			_molecules_counter[molecule]++;
+		}
+	}
+};
+
+double TLotus::calculate_research_effort(const std::string &species, const std::string &molecule) const {
+	auto Q_s = static_cast<double>(_species_counter.at(species));
+	auto P_m = static_cast<double>(_molecules_counter.at(molecule));
+	return (1 - exp(-0.1 * P_m)) * (1 - exp(-0.1 * Q_s));
+};
+
+/// Let x(m, s) denote the variable in X for NP m and species s, which, in case X contains additional dimensions, is
+/// obtained by collapsing:
+/// x(m, s) is the minimum between 1 and the sum of x(s, m, y) for all y in Y. Meaning that if there is at least one
+/// y in Y such that x(s, m, y) is 1, then x(m, s) will be 1. Otherwise, it will be 0. If we have four dimensions,
+/// then we will have to collapse the last two dimensions.
+void TLotus::fill_collapsed_x_ms(const TStorageYVector &Y) {
+
+	// if we only have two dimensions, then the provided vector Y will be the same as x_ms
+	if (_trees.size() == 2) {
+		_x_ms = Y;
+		return;
+	}
+
+	for (size_t s = 0; s < _trees[0].get_number_of_leaves(); ++s) {
+		for (size_t m = 0; m < _trees[1].get_number_of_leaves(); ++m) {
+			for (auto y = 0; Y.size(); ++y) {
+				auto linear_index = Y[y].get_linear_index_in_container_space();
+				// we now get the multidimensional index in the Y space
+				auto coordinate   = Y.get_multi_dimensional_index(linear_index);
+
+				if (coordinate[0] == s && coordinate[1] == m && Y[y].is_one()) {
+					_x_ms.insert_one(_x_ms.get_linear_index_in_container_space({m, s}));
+					break;
+				}
+			}
 		}
 	}
 };
