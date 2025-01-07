@@ -3,8 +3,8 @@
 ## Compiling the repo
 
 ```bash
-git clone https://github.com/anticipated-lotus/metabolite_inference.git
-mkdir build 
+git clone https://github.com/anticipated-chemistry-of-life/random-markov-field
+mkdir build
 cd build
 cmake ..
 ```
@@ -12,7 +12,7 @@ cmake ..
 Once this is done, you can compile the files using :
 
 ```bash
-make 
+make
 ```
 
 or with multiple cores by replacing `N` by the number of cores you want:

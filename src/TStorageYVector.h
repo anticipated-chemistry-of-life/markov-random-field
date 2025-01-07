@@ -23,6 +23,8 @@ private:
 public:
 	using value_type     = uint64_t;
 	using const_iterator = typename std::vector<TStorageY>::const_iterator;
+	TStorageYVector()    = default;
+	~TStorageYVector()   = default;
 	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
 
 		// NOTE that dimensions correspond to the number of leaf nodes in each dimension !!!
@@ -122,6 +124,12 @@ public:
 	}
 	uint64_t get_linear_index_in_container_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
+	}
+
+	/// Given a linear index, we want to get the multi-dimensional index.
+	[[nodiscard]] std::vector<size_t> get_multi_dimensional_index(uint64_t linear_index_in_Y_space) const {
+		auto tmp = static_cast<size_t>(linear_index_in_Y_space);
+		return coretools::getSubscripts(tmp, _dimensions_Y_space);
 	}
 
 	/// @brief Binary search to find the coordinate in the vector

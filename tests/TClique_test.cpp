@@ -10,8 +10,8 @@ TEST(TCliqueTest, get_z) {
 	// Set up the TTree
 	TTree tree(0);
 	TTree tree_2(1);
-	tree.load_from_file("../tests/test_data/loading_tree.tsv");
-	tree_2.load_from_file("../tests/test_data/loading_tree.tsv");
+	tree.load_from_file("../tests/test_data/loading_tree.tsv", "species_1");
+	tree_2.load_from_file("../tests/test_data/loading_tree.tsv", "species_2");
 
 	// Set up the TStorageYVector and TStorageZVector
 	std::vector<size_t> dimensions = {11, 11};

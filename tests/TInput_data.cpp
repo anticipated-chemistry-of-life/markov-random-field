@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "TInput.h"
+#include "TLotus.h"
 #include "TTree.h"
 using namespace testing;
 
@@ -11,12 +11,12 @@ TEST(Tinput, test_reading_links) {
 	TTree tree_1 = TTree(0);
 	TTree tree_2 = TTree(1);
 
-	tree_1.load_from_file("../tests/test_data/loading_tree.tsv");
-	tree_2.load_from_file("../tests/test_data/molecules.tsv");
+	tree_1.load_from_file("../tests/test_data/loading_tree.tsv", "species");
+	tree_2.load_from_file("../tests/test_data/molecules.tsv", "molecules");
 
 	std::vector<TTree> trees = {tree_1, tree_2};
 
-	TLinks links(trees, 10);
+	TLotus links(trees);
 
 	links.load_from_file("../tests/test_data/links.tsv");
 

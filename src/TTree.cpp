@@ -9,7 +9,7 @@
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
-#include "coretools/devtools.h"
+
 #include "omp.h"
 #include <cstddef>
 #include <string>
@@ -54,10 +54,10 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 	}
 };
 
-void TTree::load_from_file(const std::string &filename) {
+void TTree::load_from_file(const std::string &filename, const std::string &tree_name) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
-
+	this->_tree_name = tree_name;
 	if (file.numCols() != 3) {
 		UERROR("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(), " !");
 	}

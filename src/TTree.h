@@ -50,6 +50,7 @@ public:
 /// Note: All indices are within the tree itself
 class TTree {
 private:
+	std::string _tree_name;
 	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
 	std::unordered_map<std::string, size_t> _node_map; // for fast access to nodes
 	std::vector<size_t> _leaves;
@@ -117,7 +118,7 @@ public:
 	 * branch_length.
 	 * @return the loaded tree
 	 */
-	void load_from_file(const std::string &filename);
+	void load_from_file(const std::string &filename, const std::string &tree_name);
 
 	/** Gives the number of roots within the tree
 	 * @return the number of roots
@@ -141,6 +142,9 @@ public:
 	 * tree). If the node is not a leaf, the function will return -1.
 	 */
 	size_t get_index_within_leaves(size_t node_index) const { return _leafIndices[node_index]; }
+	size_t get_index_within_leaves(const std::string &node_name) const {
+		return _leafIndices[get_node_index(node_name)];
+	}
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
@@ -176,5 +180,7 @@ public:
 	std::vector<TClique> &get_cliques();
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 	void update_Z(const TStorageYVector &Y);
+
+	const std::string &get_tree_name() const { return _tree_name; }
 };
 #endif // METABOLITE_INFERENCE_TREE_H
