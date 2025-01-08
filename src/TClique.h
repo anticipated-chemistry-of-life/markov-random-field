@@ -54,7 +54,7 @@ public:
 		_mat[3] = 1.0 - _mat[1];
 	}
 
-	constexpr double operator()(size_t i, size_t j) const {
+	double operator()(size_t i, size_t j) const {
 		// get element from matrix
 		// 0  2
 		// 1  3

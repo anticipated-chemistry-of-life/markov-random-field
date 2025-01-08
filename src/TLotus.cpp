@@ -9,6 +9,30 @@
 #include <cstddef>
 #include <vector>
 
+TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, TypeParamDelta *delta)
+    : _trees(trees), _gamma(gamma), _delta(delta) {
+	// we add the trees when we construct the object.
+
+	this->addPriorParameter({_gamma, _delta});
+
+	if (trees[0].get_tree_name() != "species") {
+		UERROR("The species tree was not found in the provided trees.");
+	} else if (trees[1].get_tree_name() != "molecules") {
+		UERROR("The molecules tree was not found in the provided trees.");
+	}
+
+	_L_sm.initialize(0, _get_dimensions_Lotus_space(trees));
+	_x_sm.initialize(0, _get_dimensions_Lotus_space(trees));
+}
+
+[[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
+
+void TLotus::initialize() {
+	// initialize storage
+	_gamma->initStorage(this);
+	_delta->initStorage(this);
+}
+
 void TLotus::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading links from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
@@ -60,7 +84,7 @@ double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
 	auto coordinate = _L_sm.get_multi_dimensional_index(linear_index_in_L_space);
 	auto Q_s        = static_cast<double>(_species_counter[coordinate[0]]);
 	auto P_m        = static_cast<double>(_molecules_counter[coordinate[1]]);
-	return (1 - exp(-0.1 * P_m)) * (1 - exp(-0.1 * Q_s));
+	return (1.0 - exp(-_gamma->value() * P_m)) * (1.0 - exp(-_delta->value() * Q_s));
 };
 
 /// Let x(m, s) denote the variable in X for NP m and species s, which, in case X contains additional dimensions, is
@@ -86,6 +110,7 @@ void TLotus::_initialize_x_sm(const TStorageYVector &Y) {
 		}
 	}
 };
+double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); };
 
 double TLotus::calculate_log_likelihood_of_L() const {
 	size_t index_in_x = 0;
@@ -137,4 +162,41 @@ double TLotus::_calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linea
 	return 1.0;
 }
 
-/// TODO : make sure x_sm is updated when we update Y !
+double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &) {
+	_oldLL = _curLL;                          // store current likelihood
+	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
+	return _curLL - _oldLL;
+}
+
+double TLotus::calculateLLRatio(TypeParamDelta *, size_t /*Index*/, const Storage &) {
+	_oldLL = _curLL;                          // store current likelihood
+	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new delta
+	return _curLL - _oldLL;
+}
+
+void TLotus::updateTempVals(TypeParamGamma *, size_t, bool Accepted) {
+	if (!Accepted) {
+		_curLL = _oldLL; // reset
+	}
+}
+
+void TLotus::updateTempVals(TypeParamDelta *, size_t, bool Accepted) {
+	if (!Accepted) {
+		_curLL = _oldLL; // reset
+	}
+}
+
+void TLotus::set_x(bool state, size_t linear_index_in_L_space) {
+	// TODO : make sure x_sm is updated when we update Y !
+	// TODO: make sure _curLL is adjusted to match the new x
+}
+
+void TLotus::guessInitialValues() {
+	// TODO: think of an initialization scheme
+	_gamma->set(0.001);
+	_delta->set(0.001);
+}
+
+void TLotus::_simulateUnderPrior(Storage *) {
+	// TODO: implement simulator
+}
