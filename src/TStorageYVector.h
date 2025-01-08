@@ -26,13 +26,15 @@ public:
 	TStorageYVector()    = default;
 	~TStorageYVector()   = default;
 	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
+		initialize(n_iterations, dimensions_Y_space);
+	};
 
-		// NOTE that dimensions correspond to the number of leaf nodes in each dimension !!!
+	void initialize(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
 		_dimensions_Y_space          = dimensions_Y_space;
-	};
+	}
 
 	/// We want to check if element at position index_in_TStorageYVector is one.
 	/// This index *must* be previously obtained by a binary search.

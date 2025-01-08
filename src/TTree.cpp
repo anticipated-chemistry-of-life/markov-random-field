@@ -174,7 +174,7 @@ const TNode &TTree::get_node(size_t index) const { return _nodes[index]; }
 
 size_t TTree::get_node_index(const std::string &Id) const {
 	auto it = _node_map.find(Id);
-	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist!"); }
+	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist in the tree !"); }
 	return it->second; // Return the index from the map
 }
 

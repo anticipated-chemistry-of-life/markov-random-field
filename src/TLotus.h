@@ -12,50 +12,41 @@ class TLotus {
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy them
 	const std::vector<TTree> &_trees;
-	TStorageYVector _L_ms;
-	TStorageYVector _x_ms;
-	std::unordered_map<std::string, size_t> _species_counter;
-	std::unordered_map<std::string, size_t> _molecules_counter;
+	TStorageYVector _L_sm;
+	TStorageYVector _x_sm;
+	std::vector<size_t> _species_counter;
+	std::vector<size_t> _molecules_counter;
 
 	// private functions
 	static std::vector<size_t> _get_dimensions_Lotus_space(const std::vector<TTree> &trees) {
-		std::vector<size_t> dimensions_Y_space(trees.size());
-		for (size_t i = 0; i < trees.size(); ++i) { dimensions_Y_space[i] = trees[i].get_number_of_leaves(); }
-
-		// return only the first two dimensions i.e. the species and the molecules
-		return {dimensions_Y_space[0], dimensions_Y_space[1]};
-	}
-
-	size_t _get_tree_index_of_node(const std::string &node_id) const {
-		for (size_t i = 0; i < _trees.size(); ++i) {
-			const auto &tree = _trees[i];
-			if (tree.in_tree(node_id)) {
-				if (tree.get_node(tree.get_node_index(node_id)).isLeaf()) {
-					return i;
-				} else {
-					UERROR("Node '", node_id,
-					       "' is not a leaf ! So far, we have defined our model to only accept leaves.");
-				}
-			}
-		};
-		UERROR("Node '", node_id, "' doesn't exist in any of the provided trees !");
+		return {trees[0].get_number_of_leaves(), trees[1].get_number_of_leaves()};
 	}
 
 	/// To construct the _data_X_of_Lotus we will need to have as input a vector of TStorageYVector but this time with
 	/// as many dimensions as there are trees.
-	void fill_collapsed_x_ms(const TStorageYVector &Y);
+	void _initialize_x_sm(const TStorageYVector &Y);
 
 public:
 	// we add the trees when we construct the object.
-	explicit TLotus(const std::vector<TTree> &trees)
-	    : _trees(trees), _L_ms(0, _get_dimensions_Lotus_space(trees)), _x_ms(0, _get_dimensions_Lotus_space(trees)) {}
+	explicit TLotus(const std::vector<TTree> &trees) : _trees(trees) {
+		if (trees[0].get_tree_name() != "species") {
+			UERROR("The species tree was not found in the provided trees.");
+		} else if (trees[1].get_tree_name() != "molecules") {
+			UERROR("The molecules tree was not found in the provided trees.");
+		}
+
+		_L_sm.initialize(0, _get_dimensions_Lotus_space(trees));
+		_x_sm.initialize(0, _get_dimensions_Lotus_space(trees));
+	}
 
 	// default destructor
 	~TLotus() = default;
 
 	void load_from_file(const std::string &filename);
 
-	[[nodiscard]] const TStorageYVector &get_TStorageYVector() const { return _L_ms; }
+	[[nodiscard]] const TStorageYVector &get_TStorageYVector() const { return _L_sm; }
 
-	double calculate_research_effort(const std::string &species, const std::string &molecule) const;
+	double calculate_research_effort(size_t species_index, size_t molecule_index) const;
+
+	double calculate_probability_of_L_sm(size_t species_index, size_t molecule_index) const;
 };

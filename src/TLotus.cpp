@@ -10,8 +10,11 @@ void TLotus::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading links from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	const auto &header = file.header();
-	std::vector<std::string> tree_names(this->_trees.size());
-	for (size_t i = 0; i < this->_trees.size(); ++i) { tree_names[i] = this->_trees[i].get_tree_name(); }
+
+	if (file.numCols() != 2) {
+		UERROR("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(), " !");
+	}
+
 	if (header[0] != "species") {
 		UERROR("File '", filename, "' is expected to have a header with 'species' as first column, but has ", header[0],
 		       " !");
@@ -22,49 +25,37 @@ void TLotus::load_from_file(const std::string &filename) {
 		       header[1], " !");
 	}
 
-	if (file.numCols() != 2) {
-		UERROR("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(), " !");
-	}
+	_species_counter.resize(_trees[0].get_number_of_leaves(), 0);
+	_molecules_counter.resize(_trees[1].get_number_of_leaves(), 0);
 
 	for (; !file.empty(); file.popFront()) {
-		std::vector<size_t> coordinate(2); // since Lotus only has species and molecules, we know that the coordinate
-		                                   // will always be of size 2
-
-		for (size_t i = 0; i < 2; ++i) {
-			std::string node = std::string(file.get(i));
-
-			size_t tree_index_of_node      = this->_get_tree_index_of_node(node);
-			// we get the index within the leaves of the tree
-			coordinate[tree_index_of_node] = this->_trees[tree_index_of_node].get_index_within_leaves(node);
-		}
-		// we currently have the multidimensional index in the Y space. We need to convert it to a linear index in Y
-		// space and store it in the data_Y vector.
-		size_t linear_index_in_Y_space = this->_L_ms.get_linear_index_in_container_space(coordinate);
-		this->_L_ms.insert_one(linear_index_in_Y_space);
 
 		std::string species  = std::string(file.get(0));
 		std::string molecule = std::string(file.get(1));
 
-		// now we add the species and molecule to the counter. If the species is still not in the map, we add it and
-		// add 1. If it is already in the map, we increment the counter by 1.
-		if (auto it_species = _species_counter.find(species); it_species == _species_counter.end()) {
-			_species_counter[species] = 1;
-		} else {
-			_species_counter[species]++;
+		if (!_trees[0].get_node(_trees[0].get_node_index(species)).isLeaf()) {
+			UERROR("Node '", species, "' is not a leaf !");
 		}
 
-		// do the same for the molecules
-		if (auto it_molecules = _molecules_counter.find(molecule); it_molecules == _molecules_counter.end()) {
-			_molecules_counter[molecule] = 1;
-		} else {
-			_molecules_counter[molecule]++;
+		if (!_trees[1].get_node(_trees[1].get_node_index(molecule)).isLeaf()) {
+			UERROR("Node '", molecule, "' is not a leaf !");
 		}
+
+		size_t species_index  = this->_trees[0].get_index_within_leaves(species);
+		size_t molecule_index = this->_trees[1].get_index_within_leaves(molecule);
+
+		size_t linear_index_in_Y_space =
+		    this->_L_sm.get_linear_index_in_container_space({species_index, molecule_index});
+		this->_L_sm.insert_one(linear_index_in_Y_space);
+
+		++_species_counter[species_index];
+		++_molecules_counter[molecule_index];
 	}
 };
 
-double TLotus::calculate_research_effort(const std::string &species, const std::string &molecule) const {
-	auto Q_s = static_cast<double>(_species_counter.at(species));
-	auto P_m = static_cast<double>(_molecules_counter.at(molecule));
+double TLotus::calculate_research_effort(size_t species_index, size_t molecule_index) const {
+	auto Q_s = static_cast<double>(_species_counter[species_index]);
+	auto P_m = static_cast<double>(_molecules_counter[molecule_index]);
 	return (1 - exp(-0.1 * P_m)) * (1 - exp(-0.1 * Q_s));
 };
 
@@ -73,26 +64,39 @@ double TLotus::calculate_research_effort(const std::string &species, const std::
 /// x(m, s) is the minimum between 1 and the sum of x(s, m, y) for all y in Y. Meaning that if there is at least one
 /// y in Y such that x(s, m, y) is 1, then x(m, s) will be 1. Otherwise, it will be 0. If we have four dimensions,
 /// then we will have to collapse the last two dimensions.
-void TLotus::fill_collapsed_x_ms(const TStorageYVector &Y) {
+void TLotus::_initialize_x_sm(const TStorageYVector &Y) {
 
 	// if we only have two dimensions, then the provided vector Y will be the same as x_ms
 	if (_trees.size() == 2) {
-		_x_ms = Y;
+		_x_sm = Y;
 		return;
 	}
 
-	for (size_t s = 0; s < _trees[0].get_number_of_leaves(); ++s) {
-		for (size_t m = 0; m < _trees[1].get_number_of_leaves(); ++m) {
-			for (auto y = 0; Y.size(); ++y) {
-				auto linear_index = Y[y].get_linear_index_in_container_space();
-				// we now get the multidimensional index in the Y space
-				auto coordinate   = Y.get_multi_dimensional_index(linear_index);
+	for (auto y = 0; Y.size(); ++y) {
+		auto linear_index = Y[y].get_linear_index_in_container_space();
+		// we now get the multidimensional index in the Y space
+		auto coordinate   = Y.get_multi_dimensional_index(linear_index);
 
-				if (coordinate[0] == s && coordinate[1] == m && Y[y].is_one()) {
-					_x_ms.insert_one(_x_ms.get_linear_index_in_container_space({m, s}));
-					break;
-				}
-			}
+		if (Y[y].is_one()) {
+			_x_sm.insert_one(_x_sm.get_linear_index_in_container_space({coordinate[0], coordinate[1]}));
 		}
 	}
 };
+
+double TLotus::calculate_probability_of_L_sm(size_t species_index, size_t molecule_index) const {
+	size_t linear_index = _L_sm.get_linear_index_in_container_space({species_index, molecule_index});
+	if (!_x_sm.is_one(linear_index) && _L_sm.is_one(linear_index)) {
+		return 0.0;
+	} else if (!_x_sm.is_one(linear_index) && !_L_sm.is_one(linear_index)) {
+		return 1.0;
+	} else if (_x_sm.is_one(linear_index) && _L_sm.is_one(linear_index)) {
+		return calculate_research_effort(species_index, molecule_index);
+	} else if (_x_sm.is_one(linear_index) && !_L_sm.is_one(linear_index)) {
+		return 1 - calculate_research_effort(species_index, molecule_index);
+	} else {
+		UERROR("While calculating the probability of Lotus, none of the four conditions where filled. This should "
+		       "never happen !");
+	}
+}
+
+/// TODO : make sure x_sm is updated when we update Y !
