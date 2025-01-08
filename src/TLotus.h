@@ -26,6 +26,8 @@ private:
 	/// as many dimensions as there are trees.
 	void _initialize_x_sm(const TStorageYVector &Y);
 
+	double _calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linear_index_in_L_space) const;
+
 public:
 	// we add the trees when we construct the object.
 	explicit TLotus(const std::vector<TTree> &trees) : _trees(trees) {
@@ -46,7 +48,7 @@ public:
 
 	[[nodiscard]] const TStorageYVector &get_TStorageYVector() const { return _L_sm; }
 
-	double calculate_research_effort(size_t species_index, size_t molecule_index) const;
+	double calculate_research_effort(size_t linear_index_in_L_space) const;
 
-	double calculate_probability_of_L_sm(size_t species_index, size_t molecule_index) const;
+	double calculate_log_likelihood_of_L() const;
 };

@@ -1,7 +1,10 @@
 #include "TLotus.h"
+#include "TStorageY.h"
+#include "TStorageYVector.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
-#include "coretools/devtools.h"
+#include "coretools/Math/TSumLog.h"
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -53,9 +56,10 @@ void TLotus::load_from_file(const std::string &filename) {
 	}
 };
 
-double TLotus::calculate_research_effort(size_t species_index, size_t molecule_index) const {
-	auto Q_s = static_cast<double>(_species_counter[species_index]);
-	auto P_m = static_cast<double>(_molecules_counter[molecule_index]);
+double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
+	auto coordinate = _L_sm.get_multi_dimensional_index(linear_index_in_L_space);
+	auto Q_s        = static_cast<double>(_species_counter[coordinate[0]]);
+	auto P_m        = static_cast<double>(_molecules_counter[coordinate[1]]);
 	return (1 - exp(-0.1 * P_m)) * (1 - exp(-0.1 * Q_s));
 };
 
@@ -83,20 +87,54 @@ void TLotus::_initialize_x_sm(const TStorageYVector &Y) {
 	}
 };
 
-double TLotus::calculate_probability_of_L_sm(size_t species_index, size_t molecule_index) const {
-	size_t linear_index = _L_sm.get_linear_index_in_container_space({species_index, molecule_index});
-	if (!_x_sm.is_one(linear_index) && _L_sm.is_one(linear_index)) {
-		return 0.0;
-	} else if (!_x_sm.is_one(linear_index) && !_L_sm.is_one(linear_index)) {
-		return 1.0;
-	} else if (_x_sm.is_one(linear_index) && _L_sm.is_one(linear_index)) {
-		return calculate_research_effort(species_index, molecule_index);
-	} else if (_x_sm.is_one(linear_index) && !_L_sm.is_one(linear_index)) {
-		return 1 - calculate_research_effort(species_index, molecule_index);
-	} else {
-		UERROR("While calculating the probability of Lotus, none of the four conditions where filled. This should "
-		       "never happen !");
+double TLotus::calculate_log_likelihood_of_L() const {
+	size_t index_in_x = 0;
+	size_t index_in_L = 0;
+
+	const auto length_x = _x_sm.size();
+	const auto length_L = _L_sm.size();
+
+	coretools::TSumLogProbability sum_log;
+
+	for (size_t i = 0; i < std::max(length_x, length_L); ++i) {
+
+		// if we reach the end of vector L but not the end of vector x, that means that all the other Ls are 0.
+		// But x can still be 1 or 0.
+		if (index_in_L == length_L) {
+
+			sum_log.add(_calculate_probability_of_L_sm(_x_sm[index_in_x].is_one(), false,
+			                                           _x_sm[index_in_x].get_linear_index_in_container_space()));
+			++index_in_x;
+		} else if (index_in_x == length_x) {
+			// if we reach the end of vector x but not the end of vector L, that means that all the other x are 0.
+			sum_log.add(_calculate_probability_of_L_sm(false, _L_sm[index_in_L].is_one(),
+			                                           _L_sm[index_in_L].get_linear_index_in_container_space()));
+			++index_in_L;
+		} else if (_x_sm[index_in_x].get_linear_index_in_container_space() ==
+		           _L_sm[index_in_L].get_linear_index_in_container_space()) {
+			sum_log.add(_calculate_probability_of_L_sm(_x_sm[index_in_x].is_one(), _L_sm[index_in_L].is_one(),
+			                                           _L_sm[index_in_L].get_linear_index_in_container_space()));
+			++index_in_x;
+			++index_in_L;
+		} else if (_x_sm[index_in_x].get_linear_index_in_container_space() <
+		           _L_sm[index_in_L].get_linear_index_in_container_space()) {
+			sum_log.add(_calculate_probability_of_L_sm(_x_sm[index_in_x].is_one(), false,
+			                                           _x_sm[index_in_x].get_linear_index_in_container_space()));
+			++index_in_x;
+		} else {
+			sum_log.add(_calculate_probability_of_L_sm(false, _L_sm[index_in_L].is_one(),
+			                                           _L_sm[index_in_L].get_linear_index_in_container_space()));
+			++index_in_L;
+		}
 	}
+	return sum_log.getSum();
+}
+
+double TLotus::_calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linear_index_in_L_space) const {
+	if (x_sm && L_sm) { return calculate_research_effort(linear_index_in_L_space); }
+	if (x_sm && !L_sm) { return 1 - calculate_research_effort(linear_index_in_L_space); }
+	if (!x_sm && L_sm) { return 0.0; }
+	return 1.0;
 }
 
 /// TODO : make sure x_sm is updated when we update Y !
