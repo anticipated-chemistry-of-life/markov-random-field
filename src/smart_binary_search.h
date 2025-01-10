@@ -47,8 +47,7 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 
 template<typename Container>
 std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
-fill_current_state_easy(const Container &container,
-                        const std::vector<size_t> &multidim_index_of_first_in_container_space,
+fill_current_state_easy(const Container &container, const std::vector<size_t> &start_index_in_leaves_space,
                         size_t n_nodes_in_clique_of_container) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
@@ -56,7 +55,7 @@ fill_current_state_easy(const Container &container,
 	std::vector<bool> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<bool> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
-	auto start_linear_index = container.get_linear_index_in_container_space(multidim_index_of_first_in_container_space);
+	size_t start_linear_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
 	auto [found, index_in_TStorage, linear_index_in_container_space, is_last_element] =
 	    binary_search(container, start_linear_index, container.begin(), start_linear_index + 1);
@@ -95,12 +94,12 @@ fill_current_state_easy(const Container &container,
 template<typename Container>
 std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
 fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_container,
-                        const std::vector<size_t> &multidim_index_of_first_in_container_space, size_t increment,
+                        const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
                         size_t total_size_of_container) {
 	std::vector<bool> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<bool> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
-	auto linear_start_index = container.get_linear_index_in_container_space(multidim_index_of_first_in_container_space);
+	auto linear_start_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
 	auto [found, index_in_TStorage, linear_index_in_container_space, is_last_element] =
 	    binary_search(container, linear_start_index, container.begin(), linear_start_index + 1);
@@ -185,26 +184,14 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 	return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector);
 }
 
-class TCurrentState {
-private:
-	std::vector<bool> _current_state_Y;
-	std::vector<bool> _exists_in_Y;
-	std::vector<size_t> _index_in_TStorageYVector;
-	std::vector<bool> _current_state_Z;
-	std::vector<bool> _exists_in_Z;
-	std::vector<size_t> _index_in_TStorageZVector;
-	const std::vector<size_t> &_multidim_index_of_first_in_container_space;
-	size_t _increment;
-	const TTree &_tree;
-
-public:
-	TCurrentState(const std::vector<size_t> &multidim_index_of_first_in_container_space, size_t increment,
-	              const TStorageYVector &Y, const TStorageZVector &Z, const TTree &tree);
-
-	bool get(size_t index_in_tree) const;
-	void set(size_t index_in_tree, bool value);
-
-	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
-
-	bool exists_in_TStorageVector(size_t index_in_tree) const;
-};
+template<typename Container>
+std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
+                   const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
+                   size_t total_size_of_container) {
+	if (increment == 1) {
+		return fill_current_state_easy(container, start_index_in_leaves_space, n_nodes_in_clique_of_container);
+	}
+	return fill_current_state_hard(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
+	                               total_size_of_container);
+}

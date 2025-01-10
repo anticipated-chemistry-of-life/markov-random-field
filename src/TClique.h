@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <tuple>
 #include <vector>
+#include "TCurrentState.h"
+
 class TTree;
 class TNode;
 
@@ -159,7 +161,7 @@ private:
 	TMatrices _matrices;
 	double _mu_c_1;
 	double _mu_c_0;
-	std::vector<size_t> _start_index;
+	std::vector<size_t> _start_index_in_leaves_space;
 	size_t _variable_dimension;
 	size_t _n_nodes;
 	size_t _increment;
@@ -184,12 +186,7 @@ private:
 	_compute_internal_nodes(const TNode &node, const TCurrentState &current_state) const;
 
 public:
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {
-		_start_index        = start_index;
-		_variable_dimension = variable_dimension;
-		_n_nodes            = n_nodes;
-		_increment          = increment;
-	}
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
 	~TClique() = default;
 
 	/// @brief Initialize the matrices for the clique.

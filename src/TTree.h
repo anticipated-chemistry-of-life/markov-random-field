@@ -106,6 +106,7 @@ public:
 	 * @return a reference to the Node with the given id
 	 */
 	const TNode &get_node(size_t index) const;
+	bool isLeaf(size_t index) const;
 
 	/** Get the index of a node by its id
 	 * @param Id: the id of the node

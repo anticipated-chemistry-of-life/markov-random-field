@@ -8,10 +8,16 @@
 #include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
-#include "coretools/devtools.h"
-#include "smart_binary_search.h"
 #include <cstddef>
 #include <vector>
+
+TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,
+                 size_t increment) {
+	_start_index_in_leaves_space = start_index_in_leaves_space;
+	_variable_dimension          = variable_dimension;
+	_n_nodes                     = n_nodes;
+	_increment                   = increment;
+}
 
 bool TClique::_compute_new_state(const TCurrentState &current_state, const TTree &tree, const TNode &node,
                                  coretools::TSumLogProbability &sum_log_0,
@@ -30,7 +36,8 @@ bool TClique::_compute_new_state(const TCurrentState &current_state, const TTree
 };
 
 std::vector<TStorageZ> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
-	TCurrentState current_state(this->_start_index, this->_increment, Y, Z, tree);
+	TCurrentState current_state(tree, this->_increment);
+	current_state.fill(_start_index_in_leaves_space, Y, Z);
 	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
 
 	const double stationary_0 = this->get_stationary_probability(false);
@@ -68,7 +75,7 @@ void TClique::_update_current_state(TStorageZVector &Z, const TCurrentState &cur
 		if (current_state.exists_in_TStorageVector(index_in_tree)) {
 			Z.set_to_zero(index_in_TStorageZVector);
 		} else {
-			auto multidim_index_in_Z_space                 = _start_index;
+			auto multidim_index_in_Z_space                 = _start_index_in_leaves_space;
 			multidim_index_in_Z_space[_variable_dimension] = tree.get_index_within_internal_nodes(index_in_tree);
 			size_t linear_index_in_Z_space                 = Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
 			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);

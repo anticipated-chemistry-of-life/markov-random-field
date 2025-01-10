@@ -171,6 +171,7 @@ const TNode &TTree::get_node(const std::string &Id) const {
 }
 
 const TNode &TTree::get_node(size_t index) const { return _nodes[index]; }
+bool TTree::isLeaf(size_t index) const { return _nodes[index].isLeaf(); }
 
 size_t TTree::get_node_index(const std::string &Id) const {
 	auto it = _node_map.find(Id);
@@ -182,8 +183,6 @@ void TTree::initialize_cliques_and_Z(const std::vector<TTree> &all_trees) {
 
 	// we initialize the number of leaves we have in each tree
 	std::vector<size_t> num_leaves_per_tree(all_trees.size());
-
-	// we get the number of leaves for each tree
 	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i].get_number_of_leaves(); }
 
 	_initialize_Z(num_leaves_per_tree);
@@ -197,6 +196,7 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 }
 
 void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees) {
+	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
 	num_leaves_per_tree[_dimension] = 1;
 
@@ -204,11 +204,15 @@ void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const s
 	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
 	const size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
 
+	// calculate increment: product of the number of leaves of all subsequent dimensions
 	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].size(); }
+	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].get_number_of_leaves(); }
+
+	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
-		std::vector<size_t> multi_dim_index_in_leaves_space = coretools::getSubscripts(i, num_leaves_per_tree);
-		_cliques.emplace_back(multi_dim_index_in_leaves_space, _dimension, _nodes.size(), increment);
+		// get start index of each clique in leaves space
+		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, num_leaves_per_tree);
+		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
 	}
 }
 
