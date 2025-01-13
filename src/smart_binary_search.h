@@ -184,14 +184,27 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 	return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector);
 }
 
+template<bool AlongLastDim, typename Container>
+std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
+                   const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
+                   size_t total_size_of_container) {
+	if constexpr (AlongLastDim) {
+		return fill_current_state_easy(container, start_index_in_leaves_space, n_nodes_in_clique_of_container);
+	}
+	return fill_current_state_hard(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
+	                               total_size_of_container);
+}
+
 template<typename Container>
 std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
 fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
                    const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
                    size_t total_size_of_container) {
 	if (increment == 1) {
-		return fill_current_state_easy(container, start_index_in_leaves_space, n_nodes_in_clique_of_container);
+		return fill_current_state<true>(container, n_nodes_in_clique_of_container, start_index_in_leaves_space,
+		                                increment, total_size_of_container);
 	}
-	return fill_current_state_hard(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
-	                               total_size_of_container);
+	return fill_current_state<false>(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
+	                                 total_size_of_container);
 }
