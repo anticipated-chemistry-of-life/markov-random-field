@@ -15,7 +15,13 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension) { _dimension = dimension; };
+TTree::TTree(size_t dimension, size_t number_of_threads, const std::string &filename, const std::string &tree_name) {
+	_dimension         = dimension;
+	_number_of_threads = number_of_threads;
+
+	_load_from_file(filename, tree_name);
+}
+
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
 	_a               = coretools::instances::parameters().get("a", coretools::Probability(0.0));
@@ -29,9 +35,6 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
-
-	// read number of threads
-	this->_number_of_threads = coretools::getNumThreads();
 }
 
 void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
@@ -54,7 +57,7 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 	}
 };
 
-void TTree::load_from_file(const std::string &filename, const std::string &tree_name) {
+void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	this->_tree_name = tree_name;
@@ -195,14 +198,15 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	_Z.initialize_dimensions(num_leaves_per_tree);
 }
 
-void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees) {
+void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees) {
 	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
-	num_leaves_per_tree[_dimension] = 1;
+	_dimension_cliques             = num_leaves_per_tree;
+	_dimension_cliques[_dimension] = 1;
 
 	// we then caclulate how many cliques we will have in total for that tree. Which is the product of the number of
 	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
-	const size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
+	const size_t n_cliques = coretools::containerProduct(_dimension_cliques);
 
 	// calculate increment: product of the number of leaves of all subsequent dimensions
 	size_t increment = 1;
@@ -211,7 +215,7 @@ void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const s
 	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
 		// get start index of each clique in leaves space
-		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, num_leaves_per_tree);
+		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
 	}
 }
@@ -224,4 +228,10 @@ void TTree::update_Z(const TStorageYVector &Y) {
 	_Z.insert_in_Z(indices_to_insert);
 }
 
+const TStorageZVector &TTree::get_Z() const { return _Z; };
 std::vector<TClique> &TTree::get_cliques() { return this->_cliques; }
+const TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) const {
+	index_in_leaves_space[_dimension] = 0; // set to start index
+	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
+	return _cliques[ix_clique];
+}

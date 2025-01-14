@@ -5,7 +5,6 @@
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
 
-#include "TClique.h"
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
@@ -13,6 +12,8 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+
+class TClique; // forward declaration
 
 class TNode {
 private:
@@ -72,6 +73,7 @@ private:
 
 	// cliques
 	std::vector<TClique> _cliques;
+	std::vector<size_t> _dimension_cliques;
 
 	// dimension of the tree
 	size_t _dimension;
@@ -85,12 +87,11 @@ private:
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
-	void _initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees);
+	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees);
+	void _load_from_file(const std::string &filename, const std::string &tree_name);
 
 public:
-	explicit TTree(size_t dimension);
-	TTree()  = default;
-	// Destructor, deletes all nodes
+	TTree(size_t dimension, size_t number_of_threads, const std::string &filename, const std::string &tree_name);
 	~TTree() = default;
 
 	size_t size() const { return _nodes.size(); };
@@ -113,13 +114,6 @@ public:
 	 * @return the index of the node with the given id
 	 */
 	size_t get_node_index(const std::string &Id) const;
-
-	/** Load a tree from a file
-	 * @param filename: the name of the file to load the tree from. This should contain three columns: child, parent,
-	 * branch_length.
-	 * @return the loaded tree
-	 */
-	void load_from_file(const std::string &filename, const std::string &tree_name);
 
 	/** Gives the number of roots within the tree
 	 * @return the number of roots
@@ -146,6 +140,7 @@ public:
 	size_t get_index_within_leaves(const std::string &node_name) const {
 		return _leafIndices[get_node_index(node_name)];
 	}
+	size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
@@ -179,6 +174,9 @@ public:
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
+	const TClique &get_clique(std::vector<size_t> index_in_leaves_space) const;
+	const TStorageZVector &get_Z() const;
+
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 	void update_Z(const TStorageYVector &Y);
 

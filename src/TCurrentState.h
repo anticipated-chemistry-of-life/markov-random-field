@@ -43,7 +43,8 @@ public:
 
 	bool get(size_t index_in_tree) const;
 	bool get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const;
-	bool get_Z(size_t index_in_tree, size_t offset_internals) const;
+	bool get_Y(size_t ix) const;
+	bool get_Z(size_t ix) const;
 	void set(size_t index_in_tree, bool value);
 
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
@@ -64,23 +65,17 @@ private:
 	// tree of last dimension
 	const TTree &_tree_last_dim;
 
-	size_t _num_Y                        = 0;
-	size_t _num_Z                        = 0;
-	size_t _offset_leaves_in_last_dim    = 0;
-	size_t _offset_internals_in_last_dim = 0;
+	size_t _start_ix_in_leaves_space_last_dim = 0;
 
 	std::vector<TCurrentState> _cur_states;
-
-	void _calculate_num_Y_Z(size_t start_ix_last_dim, size_t num_nodes_to_use_in_last_dim);
 
 public:
 	TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim);
 	~TSheet() = default;
 
-	void fill(std::vector<size_t> start_index_in_leaves_space, size_t num_nodes_to_use_in_last_dim,
-	          const TStorageYVector &Y, const std::vector<TStorageZVector> &Z_of_all_dimensions);
+	void fill(std::vector<size_t> start_index_in_leaves_space, size_t K, const TStorageYVector &Y);
 
-	bool get(size_t index_in_tree_of_dim, size_t index_in_tree_of_last_dim) const;
+	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H
