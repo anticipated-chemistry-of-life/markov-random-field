@@ -5,9 +5,11 @@
 #ifndef ACOL_TBRANCHLENGTHS_H
 #define ACOL_TBRANCHLENGTHS_H
 
+#include "TCurrentState.h"
 #include "TStorageYVector.h"
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
+#include "TTree.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
@@ -16,8 +18,6 @@
 #include <cstddef>
 #include <tuple>
 #include <vector>
-class TTree;
-class TNode;
 
 /**
  * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for
@@ -159,37 +159,32 @@ private:
 	TMatrices _matrices;
 	double _mu_c_1;
 	double _mu_c_0;
-	std::vector<size_t> _start_index;
+	std::vector<size_t> _start_index_in_leaves_space;
 	size_t _variable_dimension;
 	size_t _n_nodes;
 	size_t _increment;
-
-	bool _compute_new_state(const TCurrentState &current_state, const TTree &tree, const TNode &node,
-	                        coretools::TSumLogProbability &sum_log_0, coretools::TSumLogProbability &sum_log_1) const;
 
 	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
 	                           bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
 	                           const TTree &tree) const;
 
-	static std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
-	_compute_roots(double stationary_0, double stationary_1) {
-		coretools::TSumLogProbability sum_log_0;
-		coretools::TSumLogProbability sum_log_1;
-		sum_log_0.add(stationary_0);
-		sum_log_1.add(stationary_1);
-		return {sum_log_0, sum_log_1};
-	}
+	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
+	void _calculate_log_prob_node_to_children(size_t index_in_tree, const TTree &tree,
+	                                          const TCurrentState &current_state,
+	                                          std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
-	std::tuple<coretools::TSumLogProbability, coretools::TSumLogProbability>
-	_compute_internal_nodes(const TNode &node, const TCurrentState &current_state) const;
+	template<typename ContainerStates> // can either be TSheet or TCurrentStates
+	bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
+	               size_t leaf_index_in_tree_of_last_dim) const {
+		if constexpr (std::is_same_v<ContainerStates, TSheet>) { // is a sheet
+			return states.get(parent_index_in_tree, leaf_index_in_tree_of_last_dim);
+		} else { // TCurrentState
+			return states.get(parent_index_in_tree);
+		}
+	}
 
 public:
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment) {
-		_start_index        = start_index;
-		_variable_dimension = variable_dimension;
-		_n_nodes            = n_nodes;
-		_increment          = increment;
-	}
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
 	~TClique() = default;
 
 	/// @brief Initialize the matrices for the clique.
@@ -207,11 +202,8 @@ public:
 	}
 
 	double get_stationary_probability(bool state) const {
-		if (state) {
-			return _mu_c_1 / (_mu_c_1 + _mu_c_0);
-		} else {
-			return _mu_c_0 / (_mu_c_1 + _mu_c_0);
-		}
+		if (state) { return _mu_c_1 / (_mu_c_1 + _mu_c_0); }
+		return _mu_c_0 / (_mu_c_1 + _mu_c_0);
 	}
 
 	/// @brief Set the rate parameters for the clique.
@@ -230,6 +222,23 @@ public:
 	std::vector<TStorageZ> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
+
+	template<typename ContainerStates> // can either be TSheet or TCurrentStates
+	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
+	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
+	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		// calculates log P(node = 0 | parent) and log P(node = 1 | parent)
+		const auto &node                  = tree.get_node(index_in_tree);
+		auto bin_length                   = node.get_branch_length_bin();
+		const auto &matrix_for_bin        = _matrices[bin_length];
+		const size_t parent_index_in_tree = node.parentIndex_in_tree();
+		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
+			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
+			sum_log[i].add(matrix_for_bin(state_of_parent, i));
+		}
+	}
 };
+
+bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
 
 #endif // ACOL_TBRANCHLENGTHS_H

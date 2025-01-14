@@ -15,7 +15,11 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension) { _dimension = dimension; };
+TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name) {
+	_dimension         = dimension;
+	_load_from_file(filename, tree_name);
+}
+
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
 	_a               = coretools::instances::parameters().get("a", coretools::Probability(0.0));
@@ -29,9 +33,6 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
-
-	// read number of threads
-	this->_number_of_threads = coretools::getNumThreads();
 }
 
 void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
@@ -54,7 +55,7 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 	}
 };
 
-void TTree::load_from_file(const std::string &filename, const std::string &tree_name) {
+void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	this->_tree_name = tree_name;
@@ -171,6 +172,7 @@ const TNode &TTree::get_node(const std::string &Id) const {
 }
 
 const TNode &TTree::get_node(size_t index) const { return _nodes[index]; }
+bool TTree::isLeaf(size_t index) const { return _nodes[index].isLeaf(); }
 
 size_t TTree::get_node_index(const std::string &Id) const {
 	auto it = _node_map.find(Id);
@@ -182,8 +184,6 @@ void TTree::initialize_cliques_and_Z(const std::vector<TTree> &all_trees) {
 
 	// we initialize the number of leaves we have in each tree
 	std::vector<size_t> num_leaves_per_tree(all_trees.size());
-
-	// we get the number of leaves for each tree
 	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i].get_number_of_leaves(); }
 
 	_initialize_Z(num_leaves_per_tree);
@@ -196,28 +196,40 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	_Z.initialize_dimensions(num_leaves_per_tree);
 }
 
-void TTree::_initialize_cliques(std::vector<size_t> num_leaves_per_tree, const std::vector<TTree> &all_trees) {
+void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees) {
+	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
-	num_leaves_per_tree[_dimension] = 1;
+	_dimension_cliques             = num_leaves_per_tree;
+	_dimension_cliques[_dimension] = 1;
 
 	// we then caclulate how many cliques we will have in total for that tree. Which is the product of the number of
 	// leaves in each tree except the one we are working on (that is why we set it to 1 before).
-	const size_t n_cliques = coretools::containerProduct(num_leaves_per_tree);
+	const size_t n_cliques = coretools::containerProduct(_dimension_cliques);
 
+	// calculate increment: product of the number of leaves of all subsequent dimensions
 	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].size(); }
+	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].get_number_of_leaves(); }
+
+	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
-		std::vector<size_t> multi_dim_index_in_leaves_space = coretools::getSubscripts(i, num_leaves_per_tree);
-		_cliques.emplace_back(multi_dim_index_in_leaves_space, _dimension, _nodes.size(), increment);
+		// get start index of each clique in leaves space
+		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, _dimension_cliques);
+		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
 	}
 }
 
 void TTree::update_Z(const TStorageYVector &Y) {
 	std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
-#pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 	for (size_t i = 0; i < _cliques.size(); ++i) { indices_to_insert[i] = _cliques[i].update_Z(Y, _Z, *this); }
 	_Z.insert_in_Z(indices_to_insert);
 }
 
+const TStorageZVector &TTree::get_Z() const { return _Z; };
 std::vector<TClique> &TTree::get_cliques() { return this->_cliques; }
+const TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) const {
+	index_in_leaves_space[_dimension] = 0; // set to start index
+	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
+	return _cliques[ix_clique];
+}
