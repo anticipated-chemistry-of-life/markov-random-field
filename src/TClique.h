@@ -173,12 +173,12 @@ private:
 	                                          const TCurrentState &current_state,
 	                                          std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
-	template<typename ContainerStates>
+	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
 	               size_t leaf_index_in_tree_of_last_dim) const {
 		if constexpr (std::is_same_v<ContainerStates, TSheet>) { // is a sheet
 			return states.get(parent_index_in_tree, leaf_index_in_tree_of_last_dim);
-		} else {
+		} else { // TCurrentState
 			return states.get(parent_index_in_tree);
 		}
 	}
@@ -223,7 +223,7 @@ public:
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 
-	template<typename ContainerStates>
+	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
 	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
@@ -233,7 +233,8 @@ public:
 		const auto &matrix_for_bin        = _matrices[bin_length];
 		const size_t parent_index_in_tree = node.parentIndex_in_tree();
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			sum_log[i].add(matrix_for_bin(_getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim), i));
+			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
+			sum_log[i].add(matrix_for_bin(state_of_parent, i));
 		}
 	}
 };

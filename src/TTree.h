@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+static const size_t NUMBER_OF_THREADS = coretools::getNumThreads();
+
 class TClique; // forward declaration
 
 class TNode {
@@ -77,8 +79,6 @@ private:
 
 	// dimension of the tree
 	size_t _dimension;
-	// number of threads
-	size_t _number_of_threads;
 
 	// Set Z
 	TStorageZVector _Z;
@@ -91,7 +91,7 @@ private:
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
 
 public:
-	TTree(size_t dimension, size_t number_of_threads, const std::string &filename, const std::string &tree_name);
+	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
 	~TTree() = default;
 
 	size_t size() const { return _nodes.size(); };

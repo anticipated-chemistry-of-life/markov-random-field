@@ -86,6 +86,7 @@ void TSheet::fill(std::vector<size_t> start_index_in_leaves_space, size_t K, con
 	// start index and how many Y need to be parsed
 	_start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back();
 
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 	for (size_t i = 0; i < _tree.get_number_of_nodes(); ++i) { // loop over all nodes along current dimension
 		if (_tree.isLeaf(i)) { // only fill Y (ignore Z along last dimensions, not needed when updating)
 			start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_leaves(i);
@@ -93,7 +94,7 @@ void TSheet::fill(std::vector<size_t> start_index_in_leaves_space, size_t K, con
 		} else {
 			// get start index: leaf space in all dimensions except _dim_ix, for which we use the internal node index
 			start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_internal_nodes(i);
-			// fill Z. There are as many Z as there are leaves along the last dimension (= num_Y)
+			// fill Z. There are as many Z as there are leaves along the last dimension
 			// use z of your own dimension for filling
 			// Note: we do not need to fill Y here, as there are no Y when the node(i) is internal
 			// Note: this will not fill nodes that are not part of Z, i.e. which are internal in the last dimension

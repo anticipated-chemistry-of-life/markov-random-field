@@ -14,9 +14,6 @@
 
 class TMarkovField {
 private:
-	// parallelizing
-	size_t _number_of_threads;
-
 	// trees and Y
 	std::vector<TTree> _trees;
 	TStorageYVector _Y;
@@ -37,7 +34,9 @@ private:
 	void _fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space);
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
-	void _update_Y(const std::vector<size_t> &index_in_leaves_space);
+	void _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index);
+	bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
+	                           const std::vector<size_t> &previous_ix);
 
 public:
 	TMarkovField();

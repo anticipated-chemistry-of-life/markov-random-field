@@ -67,6 +67,8 @@ private:
 
 	size_t _start_ix_in_leaves_space_last_dim = 0;
 
+	// the sheet consists of multiple TCurrentStates (length of vector = number of nodes in _tree)
+	// each _cur_states[i] is of size K
 	std::vector<TCurrentState> _cur_states;
 
 public:

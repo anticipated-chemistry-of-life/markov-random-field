@@ -64,7 +64,7 @@ void TLotus::load_from_file(const std::string &filename) {
 			UERROR("Node '", species, "' is not a leaf !");
 		}
 
-		if (!_trees[1].get_node(_trees[1].get_node_index(molecule)).isLeaf()) {
+		if (!_trees[1].isLeaf(_trees[1].get_node_index(molecule))) {
 			UERROR("Node '", molecule, "' is not a leaf !");
 		}
 
@@ -78,7 +78,7 @@ void TLotus::load_from_file(const std::string &filename) {
 		++_species_counter[species_index];
 		++_molecules_counter[molecule_index];
 	}
-};
+}
 
 double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
 	auto coordinate = _L_sm.get_multi_dimensional_index(linear_index_in_L_space);

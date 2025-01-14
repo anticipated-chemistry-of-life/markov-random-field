@@ -6,8 +6,7 @@
 #include "TClique.h"
 #include "smart_binary_search.h"
 
-TMarkovField::TMarkovField()
-    : _number_of_threads(coretools::getNumThreads()), _trees(_make_trees()), _clique_last_dim(_trees.back(), 1) {
+TMarkovField::TMarkovField() : _trees(_make_trees()), _clique_last_dim(_trees.back(), 1) {
 
 	// read K (sheet size for updating Y)
 	_K = coretools::instances::parameters().get("K", 100);
@@ -39,21 +38,30 @@ std::vector<TTree> TMarkovField::_make_trees() {
 	trees.reserve(num_trees);
 
 	// first tree: molecules
-	trees.emplace_back(0, _number_of_threads, filename_tree_molecules, "molecules");
+	trees.emplace_back(0, filename_tree_molecules, "molecules");
 	// middle trees: all others (e.g. tissues)
 	for (size_t i = 1; i < num_trees - 1; ++i) {
-		trees.emplace_back(i, _number_of_threads, filenames_tree_others[i - 1], filenames_tree_others[i - 1]);
+		trees.emplace_back(i, filenames_tree_others[i - 1], filenames_tree_others[i - 1]);
 	}
 	// last tree: species
-	trees.emplace_back(num_trees - 1, _number_of_threads, filename_tree_species, "species");
+	trees.emplace_back(num_trees - 1, filename_tree_species, "species");
 
 	return trees;
+}
+
+bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
+                                         const std::vector<size_t> &previous_ix) {
+	for (size_t j = 0; j < _sheets.size(); ++j) { // loop over all sheets
+		if (j == sheet_ix) { continue; }          // ignore current sheet
+		if (start_index_in_leaves_space[j] != previous_ix[j]) { return true; }
+	}
+	return false;
 }
 
 void TMarkovField::_update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
                                   const std::vector<size_t> &previous_ix, size_t K_cur_sheet) {
 	for (size_t j = 0; j < _sheets.size(); ++j) {
-		if (first || previous_ix[j] != start_index_in_leaves_space[j]) {
+		if (first || _need_to_update_sheet(j, start_index_in_leaves_space, previous_ix)) {
 			// first iteration or different index than before -> re-compute sheet
 			_sheets[j].fill(start_index_in_leaves_space, K_cur_sheet, _Y);
 		}
@@ -78,6 +86,7 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 		// get leaf index in tree of last dimension
 		const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 		// calculate P(parent | node = 0) and P(parent | node = 1)
+		// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
 		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
 			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim], leaf_index_in_tree_of_last_dim,
 			                                         _clique_last_dim, sum_log);
@@ -88,18 +97,24 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 	}
 }
 
-void TMarkovField::_update_Y(const std::vector<size_t> &index_in_leaves_space) {
+void TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim) {
+	index_in_leaves_space.back() = leaf_index_last_dim;
+
 	// prepare log probabilities for the two possible states
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
-	// calculate probabilities in random Markov field
+	// calculate probabilities in Markov random field
 	_calculate_log_prob_field(index_in_leaves_space, sum_log);
 
-	// calculate likelihood (lotus)
+	// calculate log likelihood (lotus)
 	// ...
+
+	// calculate log likelihood (virtual mass spec)...
 
 	// sample state
 	bool new_state = sample(sum_log);
+
+	// update Y accordingly
 }
 
 void TMarkovField::update_Y() {
@@ -125,10 +140,9 @@ void TMarkovField::update_Y() {
 
 			// now loop along all leaves of the last dimension for updating (only K leaves for which we have everything)
 			const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
-#pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 			for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-				start_index_in_leaves_space.back() = j;
-				_update_Y(start_index_in_leaves_space);
+				_update_Y(start_index_in_leaves_space, j);
 			}
 
 			previous_ix = start_index_in_leaves_space;

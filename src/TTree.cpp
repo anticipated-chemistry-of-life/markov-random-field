@@ -15,10 +15,8 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension, size_t number_of_threads, const std::string &filename, const std::string &tree_name) {
+TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name) {
 	_dimension         = dimension;
-	_number_of_threads = number_of_threads;
-
 	_load_from_file(filename, tree_name);
 }
 
@@ -223,7 +221,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, 
 void TTree::update_Z(const TStorageYVector &Y) {
 	std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
-#pragma omp parallel for num_threads(this->_number_of_threads) schedule(static)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 	for (size_t i = 0; i < _cliques.size(); ++i) { indices_to_insert[i] = _cliques[i].update_Z(Y, _Z, *this); }
 	_Z.insert_in_Z(indices_to_insert);
 }
