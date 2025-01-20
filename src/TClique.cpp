@@ -9,6 +9,7 @@
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,
@@ -101,4 +102,13 @@ void TClique::update_counter_leaves_state_1(int difference) {
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
 	return coretools::TAcceptOddsRatio::accept(log_Q);
+}
+
+std::pair<size_t, TypeBinBranches> TClique::_get_parent_index_and_bin_length(size_t index_in_tree, const TTree &tree) {
+	// calculates log P(node = 0 | parent) and log P(node = 1 | parent)
+	const auto &node                  = tree.get_node(index_in_tree);
+	auto bin_length                   = node.get_branch_length_bin();
+	const size_t parent_index_in_tree = node.parentIndex_in_tree();
+
+	return {parent_index_in_tree, bin_length};
 }

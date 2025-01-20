@@ -19,6 +19,7 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
 	_dimension = dimension;
 	_load_from_file(filename, tree_name);
 }
+TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line

@@ -39,6 +39,8 @@ TLotus::TLotus(const std::vector<TTree> &trees, const std::vector<size_t> &dimen
 	_curLL = 0.0;
 }
 
+TLotus::TLotus(const std::vector<TTree> &trees) : TLotus(trees, nullptr, nullptr) {}
+
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
 void TLotus::initialize() {
@@ -73,8 +75,7 @@ void TLotus::load_from_file(const std::string &filename) {
 
 			const size_t ix    = _trees[tree_index].get_index_within_leaves(node_name);
 			index_in_leaves[i] = ix;
-			++_occurrence_counters[i][ix];
-		}
+			++_occurrence_counters[i][ix]; }
 
 		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_leaves);
 		_L.insert_one(linear_index_in_Y_space);

@@ -5,6 +5,7 @@
 #ifndef METABOLITE_INFERENCE_TREE_H
 #define METABOLITE_INFERENCE_TREE_H
 
+#include "TClique.h"
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
@@ -14,8 +15,6 @@
 #include <vector>
 
 static const size_t NUMBER_OF_THREADS = coretools::getNumThreads();
-
-class TClique; // forward declaration
 
 class TNode {
 private:
@@ -92,7 +91,7 @@ private:
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
-	~TTree() = default;
+	~TTree();
 
 	size_t size() const { return _nodes.size(); };
 
