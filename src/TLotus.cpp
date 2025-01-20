@@ -9,108 +9,104 @@
 #include <cstddef>
 #include <vector>
 
-TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, TypeParamDelta *delta)
-    : _trees(trees), _gamma(gamma), _delta(delta) {
-	// we add the trees when we construct the object.
+TLotus::TLotus(const std::vector<TTree> &trees, const std::vector<size_t> &dimensions_to_collapse,
+               TypeParamGamma *gamma)
+    : _trees(trees), _gamma(gamma), _dimensions_to_collapse(dimensions_to_collapse) {
+	this->addPriorParameter({_gamma});
 
-	this->addPriorParameter({_gamma, _delta});
-
-	if (trees[0].get_tree_name() != "species") {
-		UERROR("The species tree was not found in the provided trees.");
-	} else if (trees[1].get_tree_name() != "molecules") {
-		UERROR("The molecules tree was not found in the provided trees.");
+	// check if dimensions to collapse is valid
+	std::sort(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end());
+	if (!_dimensions_to_collapse.empty() && std::find(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end(),
+	                                                  _trees.size() - 1) != _dimensions_to_collapse.end()) {
+		UERROR("Can not collapse along the last dimension.");
 	}
 
-	_L_sm.initialize(0, _get_dimensions_Lotus_space(trees));
-	_x_sm.initialize(0, _get_dimensions_Lotus_space(trees));
+	// get which dimensions to keep and what the size of these dimensions is (in leaf space)
+	_dimensions_to_keep.reserve(_trees.size() - _dimensions_to_collapse.size());
+	_dimensions_lotus.reserve(_trees.size() - _dimensions_to_collapse.size());
+	for (size_t i = 0; i < _trees.size(); ++i) {
+		if (std::find(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end(), i) ==
+		    _dimensions_to_collapse.end()) {
+			_dimensions_to_keep.emplace_back(i);
+			_dimensions_lotus.emplace_back(_trees[i].get_number_of_leaves());
+		}
+		if (_trees[i].get_tree_name() == "species") { _ix_species = i; }
+		if (_trees[i].get_tree_name() == "molecules") { _ix_molecules = i; }
+	}
+	_L.initialize(0, _dimensions_lotus);
+
+	_oldLL = 0.0;
+	_curLL = 0.0;
 }
 
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
 void TLotus::initialize() {
 	// initialize storage
-	_gamma->initStorage(this);
-	_delta->initStorage(this);
+	_gamma->initStorage(this, {_dimensions_to_keep.size()});
 }
 
 void TLotus::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading links from file '", filename, "' ...");
-	coretools::TInputFile file(filename, coretools::FileType::Header);
-	const auto &header = file.header();
+	coretools::TInputFile file(filename, coretools::FileType::NoHeader);
 
-	if (file.numCols() != 2) {
-		UERROR("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(), " !");
+	if (file.numCols() != _dimensions_to_keep.size()) {
+		UERROR("File '", filename, "' is expected to have ", _dimensions_to_keep.size(), " columns, but has ",
+		       file.numCols(), " !");
 	}
 
-	if (header[0] != "species") {
-		UERROR("File '", filename, "' is expected to have a header with 'species' as first column, but has ", header[0],
-		       " !");
+	_occurrence_counters.resize(_dimensions_to_keep.size());
+	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
+		_occurrence_counters[i].resize(_trees[_dimensions_to_keep[i]].get_number_of_leaves(), 0);
 	}
 
-	if (header[1] != "molecules") {
-		UERROR("File '", filename, "' is expected to have a header with 'molecules' as second column, but has ",
-		       header[1], " !");
-	}
-
-	_species_counter.resize(_trees[0].get_number_of_leaves(), 0);
-	_molecules_counter.resize(_trees[1].get_number_of_leaves(), 0);
-
+	std::vector<size_t> index_in_leaves(_dimensions_to_keep.size());
 	for (; !file.empty(); file.popFront()) {
+		// loop over all columns
+		for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
+			std::string node_name = std::string(file.get(i));
 
-		std::string species  = std::string(file.get(0));
-		std::string molecule = std::string(file.get(1));
+			const size_t tree_index = _dimensions_to_keep[i];
+			if (!_trees[tree_index].isLeaf(_trees[tree_index].get_node_index(node_name))) {
+				UERROR("Node '", node_name, "' in tree '", _trees[tree_index].get_tree_name(), "' is not a leaf !");
+			}
 
-		if (!_trees[0].get_node(_trees[0].get_node_index(species)).isLeaf()) {
-			UERROR("Node '", species, "' is not a leaf !");
+			const size_t ix    = _trees[tree_index].get_index_within_leaves(node_name);
+			index_in_leaves[i] = ix;
+			++_occurrence_counters[i][ix];
 		}
 
-		if (!_trees[1].isLeaf(_trees[1].get_node_index(molecule))) {
-			UERROR("Node '", molecule, "' is not a leaf !");
-		}
-
-		size_t species_index  = this->_trees[0].get_index_within_leaves(species);
-		size_t molecule_index = this->_trees[1].get_index_within_leaves(molecule);
-
-		size_t linear_index_in_Y_space =
-		    this->_L_sm.get_linear_index_in_container_space({species_index, molecule_index});
-		this->_L_sm.insert_one(linear_index_in_Y_space);
-
-		++_species_counter[species_index];
-		++_molecules_counter[molecule_index];
+		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_leaves);
+		_L.insert_one(linear_index_in_Y_space);
 	}
 }
 
 double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
-	auto coordinate = _L_sm.get_multi_dimensional_index(linear_index_in_L_space);
-	auto Q_s        = static_cast<double>(_species_counter[coordinate[0]]);
-	auto P_m        = static_cast<double>(_molecules_counter[coordinate[1]]);
-	return (1.0 - exp(-_gamma->value() * P_m)) * (1.0 - exp(-_delta->value() * Q_s));
-};
+	auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_L_space);
 
-/// Let x(m, s) denote the variable in X for NP m and species s, which, in case X contains additional dimensions, is
-/// obtained by collapsing:
-/// x(m, s) is the minimum between 1 and the sum of x(s, m, y) for all y in Y. Meaning that if there is at least one
-/// y in Y such that x(s, m, y) is 1, then x(m, s) will be 1. Otherwise, it will be 0. If we have four dimensions,
-/// then we will have to collapse the last two dimensions.
-void TLotus::_initialize_x_sm(const TStorageYVector &Y) {
-
-	// if we only have two dimensions, then the provided vector Y will be the same as x_ms
-	if (_trees.size() == 2) {
-		_x_sm = Y;
-		return;
+	double prod = 1.0;
+	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
+		const auto counts = (double)_occurrence_counters[i][index_in_L_space[i]];
+		prod *= 1.0 - exp(-_gamma->value(i) * counts);
 	}
+	return prod;
+}
 
-	for (auto y = 0; Y.size(); ++y) {
-		auto linear_index = Y[y].get_linear_index_in_container_space();
-		// we now get the multidimensional index in the Y space
-		auto coordinate   = Y.get_multi_dimensional_index(linear_index);
-
-		if (Y[y].is_one()) {
-			_x_sm.insert_one(_x_sm.get_linear_index_in_container_space({coordinate[0], coordinate[1]}));
-		}
-	}
-};
 double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); };
+
+bool TLotus::_x_is_one(const std::vector<size_t> &index_in_Lotus) const {
+	// fill fixed indices of clique (e.g. species and molecule)
+	std::vector<size_t> index_in_leaves(_trees.size());
+	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
+		index_in_leaves[_dimensions_to_keep[i]] = index_in_Lotus[i];
+	}
+
+	// now loop over all possible starting positions of cliques for the fixed indices
+	// TODO: implement
+	//for (size_t i = 0; i < _dimensions_to_collapse.size(); ++i) {
+	//	_trees[_dimensions_to_collapse[i]].get_clique()
+	//}
+}
 
 double TLotus::calculate_log_likelihood_of_L() const {
 	size_t index_in_x = 0;
@@ -162,25 +158,13 @@ double TLotus::_calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linea
 	return 1.0;
 }
 
-double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &) {
+double TLotus::calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &) {
 	_oldLL = _curLL;                          // store current likelihood
 	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
 	return _curLL - _oldLL;
 }
 
-double TLotus::calculateLLRatio(TypeParamDelta *, size_t /*Index*/, const Storage &) {
-	_oldLL = _curLL;                          // store current likelihood
-	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new delta
-	return _curLL - _oldLL;
-}
-
-void TLotus::updateTempVals(TypeParamGamma *, size_t, bool Accepted) {
-	if (!Accepted) {
-		_curLL = _oldLL; // reset
-	}
-}
-
-void TLotus::updateTempVals(TypeParamDelta *, size_t, bool Accepted) {
+void TLotus::updateTempVals(TypeParamGamma *, size_t Index, bool Accepted) {
 	if (!Accepted) {
 		_curLL = _oldLL; // reset
 	}
@@ -194,7 +178,6 @@ void TLotus::set_x(bool state, size_t linear_index_in_L_space) {
 void TLotus::guessInitialValues() {
 	// TODO: think of an initialization scheme
 	_gamma->set(0.001);
-	_delta->set(0.001);
 }
 
 void TLotus::_simulateUnderPrior(Storage *) {

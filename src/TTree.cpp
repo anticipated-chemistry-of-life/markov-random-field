@@ -16,7 +16,7 @@
 #include <vector>
 
 TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name) {
-	_dimension         = dimension;
+	_dimension = dimension;
 	_load_from_file(filename, tree_name);
 }
 
@@ -41,7 +41,7 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 	coretools::normalize(branch_lengths);
 
 	std::vector<double> grid(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1)); }
+	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
 
 	for (size_t i = 0; i < branch_lengths.size(); ++i) {
 		// find bin
@@ -229,6 +229,12 @@ void TTree::update_Z(const TStorageYVector &Y) {
 const TStorageZVector &TTree::get_Z() const { return _Z; };
 std::vector<TClique> &TTree::get_cliques() { return this->_cliques; }
 const TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) const {
+	index_in_leaves_space[_dimension] = 0; // set to start index
+	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
+	return _cliques[ix_clique];
+}
+
+TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) {
 	index_in_leaves_space[_dimension] = 0; // set to start index
 	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
 	return _cliques[ix_clique];

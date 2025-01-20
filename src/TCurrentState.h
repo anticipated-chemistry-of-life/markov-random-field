@@ -82,7 +82,7 @@ public:
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
-	auto get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim);
+	auto get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H

@@ -25,7 +25,7 @@ public:
 	using const_iterator = typename std::vector<TStorageY>::const_iterator;
 	TStorageYVector()    = default;
 	~TStorageYVector()   = default;
-	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
+	TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
 		initialize(n_iterations, dimensions_Y_space);
 	};
 
@@ -76,7 +76,6 @@ public:
 	}
 
 	/// Does the same as set_to_one but sets the element to zero
-	/// @param coordinate the position of the element in the Y vector
 	void insert_zero(uint64_t linear_index_in_Y_space) {
 		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (found) {

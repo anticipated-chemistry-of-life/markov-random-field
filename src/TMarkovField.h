@@ -26,7 +26,7 @@ private:
 	TCurrentState _clique_last_dim;
 
 	// functions for initializing
-	std::vector<TTree> _make_trees();
+	static std::vector<TTree> _make_trees();
 
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
@@ -35,14 +35,15 @@ private:
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 	void _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index,
-	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
+	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, int &diff_counter_1_in_last_dim);
 	bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
-	                           const std::vector<size_t> &previous_ix);
+	                           const std::vector<size_t> &previous_ix) const;
 	void _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
-	                std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
+	                std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, int &diff_counter_1_in_last_dim);
+	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 public:
-	TMarkovField();
+	TMarkovField(size_t n_iterations);
 	~TMarkovField() = default;
 
 	// updates

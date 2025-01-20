@@ -132,7 +132,7 @@ void TSheet::set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_
 }
 
 auto TSheet::get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
-                                                size_t leaf_index_in_tree_of_last_dim) {
+                                                size_t leaf_index_in_tree_of_last_dim) const {
 	// calculate index in Y: leaf index in last dimension, relative to start index
 	const size_t ix = leaf_index_in_tree_of_last_dim - _start_ix_in_leaves_space_last_dim;
 	return _cur_states[node_index_in_tree_of_dim].get_state_exist_ix_TStorageYVector(ix);

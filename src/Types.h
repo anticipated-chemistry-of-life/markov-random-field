@@ -14,15 +14,10 @@
 
 // Parameter types
 using TypeGamma = coretools::Positive;
-using TypeDelta = coretools::Positive;
 
 // Gamma
 using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
-
-// Delta
-using PriorOnDelta = stattools::prior::TUniformFixed<TypeDelta>;
-using SpecDelta    = stattools::ParamSpec<TypeDelta, stattools::name("delta"), PriorOnDelta>;
 
 // Observation: Lotus
 class TLotus; // forward declaration to avoid circular inclusion
@@ -35,5 +30,8 @@ using SpecLotus                     = stattools::TObservation<TypeLotus, stattoo
  * Type for the number of bins for the branches.
  */
 using TypeBinBranches = uint8_t;
+
+// Type for calculating the number of 1's per clique
+using TypeCounter1 = uint32_t;
 
 #endif // ACOL_TYPES_H

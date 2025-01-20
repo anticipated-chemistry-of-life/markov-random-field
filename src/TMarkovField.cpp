@@ -6,7 +6,7 @@
 #include "TClique.h"
 #include "smart_binary_search.h"
 
-TMarkovField::TMarkovField() : _trees(_make_trees()), _clique_last_dim(_trees.back(), 1) {
+TMarkovField::TMarkovField(size_t n_iterations) : _trees(_make_trees()), _clique_last_dim(_trees.back(), 1) {
 
 	// read K (sheet size for updating Y)
 	_K = coretools::instances::parameters().get("K", 100);
@@ -23,6 +23,11 @@ TMarkovField::TMarkovField() : _trees(_make_trees()), _clique_last_dim(_trees.ba
 	// create sheets: one per dimension except the last dimension
 	_sheets.reserve(_trees.size() - 1);
 	for (size_t i = 0; i < _trees.size() - 1; ++i) { _sheets.emplace_back(i, _trees[i], _trees.back()); }
+
+	// initialize Y
+	auto num_leaves_per_dim   = _num_leaves_per_dim_except_last;
+	num_leaves_per_dim.back() = _trees.back().get_number_of_leaves();
+	_Y.initialize(n_iterations, num_leaves_per_dim);
 }
 
 std::vector<TTree> TMarkovField::_make_trees() {
@@ -50,7 +55,7 @@ std::vector<TTree> TMarkovField::_make_trees() {
 }
 
 bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
-                                         const std::vector<size_t> &previous_ix) {
+                                         const std::vector<size_t> &previous_ix) const {
 	for (size_t j = 0; j < _sheets.size(); ++j) { // loop over all sheets
 		if (j == sheet_ix) { continue; }          // ignore current sheet
 		if (start_index_in_leaves_space[j] != previous_ix[j]) { return true; }
@@ -98,7 +103,8 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 }
 
 void TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-                             std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
+                             std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
+                             int &diff_counter_1_in_last_dim) {
 	index_in_leaves_space.back() = leaf_index_last_dim;
 
 	// prepare log probabilities for the two possible states
@@ -116,11 +122,22 @@ void TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t l
 	bool new_state = sample(sum_log);
 
 	// update Y accordingly
-	_set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
+	_set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert, diff_counter_1_in_last_dim);
+}
+
+void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
+                                             const std::vector<size_t> &index_in_leaves_space) {
+	// update counter of leaves with value 1 for all dimensions except the last one
+	// reason: we parallelize over the last dimension -> can not update the counter there, as this would result in race
+	// condition
+	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
+		_trees[dim].get_clique(index_in_leaves_space).update_counter_leaves_state_1(new_state, old_state);
+	}
 }
 
 void TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
-                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
+                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
+                              int &diff_counter_1_in_last_dim) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
 	// get current state, exists and index in TStorageYVector
@@ -139,6 +156,10 @@ void TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_i
 			linear_indices_in_Y_space_to_insert.emplace_back(linear_index_in_Y_space);
 		}
 	}
+
+	// update values of 1-valued leaves in clique
+	_update_counter_1_cliques(new_state, cur_state, index_in_leaves_space);
+	diff_counter_1_in_last_dim += (int)new_state - (int)cur_state;
 
 	// update value in _sheets
 	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
@@ -173,16 +194,25 @@ void TMarkovField::update_Y() {
 			// now loop along all leaves of the last dimension for updating (only K leaves for which we have everything)
 			const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
 			std::vector<TStorageY> linear_indices_in_Y_space_to_insert;
+			int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 			for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-				_update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert);
+				_update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert,
+				          diff_counter_1_in_last_dim);
 			}
 
 			// insert new 1-valued indices into Y
-			// Note: indices of where Y is one in _sheets is not be accurate anymore, but we don't use them, so it's ok
+			// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
 			_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
+			_trees.back()
+			    .get_clique(start_index_in_leaves_space)
+			    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
 
 			previous_ix = start_index_in_leaves_space;
 		}
 	}
+}
+
+void TMarkovField::update_Z() {
+	for (auto &_tree : _trees) { _tree.update_Z(_Y); }
 }

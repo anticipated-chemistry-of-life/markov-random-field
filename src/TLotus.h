@@ -20,40 +20,37 @@ public:
 	using typename Base::UpdatedStorage;
 
 	using TypeParamGamma = stattools::TParameter<SpecGamma, BoxType>;
-	using TypeParamDelta = stattools::TParameter<SpecDelta, BoxType>;
 
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy them
 	const std::vector<TTree> &_trees;
-	TStorageYVector _L_sm;
-	TStorageYVector _x_sm;
-	std::vector<size_t> _species_counter;
-	std::vector<size_t> _molecules_counter;
 
-	// parameters gamma and delta
+	// data
+	TStorageYVector _L;
+	std::vector<std::vector<size_t>> _occurrence_counters;
+
+	std::vector<size_t> _dimensions_to_keep;
+	std::vector<size_t> _dimensions_to_collapse;
+	std::vector<size_t> _dimensions_lotus;
+	size_t _ix_species;
+	size_t _ix_molecules;
+
+	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
-	TypeParamDelta *_delta = nullptr;
 
 	// temporary values
 	double _oldLL;
 	double _curLL;
 
 	// private functions
-	static std::vector<size_t> _get_dimensions_Lotus_space(const std::vector<TTree> &trees) {
-		return {trees[0].get_number_of_leaves(), trees[1].get_number_of_leaves()};
-	}
-
-	/// To construct the _data_X_of_Lotus we will need to have as input a vector of TStorageYVector but this time with
-	/// as many dimensions as there are trees.
-	void _initialize_x_sm(const TStorageYVector &Y);
-
 	double _calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linear_index_in_L_space) const;
+	bool _x_is_one(const std::vector<size_t> &index_in_Lotus) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
 public:
-	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, TypeParamDelta *delta);
-	~TLotus() = default;
+	TLotus(const std::vector<TTree> &trees, const std::vector<size_t> &dimensions_to_collapse, TypeParamGamma *gamma);
+	~TLotus() override = default;
 
 	[[nodiscard]] std::string name() const override;
 	void initialize() override;
@@ -65,11 +62,9 @@ public:
 
 	double getSumLogPriorDensity(const Storage &) const override;
 
-	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &);
-	[[nodiscard]] double calculateLLRatio(TypeParamDelta *, size_t /*Index*/, const Storage &);
+	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &);
 
-	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
-	void updateTempVals(TypeParamDelta *, size_t /*Index*/, bool Accepted);
+	void updateTempVals(TypeParamGamma *, size_t Index, bool Accepted);
 
 	void guessInitialValues() override;
 

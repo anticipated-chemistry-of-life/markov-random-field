@@ -17,6 +17,8 @@ TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t 
 	_variable_dimension          = variable_dimension;
 	_n_nodes                     = n_nodes;
 	_increment                   = increment;
+	_mu_c_0                      = 0.0;
+	_mu_c_1                      = 0.0;
 }
 
 std::vector<TStorageZ> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
@@ -87,7 +89,16 @@ void TClique::_calculate_log_prob_node_to_children(size_t index_in_tree, const T
 	}
 }
 
-bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log){
+void TClique::update_counter_leaves_state_1(bool new_state, bool old_state) {
+	const int diff = (int)new_state - (int)old_state;
+	update_counter_leaves_state_1(diff);
+}
+void TClique::update_counter_leaves_state_1(int difference) {
+	assert((int)_counter_leaves_state_1 + difference >= 0);
+	_counter_leaves_state_1 += difference;
+}
+
+bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
 	return coretools::TAcceptOddsRatio::accept(log_Q);
 }
