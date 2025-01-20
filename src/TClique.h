@@ -9,7 +9,7 @@
 #include "TStorageYVector.h"
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
-#include "TTree.h"
+#include "Types.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
@@ -18,6 +18,8 @@
 #include <cstddef>
 #include <tuple>
 #include <vector>
+
+class TTree;
 
 /**
  * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for
@@ -183,6 +185,8 @@ private:
 		}
 	}
 
+	static std::pair<size_t, TypeBinBranches> _get_parent_index_and_bin_length(size_t index_in_tree, const TTree &tree);
+
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
 	~TClique() = default;
@@ -227,11 +231,8 @@ public:
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
 	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		// calculates log P(node = 0 | parent) and log P(node = 1 | parent)
-		const auto &node                  = tree.get_node(index_in_tree);
-		auto bin_length                   = node.get_branch_length_bin();
-		const auto &matrix_for_bin        = _matrices[bin_length];
-		const size_t parent_index_in_tree = node.parentIndex_in_tree();
+		auto [parent_index_in_tree, bin_length] = _get_parent_index_and_bin_length(index_in_tree, tree);
+		const auto &matrix_for_bin              = _matrices[bin_length];
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));

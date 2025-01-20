@@ -53,6 +53,7 @@ private:
 
 public:
 	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, TypeParamDelta *delta);
+	TLotus(const std::vector<TTree> &trees);
 	~TLotus() = default;
 
 	[[nodiscard]] std::string name() const override;
@@ -74,4 +75,5 @@ public:
 	void guessInitialValues() override;
 
 	void set_x(bool state, size_t linear_index_in_L_space);
+	const TStorageYVector &get_Lotus() const { return _L_sm; }
 };

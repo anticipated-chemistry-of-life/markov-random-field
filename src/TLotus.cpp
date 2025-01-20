@@ -25,6 +25,8 @@ TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, TypeParam
 	_x_sm.initialize(0, _get_dimensions_Lotus_space(trees));
 }
 
+TLotus::TLotus(const std::vector<TTree> &trees) : TLotus(trees, nullptr, nullptr) {}
+
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
 void TLotus::initialize() {
@@ -64,9 +66,7 @@ void TLotus::load_from_file(const std::string &filename) {
 			UERROR("Node '", species, "' is not a leaf !");
 		}
 
-		if (!_trees[1].isLeaf(_trees[1].get_node_index(molecule))) {
-			UERROR("Node '", molecule, "' is not a leaf !");
-		}
+		if (!_trees[1].isLeaf(_trees[1].get_node_index(molecule))) { UERROR("Node '", molecule, "' is not a leaf !"); }
 
 		size_t species_index  = this->_trees[0].get_index_within_leaves(species);
 		size_t molecule_index = this->_trees[1].get_index_within_leaves(molecule);
