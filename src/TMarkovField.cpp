@@ -46,7 +46,12 @@ std::vector<TTree> TMarkovField::_make_trees() {
 	trees.emplace_back(0, filename_tree_molecules, "molecules");
 	// middle trees: all others (e.g. tissues)
 	for (size_t i = 1; i < num_trees - 1; ++i) {
-		trees.emplace_back(i, filenames_tree_others[i - 1], filenames_tree_others[i - 1]);
+		std::string name = coretools::str::split(filenames_tree_others[i - 1], ':');
+		if (name.empty()) {
+			UERROR("Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
+			       "filename (e.g. myTreeName:pathToFile)");
+		}
+		trees.emplace_back(i, filenames_tree_others[i - 1], name);
 	}
 	// last tree: species
 	trees.emplace_back(num_trees - 1, filename_tree_species, "species");
@@ -193,11 +198,11 @@ void TMarkovField::update_Y() {
 
 			// now loop along all leaves of the last dimension for updating (only K leaves for which we have everything)
 			const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
-			std::vector<TStorageY> linear_indices_in_Y_space_to_insert;
+			std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
 			int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 			for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-				_update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert,
+				_update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert[omp_get_thread_num()],
 				          diff_counter_1_in_last_dim);
 			}
 

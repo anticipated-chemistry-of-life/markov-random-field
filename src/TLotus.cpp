@@ -9,37 +9,14 @@
 #include <cstddef>
 #include <vector>
 
-TLotus::TLotus(const std::vector<TTree> &trees, const std::vector<size_t> &dimensions_to_collapse,
-               TypeParamGamma *gamma)
-    : _trees(trees), _gamma(gamma), _dimensions_to_collapse(dimensions_to_collapse) {
-	this->addPriorParameter({_gamma});
-
-	// check if dimensions to collapse is valid
-	std::sort(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end());
-	if (!_dimensions_to_collapse.empty() && std::find(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end(),
-	                                                  _trees.size() - 1) != _dimensions_to_collapse.end()) {
-		UERROR("Can not collapse along the last dimension.");
-	}
-
-	// get which dimensions to keep and what the size of these dimensions is (in leaf space)
-	_dimensions_to_keep.reserve(_trees.size() - _dimensions_to_collapse.size());
-	_dimensions_lotus.reserve(_trees.size() - _dimensions_to_collapse.size());
-	for (size_t i = 0; i < _trees.size(); ++i) {
-		if (std::find(_dimensions_to_collapse.begin(), _dimensions_to_collapse.end(), i) ==
-		    _dimensions_to_collapse.end()) {
-			_dimensions_to_keep.emplace_back(i);
-			_dimensions_lotus.emplace_back(_trees[i].get_number_of_leaves());
-		}
-		if (_trees[i].get_tree_name() == "species") { _ix_species = i; }
-		if (_trees[i].get_tree_name() == "molecules") { _ix_molecules = i; }
-	}
-	_L.initialize(0, _dimensions_lotus);
+TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma) : _trees(trees), _gamma(gamma) {
+	this->addPriorParameter(_gamma);
 
 	_oldLL = 0.0;
 	_curLL = 0.0;
 }
 
-TLotus::TLotus(const std::vector<TTree> &trees) : TLotus(trees, nullptr, nullptr) {}
+TLotus::TLotus(const std::vector<TTree> &trees) : TLotus(trees, nullptr) {}
 
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
@@ -48,14 +25,63 @@ void TLotus::initialize() {
 	_gamma->initStorage(this, {_dimensions_to_keep.size()});
 }
 
+void TLotus::_get_dimensions_to_collapse(const std::vector<std::string> &header) {
+	using namespace coretools::instances;
+	// all dimensions that are not present in header will be collapsed
+	if (header.size() > _trees.size()) {
+		UERROR("Lotus can not have more dimensions than there are trees (", header.size(), " vs ", _trees.size(), ")");
+	}
+
+	for (const auto &tree_name : header) {
+		bool found = false;
+		for (size_t j = 0; j < _trees.size(); ++j) {
+			if (_trees[j].get_tree_name() == tree_name) {
+				// already found before -> duplicated!
+				if (found) { UERROR("Duplicate column name '", tree_name, "' in lotus file!"); }
+				// else: remember this dimension -> we will not collapse it
+				_dimensions_to_keep.push_back(j);
+				_len_per_dimension_lotus.push_back(_trees[j].get_number_of_leaves());
+				found = true;
+			}
+		}
+		if (!found) { UERROR("Could not find tree with name '", tree_name, "' in trees (required by lotus)."); }
+	}
+
+	if (_dimensions_to_keep.empty()) { UERROR("No dimensions in lotus file are kept!"); }
+	if (_dimensions_to_keep.back() != _trees.size() - 1) {
+		UERROR("Last dimension of trees and lotus must be identical (", _dimensions_to_keep.back(), " vs ",
+		       _trees.size() - 1, ")!");
+	}
+
+	// find dimensions to collapse
+	for (size_t i = 0; i < _trees.size(); ++i) {
+		if (std::find(_dimensions_to_keep.begin(), _dimensions_to_keep.end(), i) == _dimensions_to_keep.end()) {
+			// not found in keep -> collapse
+			_dimensions_to_collapse.emplace_back(i);
+		}
+	}
+
+	// report to logfile
+	logfile().startIndent("Will keep the following dimensions for lotus: ", _dimensions_to_keep, ":");
+	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i].get_tree_name()); }
+	logfile().endIndent();
+	if (_dimensions_to_collapse.empty()) {
+		logfile().list("Will not collapse lotus.");
+	} else {
+		logfile().startIndent("Will collapse the following dimensions for lotus: ", _dimensions_to_collapse, ":");
+		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i].get_tree_name()); }
+		logfile().endIndent();
+	}
+
+	// initialize the size of L
+	_L.initialize(0, _len_per_dimension_lotus);
+}
+
 void TLotus::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().listFlush("Reading links from file '", filename, "' ...");
-	coretools::TInputFile file(filename, coretools::FileType::NoHeader);
+	coretools::TInputFile file(filename, coretools::FileType::Header);
 
-	if (file.numCols() != _dimensions_to_keep.size()) {
-		UERROR("File '", filename, "' is expected to have ", _dimensions_to_keep.size(), " columns, but has ",
-		       file.numCols(), " !");
-	}
+	_get_dimensions_to_collapse(file.header());
 
 	_occurrence_counters.resize(_dimensions_to_keep.size());
 	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
@@ -75,7 +101,8 @@ void TLotus::load_from_file(const std::string &filename) {
 
 			const size_t ix    = _trees[tree_index].get_index_within_leaves(node_name);
 			index_in_leaves[i] = ix;
-			++_occurrence_counters[i][ix]; }
+			++_occurrence_counters[i][ix];
+		}
 
 		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_leaves);
 		_L.insert_one(linear_index_in_Y_space);
@@ -104,7 +131,7 @@ bool TLotus::_x_is_one(const std::vector<size_t> &index_in_Lotus) const {
 
 	// now loop over all possible starting positions of cliques for the fixed indices
 	// TODO: implement
-	//for (size_t i = 0; i < _dimensions_to_collapse.size(); ++i) {
+	// for (size_t i = 0; i < _dimensions_to_collapse.size(); ++i) {
 	//	_trees[_dimensions_to_collapse[i]].get_clique()
 	//}
 }

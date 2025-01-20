@@ -31,9 +31,7 @@ private:
 
 	std::vector<size_t> _dimensions_to_keep;
 	std::vector<size_t> _dimensions_to_collapse;
-	std::vector<size_t> _dimensions_lotus;
-	size_t _ix_species;
-	size_t _ix_molecules;
+	std::vector<size_t> _len_per_dimension_lotus;
 
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
@@ -45,11 +43,12 @@ private:
 	// private functions
 	double _calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linear_index_in_L_space) const;
 	bool _x_is_one(const std::vector<size_t> &index_in_Lotus) const;
+	void _get_dimensions_to_collapse(const std::vector<std::string> &header);
 
 	void _simulateUnderPrior(Storage *) override;
 
 public:
-	TLotus(const std::vector<TTree> &trees, const std::vector<size_t> &dimensions_to_collapse, TypeParamGamma *gamma);
+	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma);
 	TLotus(const std::vector<TTree> &trees);
 	~TLotus() override = default;
 

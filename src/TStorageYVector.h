@@ -158,9 +158,16 @@ public:
 		return binary_search(get_linear_index_in_Y_space(multidim_index_in_Y_space));
 	}
 
-	void insert_in_Y(const std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
-		_vec.reserve(this->_vec.size() + linear_indices_in_Y_space_to_insert.size());
-		_vec.insert(_vec.end(), linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end());
+	void insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
+		auto size_to_insert =
+		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
+		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
+
+		this->_vec.reserve(this->_vec.size() + size_to_insert);
+
+		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
+			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
+		}
 		std::sort(_vec.begin(), _vec.end());
 	}
 };
