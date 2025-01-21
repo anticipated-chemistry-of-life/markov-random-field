@@ -107,9 +107,8 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 	}
 }
 
-void TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-                             std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
-                             int &diff_counter_1_in_last_dim) {
+int TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
+                             std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 	index_in_leaves_space.back() = leaf_index_last_dim;
 
 	// prepare log probabilities for the two possible states
@@ -127,7 +126,7 @@ void TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t l
 	bool new_state = sample(sum_log);
 
 	// update Y accordingly
-	_set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert, diff_counter_1_in_last_dim);
+	return _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
 }
 
 void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
@@ -140,9 +139,8 @@ void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
 	}
 }
 
-void TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
-                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
-                              int &diff_counter_1_in_last_dim) {
+int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
+                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
 	// get current state, exists and index in TStorageYVector
@@ -164,7 +162,7 @@ void TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_i
 
 	// update values of 1-valued leaves in clique
 	_update_counter_1_cliques(new_state, cur_state, index_in_leaves_space);
-	diff_counter_1_in_last_dim += (int)new_state - (int)cur_state;
+	int diff_counter_1_in_last_dim = (int)new_state - (int)cur_state;
 
 	// update value in _sheets
 	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
@@ -173,6 +171,8 @@ void TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_i
 		_sheets[dim].set(node_index_in_tree_of_dim, leaf_index_in_tree_of_last_dim, new_state);
 	}
 	// Note: no need to update in _clique_last_dim, as this will anyway be overwritten for next Y
+
+	return diff_counter_1_in_last_dim;
 }
 
 void TMarkovField::update_Y() {
@@ -200,10 +200,9 @@ void TMarkovField::update_Y() {
 			const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
 			std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
 			int diff_counter_1_in_last_dim = 0;
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+:diff_counter_1_in_last_dim)
 			for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-				_update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert[omp_get_thread_num()],
-				          diff_counter_1_in_last_dim);
+				diff_counter_1_in_last_dim += _update_Y(start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert[omp_get_thread_num()]);
 			}
 
 			// insert new 1-valued indices into Y

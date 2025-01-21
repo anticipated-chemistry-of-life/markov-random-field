@@ -66,7 +66,7 @@ void TLotus::_get_dimensions_to_collapse(const std::vector<std::string> &header)
 	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i].get_tree_name()); }
 	logfile().endIndent();
 	if (_dimensions_to_collapse.empty()) {
-		logfile().list("Will not collapse lotus.");
+		logfile().list("Will not collapse any dimensions for lotus.");
 	} else {
 		logfile().startIndent("Will collapse the following dimensions for lotus: ", _dimensions_to_collapse, ":");
 		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i].get_tree_name()); }
@@ -83,7 +83,7 @@ void TLotus::load_from_file(const std::string &filename) {
 
 	_get_dimensions_to_collapse(file.header());
 
-	_occurrence_counters.resize(_dimensions_to_keep.size());
+	_occurrence_counters.resize(_dimensions_to_keep.size()); // for example, size is 2 if keep molecules and species
 	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
 		_occurrence_counters[i].resize(_trees[_dimensions_to_keep[i]].get_number_of_leaves(), 0);
 	}
@@ -114,8 +114,9 @@ double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
 
 	double prod = 1.0;
 	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
-		const auto counts = (double)_occurrence_counters[i][index_in_L_space[i]];
-		prod *= 1.0 - exp(-_gamma->value(i) * counts);
+		const size_t leaf_index = index_in_L_space[i];
+		const auto counts = (double)_occurrence_counters[i][leaf_index];
+		prod *= 1.0 - exp(-(double)_gamma->value(i) * counts);
 	}
 	return prod;
 }
