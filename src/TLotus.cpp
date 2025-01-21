@@ -115,7 +115,7 @@ double TLotus::calculate_research_effort(size_t linear_index_in_L_space) const {
 	double prod = 1.0;
 	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
 		const size_t leaf_index = index_in_L_space[i];
-		const auto counts = (double)_occurrence_counters[i][leaf_index];
+		const auto counts       = (double)_occurrence_counters[i][leaf_index];
 		prod *= 1.0 - exp(-(double)_gamma->value(i) * counts);
 	}
 	return prod;
@@ -125,16 +125,48 @@ double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_l
 
 bool TLotus::_x_is_one(const std::vector<size_t> &index_in_Lotus) const {
 	// fill fixed indices of clique (e.g. species and molecule)
-	std::vector<size_t> index_in_leaves(_trees.size());
+	std::vector<size_t> index_in_leaves(_trees.size(), 0);
 	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
 		index_in_leaves[_dimensions_to_keep[i]] = index_in_Lotus[i];
 	}
 
-	// now loop over all possible starting positions of cliques for the fixed indices
-	// TODO: implement
-	// for (size_t i = 0; i < _dimensions_to_collapse.size(); ++i) {
-	//	_trees[_dimensions_to_collapse[i]].get_clique()
-	//}
+	if (_dimensions_to_collapse.empty()) {
+		// TODO: ?
+		// ??? need to access Y?
+	}
+
+	// define dimension along which we take the cliques: always the last dimension to collapse
+	const size_t dim_along_which_clique_runs     = _dimensions_to_collapse.back();
+	index_in_leaves[dim_along_which_clique_runs] = 0;
+
+	if (_dimensions_to_collapse.size() == 1) {
+		// only need to consider a single clique
+		return _trees[dim_along_which_clique_runs].get_clique(index_in_leaves).get_counter_leaves_state_1() > 0;
+	}
+
+	// define sub-space of dimensions to get the starting positions of all cliques to consider
+	// the last dimension to collapse is used as a clique -> no need to consider that one -> take size() - 1
+	std::vector<size_t> dimensions_clique_starts(_dimensions_to_collapse.size() - 1);
+	for (size_t i = 0; i < _dimensions_to_collapse.size() - 1; ++i) {
+		const size_t tree_index     = _dimensions_to_collapse[i];
+		dimensions_clique_starts[i] = _trees[tree_index].get_number_of_leaves();
+	}
+
+	const size_t num_loops = coretools::containerProduct(dimensions_clique_starts);
+	for (size_t i = 0; i < num_loops; ++i) { // loop over linear index of clique start
+		const auto ix = coretools::getSubscripts(i, dimensions_clique_starts);
+		// set clique starting index
+		for (size_t j = 0; j < _dimensions_to_collapse.size() - 1; ++j) {
+			const size_t tree_index     = _dimensions_to_collapse[j];
+			index_in_leaves[tree_index] = ix[j];
+		}
+		// if at least one clique has a one: x is one
+		if (_trees[dim_along_which_clique_runs].get_clique(index_in_leaves).get_counter_leaves_state_1() > 0) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 double TLotus::calculate_log_likelihood_of_L() const {

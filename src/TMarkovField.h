@@ -25,6 +25,10 @@ private:
 	std::vector<TSheet> _sheets;
 	TCurrentState _clique_last_dim;
 
+	// fix values?
+	bool _fix_Y = false;
+	bool _fix_Z = false;
+
 	// functions for initializing
 	static std::vector<TTree> _make_trees();
 

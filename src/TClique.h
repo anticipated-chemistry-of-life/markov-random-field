@@ -244,6 +244,7 @@ public:
 
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
+	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
