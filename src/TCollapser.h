@@ -19,8 +19,8 @@ private:
 	std::vector<size_t> _dimensions_to_collapse;
 
 	bool _x_is_one(std::vector<size_t> index_in_leaves, bool new_state, bool old_state) const {
-		if (_dimensions_to_collapse.empty()) {
-			return {_ix_is_one_no_collapse(new_state), _ix_is_one_no_collapse(old_state)};
+		if (!do_collapse()) {
+			return new_state;
 		}
 
 		// define dimension along which we take the cliques: always the last dimension to collapse

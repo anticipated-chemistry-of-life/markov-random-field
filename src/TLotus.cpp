@@ -75,16 +75,12 @@ double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_co
 
 double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); };
 
-void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim) {
+void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
 	// collapse start_index_in_leaves (this is the index in Y)
-	// Note: always take last tree (regardless of collapsing), as we make sure this one is the same in Markov field and
-	// lotus
 	if (_collapser.do_collapse()) {
-		_tmp_state_along_last_dim.fill_Y_along_last_dim(_collapser.collapse(start_index_clique_along_last_dim),
-		                                                _trees.back().get_number_of_leaves(), _L);
+		_tmp_state_along_last_dim.fill_Y_along_last_dim(_collapser.collapse(start_index_clique_along_last_dim), K, _L);
 	} else { // no need to collapse
-		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim,
-		                                                _trees.back().get_number_of_leaves(), _L);
+		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
 	}
 }
 
