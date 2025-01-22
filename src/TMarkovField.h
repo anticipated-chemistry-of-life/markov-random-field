@@ -7,12 +7,20 @@
 
 #include "TCurrentState.h"
 #include "TTree.h"
+#include "TLotus.h"
 
 //-----------------------------------
 // TMarkovField
 //-----------------------------------
 
-class TMarkovField {
+class TMarkovField : public stattools::prior::TBaseLikelihoodPrior<TypeMarkovField, NumDimMarkovField> {
+public:
+	// some type aliases, for better readability
+	using BoxType = TMarkovField;
+	using Base    = stattools::prior::TBaseLikelihoodPrior<TypeMarkovField, NumDimMarkovField>;
+	using typename Base::Storage;
+	using typename Base::UpdatedStorage;
+
 private:
 	// trees and Y
 	std::vector<TTree> _trees;
@@ -33,6 +41,8 @@ private:
 	static std::vector<TTree> _make_trees();
 
 	// functions for updating Y
+	void _update_all_Y();
+	void _update_all_Z();
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
 	                    const std::vector<size_t> &previous_ix, size_t K_cur_sheet);
 	void _fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space);
@@ -46,13 +56,19 @@ private:
 	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
+	void _simulateUnderPrior(Storage *) override;
+
 public:
 	TMarkovField(size_t n_iterations);
-	~TMarkovField() = default;
+	~TMarkovField() override = default;
+
+	[[nodiscard]] std::string name() const override;
+	void initialize() override;
 
 	// updates
-	void update_Y();
-	void update_Z();
+	void update_markov_field();
+
+	void guessInitialValues() override;
 };
 
 #endif // ACOL_TMARKOVFIELD_H

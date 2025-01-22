@@ -23,10 +23,18 @@
 #include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorPoisson.h"
 #include <memory>
+#include "TMarkovField.h"
 
 class TCore {
+private:
+	void (TMarkovField:: *_fun_update_mrf)();
+
 public:
-	void infer(){};
+	void infer(){
+		// define function that is called when updating
+		//_fun_update_mrf = &TMarkovField::update_markov_field;
+		//stattools::instances::dagBuilder().addFuncToUpdate(*_lotus, _funUpdateLotus);
+	};
 };
 
 //--------------------------------------

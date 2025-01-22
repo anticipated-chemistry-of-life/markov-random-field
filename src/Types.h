@@ -19,6 +19,10 @@ using TypeGamma = coretools::Positive;
 using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
+// Markov Field
+using TypeMarkovField                     = coretools::Boolean;
+constexpr static size_t NumDimMarkovField = 1; // note: only for stattools, actually not known at compile time
+
 // Observation: Lotus
 class TLotus; // forward declaration to avoid circular inclusion
 using TypeLotus                     = coretools::Boolean;

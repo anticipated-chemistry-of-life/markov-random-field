@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TCollapser.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "Types.h"
@@ -29,9 +30,8 @@ private:
 	TStorageYVector _L;
 	std::vector<std::vector<size_t>> _occurrence_counters;
 
-	std::vector<size_t> _dimensions_to_keep;
-	std::vector<size_t> _dimensions_to_collapse;
-	std::vector<size_t> _len_per_dimension_lotus;
+	// how to collapse
+	TCollapser _collapser;
 
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
@@ -39,11 +39,12 @@ private:
 	// temporary values
 	double _oldLL;
 	double _curLL;
+	TCurrentState _tmp_state_along_last_dim;
 
 	// private functions
-	double _calculate_probability_of_L_sm(bool x_sm, bool L_sm, size_t linear_index_in_L_space) const;
-	bool _x_is_one(const std::vector<size_t> &index_in_Lotus) const;
-	void _get_dimensions_to_collapse(const std::vector<std::string> &header);
+	double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
+	double _calculate_probability_of_L_given_x(bool x, bool L,
+	                                           const std::vector<size_t> &index_in_collapsed_space) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -57,17 +58,18 @@ public:
 
 	void load_from_file(const std::string &filename);
 
-	double calculate_research_effort(size_t linear_index_in_L_space) const;
 	double calculate_log_likelihood_of_L() const;
 
 	double getSumLogPriorDensity(const Storage &) const override;
 
-	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &);
+	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_in_leaves);
+	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool new_state, bool old_state,
+	                           std::array<coretools::TSumLogProbability, 2> &sum_log);
 
+	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &);
 	void updateTempVals(TypeParamGamma *, size_t Index, bool Accepted);
 
 	void guessInitialValues() override;
 
-	void set_x(bool state, size_t linear_index_in_L_space);
-	const TStorageYVector &get_Lotus() const { return _L_sm; }
+	const TStorageYVector &get_Lotus() const { return _L; }
 };
