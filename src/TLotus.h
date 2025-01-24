@@ -63,10 +63,10 @@ public:
 	double getSumLogPriorDensity(const Storage &) const override;
 
 	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K);
-	void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
-	                                   std::array<coretools::TSumLogProbability, 2> &sum_log);
+	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
+	                           std::array<coretools::TSumLogProbability, 2> &sum_log);
 
-	    [[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &);
+	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &);
 	void updateTempVals(TypeParamGamma *, size_t Index, bool Accepted);
 
 	void guessInitialValues() override;
