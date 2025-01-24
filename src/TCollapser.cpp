@@ -64,16 +64,62 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	return len_per_dimension;
 }
 
-bool TCollapser::_ix_is_one_no_collapse(bool state) { return state; }
+bool TCollapser::_x_is_one(size_t dim_along_which_clique_runs, const std::vector<size_t> &index_in_leaves,
+                           bool old_state) const {
+	// count the number of leaves with state = 1 in current clique (corresponds to old_state)
+	const auto c = _trees[dim_along_which_clique_runs].get_clique(index_in_leaves).get_counter_leaves_state_1();
 
-std::pair<bool, bool> TCollapser::x_is_one_new_old(std::vector<size_t> index_in_leaves, bool new_state,
-                                                   bool old_state) const {
-	if (!do_collapse()) { return {new_state, old_state}; }
+	// new_state is always zero once we get here
+	// 0 and 0 -> c does not change
+	if (!old_state) { return c > 0; }
 
-
+	// new_state is zero and old_state is one
+	// -> depends on the states of the other Y's in the clique
+	// -> if old_state was the only 1 in the clique -> new_state will not be one anymore
+	return ((int)c - 1) > 0;
 }
 
-bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool state) const {}
+bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool new_state, bool old_state) const {
+	// we return x_is_one for the new_state
+	if (!do_collapse()) { return new_state; }
+	if (new_state) { return true; }
+
+	// define dimension along which we take the cliques: always the last dimension to collapse
+	const size_t dim_along_which_clique_runs     = _dimensions_to_collapse.back();
+	index_in_leaves[dim_along_which_clique_runs] = 0;
+
+	if (_dimensions_to_collapse.size() == 1) {
+		// only need to consider a single clique
+		return _x_is_one(dim_along_which_clique_runs, index_in_leaves, old_state);
+	}
+
+	// define sub-space of dimensions to get the starting positions of all cliques to consider
+	// the last dimension to collapse is used as a clique -> no need to consider that one -> take size() - 1
+	std::vector<size_t> dimensions_clique_starts(_dimensions_to_collapse.size() - 1);
+	for (size_t i = 0; i < _dimensions_to_collapse.size() - 1; ++i) {
+		const size_t tree_index     = _dimensions_to_collapse[i];
+		dimensions_clique_starts[i] = _trees[tree_index].get_number_of_leaves();
+	}
+
+	const size_t num_loops = coretools::containerProduct(dimensions_clique_starts);
+	for (size_t i = 0; i < num_loops; ++i) { // loop over linear index of clique start
+		const auto ix = coretools::getSubscripts(i, dimensions_clique_starts);
+		// set clique starting index
+		for (size_t j = 0; j < _dimensions_to_collapse.size() - 1; ++j) {
+			const size_t tree_index     = _dimensions_to_collapse[j];
+			index_in_leaves[tree_index] = ix[j];
+		}
+		// if at least one clique has a one: x is one
+		if (_x_is_one(dim_along_which_clique_runs, index_in_leaves, old_state)) { return true; }
+	}
+
+	// we checked all the cliques -> never a one -> return false
+	return false;
+}
+
+bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool state) const {
+	return x_is_one(index_in_leaves, state, state);
+}
 
 std::vector<size_t> TCollapser::collapse(const std::vector<size_t> &index_in_full_space) const {
 	std::vector<size_t> index_in_collapsed_space(_dimensions_to_keep.size());

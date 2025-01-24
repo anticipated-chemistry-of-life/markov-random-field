@@ -73,7 +73,7 @@ double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_co
 	return prod;
 }
 
-double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); };
+double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); }
 
 void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
 	// collapse start_index_in_leaves (this is the index in Y)
@@ -84,14 +84,23 @@ void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_inde
 	}
 }
 
-void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool new_state, bool old_state,
+void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
                                    std::array<coretools::TSumLogProbability, 2> &sum_log) {
-	const bool x = _collapser.x_is_one(index_in_leaves_space, new_state, old_state);
+	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
+	// for state 1, we know that the new x will always be 1 (at least one is a one)
+	const auto x_is_one_for_Y_0 = _collapser.x_is_one(index_in_leaves_space, false, old_state);
+	if (x_is_one_for_Y_0) { // Y=0 also results in x=1 (others in clique are a one)
+		return;             // x is one for both states (due to collapsing) -> likelihood doesn't matter
+	}
 
 	const size_t leaf_index_last_dim    = index_in_leaves_space.back();
 	const auto index_in_collapsed_space = _collapser.collapse(index_in_leaves_space);
-	_calculate_probability_of_L_given_x(x, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
-	                                    index_in_collapsed_space);
+	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous if-statement)
+	// new Y = 1 -> x will always be true
+	for (size_t i = 0; i < 2; ++i) {
+		sum_log[i].add(_calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
+		                                                   index_in_collapsed_space));
+	}
 }
 
 double TLotus::calculate_log_likelihood_of_L() const {
