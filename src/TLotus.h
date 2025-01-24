@@ -45,6 +45,9 @@ private:
 	double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
 	double _calculate_probability_of_L_given_x(bool x, bool L,
 	                                           const std::vector<size_t> &index_in_collapsed_space) const;
+	double _calculate_probability_of_L_given_x(bool x, bool L, size_t linear_index_in_collapsed_space) const;
+	double _calculate_log_likelihood_of_L_no_collapsing(const TStorageYVector &Y) const;
+	double _calculate_log_likelihood_of_L_do_collapse() const;
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -58,7 +61,7 @@ public:
 
 	void load_from_file(const std::string &filename);
 
-	double calculate_log_likelihood_of_L() const;
+	double calculate_log_likelihood_of_L(const TStorageYVector &Y) const;
 
 	double getSumLogPriorDensity(const Storage &) const override;
 

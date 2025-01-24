@@ -117,8 +117,8 @@ bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool new_state, b
 	return false;
 }
 
-bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool state) const {
-	return x_is_one(index_in_leaves, state, state);
+bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves) const {
+	return x_is_one(index_in_leaves, false, false);
 }
 
 std::vector<size_t> TCollapser::collapse(const std::vector<size_t> &index_in_full_space) const {

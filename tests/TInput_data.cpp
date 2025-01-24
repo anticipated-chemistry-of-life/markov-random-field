@@ -14,6 +14,7 @@ TEST(Tinput, test_reading_links) {
 
 	std::vector<TTree> trees = {tree_1, tree_2};
 
+	// TODO: Madleina - fix this
 	TLotus links(trees);
 
 	links.load_from_file("../tests/test_data/links.tsv");

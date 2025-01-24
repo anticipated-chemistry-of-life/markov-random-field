@@ -29,7 +29,7 @@ public:
 
 	// getters
 	bool x_is_one(std::vector<size_t> index_in_leaves, bool new_state, bool old_state) const;
-	bool x_is_one(std::vector<size_t> index_in_leaves, bool state) const;
+	bool x_is_one(std::vector<size_t> index_in_leaves) const;
 
 	std::vector<size_t> collapse(const std::vector<size_t> &index_in_full_space) const;
 	std::vector<size_t> expand(const std::vector<size_t> &index_in_collapsed_space) const;

@@ -103,51 +103,72 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
 	}
 }
 
-double TLotus::calculate_log_likelihood_of_L() const {
-	size_t index_in_x = 0;
+double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYVector &Y) const {
+	// Y = L
+	size_t index_in_Y = 0;
 	size_t index_in_L = 0;
 
-	const auto length_x = _x_sm.size();
-	const auto length_L = _L_sm.size();
+	const auto length_Y = Y.size();
+	const auto length_L = _L.size();
 
 	coretools::TSumLogProbability sum_log;
 
-	for (size_t i = 0; i < std::max(length_x, length_L); ++i) {
+	for (size_t i = 0; i < std::max(length_Y, length_L); ++i) {
 
-		// if we reach the end of vector L but not the end of vector x, that means that all the other Ls are 0.
-		// But x can still be 1 or 0.
+		// if we reach the end of vector L but not the end of vector Y, that means that all the other Ls are 0.
+		// But Y can still be 1 or 0.
 		if (index_in_L == length_L) {
-			const auto index_in_L_space = _x_sm[index_in_x].get_linear_index_in_container_space());
-			sum_log.add(_calculate_probability_of_L_given_x(_x_sm[index_in_x].is_one(), false,
-			                                           index_in_L_space);
-			++index_in_x;
-		} else if (index_in_x == length_x) {
-			// if we reach the end of vector x but not the end of vector L, that means that all the other x are 0.
-			const auto index_in_L_space = _L_sm[index_in_L].get_linear_index_in_container_space());
-			sum_log.add(_calculate_probability_of_L_given_x(false, _L_sm[index_in_L].is_one(),
-			                                                index_in_L_space);
+			const auto index_in_L_space = Y[index_in_Y].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), false, index_in_L_space));
+			++index_in_Y;
+		} else if (index_in_Y == length_Y) {
+			// if we reach the end of vector Y but not the end of vector L, that means that all the other Y are 0.
+			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(false, _L[index_in_L].is_one(), index_in_L_space));
 			++index_in_L;
-		} else if (_x_sm[index_in_x].get_linear_index_in_container_space() ==
-		           _L_sm[index_in_L].get_linear_index_in_container_space()) {
-			const auto index_in_L_space = _L_sm[index_in_L].get_linear_index_in_container_space());
-			sum_log.add(_calculate_probability_of_L_given_x(_x_sm[index_in_x].is_one(), _L_sm[index_in_L].is_one(),
-			                                                index_in_L_space);
-			++index_in_x;
+		} else if (Y[index_in_Y].get_linear_index_in_container_space() ==
+		           _L[index_in_L].get_linear_index_in_container_space()) {
+			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
+			sum_log.add(
+			    _calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), _L[index_in_L].is_one(), index_in_L_space));
+			++index_in_Y;
 			++index_in_L;
-		} else if (_x_sm[index_in_x].get_linear_index_in_container_space() <
-		           _L_sm[index_in_L].get_linear_index_in_container_space()) {
-			const auto index_in_L_space = _x_sm[index_in_x].get_linear_index_in_container_space());
-			sum_log.add(_calculate_probability_of_L_given_x(_x_sm[index_in_x].is_one(), false,
-			                                               index_in_L_space);
-			++index_in_x;
+		} else if (Y[index_in_Y].get_linear_index_in_container_space() <
+		           _L[index_in_L].get_linear_index_in_container_space()) {
+			const auto index_in_L_space = Y[index_in_Y].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), false, index_in_L_space));
+			++index_in_Y;
 		} else {
-			const auto index_in_L_space = _L_sm[index_in_L].get_linear_index_in_container_space());
-			sum_log.add(_calculate_probability_of_L_given_x(false, _L_sm[index_in_L].is_one(),
-			                                                index_in_L_space);
+			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(false, _L[index_in_L].is_one(), index_in_L_space));
 			++index_in_L;
 		}
 	}
 	return sum_log.getSum();
+}
+
+double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
+	const auto length_L = _L.size();
+
+	coretools::TSumLogProbability sum_log;
+
+	size_t previous_index_in_L_space = 0;
+	for (size_t i = 0; i < length_L; ++i) { // loop over all 1's in L
+		const auto linear_index_in_L_space = _L[i].get_linear_index_in_container_space();
+		auto multi_dim_index_in_L_space    = _L.get_multi_dimensional_index(linear_index_in_L_space);
+		for (size_t j = previous_index_in_L_space; j <= linear_index_in_L_space; ++j) {
+			const bool L = (j == linear_index_in_L_space);
+			const bool x = _collapser.x_is_one(multi_dim_index_in_L_space);
+			sum_log.add(_calculate_probability_of_L_given_x(x, L, multi_dim_index_in_L_space));
+		}
+		previous_index_in_L_space = linear_index_in_L_space + 1;
+	}
+	return sum_log.getSum();
+}
+
+double TLotus::calculate_log_likelihood_of_L(const TStorageYVector &Y) const {
+	if (_collapser.do_collapse()) { return _calculate_log_likelihood_of_L_do_collapse(); }
+	return _calculate_log_likelihood_of_L_no_collapsing(Y);
 }
 
 double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
@@ -156,6 +177,11 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 	if (x && !L) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
 	if (!x && L) { return 0.0; }
 	return 1.0;
+}
+
+double TLotus::_calculate_probability_of_L_given_x(bool x, bool L, size_t linear_index_in_collapsed_space) const {
+	auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
+	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 }
 
 double TLotus::calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &) {
