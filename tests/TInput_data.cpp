@@ -15,8 +15,9 @@ struct ModelDummy {
 };
 
 TEST(Tinput, test_reading_links) {
-	TTree tree_1 = TTree(0, "../tests/test_data/loading_tree.tsv", "species");
-	TTree tree_2 = TTree(1, "../tests/test_data/molecules.tsv", "molecules");
+
+	TTree tree_1 = TTree(1, "../tests/test_data/molecules.tsv", "molecules");
+	TTree tree_2 = TTree(0, "../tests/test_data/loading_tree.tsv", "species");
 
 	std::vector<TTree> trees = {tree_1, tree_2};
 
@@ -33,5 +34,5 @@ TEST(Tinput, test_reading_links) {
 		vector.push_back(links.get_Lotus()[i].get_linear_index_in_container_space());
 	}
 
-	EXPECT_THAT(vector, ElementsAre(1, 4, 6, 10, 11, 14));
+	EXPECT_THAT(vector, ElementsAre(2, 6, 7, 9, 15, 16));
 }
