@@ -87,7 +87,9 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
                                    std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
 	// for state 1, we know that the new x will always be 1 (at least one is a one)
-	const auto x_is_one_for_Y_0 = _collapser.x_is_one(index_in_leaves_space, false, old_state);
+	bool x_is_one_for_Y_0 = false; // Y = 0 -> x = 0 if we don't collapse
+	if (_collapser.do_collapse()) { x_is_one_for_Y_0 = _collapser.x_is_one(index_in_leaves_space, old_state); }
+
 	if (x_is_one_for_Y_0) { // Y=0 also results in x=1 (others in clique are a one)
 		return;             // x is one for both states (due to collapsing) -> likelihood doesn't matter
 	}
