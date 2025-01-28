@@ -83,6 +83,7 @@ void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_inde
 	}
 }
 
+/// This function will be used when we update Y.
 void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
                                    std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
