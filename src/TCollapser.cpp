@@ -49,15 +49,14 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	}
 
 	// report to logfile
-	logfile().startIndent("Will keep the following dimensions for ", data_name, ": ", _dimensions_to_keep, ":");
-	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i].get_tree_name()); }
+	logfile().startIndent("Will keep the following dimensions for ", data_name, ":");
+	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i].get_tree_name(), " [", i, "]"); }
 	logfile().endIndent();
 	if (_dimensions_to_collapse.empty()) {
 		logfile().list("Will not collapse any dimensions for ", data_name, ".");
 	} else {
-		logfile().startIndent("Will collapse the following dimensions for ", data_name, ": ", _dimensions_to_collapse,
-		                      ":");
-		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i].get_tree_name()); }
+		logfile().startIndent("Will collapse the following dimensions for ", data_name, ":");
+		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i].get_tree_name(), " [", i, "]"); }
 		logfile().endIndent();
 	}
 

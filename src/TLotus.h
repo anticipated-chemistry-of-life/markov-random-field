@@ -30,6 +30,9 @@ private:
 	TStorageYVector _L;
 	std::vector<std::vector<size_t>> _occurrence_counters;
 
+	// access to Y
+	const TStorageYVector &_Y;
+
 	// how to collapse
 	TCollapser _collapser;
 
@@ -46,14 +49,13 @@ private:
 	double _calculate_probability_of_L_given_x(bool x, bool L,
 	                                           const std::vector<size_t> &index_in_collapsed_space) const;
 	double _calculate_probability_of_L_given_x(bool x, bool L, size_t linear_index_in_collapsed_space) const;
-	double _calculate_log_likelihood_of_L_no_collapsing(const TStorageYVector &Y) const;
+	double _calculate_log_likelihood_of_L_no_collapsing() const;
 	double _calculate_log_likelihood_of_L_do_collapse() const;
 
 	void _simulateUnderPrior(Storage *) override;
 
 public:
-	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma);
-	TLotus(const std::vector<TTree> &trees);
+	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y);
 	~TLotus() override = default;
 
 	[[nodiscard]] std::string name() const override;
@@ -61,7 +63,7 @@ public:
 
 	void load_from_file(const std::string &filename);
 
-	double calculate_log_likelihood_of_L(const TStorageYVector &Y) const;
+	double calculate_log_likelihood_of_L() const;
 
 	double getSumLogPriorDensity(const Storage &) const override;
 

@@ -9,15 +9,13 @@
 #include <cstddef>
 #include <vector>
 
-TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma)
-    : _trees(trees), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(trees.back(), 1) {
+TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y)
+    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(trees.back(), 1) {
 	this->addPriorParameter(_gamma);
 
 	_oldLL = 0.0;
 	_curLL = 0.0;
 }
-
-TLotus::TLotus(const std::vector<TTree> &trees) : TLotus(trees, nullptr) {}
 
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
@@ -27,7 +25,7 @@ void TLotus::initialize() {
 }
 
 void TLotus::load_from_file(const std::string &filename) {
-	coretools::instances::logfile().listFlush("Reading links from file '", filename, "' ...");
+	coretools::instances::logfile().startIndent("Reading links from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 
 	// initialize collapser: know which dimensions to keep and which to collapse
@@ -61,6 +59,7 @@ void TLotus::load_from_file(const std::string &filename) {
 		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_collapsed_space);
 		_L.insert_one(linear_index_in_Y_space);
 	}
+	coretools::instances::logfile().endIndent();
 }
 
 double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
@@ -73,7 +72,7 @@ double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_co
 	return prod;
 }
 
-double TLotus::getSumLogPriorDensity(const Storage &) const { return calculate_log_likelihood_of_L(); }
+double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; }
 
 void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
 	// collapse start_index_in_leaves (this is the index in Y)
@@ -103,12 +102,12 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
 	}
 }
 
-double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYVector &Y) const {
+double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
 	// Y = L
 	size_t index_in_Y = 0;
 	size_t index_in_L = 0;
 
-	const auto length_Y = Y.size();
+	const auto length_Y = _Y.size();
 	const auto length_L = _L.size();
 
 	coretools::TSumLogProbability sum_log;
@@ -118,25 +117,25 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYVecto
 		// if we reach the end of vector L but not the end of vector Y, that means that all the other Ls are 0.
 		// But Y can still be 1 or 0.
 		if (index_in_L == length_L) {
-			const auto index_in_L_space = Y[index_in_Y].get_linear_index_in_container_space();
-			sum_log.add(_calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), false, index_in_L_space));
+			const auto index_in_L_space = _Y[index_in_Y].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(_Y[index_in_Y].is_one(), false, index_in_L_space));
 			++index_in_Y;
 		} else if (index_in_Y == length_Y) {
 			// if we reach the end of vector Y but not the end of vector L, that means that all the other Y are 0.
 			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
 			sum_log.add(_calculate_probability_of_L_given_x(false, _L[index_in_L].is_one(), index_in_L_space));
 			++index_in_L;
-		} else if (Y[index_in_Y].get_linear_index_in_container_space() ==
+		} else if (_Y[index_in_Y].get_linear_index_in_container_space() ==
 		           _L[index_in_L].get_linear_index_in_container_space()) {
 			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
-			sum_log.add(
-			    _calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), _L[index_in_L].is_one(), index_in_L_space));
+			sum_log.add(_calculate_probability_of_L_given_x(_Y[index_in_Y].is_one(), _L[index_in_L].is_one(),
+			                                                index_in_L_space));
 			++index_in_Y;
 			++index_in_L;
-		} else if (Y[index_in_Y].get_linear_index_in_container_space() <
+		} else if (_Y[index_in_Y].get_linear_index_in_container_space() <
 		           _L[index_in_L].get_linear_index_in_container_space()) {
-			const auto index_in_L_space = Y[index_in_Y].get_linear_index_in_container_space();
-			sum_log.add(_calculate_probability_of_L_given_x(Y[index_in_Y].is_one(), false, index_in_L_space));
+			const auto index_in_L_space = _Y[index_in_Y].get_linear_index_in_container_space();
+			sum_log.add(_calculate_probability_of_L_given_x(_Y[index_in_Y].is_one(), false, index_in_L_space));
 			++index_in_Y;
 		} else {
 			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
@@ -166,9 +165,9 @@ double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
 	return sum_log.getSum();
 }
 
-double TLotus::calculate_log_likelihood_of_L(const TStorageYVector &Y) const {
+double TLotus::calculate_log_likelihood_of_L() const {
 	if (_collapser.do_collapse()) { return _calculate_log_likelihood_of_L_do_collapse(); }
-	return _calculate_log_likelihood_of_L_no_collapsing(Y);
+	return _calculate_log_likelihood_of_L_no_collapsing();
 }
 
 double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,

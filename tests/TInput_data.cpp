@@ -5,8 +5,14 @@
 
 #include "TLotus.h"
 #include "TTree.h"
+#include "Types.h"
 #include "stattools/ParametersObservations/TParameter.h"
 using namespace testing;
+
+struct ModelDummy {
+	PriorOnGamma prior_on_gamma{};
+	stattools::TParameter<SpecGamma, TLotus> gamma{&prior_on_gamma};
+};
 
 TEST(Tinput, test_reading_links) {
 	TTree tree_1 = TTree(0, "../tests/test_data/loading_tree.tsv", "species");
@@ -14,8 +20,9 @@ TEST(Tinput, test_reading_links) {
 
 	std::vector<TTree> trees = {tree_1, tree_2};
 
-	// TODO: Madleina - fix this
-	TLotus links(trees);
+	TStorageYVector Y;
+	ModelDummy model;
+	TLotus links(trees, &model.gamma, Y);
 
 	links.load_from_file("../tests/test_data/links.tsv");
 
