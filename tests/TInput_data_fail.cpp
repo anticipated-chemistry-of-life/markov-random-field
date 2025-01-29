@@ -18,11 +18,27 @@ TEST(Tinput, test_reading_links_should_fail) {
 
 	std::vector<TTree> trees;
 	trees.emplace_back(0, "../tests/test_data/loading_tree.tsv", "species");
-	trees.emplace_back(1, "../tests/test_data/molecules.tsv", "molecules");
+	trees.emplace_back(1, "../tests/test_data/loading_tree.tsv", "tissues");
+	trees.emplace_back(2, "../tests/test_data/molecules.tsv", "molecules");
 
 	TStorageYVector Y;
 	ModelDummy model;
 	TLotus links(trees, &model.gamma, Y);
 
 	EXPECT_ANY_THROW(links.load_from_file("../tests/test_data/links.tsv"));
+	stattools::instances::dagBuilder().clear();
+}
+TEST(Tinput, test_reading_links_should_pass) {
+
+	std::vector<TTree> trees;
+	trees.emplace_back(0, "../tests/test_data/molecules.tsv", "molecules");
+	trees.emplace_back(1, "../tests/test_data/loading_tree.tsv", "tissues");
+	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
+
+	TStorageYVector Y;
+	ModelDummy model;
+	TLotus links(trees, &model.gamma, Y);
+
+	links.load_from_file("../tests/test_data/links.tsv");
+	stattools::instances::dagBuilder().clear();
 }
