@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <deque>
 #include <vector>
 
 TLotus::TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y)
@@ -30,6 +31,29 @@ void TLotus::load_from_file(const std::string &filename) {
 
 	// initialize collapser: know which dimensions to keep and which to collapse
 	// TODO: ensure somewhere that the order matches (at least if we don't collapse)
+	std::vector<std::string> tree_names(_trees.size());
+	for (const auto &tree : _trees) { tree_names.push_back(tree.get_tree_name()); }
+
+	// check if all headers in file match a tree name
+	for (const auto &header_name : file.header()) {
+		if (std::find(tree_names.begin(), tree_names.end(), header_name) == tree_names.end()) {
+			UERROR("Header '", header_name, "' in file '", filename, "' does not match any tree name!");
+		}
+	}
+
+	// since lotus can also contain less dimensions than the trees, we need to check if the order of the headers
+	// matches the order of the trees. To do so we can do a dequing of the tree names and the headers and check if
+	// the headers are a subset of the tree names.
+	std::deque<std::string> header_names_deque(file.header().size());
+	for (const auto &header_name : file.header()) { header_names_deque.push_back(header_name); }
+	for (const auto &tree_name : tree_names) {
+		if (header_names_deque.empty()) { break; }
+		if (header_names_deque.front() == tree_name) { header_names_deque.pop_front(); }
+	}
+	if (!header_names_deque.empty()) {
+		UERROR("Headers in file '", filename, "' should be ordered in the same way as the trees.");
+	}
+
 	const auto len_per_dimension_lotus = _collapser.initialize(file.header(), "LOTUS");
 
 	// initialize the size of L
