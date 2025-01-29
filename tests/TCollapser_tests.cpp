@@ -1,5 +1,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -105,6 +106,41 @@ TEST(Collapser, old_state) {
 
 	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), false);
 	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), true);
+}
+
+TEST(Collapser, collpase_2_dims_and_counter_to_1) {
+	std::vector<TTree> trees;
+
+	trees.emplace_back(0, "../tests/test_data/molecules.tsv", "molecules");
+	trees.emplace_back(1, "../tests/test_data/loading_tree.tsv", "tissues");
+	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
+
+	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
+	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(1);
+
+	TCollapser collapser(trees);
+	std::vector<std::string> dimension_names_to_keep = {"species"};
+	collapser.initialize(dimension_names_to_keep, "lotus");
+
+	EXPECT_EQ(collapser.x_is_one({0, 1, 0}), true);
+	EXPECT_EQ(collapser.x_is_one({0, 2, 0}), true);
+}
+
+TEST(Collapser, collpase_2_dims_and_counter_to_0) {
+	std::vector<TTree> trees;
+
+	trees.emplace_back(0, "../tests/test_data/molecules.tsv", "molecules");
+	trees.emplace_back(1, "../tests/test_data/loading_tree.tsv", "tissues");
+	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
+
+	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
+	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(0);
+
+	TCollapser collapser(trees);
+	std::vector<std::string> dimension_names_to_keep = {"species"};
+	collapser.initialize(dimension_names_to_keep, "lotus");
+
+	EXPECT_EQ(collapser.x_is_one({0, 1, 0}), false);
 }
 
 TEST(Collapser, old_state_is_0) {
