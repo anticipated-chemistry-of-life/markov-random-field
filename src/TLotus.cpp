@@ -34,6 +34,13 @@ void TLotus::load_from_file(const std::string &filename) {
 	std::vector<std::string> tree_names(_trees.size());
 	for (const auto &tree : _trees) { tree_names.push_back(tree.get_tree_name()); }
 
+	// check if all headers in file match a tree name
+	for (const auto &header_name : file.header()) {
+		if (std::find(tree_names.begin(), tree_names.end(), header_name) == tree_names.end()) {
+			UERROR("Header '", header_name, "' in file '", filename, "' does not match any tree name!");
+		}
+	}
+
 	// since lotus can also contain less dimensions than the trees, we need to check if the order of the headers
 	// matches the order of the trees. To do so we can do a dequing of the tree names and the headers and check if
 	// the headers are a subset of the tree names.
