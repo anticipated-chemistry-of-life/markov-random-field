@@ -48,19 +48,20 @@ TEST(Collapser, counter) {
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
 
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(2);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(2);
 
-	TClique *clique = &trees[1].get_clique({0, 0, 0});
-	ASSERT_EQ(clique->get_counter_leaves_state_1(), 2);
+	TClique *clique = &trees[1].get_clique({1, 0, 2});
+	EXPECT_EQ(clique->get_counter_leaves_state_1(), 2);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"molecules", "species"};
 
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 0, 0}), true);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}), true);
-	EXPECT_EQ(collapser.x_is_one({0, 0, 1}), false);
+	EXPECT_EQ(collapser.x_is_one({1, 0, 2}), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}), true);
+	EXPECT_EQ(collapser.x_is_one({1, 0, 3}), false);
+	EXPECT_EQ(collapser.x_is_one({1, 0, 3}), false);
 }
 
 TEST(Collapser, check_if_other_dims_are_not_collapsed) {
@@ -74,7 +75,7 @@ TEST(Collapser, check_if_other_dims_are_not_collapsed) {
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
 
-	trees[0].get_clique({0, 0, 0}).update_counter_leaves_state_1(2);
+	trees[0].get_clique({1, 0, 2}).update_counter_leaves_state_1(2);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"molecules", "species"};
@@ -98,14 +99,14 @@ TEST(Collapser, old_state) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(1);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(1);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"molecules", "species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), false);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, true), false);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, false), true);
 }
 
 TEST(Collapser, collpase_2_dims_and_counter_to_1) {
@@ -116,14 +117,14 @@ TEST(Collapser, collpase_2_dims_and_counter_to_1) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(1);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(1);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}), true);
-	EXPECT_EQ(collapser.x_is_one({0, 2, 0}), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}), true);
+	EXPECT_EQ(collapser.x_is_one({1, 2, 2}), true);
 }
 
 TEST(Collapser, collpase_2_dims_and_counter_to_0) {
@@ -134,13 +135,13 @@ TEST(Collapser, collpase_2_dims_and_counter_to_0) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(0);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(0);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}), false);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}), false);
 }
 
 TEST(Collapser, old_state_is_0) {
@@ -151,14 +152,14 @@ TEST(Collapser, old_state_is_0) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(0);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(0);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"molecules", "species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), false);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), false);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, true), false);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, false), false);
 }
 
 TEST(Collapser, old_state_is_bigger_than_1) {
@@ -169,14 +170,14 @@ TEST(Collapser, old_state_is_bigger_than_1) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(10);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(10);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"molecules", "species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), true);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, true), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, false), true);
 }
 
 TEST(Collapser, collpase_2_dims) {
@@ -187,14 +188,14 @@ TEST(Collapser, collpase_2_dims) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(10);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(10);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), true);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, true), true);
+	EXPECT_EQ(collapser.x_is_one({1, 1, 2}, false), true);
 }
 
 TEST(Collapser, collpase_2_dims_and_check_old_state_is_1) {
@@ -205,12 +206,12 @@ TEST(Collapser, collpase_2_dims_and_check_old_state_is_1) {
 	trees.emplace_back(2, "../tests/test_data/loading_tree.tsv", "species");
 
 	for (auto &tree : trees) { tree.initialize_cliques_and_Z(trees); }
-	trees[1].get_clique({0, 0, 0}).update_counter_leaves_state_1(1);
+	trees[1].get_clique({1, 0, 2}).update_counter_leaves_state_1(1);
 
 	TCollapser collapser(trees);
 	std::vector<std::string> dimension_names_to_keep = {"species"};
 	collapser.initialize(dimension_names_to_keep, "lotus");
 
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, true), false);
-	EXPECT_EQ(collapser.x_is_one({0, 1, 0}, false), true);
+	EXPECT_EQ(collapser.x_is_one({1, 0, 2}, true), false);
+	EXPECT_EQ(collapser.x_is_one({1, 4, 2}, false), true);
 }
