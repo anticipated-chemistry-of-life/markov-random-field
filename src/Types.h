@@ -24,11 +24,11 @@ using TypeMarkovField                     = coretools::Boolean;
 constexpr static size_t NumDimMarkovField = 1; // note: only for stattools, actually not known at compile time
 
 // Observation: Lotus
-class TLotus; // forward declaration to avoid circular inclusion
+template<bool SimpleErrorModel> class TLotus; // forward declaration to avoid circular inclusion
 using TypeLotus                     = coretools::Boolean;
 constexpr static size_t NumDimLotus = 2;
 using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
-using SpecLotus                     = stattools::TObservation<TypeLotus, stattools::name("lotus"), NumDimLotus, TLotus>;
+using SpecLotus = stattools::TObservation<TypeLotus, stattools::name("lotus"), NumDimLotus, TLotus<false>>;
 
 /**
  * Type for the number of bins for the branches.

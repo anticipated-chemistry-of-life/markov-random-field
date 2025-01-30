@@ -11,7 +11,7 @@ using namespace testing;
 
 struct ModelDummy {
 	PriorOnGamma prior_on_gamma{};
-	stattools::TParameter<SpecGamma, TLotus> gamma{&prior_on_gamma};
+	stattools::TParameter<SpecGamma, TLotus<false>> gamma{&prior_on_gamma};
 };
 
 TEST(Tinput, test_reading_links_should_fail) {
