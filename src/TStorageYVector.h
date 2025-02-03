@@ -133,6 +133,16 @@ public:
 		return coretools::getSubscripts(tmp, _dimensions_Y_space);
 	}
 
+	/// Returns the product of the dimensions in the container. This is the
+	/// maximum number of ones that can be stored in the vector given
+	/// the dimensions of the container. For example, if the container
+	/// has dimension sizes [2, 3, 4], the maximum number of ones that can be
+	/// stored in the vector is 24.
+	[[nodiscard]]
+	size_t total_size_of_container_space() const {
+		return coretools::containerProduct(_dimensions_Y_space);
+	}
+
 	/// @brief Binary search to find the coordinate in the vector
 	[[nodiscard]] std::pair<bool, size_t> binary_search(uint64_t coordinate) const {
 

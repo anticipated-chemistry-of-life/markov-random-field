@@ -23,7 +23,7 @@ TEST(Tinput, test_reading_links_should_fail) {
 
 	TStorageYVector Y;
 	ModelDummy model;
-	TLotus links(trees, &model.gamma, Y);
+	TLotus links(trees, &model.gamma, Y, "simulations");
 
 	EXPECT_ANY_THROW(links.load_from_file("../tests/test_data/links.tsv"));
 	stattools::instances::dagBuilder().clear();
@@ -37,7 +37,7 @@ TEST(Tinput, test_reading_links_should_pass) {
 
 	TStorageYVector Y;
 	ModelDummy model;
-	TLotus links(trees, &model.gamma, Y);
+	TLotus links(trees, &model.gamma, Y, "tests");
 
 	links.load_from_file("../tests/test_data/links.tsv");
 	stattools::instances::dagBuilder().clear();

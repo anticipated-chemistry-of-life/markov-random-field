@@ -4,6 +4,7 @@
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "Types.h"
+#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Types/probability.h"
@@ -48,6 +49,9 @@ private:
 	double _curLL;
 	TCurrentState _tmp_state_along_last_dim;
 
+	// output file
+	std::string _prefix;
+
 	// private functions
 	double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
 		double prod = 1.0;
@@ -78,7 +82,10 @@ private:
 		return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 	};
 
+	/// Note that this function does not go through the whole vector L, but only through the 1's in L or Y. This is
+	/// justified because if L and Y are both 0, the probability is 1 and that does not matter.
 	double _calculate_log_likelihood_of_L_no_collapsing() const {
+
 		// Y = L
 		size_t index_in_Y = 0;
 		size_t index_in_L = 0;
@@ -142,16 +149,57 @@ private:
 	};
 
 	void _simulateUnderPrior(Storage *) override {
-		// In this function we assume that X has already some values. So all Y and Z are simulated, the cliques are
-		// filled etc. We only need to simulate L.
-		coretools::Probability p(0.5);
-		coretools::instances::randomGenerator().pickOneOfTwo(p);
-		// then if L is 1, we write it to a file. This file can then we
+		std::vector<std::vector<std::string>> node_names;
+		bool x;
+		for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
+			auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
+			if (_collapser.do_collapse()) {
+				x = _collapser.x_is_one(multi_dim_index_in_L_space);
+			} else {
+				// When we don't collapse, this means that the dimensions of Y are equal to the dimensions of Lotus.
+				// Since we do simulations, speed in not that important. We could simply run a binary search for each
+				// i in Y.
+				auto result = _Y.binary_search(i);
+				if (result.first) {
+					x = _Y.is_one(result.second);
+				} else {
+					x = false;
+				}
+			}
+			double proba = _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
+			coretools::Probability p(proba);
+			bool draw = coretools::instances::randomGenerator().pickOneOfTwo(p);
+			if (draw) {
+				// for each draw we need to get the node name of the leaf in the correct tree and write it a file
+				std::vector<std::string> line(_collapser.num_dim_to_keep());
+				for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
+					const size_t tree_index         = _collapser.dim_to_keep(j);
+					const size_t leaf_index         = multi_dim_index_in_L_space[j];
+					const size_t node_index_in_tree = _trees[tree_index].get_node_index_from_leaf_index(leaf_index);
+					line[j]                         = _trees[tree_index].get_node_id(node_index_in_tree);
+				}
+				node_names.push_back(line);
+			}
+		}
+
+		// write to file
+		std::string file_name = _prefix + "_lotus.tsv";
+
+		// we get the tree name for the header of the file.
+		std::vector<std::string> header(_collapser.num_dim_to_keep());
+		for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
+			const size_t tree_index = _collapser.dim_to_keep(j);
+			header[j]               = _trees[tree_index].get_tree_name();
+		}
+
+		coretools::TOutputFile file(file_name, header, "\t");
+		for (const auto &line : node_names) { file.writeln(line); }
 	};
 
 public:
-	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y)
-	    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(trees.back(), 1) {
+	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y, const std::string &prefix)
+	    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(trees.back(), 1),
+	      _prefix(prefix) {
 		this->addPriorParameter(_gamma);
 
 		_oldLL = 0.0;
@@ -175,7 +223,6 @@ public:
 		coretools::TInputFile file(filename, coretools::FileType::Header);
 
 		// initialize collapser: know which dimensions to keep and which to collapse
-		// TODO: ensure somewhere that the order matches (at least if we don't collapse)
 		std::vector<std::string> tree_names(_trees.size());
 		for (const auto &tree : _trees) { tree_names.push_back(tree.get_tree_name()); }
 

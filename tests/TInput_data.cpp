@@ -22,7 +22,7 @@ TEST(Tinput, test_reading_links) {
 
 	TStorageYVector Y;
 	ModelDummy model;
-	TLotus links(trees, &model.gamma, Y);
+	TLotus links(trees, &model.gamma, Y, "simulations");
 
 	links.load_from_file("../tests/test_data/links.tsv");
 
