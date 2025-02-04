@@ -174,6 +174,7 @@ public:
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
 	const TClique &get_clique(std::vector<size_t> index_in_leaves_space) const;
+	TClique &get_clique(std::vector<size_t> index_in_leaves_space);
 	const TStorageZVector &get_Z() const;
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }

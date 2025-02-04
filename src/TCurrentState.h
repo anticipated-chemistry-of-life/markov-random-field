@@ -46,10 +46,12 @@ public:
 	bool get_Y(size_t ix) const;
 	bool get_Z(size_t ix) const;
 	void set(size_t index_in_tree, bool value);
+	void set_Y(size_t index_in_leaves, bool value);
 
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
-
 	bool exists_in_TStorageVector(size_t index_in_tree) const;
+
+	std::tuple<bool, size_t, size_t> get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -78,6 +80,10 @@ public:
 	void fill(std::vector<size_t> start_index_in_leaves_space, size_t K, const TStorageYVector &Y);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
+	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
+
+	std::tuple<bool, size_t, size_t> get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
+	                                                                    size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H

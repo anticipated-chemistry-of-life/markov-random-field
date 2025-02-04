@@ -5,16 +5,24 @@
 
 #include "TLotus.h"
 #include "TTree.h"
+#include "Types.h"
 #include "stattools/ParametersObservations/TParameter.h"
 using namespace testing;
 
+struct ModelDummy {
+	PriorOnGamma prior_on_gamma{};
+	stattools::TParameter<SpecGamma, TLotus<false>> gamma{&prior_on_gamma};
+};
+
 TEST(Tinput, test_reading_links) {
-	TTree tree_1 = TTree(0, "../tests/test_data/loading_tree.tsv", "species");
-	TTree tree_2 = TTree(1, "../tests/test_data/molecules.tsv", "molecules");
 
-	std::vector<TTree> trees = {tree_1, tree_2};
+	std::vector<TTree> trees;
+	trees.emplace_back(1, "../tests/test_data/molecules.tsv", "molecules");
+	trees.emplace_back(0, "../tests/test_data/loading_tree.tsv", "species");
 
-	TLotus links(trees);
+	TStorageYVector Y;
+	ModelDummy model;
+	TLotus links(trees, &model.gamma, Y, "simulations");
 
 	links.load_from_file("../tests/test_data/links.tsv");
 
@@ -25,5 +33,6 @@ TEST(Tinput, test_reading_links) {
 		vector.push_back(links.get_Lotus()[i].get_linear_index_in_container_space());
 	}
 
-	EXPECT_THAT(vector, ElementsAre(1, 4, 6, 10, 11, 14));
+	EXPECT_THAT(vector, ElementsAre(2, 6, 7, 9, 15, 16));
+	stattools::instances::dagBuilder().clear();
 }

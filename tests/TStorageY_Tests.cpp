@@ -1,5 +1,6 @@
 #include "TStorageY.h"
 #include "gtest/gtest.h"
+#include <cmath>
 
 TEST(YStorage_Tests, flip_state) {
 	TStorageY y;

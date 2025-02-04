@@ -13,7 +13,6 @@
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
-#include "smart_binary_search.h"
 #include <armadillo>
 #include <cstddef>
 #include <tuple>
@@ -158,13 +157,19 @@ public:
  */
 class TClique {
 private:
+	// transition matrix and parameters
 	TMatrices _matrices;
 	double _mu_c_1;
 	double _mu_c_0;
+
+	// info about size and dimensionality of clique
 	std::vector<size_t> _start_index_in_leaves_space;
 	size_t _variable_dimension;
 	size_t _n_nodes;
 	size_t _increment;
+
+	// count the number of leaves with value 1 in a clique
+	TypeCounter1 _counter_leaves_state_1 = 0;
 
 	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
 	                           bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
@@ -211,8 +216,6 @@ public:
 	}
 
 	/// @brief Set the rate parameters for the clique.
-	/// @param mu_c_1
-	/// @param mu_c_0
 	void set_lambda() { _matrices.set_lambda(_mu_c_1, _mu_c_0); }
 
 	/// @brief Returns the matrices for the clique.
@@ -238,6 +241,10 @@ public:
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
 		}
 	}
+
+	void update_counter_leaves_state_1(bool new_state, bool old_state);
+	void update_counter_leaves_state_1(int difference);
+	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);

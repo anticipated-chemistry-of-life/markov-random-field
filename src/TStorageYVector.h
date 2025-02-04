@@ -25,7 +25,7 @@ public:
 	using const_iterator = typename std::vector<TStorageY>::const_iterator;
 	TStorageYVector()    = default;
 	~TStorageYVector()   = default;
-	explicit TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
+	TStorageYVector(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
 		initialize(n_iterations, dimensions_Y_space);
 	};
 
@@ -76,7 +76,6 @@ public:
 	}
 
 	/// Does the same as set_to_one but sets the element to zero
-	/// @param coordinate the position of the element in the Y vector
 	void insert_zero(uint64_t linear_index_in_Y_space) {
 		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (found) {
@@ -134,6 +133,16 @@ public:
 		return coretools::getSubscripts(tmp, _dimensions_Y_space);
 	}
 
+	/// Returns the product of the dimensions in the container. This is the
+	/// maximum number of ones that can be stored in the vector given
+	/// the dimensions of the container. For example, if the container
+	/// has dimension sizes [2, 3, 4], the maximum number of ones that can be
+	/// stored in the vector is 24.
+	[[nodiscard]]
+	size_t total_size_of_container_space() const {
+		return coretools::containerProduct(_dimensions_Y_space);
+	}
+
 	/// @brief Binary search to find the coordinate in the vector
 	[[nodiscard]] std::pair<bool, size_t> binary_search(uint64_t coordinate) const {
 
@@ -157,6 +166,19 @@ public:
 
 	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return binary_search(get_linear_index_in_Y_space(multidim_index_in_Y_space));
+	}
+
+	void insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
+		auto size_to_insert =
+		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
+		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
+
+		this->_vec.reserve(this->_vec.size() + size_to_insert);
+
+		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
+			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
+		}
+		std::sort(_vec.begin(), _vec.end());
 	}
 };
 
