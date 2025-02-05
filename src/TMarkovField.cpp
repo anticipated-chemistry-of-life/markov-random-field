@@ -276,16 +276,28 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 					size_t index_in_Z = current_state.get_index_in_TStorageVector(index_in_tree);
 					z.insert_one(index_in_Z);
 				}
-				for (auto child : tree.get_node(index_in_tree).children_indices_in_tree()) { node_queue.push(child); };
+				for (auto child : tree.get_node(index_in_tree).children_indices_in_tree()) {
+					if (!tree.get_node(child).isLeaf()) { node_queue.push(child); }
+				}; // those are the first children of the tree (children of the roots).
 			} // roots done, we go to the internal nodes
 
-			// sampling the roots
+			// sampling the internal nodes
 			while (!node_queue.empty()) {
 				size_t node_index = node_queue.front();
 				node_queue.pop();
 				const auto &node = tree.get_node(node_index);
 
+				// we want to sample the state of the node given its parent.
+				std::array<coretools::TSumLogProbability, 2> sum_log;
+				clique.calculate_log_prob_parent_to_node(node_index, tree, 0, current_state, sum_log);
+				bool internal_node_state = sample(sum_log);
+				size_t index_in_Z        = current_state.get_index_in_TStorageVector(node_index);
+				if (internal_node_state) { z.insert_one(index_in_Z); }
+
 				// TODO: Implement the rest
+				for (size_t child_index : node.children_indices_in_tree()) {
+					if (!tree.get_node(child_index).isLeaf()) { node_queue.push(child_index); }
+				}
 			}
 		}
 	}
