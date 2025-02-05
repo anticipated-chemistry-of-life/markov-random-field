@@ -288,7 +288,7 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 				const auto &node = tree.get_node(node_index);
 
 				// we want to sample the state of the node given its parent (and independently of its children since we
-				// haven't sampled them yet.).
+				// haven't sampled them yet).
 				std::array<coretools::TSumLogProbability, 2> sum_log;
 				clique.calculate_log_prob_parent_to_node(node_index, tree, 0, current_state, sum_log);
 				bool internal_node_state = sample(sum_log);
