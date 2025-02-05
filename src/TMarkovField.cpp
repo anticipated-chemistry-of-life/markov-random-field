@@ -284,6 +284,8 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 				size_t node_index = node_queue.front();
 				node_queue.pop();
 				const auto &node = tree.get_node(node_index);
+
+				// TODO: Implement the rest
 			}
 		}
 	}
