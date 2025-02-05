@@ -12,7 +12,6 @@ TEST(TCliqueTest, get_z) {
 	TTree tree_2(1, "../tests/test_data/loading_tree.tsv", "species_2");
 
 	// Set up the TStorageYVector and TStorageZVector
-	std::vector<size_t> dimensions = {11, 11};
 	TStorageYVector Y(1000, {6, 6});
 	TStorageZVector Z({5, 5});
 

@@ -245,7 +245,48 @@ void TMarkovField::update_markov_field() {
 }
 
 void TMarkovField::_simulateUnderPrior(Storage *) {
-	// TODO: What to do here?
+	// For simulation we always draw from the the prior. (top-down)
+	// 1. Draw branch len -> draw mus
+	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes based on the state of
+	// the parent. At the end also draw the state of the leaves. For each tree we know which leaves and which internal
+	// node are 0 or 1.
+	// 2. draw Z since its unique per tree
+	// 3. Draw Y (this function)
+	// 4. Draw Lotus.
+	// 5. From that simulated Lotus can we go back and infer the prior params
+	for (auto &tree : _trees) {
+		tree.initialize_cliques_and_Z(_trees);
+		auto &z = tree.get_Z();
+		for (auto &clique : tree.get_cliques()) {
+			clique.simulate_mus();
+			clique.set_lambda();
+			clique.initialize(tree.get_a(), tree.get_delta(), tree.get_number_of_bins());
+			TCurrentState current_state(tree, clique.get_increment());
+			current_state.fill(clique.get_start_index_in_leaf_space(), _Y, z);
+
+			// we sample the roots
+			double proba_root = clique.get_stationary_probability(true);
+			coretools::Probability p(proba_root);
+
+			// we can also prepare the queue for the DFS
+			std::queue<size_t> node_queue;
+			for (const auto index_in_tree : tree.get_root_nodes()) {
+				bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
+				if (root_state) {
+					size_t index_in_Z = current_state.get_index_in_TStorageVector(index_in_tree);
+					z.insert_one(index_in_Z);
+				}
+				for (auto child : tree.get_node(index_in_tree).children_indices_in_tree()) { node_queue.push(child); };
+			} // roots done, we go to the internal nodes
+
+			// sampling the roots
+			while (!node_queue.empty()) {
+				size_t node_index = node_queue.front();
+				node_queue.pop();
+				const auto &node = tree.get_node(node_index);
+			}
+		}
+	}
 }
 
 void TMarkovField::guessInitialValues() {

@@ -149,6 +149,18 @@ private:
 	};
 
 	void _simulateUnderPrior(Storage *) override {
+		// by default we keep all the trees
+		std::vector<std::string> tree_names_to_keep_default;
+		for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree.get_tree_name()); }
+
+		// else get the tree names to keep from CLI
+		std::vector<std::string> tree_names_to_keep =
+		    coretools::instances::parameters().get("tree_names_to_keep", tree_names_to_keep_default);
+
+		const auto len_per_dimension_lotus = _collapser.initialize(tree_names_to_keep, "LOTUS");
+		// initialize the size of L
+		_L.initialize(0, len_per_dimension_lotus);
+
 		std::vector<std::vector<std::string>> node_names;
 		bool x;
 		for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {

@@ -15,7 +15,9 @@
 #include "coretools/devtools.h"
 #include <armadillo>
 #include <cstddef>
+#include <thread>
 #include <tuple>
+#include <unistd.h>
 #include <vector>
 
 class TTree;
@@ -210,6 +212,22 @@ public:
 		_mu_c_0 = mu_c_0;
 	}
 
+	void simulate_mus() {
+		std::mt19937_64 rng;
+		// initialize the random number generator with time-dependent seed
+		uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+		std::seed_seq ss{uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32)};
+		rng.seed(ss);
+		// initialize a uniform distribution between 0 and 1
+		std::uniform_real_distribution<double> unif(0, 1);
+
+		double mu_c_1 = unif(rng);
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		double mu_c_0 = unif(rng);
+		set_mus(mu_c_1, mu_c_0);
+	}
+
+	/// Gets the stationary probability for state 0 or 1.
 	double get_stationary_probability(bool state) const {
 		if (state) { return _mu_c_1 / (_mu_c_1 + _mu_c_0); }
 		return _mu_c_0 / (_mu_c_1 + _mu_c_0);
@@ -245,6 +263,8 @@ public:
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
 	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
+	size_t get_increment() const { return _increment; }
+	const std::vector<size_t> &get_start_index_in_leaf_space() const { return _start_index_in_leaves_space; }
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);

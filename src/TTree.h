@@ -9,12 +9,13 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Main/TParameters.h"
 #include "coretools/Types/probability.h"
 #include <cstddef>
 #include <string>
 #include <vector>
 
-static const size_t NUMBER_OF_THREADS = coretools::getNumThreads();
+static const size_t NUMBER_OF_THREADS = coretools::instances::parameters().get("n_cpus", coretools::getNumThreads());
 
 class TNode {
 private:
@@ -176,6 +177,7 @@ public:
 	const TClique &get_clique(std::vector<size_t> index_in_leaves_space) const;
 	TClique &get_clique(std::vector<size_t> index_in_leaves_space);
 	const TStorageZVector &get_Z() const;
+	TStorageZVector &get_Z();
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 	void update_Z(const TStorageYVector &Y);

@@ -228,6 +228,7 @@ void TTree::update_Z(const TStorageYVector &Y) {
 }
 
 const TStorageZVector &TTree::get_Z() const { return _Z; };
+TStorageZVector &TTree::get_Z() { return _Z; };
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
 const TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) const {
 	index_in_leaves_space[_dimension] = 0; // set to start index
