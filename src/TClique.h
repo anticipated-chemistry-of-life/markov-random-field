@@ -10,6 +10,7 @@
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
@@ -161,8 +162,8 @@ class TClique {
 private:
 	// transition matrix and parameters
 	TMatrices _matrices;
-	double _mu_c_1;
-	double _mu_c_0;
+	double _mu_c_1; // TODO: change to stattools params
+	double _mu_c_0; // TODO: change to stattools params
 
 	// info about size and dimensionality of clique
 	std::vector<size_t> _start_index_in_leaves_space;
@@ -213,17 +214,8 @@ public:
 	}
 
 	void simulate_mus() {
-		std::mt19937_64 rng;
-		// initialize the random number generator with time-dependent seed
-		uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-		std::seed_seq ss{uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32)};
-		rng.seed(ss);
-		// initialize a uniform distribution between 0 and 1
-		std::uniform_real_distribution<double> unif(0, 1);
-
-		double mu_c_1 = unif(rng);
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
-		double mu_c_0 = unif(rng);
+		double mu_c_1 = coretools::instances::randomGenerator().getRand();
+		double mu_c_0 = coretools::instances::randomGenerator().getRand();
 		set_mus(mu_c_1, mu_c_0);
 	}
 
