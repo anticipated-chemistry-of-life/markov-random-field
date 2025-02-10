@@ -266,48 +266,13 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
 		auto &tree = _trees[tree_index];
 		tree.initialize_cliques_and_Z(_trees);
-		auto &z = tree.get_Z();
-		for (auto &clique : tree.get_cliques()) {
-
-			_simulation_prepare_cliques(clique, tree, z);
-			TCurrentState current_state(tree, clique.get_increment());
-
-			// we sample the roots
-			double proba_root = clique.get_stationary_probability(true);
-			coretools::Probability p(proba_root);
-
-			// we can also prepare the queue for the DFS
-			std::queue<size_t> node_queue;
-			for (const auto root_index_in_tree : tree.get_root_nodes()) {
-				bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
-				if (root_state) { _simulate_one(clique, tree, z, current_state, tree_index, root_index_in_tree); }
-				for (const auto child : tree.get_node(root_index_in_tree).children_indices_in_tree()) {
-					if (!tree.isLeaf(child)) { node_queue.push(child); }
-				} // those are the first children of the tree (children of the roots).
-			} // roots done, we go to the internal nodes
-
-			// sampling the internal nodes
-			while (!node_queue.empty()) {
-				size_t node_index = node_queue.front();
-				node_queue.pop();
-				const TNode &node = tree.get_node(node_index);
-
-				// we want to sample the state of the node given its parent (and independently of its children since we
-				// haven't sampled them yet).
-				std::array<coretools::TSumLogProbability, 2> sum_log;
-				clique.calculate_log_prob_parent_to_node(node_index, tree, 0, current_state, sum_log);
-				bool internal_node_state = sample(sum_log);
-				if (internal_node_state) { _simulate_one(clique, tree, z, current_state, tree_index, node_index); }
-
-				for (size_t child_index : node.children_indices_in_tree()) {
-					if (!tree.isLeaf(child_index)) {
-						node_queue.push(child_index);
-					} // as long as your are not a leaf we can continue sampling Z
-				}
-			} // internal nodes done, we go to the leaves
-		}
+		tree.simulate_Z(tree_index);
 	}
 
+	_simulate_Y();
+}
+
+void TMarkovField::_simulate_Y() {
 	// to sample Y we need to know the state of the parent for each leaf that is represented in a Y entry.
 	// We are going to iterate over all possible Y and sample givent the product of probabilities of the child given the
 	// parent.
@@ -339,20 +304,6 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 		// TODO : refactor also Y sampling
 	}
 }
-
-void TMarkovField::_simulate_one(const TClique &clique, const TTree &tree, TStorageZVector &z,
-                                 TCurrentState &current_state, size_t tree_index, size_t node_index_in_tree) {
-	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
-	index_in_leaves_space[tree_index] = tree.get_index_within_internal_nodes(node_index_in_tree);
-	z.insert_one(index_in_leaves_space);
-	current_state.set(node_index_in_tree, true);
-}
-
-void TMarkovField::_simulation_prepare_cliques(TClique &clique, const TTree &tree, const TStorageZVector &z) {
-	clique.simulate_mus();
-	clique.set_lambda();
-	clique.initialize(tree.get_a(), tree.get_delta(), tree.get_number_of_bins());
-};
 
 void TMarkovField::guessInitialValues() {
 	// TODO: What to do here?

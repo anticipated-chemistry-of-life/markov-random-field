@@ -241,3 +241,58 @@ TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) {
 	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
 	return _cliques[ix_clique];
 }
+
+void TTree::simulate_Z(size_t tree_index) {
+	for (auto &clique : get_cliques()) {
+		_simulation_prepare_cliques(clique);
+		TCurrentState current_state(*this, clique.get_increment());
+
+		// we sample the roots
+		double proba_root = clique.get_stationary_probability(true);
+		coretools::Probability p(proba_root);
+
+		// we can also prepare the queue for the DFS
+		std::queue<size_t> node_queue;
+		for (const auto root_index_in_tree : this->get_root_nodes()) {
+			bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
+			if (root_state) { _simulate_one(clique, current_state, tree_index, root_index_in_tree); }
+			for (const auto child : this->get_node(root_index_in_tree).children_indices_in_tree()) {
+				if (!this->isLeaf(child)) { node_queue.push(child); }
+			} // those are the first children of the tree (children of the roots).
+		} // roots done, we go to the internal nodes
+
+		// sampling the internal nodes
+		while (!node_queue.empty()) {
+			size_t node_index = node_queue.front();
+			node_queue.pop();
+			const TNode &node = this->get_node(node_index);
+
+			// we want to sample the state of the node given its parent (and independently of its children since we
+			// haven't sampled them yet).
+			std::array<coretools::TSumLogProbability, 2> sum_log;
+			clique.calculate_log_prob_parent_to_node(node_index, *this, 0, current_state, sum_log);
+			bool internal_node_state = sample(sum_log);
+			if (internal_node_state) { _simulate_one(clique, current_state, tree_index, node_index); }
+
+			for (size_t child_index : node.children_indices_in_tree()) {
+				if (!this->isLeaf(child_index)) {
+					node_queue.push(child_index);
+				} // as long as your are not a leaf we can continue sampling Z
+			}
+		} // internal nodes done, we go to the leaves
+	}
+}
+
+void TTree::_simulation_prepare_cliques(TClique &clique) const {
+	clique.simulate_mus();
+	clique.set_lambda();
+	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
+};
+
+void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
+                          size_t node_index_in_tree) {
+	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
+	index_in_leaves_space[tree_index] = this->get_index_within_internal_nodes(node_index_in_tree);
+	_Z.insert_one(index_in_leaves_space);
+	current_state.set(node_index_in_tree, true);
+}

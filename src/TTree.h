@@ -89,6 +89,9 @@ private:
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
+	void _simulation_prepare_cliques(TClique &clique) const;
+	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
+	                   size_t node_index_in_tree);
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
@@ -183,5 +186,6 @@ public:
 	void update_Z(const TStorageYVector &Y);
 
 	const std::string &get_tree_name() const { return _tree_name; }
+	void simulate_Z(size_t tree_index);
 };
 #endif // METABOLITE_INFERENCE_TREE_H
