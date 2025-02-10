@@ -58,7 +58,9 @@ private:
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulateUnderPrior(Storage *) override;
-	TCurrentState _simulation_prepare_cliques(TClique &clique, const TTree &tree, const TStorageZVector &z);
+	static void _simulation_prepare_cliques(TClique &clique, const TTree &tree, const TStorageZVector &z);
+	static void _simulate_one(const TClique &clique, const TTree &tree, TStorageZVector &z,
+	                          TCurrentState &current_state, size_t tree_index, size_t node_index_in_tree);
 
 public:
 	TMarkovField(size_t n_iterations);
