@@ -68,6 +68,11 @@ public:
 		}
 	}
 
+	void insert_one(const std::vector<size_t> &multi_dim_index_in_Z_space) {
+		size_t linear_index_in_Z_space = get_linear_index_in_Z_space(multi_dim_index_in_Z_space);
+		insert_one(linear_index_in_Z_space);
+	}
+
 	void insert_zero(uint32_t linear_index_in_Z_space) {
 		auto [found, index] = binary_search(linear_index_in_Z_space);
 		if (found) {

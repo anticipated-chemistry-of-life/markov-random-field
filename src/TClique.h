@@ -10,12 +10,15 @@
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <armadillo>
 #include <cstddef>
+#include <thread>
 #include <tuple>
+#include <unistd.h>
 #include <vector>
 
 class TTree;
@@ -159,8 +162,8 @@ class TClique {
 private:
 	// transition matrix and parameters
 	TMatrices _matrices;
-	double _mu_c_1;
-	double _mu_c_0;
+	double _mu_c_1; // TODO: change to stattools params
+	double _mu_c_0; // TODO: change to stattools params
 
 	// info about size and dimensionality of clique
 	std::vector<size_t> _start_index_in_leaves_space;
@@ -210,6 +213,13 @@ public:
 		_mu_c_0 = mu_c_0;
 	}
 
+	void simulate_mus() {
+		double mu_c_1 = coretools::instances::randomGenerator().getRand();
+		double mu_c_0 = coretools::instances::randomGenerator().getRand();
+		set_mus(mu_c_1, mu_c_0);
+	}
+
+	/// Gets the stationary probability for state 0 or 1.
 	double get_stationary_probability(bool state) const {
 		if (state) { return _mu_c_1 / (_mu_c_1 + _mu_c_0); }
 		return _mu_c_0 / (_mu_c_1 + _mu_c_0);
@@ -245,6 +255,8 @@ public:
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
 	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
+	size_t get_increment() const { return _increment; }
+	const std::vector<size_t> &get_start_index_in_leaf_space() const { return _start_index_in_leaves_space; }
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);

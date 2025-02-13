@@ -5,9 +5,10 @@
 #ifndef ACOL_TMARKOVFIELD_H
 #define ACOL_TMARKOVFIELD_H
 
+#include "TClique.h"
 #include "TCurrentState.h"
-#include "TTree.h"
 #include "TLotus.h"
+#include "TTree.h"
 
 //-----------------------------------
 // TMarkovField
@@ -57,6 +58,9 @@ private:
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulateUnderPrior(Storage *) override;
+	static void _simulate_one(const TClique &clique, const TTree &tree, TStorageZVector &z,
+	                          TCurrentState &current_state, size_t tree_index, size_t node_index_in_tree);
+	void _simulate_Y();
 
 public:
 	TMarkovField(size_t n_iterations);
