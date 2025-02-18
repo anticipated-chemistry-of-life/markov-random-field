@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Types/probability.h"
+#include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -51,7 +52,17 @@ public:
 };
 
 /// Note: All indices are within the tree itself
-class TTree {
+class TTree : public stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField> {
+public:
+	// some type aliases, for better readability
+	using BoxType = TTree;
+	using Base    = stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField>;
+	using typename Base::Storage;
+	using typename Base::UpdatedStorage;
+
+	using TypeParamMu0 = stattools::TParameter<SpecMu_0, TTree>;
+	using TypeParamMu1 = stattools::TParameter<SpecMu_1, TTree>;
+
 private:
 	std::string _tree_name;
 	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
@@ -77,6 +88,10 @@ private:
 	std::vector<TClique> _cliques;
 	std::vector<size_t> _dimension_cliques;
 
+	// mus
+	TypeParamMu0 *_mu_c_0 = nullptr;
+	TypeParamMu1 *_mu_c_1 = nullptr;
+
 	// dimension of the tree
 	size_t _dimension;
 
@@ -89,9 +104,14 @@ private:
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
-	void _simulation_prepare_cliques(TClique &clique) const;
+	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
 	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
 	                   size_t node_index_in_tree);
+
+	// updating mu
+	void _update_mu_0(const TCurrentState &current_state, size_t c);
+
+	void _simulateUnderPrior(Storage *) override;
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
@@ -170,6 +190,14 @@ public:
 		return branch_lengths;
 	}
 
+	// stattools stuff
+	[[nodiscard]] std::string name() const override;
+	void initialize() override;
+	double getSumLogPriorDensity(const Storage &) const override;
+	void guessInitialValues() override;
+	double getDensity(const Storage &, size_t) const override;
+	double getLogDensityRatio(const UpdatedStorage &, size_t) const override;
+
 	void initialize_cliques_and_Z(const std::vector<TTree> &trees);
 
 	coretools::Probability get_a() const { return _a; }
@@ -183,7 +211,21 @@ public:
 	TStorageZVector &get_Z();
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
-	void update_Z(const TStorageYVector &Y);
+
+	template<bool IsSimulation> void update_Z_and_mus(const TStorageYVector &Y) {
+		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
+		for (size_t i = 0; i < _cliques.size(); ++i) {
+			// fill the current state for this clique
+			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
+			// update Z
+			indices_to_insert[i] = _cliques[i].update_Z(current_state, _Z, *this, _mu_c_0->value(i), _mu_c_1->value(i));
+			// update mu
+			if constexpr (!IsSimulation) { _update_mu_0(current_state); }
+		}
+		_Z.insert_in_Z(indices_to_insert);
+	}
 
 	const std::string &get_tree_name() const { return _tree_name; }
 	void simulate_Z(size_t tree_index);

@@ -18,16 +18,20 @@ TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t 
 	_variable_dimension          = variable_dimension;
 	_n_nodes                     = n_nodes;
 	_increment                   = increment;
-	_mu_c_0                      = 0.0;
-	_mu_c_1                      = 0.0;
 }
 
-std::vector<TStorageZ> TClique::update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const {
+TCurrentState TClique::create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) {
 	TCurrentState current_state(tree, this->_increment);
 	current_state.fill(_start_index_in_leaves_space, Y, Z);
+
+	return current_state;
+}
+
+std::vector<TStorageZ> TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree &tree,
+                                         double mu_c_0, double mu_c_1) const {
 	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
 
-	const double stationary_0 = get_stationary_probability(false);
+	const double stationary_0 = get_stationary_probability(false, mu_c_0, mu_c_1);
 
 	// prepare log probabilities for the two possible states
 	std::array<coretools::TSumLogProbability, 2> sum_log;

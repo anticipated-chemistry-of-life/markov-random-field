@@ -134,6 +134,12 @@ private:
 		}
 	}
 
+	template<bool IsSimulation> void _update_all_Z() {
+		if (_fix_Z) { return; }
+
+		for (auto &_tree : _trees) { _tree.update_Z_and_mus<IsSimulation>(_Y); }
+	}
+
 public:
 	TMarkovField(size_t n_iterations);
 	~TMarkovField() override = default;

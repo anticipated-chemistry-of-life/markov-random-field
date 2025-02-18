@@ -12,6 +12,7 @@
 
 #include "omp.h"
 #include <cstddef>
+#include <queue>
 #include <string>
 #include <vector>
 
@@ -191,6 +192,27 @@ void TTree::initialize_cliques_and_Z(const std::vector<TTree> &all_trees) {
 	_initialize_cliques(num_leaves_per_tree, all_trees);
 }
 
+[[nodiscard]] std::string TTree::name() const { return "tree"; }
+
+void TTree::initialize() {
+	// stattools initialization function
+	_mu_c_0->initStorage(this, {_cliques.size()});
+	_mu_c_1->initStorage(this, {_cliques.size()});
+}
+
+void TTree::guessInitialValues() {
+	// TODO: initialize mu's
+	for (size_t c = 0; c < _cliques.size(); ++c) {
+		_mu_c_0->set(c, 0.001);
+		_mu_c_1->set(c, 0.001);
+	}
+}
+
+double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
+double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
+double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
+void TTree::_simulateUnderPrior(Storage *) { DEVERROR("Should never be called"); }
+
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
 
@@ -219,13 +241,32 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, 
 	}
 }
 
-void TTree::update_Z(const TStorageYVector &Y) {
-	std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
+	// propose a new value
+	_mu_c_0->propose(coretools::TRange(c));
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
-	for (size_t i = 0; i < _cliques.size(); ++i) { indices_to_insert[i] = _cliques[i].update_Z(Y, _Z, *this); }
-	_Z.insert_in_Z(indices_to_insert);
+	// calculate LL for old mu
+	// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
+	double old_mu_0 = _mu_c_0->oldValue(c);
+	double LL_old   = 0; // TODO: implement
+
+	// calculate LL for new mu
+	// Need to change Lambda (rate matrix) first, and then go over tree
+	double new_mu_0 = _mu_c_0->value(c);
+	_cliques[c].update_lambda(new_mu_0, _mu_c_1->value(c));
+	double LL_new = 0; // TODO: implement
+
+	// calculate Hastings ratio
+	const double LLRatio       = LL_new - LL_old;
+	const double logPriorRatio = _mu_c_0->getLogDensityRatio(c);
+	const double logH          = LLRatio + logPriorRatio;
+
+	// accept or reject
+	bool accepted = _mu_c_0->acceptOrReject(logH, coretools::TRange(c));
+	if (accepted) { _cliques[c].accept_update_mu(); }
 }
+
+// TODO: Implement _update_mu_1
 
 const TStorageZVector &TTree::get_Z() const { return _Z; };
 TStorageZVector &TTree::get_Z() { return _Z; };
@@ -243,12 +284,13 @@ TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) {
 }
 
 void TTree::simulate_Z(size_t tree_index) {
-	for (auto &clique : get_cliques()) {
-		_simulation_prepare_cliques(clique);
+	for (size_t c = 0; c < _cliques.size(); ++c) {
+		auto &clique = _cliques[c];
+		_simulation_prepare_cliques(c, clique);
 		TCurrentState current_state(*this, clique.get_increment());
 
 		// we sample the roots
-		double proba_root = clique.get_stationary_probability(true);
+		double proba_root = clique.get_stationary_probability(true, _mu_c_0->value(c), _mu_c_1->value(c));
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS
@@ -283,9 +325,8 @@ void TTree::simulate_Z(size_t tree_index) {
 	}
 }
 
-void TTree::_simulation_prepare_cliques(TClique &clique) const {
-	clique.simulate_mus();
-	clique.set_lambda();
+void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
+	clique.set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
 	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
 };
 

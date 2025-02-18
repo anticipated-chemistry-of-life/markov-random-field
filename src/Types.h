@@ -9,15 +9,22 @@
 #include "stattools/ParametersObservations/THash.h"
 #include "stattools/ParametersObservations/TObservation.h"
 #include "stattools/ParametersObservations/spec.h"
+#include "stattools/Priors/TPriorExponential.h"
 #include "stattools/Priors/TPriorUniform.h"
 #include <stdint.h>
 
 // Parameter types
 using TypeGamma = coretools::Positive;
+using TypeMu    = coretools::StrictlyPositive;
 
 // Gamma
 using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
+
+// Mu
+using PriorOnMu = stattools::prior::TExponentialFixed<TypeMu>;
+using SpecMu_0  = stattools::ParamSpec<TypeMu, stattools::name("mu_0"), PriorOnMu>;
+using SpecMu_1  = stattools::ParamSpec<TypeMu, stattools::name("mu_1"), PriorOnMu>;
 
 // Markov Field
 using TypeMarkovField                     = coretools::Boolean;
