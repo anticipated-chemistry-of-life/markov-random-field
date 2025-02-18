@@ -174,12 +174,6 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::_update_all_Z() {
-	if (_fix_Z) { return; }
-
-	for (auto &_tree : _trees) { _tree.update_Z(_Y); }
-}
-
 void TMarkovField::update_markov_field() {
 	_update_all_Y<false>();
 	_update_all_Z();

@@ -85,17 +85,41 @@ public:
 class TMatrices {
 private:
 	std::vector<TMatrix> _matrices;
-	TMatrix _matrix_alpha;
 	arma::mat _lambda_c = arma::zeros(2, 2);
+
+	static double _a;
+	static double _Delta;
+
+	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix
+	 * exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is
+	 * mathematically equevalent to calculating the matrix exponential for each bin.
+	 */
+	void _fill_matrices() {
+		// calculate matrix exponential for first bin
+		TMatrix P_0;
+		P_0.set_from_matrix_exponential(_lambda_c * _a);
+
+		// calculate matrix exponential of scaling matrix
+		TMatrix matrix_alpha;
+		matrix_alpha.set_from_matrix_exponential(_lambda_c * _Delta);
+
+		_matrices[0] = P_0;
+		// do recursion
+		for (size_t k = 1; k < _matrices.size(); ++k) { _matrices[k].set_from_product(_matrices[k - 1], matrix_alpha); }
+	}
 
 public:
 	TMatrices() = default;
-	explicit TMatrices(size_t NumBins) { resize(NumBins); }
+	explicit TMatrices(size_t NumBins, double a, double Delta) { resize(NumBins, a, Delta); }
 
 	/** @brief Resize the vector of matrices to the given number of bins.
 	 * @param NumBins
 	 */
-	void resize(size_t NumBins) { _matrices.resize(NumBins); }
+	void resize(size_t NumBins, double a, double Delta) {
+		_matrices.resize(NumBins);
+		_a     = a;
+		_Delta = Delta;
+	}
 
 	/** @brief Get the number of matrices.
 	 * @return Number of matrices.
@@ -112,34 +136,15 @@ public:
 	 * @param mu_c_1
 	 * @param mu_c_0
 	 */
-	void set_lambda(double mu_c_1, double mu_c_0) {
+	void set_lambda(double mu_c_0, double mu_c_1) {
 		_lambda_c[0] = -mu_c_1;
 		_lambda_c[1] = mu_c_0;
 		_lambda_c[2] = mu_c_1;
 		_lambda_c[3] = -mu_c_0;
+
+		_fill_matrices();
 	}
 
-	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix
-	 * exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is
-	 * mathematically equevalent to calculating the matrix exponential for each bin.
-	 * @param a
-	 * @param Delta
-	 */
-	void set(double a, double Delta) {
-		// calculate matrix exponential for first bin
-		TMatrix P_0;
-		P_0.set_from_matrix_exponential(_lambda_c * a);
-
-		// calculate matrix exponential of scaling matrix
-		TMatrix _matrix_alpha;
-		_matrix_alpha.set_from_matrix_exponential(_lambda_c * Delta);
-
-		_matrices[0] = P_0;
-		// do recursion
-		for (size_t k = 1; k < _matrices.size(); ++k) {
-			_matrices[k].set_from_product(_matrices[k - 1], _matrix_alpha);
-		}
-	}
 	static void print_mat(const TMatrix &my_matrix) {
 		uint cols = my_matrix.get_matrix().n_cols;
 		uint rows = my_matrix.get_matrix().n_rows;
@@ -161,9 +166,8 @@ public:
 class TClique {
 private:
 	// transition matrix and parameters
-	TMatrices _matrices;
-	double _mu_c_1; // TODO: change to stattools params
-	double _mu_c_0; // TODO: change to stattools params
+	TMatrices _cur_matrices;
+	TMatrices _try_matrices;
 
 	// info about size and dimensionality of clique
 	std::vector<size_t> _start_index_in_leaves_space;
@@ -194,6 +198,11 @@ private:
 
 	static std::pair<size_t, TypeBinBranches> _get_parent_index_and_bin_length(size_t index_in_tree, const TTree &tree);
 
+	template<bool UseTry> const TMatrix &_get_matrix(size_t bin_length) const {
+		if constexpr (UseTry) { return _try_matrices[bin_length]; }
+		return _cur_matrices[bin_length];
+	}
+
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
 	~TClique() = default;
@@ -203,48 +212,45 @@ public:
 	/// @param delta The bin width.
 	/// @param n_bins The number of bins.
 	void initialize(double a, double delta, size_t n_bins) {
-		_matrices.resize(n_bins);
-		_matrices.set(a, delta);
-	}
-
-	void set_mus(double mu_c_1, double mu_c_0) {
-		_mu_c_1 = mu_c_1;
-		_mu_c_0 = mu_c_0;
-	}
-
-	void simulate_mus() {
-		double mu_c_1 = coretools::instances::randomGenerator().getRand();
-		double mu_c_0 = coretools::instances::randomGenerator().getRand();
-		set_mus(mu_c_1, mu_c_0);
+		_cur_matrices.resize(n_bins, a, delta);
+		_try_matrices.resize(n_bins, a, delta);
 	}
 
 	/// Gets the stationary probability for state 0 or 1.
-	double get_stationary_probability(bool state) const {
-		if (state) { return _mu_c_1 / (_mu_c_1 + _mu_c_0); }
-		return _mu_c_0 / (_mu_c_1 + _mu_c_0);
+	double get_stationary_probability(bool state, double mu_c_0, double mu_c_1) const {
+		if (state) { return mu_c_1 / (mu_c_1 + mu_c_0); }
+		return mu_c_0 / (mu_c_1 + mu_c_0);
 	}
 
 	/// @brief Set the rate parameters for the clique.
-	void set_lambda() { _matrices.set_lambda(_mu_c_1, _mu_c_0); }
+	void set_lambda(double mu_c_0, double mu_c_1) {
+		_cur_matrices.set_lambda(mu_c_0, mu_c_1);
+		_try_matrices = _cur_matrices;
+	}
+
+	void update_lambda(double mu_c_0, double mu_c_1) { _try_matrices.set_lambda(mu_c_0, mu_c_1); }
+	void accept_update_mu() { _cur_matrices = _try_matrices; }
 
 	/// @brief Returns the matrices for the clique.
 	/// @return The class containing the matrices.
-	[[nodiscard]] const TMatrices &get_matrices() const { return _matrices; }
+	[[nodiscard]] const TMatrices &get_matrices() const { return _cur_matrices; }
 
 	/// @brief Update the Z dimension for this clique.
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ> update_Z(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) const;
+	std::vector<TStorageZ> update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree &tree, double mu_c_0,
+	                                double mu_c_1) const;
+	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 
-	template<typename ContainerStates> // can either be TSheet or TCurrentStates
+	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
 	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		auto [parent_index_in_tree, bin_length] = _get_parent_index_and_bin_length(index_in_tree, tree);
-		const auto &matrix_for_bin              = _matrices[bin_length];
+		const auto &matrix_for_bin              = _get_matrix<UseTry>(bin_length);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
