@@ -53,7 +53,7 @@ std::vector<TStorageZ> TClique::update_Z(const TStorageYVector &Y, TStorageZVect
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
+void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
                                     bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
                                     const TTree &tree) const {
 	auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
@@ -70,6 +70,7 @@ void TClique::_update_current_state(TStorageZVector &Z, const TCurrentState &cur
 			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
 		}
 	}
+	current_state.set(index_in_tree, new_state);
 }
 
 void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log) {

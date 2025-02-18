@@ -8,6 +8,7 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "TTree.h"
+#include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
 #include "smart_binary_search.h"
 #include <cstddef>
@@ -208,8 +209,7 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
 	// TODO: create template of _update_Y to tell if we use likelihood of data or not.
-	// size_t max_iteration = coretools::
-	size_t max_iteration = 1000;
+	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>();
 		_update_all_Z();

@@ -174,9 +174,8 @@ private:
 	// count the number of leaves with value 1 in a clique
 	TypeCounter1 _counter_leaves_state_1 = 0;
 
-	void _update_current_state(TStorageZVector &Z, const TCurrentState &current_state, size_t index_in_tree,
-	                           bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-	                           const TTree &tree) const;
+	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
+	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree &tree) const;
 
 	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
 	void _calculate_log_prob_node_to_children(size_t index_in_tree, const TTree &tree,

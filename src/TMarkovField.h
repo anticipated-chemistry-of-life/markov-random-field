@@ -74,12 +74,9 @@ private:
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
 
 		// calculate log likelihood (lotus)
-		if constexpr (IsSimuluation) {
+		if constexpr (!IsSimuluation) {
 			// calculate log likelihood (lotus)
-			// ...
-		} else {
-			UERROR("Log likelihood is currently not implemented !");
-		};
+		}
 
 		// calculate log likelihood (virtual mass spec)...
 
