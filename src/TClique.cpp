@@ -29,10 +29,9 @@ std::vector<TStorageZ> TClique::update_Z(const TStorageYVector &Y, TStorageZVect
 
 	const double stationary_0 = get_stationary_probability(false);
 
-	// prepare log probabilities for the two possible states
-	std::array<coretools::TSumLogProbability, 2> sum_log;
-
 	for (const auto index_in_tree : tree.get_internal_nodes()) {
+		// prepare log probabilities for the two possible states
+		std::array<coretools::TSumLogProbability, 2> sum_log;
 		const auto &node = tree.get_node(index_in_tree);
 		if (node.isRoot()) { // calculate stationary
 			_calculate_log_prob_root(stationary_0, sum_log);
