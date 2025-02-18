@@ -127,28 +127,6 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 	}
 }
 
-int TMarkovField::_update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-                            std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
-	index_in_leaves_space.back() = leaf_index_last_dim;
-
-	// prepare log probabilities for the two possible states
-	std::array<coretools::TSumLogProbability, 2> sum_log;
-
-	// calculate probabilities in Markov random field
-	_calculate_log_prob_field(index_in_leaves_space, sum_log);
-
-	// calculate log likelihood (lotus)
-	// ...
-
-	// calculate log likelihood (virtual mass spec)...
-
-	// sample state
-	bool new_state = sample(sum_log);
-
-	// update Y accordingly
-	return _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
-}
-
 void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
                                              const std::vector<size_t> &index_in_leaves_space) {
 	// update counter of leaves with value 1 for all dimensions except the last one
@@ -195,51 +173,6 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::_update_all_Y() {
-	if (_fix_Y) { return; }
-
-	// loop over sheets in last dimension
-	for (size_t k = 0; k < _num_outer_loops; ++k) {
-		const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
-
-		// loop over all dimensions except last (linearized)
-		size_t num_inner_loops = coretools::containerProduct(_num_leaves_per_dim_except_last);
-		std::vector<size_t> previous_ix;
-		for (size_t i = 0; i < num_inner_loops; ++i) {
-			// get multi-dimensional index from linear coordinate and set the start of the last dimension
-			auto start_index_in_leaves_space   = coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
-			start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
-			// calculate size of current sheet (make sure not to overshoot)
-			const size_t K_cur_sheet = std::min(_K, _trees.back().get_number_of_leaves() - start_ix_in_leaves_last_dim);
-			// update sheet(s), if necessary
-			_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
-
-			// fill clique along last dimension
-			start_index_in_leaves_space.back() = 0; // start from the beginning
-			_fill_clique_along_last_dim(start_index_in_leaves_space);
-
-			// now loop along all leaves of the last dimension for updating (only K leaves for which we have everything)
-			const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
-			std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
-			int diff_counter_1_in_last_dim = 0;
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
-			for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-				diff_counter_1_in_last_dim += _update_Y(start_index_in_leaves_space, j,
-				                                        linear_indices_in_Y_space_to_insert[omp_get_thread_num()]);
-			}
-
-			// insert new 1-valued indices into Y
-			// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
-			_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-			_trees.back()
-			    .get_clique(start_index_in_leaves_space)
-			    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
-
-			previous_ix = start_index_in_leaves_space;
-		}
-	}
-}
-
 void TMarkovField::_update_all_Z() {
 	if (_fix_Z) { return; }
 
@@ -247,7 +180,7 @@ void TMarkovField::_update_all_Z() {
 }
 
 void TMarkovField::update_markov_field() {
-	_update_all_Y();
+	_update_all_Y<false>();
 	_update_all_Z();
 }
 
@@ -262,7 +195,7 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	// 4. Draw Lotus.
 	// 5. From that simulated Lotus can we go back and infer the prior params
 	//
-	// TODO: refactor loop to move most of the code ion tree and cliques.
+	// TODO: refactor loop to move most of the code in tree and cliques.
 	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
 		auto &tree = _trees[tree_index];
 		tree.initialize_cliques_and_Z(_trees);
@@ -270,6 +203,17 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	}
 
 	_simulate_Y();
+
+	// for iteration in 1->max_iteration, (max_iteration should be passed from CLI)
+	// we use tree.update_Z(); and then
+	// update Y where likelihood of data is always one so it doesn't matter.
+	// TODO: create template of _update_Y to tell if we use likelihood of data or not.
+	// size_t max_iteration = coretools::
+	size_t max_iteration = 1000;
+	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
+		_update_all_Y<true>();
+		_update_all_Z();
+	}
 }
 
 void TMarkovField::_simulate_Y() {
