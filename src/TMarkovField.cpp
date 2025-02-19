@@ -190,7 +190,6 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	// 4. Draw Lotus.
 	// 5. From that simulated Lotus can we go back and infer the prior params
 	//
-	// TODO: refactor loop to move most of the code in tree and cliques.
 	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
 		auto &tree = _trees[tree_index];
 		tree.initialize_cliques_and_Z(_trees);
@@ -202,7 +201,6 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	// for iteration in 1->max_iteration, (max_iteration should be passed from CLI)
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
-	// TODO: create template of _update_Y to tell if we use likelihood of data or not.
 	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>();

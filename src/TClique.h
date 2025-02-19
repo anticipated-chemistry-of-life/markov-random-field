@@ -198,11 +198,6 @@ private:
 
 	static std::pair<size_t, TypeBinBranches> _get_parent_index_and_bin_length(size_t index_in_tree, const TTree &tree);
 
-	template<bool UseTry> const TMatrix &_get_matrix(size_t bin_length) const {
-		if constexpr (UseTry) { return _try_matrices[bin_length]; }
-		return _cur_matrices[bin_length];
-	}
-
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
 	~TClique() = default;
@@ -245,12 +240,17 @@ public:
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
 
+	template<bool UseTry> const TMatrix &get_matrix(size_t bin_length) const {
+		if constexpr (UseTry) { return _try_matrices[bin_length]; }
+		return _cur_matrices[bin_length];
+	}
+
 	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
 	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		auto [parent_index_in_tree, bin_length] = _get_parent_index_and_bin_length(index_in_tree, tree);
-		const auto &matrix_for_bin              = _get_matrix<UseTry>(bin_length);
+		const auto &matrix_for_bin              = get_matrix<UseTry>(bin_length);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));

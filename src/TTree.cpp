@@ -8,6 +8,8 @@
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Math/TSumLog.h"
+#include "coretools/Storage/TDimension.h"
 #include "coretools/algorithms.h"
 
 #include "omp.h"
@@ -248,16 +250,44 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	// calculate LL for old mu
 	// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
 	double old_mu_0 = _mu_c_0->oldValue(c);
-	double LL_old   = 0; // TODO: implement
+	coretools::TSumLogProbability LL_old;
+	for (size_t i = 0; i < _nodes.size(); ++i) {
+		const auto &node = _nodes[i];
+		if (node.isRoot()) {
+			LL_old.add(this->get_cliques()[c].get_stationary_probability(true, old_mu_0, _mu_c_1->value(c)));
+		} else {
+			const auto &clique  = this->get_cliques()[c];
+			const auto &matrix  = clique.get_matrix<false>(node.get_branch_length_bin());
+			size_t parent_index = node.parentIndex_in_tree();
+			bool parent_state   = current_state.get(parent_index);
+			bool child_state    = current_state.get(i);
+			double parent_prob  = matrix(parent_state, child_state);
+			LL_old.add(parent_prob);
+		}
+	}
 
 	// calculate LL for new mu
 	// Need to change Lambda (rate matrix) first, and then go over tree
 	double new_mu_0 = _mu_c_0->value(c);
 	_cliques[c].update_lambda(new_mu_0, _mu_c_1->value(c));
-	double LL_new = 0; // TODO: implement
+	coretools::TSumLogProbability LL_new;
+	for (size_t i = 0; i < _nodes.size(); ++i) {
+		const auto &node = _nodes[i];
+		if (node.isRoot()) {
+			LL_new.add(this->get_cliques()[c].get_stationary_probability(true, new_mu_0, _mu_c_1->value(c)));
+		} else {
+			const auto clique   = this->get_cliques()[c];
+			const auto &matrix  = clique.get_matrix<true>(node.get_branch_length_bin());
+			size_t parent_index = node.parentIndex_in_tree();
+			bool parent_state   = current_state.get(parent_index);
+			bool child_state    = current_state.get(i);
+			double parent_prob  = matrix(parent_state, child_state);
+			LL_new.add(parent_prob);
+		}
+	}
 
 	// calculate Hastings ratio
-	const double LLRatio       = LL_new - LL_old;
+	const double LLRatio       = LL_new.getSum() - LL_old.getSum();
 	const double logPriorRatio = _mu_c_0->getLogDensityRatio(c);
 	const double logH          = LLRatio + logPriorRatio;
 
@@ -266,7 +296,52 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	if (accepted) { _cliques[c].accept_update_mu(); }
 }
 
-// TODO: Implement _update_mu_1
+void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
+	_mu_c_1->propose(coretools::TRange(c));
+	double old_mu_1 = _mu_c_1->oldValue(c);
+	coretools::TSumLogProbability LL_old;
+	for (size_t i = 0; i < _nodes.size(); ++i) {
+		const auto &node = _nodes[i];
+		if (node.isRoot()) {
+			LL_old.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), old_mu_1));
+		} else {
+			const auto &clique  = this->get_cliques()[c];
+			const auto &matrix  = clique.get_matrix<false>(node.get_branch_length_bin());
+			size_t parent_index = node.parentIndex_in_tree();
+			bool parent_state   = current_state.get(parent_index);
+			bool child_state    = current_state.get(i);
+			double parent_prob  = matrix(parent_state, child_state);
+			LL_old.add(parent_prob);
+		}
+	}
+
+	double new_mu_1 = _mu_c_1->value(c);
+	_cliques[c].update_lambda(_mu_c_0->value(c), new_mu_1);
+	coretools::TSumLogProbability LL_new;
+	for (size_t i = 0; i < _nodes.size(); ++i) {
+		const auto &node = _nodes[i];
+		if (node.isRoot()) {
+			LL_new.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), new_mu_1));
+		} else {
+			const auto clique   = this->get_cliques()[c];
+			const auto &matrix  = clique.get_matrix<true>(node.get_branch_length_bin());
+			size_t parent_index = node.parentIndex_in_tree();
+			bool parent_state   = current_state.get(parent_index);
+			bool child_state    = current_state.get(i);
+			double parent_prob  = matrix(parent_state, child_state);
+			LL_new.add(parent_prob);
+		}
+	}
+
+	// calculate Hastings ratio
+	const double LLRatio       = LL_new.getSum() - LL_old.getSum();
+	const double logPriorRatio = _mu_c_1->getLogDensityRatio(c);
+	const double logH          = LLRatio + logPriorRatio;
+
+	// accept or reject
+	bool accepted = _mu_c_1->acceptOrReject(logH, coretools::TRange(c));
+	if (accepted) { _cliques[c].accept_update_mu(); }
+}
 
 const TStorageZVector &TTree::get_Z() const { return _Z; };
 TStorageZVector &TTree::get_Z() { return _Z; };

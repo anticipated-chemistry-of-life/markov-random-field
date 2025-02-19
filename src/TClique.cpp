@@ -3,6 +3,7 @@
 //
 
 #include "TClique.h"
+#include "TCurrentState.h"
 #include "TStorageYVector.h"
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
@@ -87,7 +88,7 @@ void TClique::_calculate_log_prob_node_to_children(size_t index_in_tree, const T
 	const auto &node = tree.get_node(index_in_tree);
 	for (const auto &child_index : node.children_indices_in_tree()) {
 		auto bin_length            = tree.get_node(child_index).get_branch_length_bin();
-		const auto &matrix_for_bin = _matrices[bin_length];
+		const auto &matrix_for_bin = _cur_matrices[bin_length];
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			sum_log[i].add(matrix_for_bin(i, current_state.get(child_index)));
 		}
