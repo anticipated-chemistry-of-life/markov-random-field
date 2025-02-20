@@ -165,6 +165,8 @@ public:
  */
 class TClique {
 private:
+	using TypeParamBinBranches = stattools::TParameter<SpecBinnedBranches, TTree>;
+
 	// transition matrix and parameters
 	TMatrices _cur_matrices;
 	TMatrices _try_matrices;
@@ -182,9 +184,10 @@ private:
 	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree &tree) const;
 
 	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
-	void _calculate_log_prob_node_to_children(size_t index_in_tree, const TTree &tree,
-	                                          const TCurrentState &current_state,
-	                                          std::array<coretools::TSumLogProbability, 2> &sum_log) const;
+	void _calculate_log_prob_node_to_children(
+	    size_t index_in_tree, const TTree &tree, const TCurrentState &current_state,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> leaves_and_internal_nodes_without_roots_indices) const;
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
@@ -196,7 +199,7 @@ private:
 		}
 	}
 
-	static std::pair<size_t, TypeBinBranches> _get_parent_index_and_bin_length(size_t index_in_tree, const TTree &tree);
+	static size_t _get_parent_index(size_t index_in_tree, const TTree &tree);
 
 public:
 	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
@@ -235,7 +238,8 @@ public:
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
 	std::vector<TStorageZ> update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree &tree, double mu_c_0,
-	                                double mu_c_1) const;
+	                                double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
+	                                const std::vector<size_t> leaves_and_internal_nodes_without_roots_indices) const;
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
 	size_t get_number_of_nodes() const { return _n_nodes; }
@@ -245,12 +249,17 @@ public:
 		return _cur_matrices[bin_length];
 	}
 
+	double calculate_prob_to_parent(size_t index_in_tree, const TTree &tree,
+	                                TypeBinnedBranchLengths binned_branch_length,
+	                                const TCurrentState &current_state) const;
+
 	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
-	void calculate_log_prob_parent_to_node(size_t index_in_tree, const TTree &tree,
-	                                       size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
+	void calculate_log_prob_parent_to_node(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
+	                                       const TTree &tree, size_t leaf_index_in_tree_of_last_dim,
+	                                       const ContainerStates &states,
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		auto [parent_index_in_tree, bin_length] = _get_parent_index_and_bin_length(index_in_tree, tree);
-		const auto &matrix_for_bin              = get_matrix<UseTry>(bin_length);
+		const size_t parent_index_in_tree = _get_parent_index(index_in_tree, tree);
+		const auto &matrix_for_bin        = get_matrix<UseTry>(binned_branch_length);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));

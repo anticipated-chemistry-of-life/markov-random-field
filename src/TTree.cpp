@@ -11,6 +11,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
 #include "coretools/algorithms.h"
+#include "stattools/Updates/TPairIndexSampler.h"
 
 #include "omp.h"
 #include <cstddef>
@@ -30,9 +31,9 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
 	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);
-	if (_number_of_bins >= (size_t)std::numeric_limits<TypeBinBranches>::max()) {
+	if (_number_of_bins >= (size_t)std::numeric_limits<TypeBinnedBranchLengths>::max()) {
 		UERROR("More bins (", _number_of_bins, ") required than type allows (",
-		       std::numeric_limits<TypeBinBranches>::max(), ")! Please decrease K or change type of bins.");
+		       std::numeric_limits<TypeBinnedBranchLengths>::max(), ")! Please decrease K or change type of bins.");
 	}
 
 	// calculate Delta
@@ -47,14 +48,16 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 	std::vector<double> grid(_number_of_bins);
 	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
 
-	for (size_t i = 0; i < branch_lengths.size(); ++i) {
+	_binned_branch_lengths_from_tree.reserve(get_number_of_nodes() - get_number_of_roots());
+	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
+		if (_nodes[i].isRoot()) { continue; }
 		// find bin
 		auto it = std::lower_bound(grid.begin(), grid.end(), branch_lengths[i]);
 		if (it == grid.end()) {
 			// last bin
-			_nodes[i].set_bin_branch_length_to_parent(grid.size() - 1);
+			_binned_branch_lengths_from_tree.push_back(grid.size() - 1);
 		} else {
-			_nodes[i].set_bin_branch_length_to_parent(std::distance(grid.begin(), it));
+			_binned_branch_lengths_from_tree.push_back(std::distance(grid.begin(), it));
 		}
 	}
 };
@@ -143,10 +146,15 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	this->_rootIndices.resize(_nodes.size(), -1);
 	this->_internalIndices.resize(_nodes.size(), -1);
 	this->_internalIndicesWithoutRoots.resize(_nodes.size(), -1);
+	this->_leaves_and_internal_nodes_without_roots_indices.resize(_nodes.size(), -1);
 	for (auto it = _nodes.begin(); it != _nodes.end(); ++it) {
 		if (it->isLeaf()) {
 			this->_leafIndices[it - _nodes.begin()] = _leaves.size();
 			this->_leaves.push_back(it - _nodes.begin());
+
+			this->_leaves_and_internal_nodes_without_roots_indices[it - _nodes.begin()] =
+			    _leaves_and_internal_nodes_without_roots.size();
+			this->_leaves_and_internal_nodes_without_roots.push_back(it - _nodes.begin());
 		} else {
 			this->_internalIndices[it - _nodes.begin()] = _internal_nodes.size();
 			this->_internal_nodes.push_back(it - _nodes.begin());
@@ -156,6 +164,10 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			} else if (it->isInternalNode()) {
 				_internalIndicesWithoutRoots[it - _nodes.begin()] = _internal_nodes_without_roots.size();
 				_internal_nodes_without_roots.push_back(it - _nodes.begin());
+
+				this->_leaves_and_internal_nodes_without_roots_indices[it - _nodes.begin()] =
+				    _leaves_and_internal_nodes_without_roots.size();
+				this->_leaves_and_internal_nodes_without_roots.push_back(it - _nodes.begin());
 			}
 		}
 	}
@@ -200,6 +212,8 @@ void TTree::initialize() {
 	// stattools initialization function
 	_mu_c_0->initStorage(this, {_cliques.size()});
 	_mu_c_1->initStorage(this, {_cliques.size()});
+	// number of branches = number of leaves + number of internal nodes without roots
+	_binned_branch_lengths->initStorage(this, {get_number_of_nodes() - get_number_of_roots()});
 }
 
 void TTree::guessInitialValues() {
@@ -207,6 +221,10 @@ void TTree::guessInitialValues() {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		_mu_c_0->set(c, 0.001);
 		_mu_c_1->set(c, 0.001);
+	}
+
+	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
 	}
 }
 
@@ -255,15 +273,19 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 		const auto &node   = _nodes[i];
 		const auto &clique = this->get_cliques()[c];
 		bool state_of_node = current_state.get(i);
+		// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
+		const auto branch_len_bin =
+		    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
 		if (node.isRoot()) {
 			LL_old.add(clique.get_stationary_probability(state_of_node, old_mu_0, _mu_c_1->value(c)));
 		} else {
-			const auto &matrix  = clique.get_matrix<false>(node.get_branch_length_bin());
+			const auto &matrix  = clique.get_matrix<false>(branch_len_bin);
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
 			double parent_prob  = matrix(parent_state, state_of_node);
 			LL_old.add(parent_prob);
-		} // TODO: put if-else in a fucntion so that we can have a single loop instead of 2.
+		} // TODO: put if-else in a function so that we can have a single loop instead of 2.
+		// TODO: try to use calculate_prob_to_parent from clique
 	}
 
 	// calculate LL for new mu
@@ -273,12 +295,12 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	coretools::TSumLogProbability LL_new;
 	for (size_t i = 0; i < _nodes.size(); ++i) {
 		const auto &node   = _nodes[i];
-		const auto clique  = this->get_cliques()[c];
+		const auto &clique = this->get_cliques()[c];
 		bool state_of_node = current_state.get(i);
 		if (node.isRoot()) {
 			LL_new.add(clique.get_stationary_probability(state_of_node, new_mu_0, _mu_c_1->value(c)));
 		} else {
-			const auto &matrix  = clique.get_matrix<true>(node.get_branch_length_bin());
+			const auto &matrix  = clique.get_matrix<true>(0);
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
 			double parent_prob  = matrix(parent_state, state_of_node);
@@ -307,7 +329,7 @@ void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
 			LL_old.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), old_mu_1));
 		} else {
 			const auto &clique  = this->get_cliques()[c];
-			const auto &matrix  = clique.get_matrix<false>(node.get_branch_length_bin());
+			const auto &matrix  = clique.get_matrix<false>(0);
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
 			bool child_state    = current_state.get(i);
@@ -324,8 +346,8 @@ void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
 		if (node.isRoot()) {
 			LL_new.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), new_mu_1));
 		} else {
-			const auto clique   = this->get_cliques()[c];
-			const auto &matrix  = clique.get_matrix<true>(node.get_branch_length_bin());
+			const auto &clique  = this->get_cliques()[c];
+			const auto &matrix  = clique.get_matrix<true>(0);
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
 			bool child_state    = current_state.get(i);
@@ -342,6 +364,88 @@ void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
 	// accept or reject
 	bool accepted = _mu_c_1->acceptOrReject(logH, coretools::TRange(c));
 	if (accepted) { _cliques[c].accept_update_mu(); }
+}
+
+stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
+	const size_t num_branches = _nodes.size() - get_number_of_roots();
+	stattools::TPairIndexSampler sampler(num_branches);
+	sampler.sampleIndices();
+
+	return sampler;
+}
+
+void TTree::_propose_new_branch_lengths(size_t p1, size_t p2, int val) {
+	_binned_branch_lengths->set(p1, _binned_branch_lengths->value(p1) + val);
+	_binned_branch_lengths->set(p2, _binned_branch_lengths->value(p2) - val);
+}
+
+void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs) {
+	for (size_t p = 0; p < pairs.length(); ++p) {
+		auto [p1, p2] = pairs.getIndexPair(p);
+
+		const bool both_at_min = _binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::min() &&
+		                         _binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::min();
+		const bool both_at_max = _binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::max() &&
+		                         _binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::max();
+		if (both_at_min || both_at_max) {
+			// can not do update, both are at boundary
+			_propose_new_branch_lengths(p1, p2, 0);
+		} else if (_binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::min()) {
+			// p1 is at minimum (at the left-most position) -> can only go to the right
+			_propose_new_branch_lengths(p1, p2, 1);
+		} else if (_binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::min()) {
+			// p2 is at minimum (at the left-most position) -> can only go to the right
+			_propose_new_branch_lengths(p1, p2, -1);
+		} else if (_binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::max()) {
+			// p1 is at maximum (at the right-most position) -> can only go to the left
+			_propose_new_branch_lengths(p1, p2, -1);
+		} else if (_binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::max()) {
+			// p2 is at maximum (at the right-most position) -> can only go to the left
+			_propose_new_branch_lengths(p1, p2, 1);
+		} else {
+			// we can choose to go left or right
+			bool left = coretools::instances::randomGenerator().pickOneOfTwo(coretools::P(0.5));
+			if (left) {
+				_propose_new_branch_lengths(p1, p2, -1);
+			} else {
+				_propose_new_branch_lengths(p1, p2, 1);
+			}
+		}
+	}
+};
+
+double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length, const TClique &clique,
+                                                        const TCurrentState &current_state) const {
+	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in nodes
+	const size_t index_in_tree = _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
+
+	// calculate probability of parent to node for new branch length
+	double prob_old = clique.calculate_prob_to_parent(
+	    index_in_tree, *this, _binned_branch_lengths->oldValue(index_in_binned_branch_length), current_state);
+
+	// calculate probability of parent to node for new branch length
+	double prob_new = clique.calculate_prob_to_parent(
+	    index_in_tree, *this, _binned_branch_lengths->value(index_in_binned_branch_length), current_state);
+
+	return prob_new / prob_old;
+}
+
+void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
+                                      std::vector<coretools::TSumLogProbability> &log_sum,
+                                      const stattools::TPairIndexSampler &pairs) const {
+	const auto &clique = _cliques[c];
+
+	for (size_t p = 0; p < pairs.length(); ++p) { // loop over all possible pairs
+		// get index of branches to calculate LL: p1 and p2
+		// that index corresponds to the index in fake, concatenated vector of leaves and internal nodes without roots
+		auto [p1, p2]   = pairs.getIndexPair(p);
+		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, current_state);
+		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, current_state);
+
+		// TODO: make sure we don't have issues with parallelization, probably need pragma once
+		log_sum[p].add(ratio_p1);
+		log_sum[p].add(ratio_p2);
+	}
 }
 
 const TStorageZVector &TTree::get_Z() const { return _Z; };
@@ -388,7 +492,10 @@ void TTree::simulate_Z(size_t tree_index) {
 			// we want to sample the state of the node given its parent (and independently of its children since we
 			// haven't sampled them yet).
 			std::array<coretools::TSumLogProbability, 2> sum_log;
-			clique.calculate_log_prob_parent_to_node(node_index, *this, 0, current_state, sum_log);
+			clique.calculate_log_prob_parent_to_node(node_index,
+			                                         (TypeBinnedBranchLengths)_binned_branch_lengths->value(
+			                                             _leaves_and_internal_nodes_without_roots_indices[node_index]),
+			                                         *this, 0, current_state, sum_log);
 			bool internal_node_state = sample(sum_log);
 			if (internal_node_state) { _simulate_one(clique, current_state, tree_index, node_index); }
 
