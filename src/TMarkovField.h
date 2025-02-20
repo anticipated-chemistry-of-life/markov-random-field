@@ -43,7 +43,6 @@ private:
 	static std::vector<TTree> _make_trees();
 
 	// functions for updating Y
-	void _update_all_Z();
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
 	                    const std::vector<size_t> &previous_ix, size_t K_cur_sheet);
 	void _fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space);

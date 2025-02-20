@@ -252,18 +252,18 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	double old_mu_0 = _mu_c_0->oldValue(c);
 	coretools::TSumLogProbability LL_old;
 	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node = _nodes[i];
+		const auto &node   = _nodes[i];
+		const auto &clique = this->get_cliques()[c];
+		bool state_of_node = current_state.get(i);
 		if (node.isRoot()) {
-			LL_old.add(this->get_cliques()[c].get_stationary_probability(true, old_mu_0, _mu_c_1->value(c)));
+			LL_old.add(clique.get_stationary_probability(state_of_node, old_mu_0, _mu_c_1->value(c)));
 		} else {
-			const auto &clique  = this->get_cliques()[c];
 			const auto &matrix  = clique.get_matrix<false>(node.get_branch_length_bin());
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
-			bool child_state    = current_state.get(i);
-			double parent_prob  = matrix(parent_state, child_state);
+			double parent_prob  = matrix(parent_state, state_of_node);
 			LL_old.add(parent_prob);
-		}
+		} // TODO: put if-else in a fucntion so that we can have a single loop instead of 2.
 	}
 
 	// calculate LL for new mu
@@ -272,16 +272,16 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	_cliques[c].update_lambda(new_mu_0, _mu_c_1->value(c));
 	coretools::TSumLogProbability LL_new;
 	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node = _nodes[i];
+		const auto &node   = _nodes[i];
+		const auto clique  = this->get_cliques()[c];
+		bool state_of_node = current_state.get(i);
 		if (node.isRoot()) {
-			LL_new.add(this->get_cliques()[c].get_stationary_probability(true, new_mu_0, _mu_c_1->value(c)));
+			LL_new.add(clique.get_stationary_probability(state_of_node, new_mu_0, _mu_c_1->value(c)));
 		} else {
-			const auto clique   = this->get_cliques()[c];
 			const auto &matrix  = clique.get_matrix<true>(node.get_branch_length_bin());
 			size_t parent_index = node.parentIndex_in_tree();
 			bool parent_state   = current_state.get(parent_index);
-			bool child_state    = current_state.get(i);
-			double parent_prob  = matrix(parent_state, child_state);
+			double parent_prob  = matrix(parent_state, state_of_node);
 			LL_new.add(parent_prob);
 		}
 	}
@@ -296,6 +296,7 @@ void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
 	if (accepted) { _cliques[c].accept_update_mu(); }
 }
 
+// TODO : correct update of mu_1 and also refactor to a function
 void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
 	_mu_c_1->propose(coretools::TRange(c));
 	double old_mu_1 = _mu_c_1->oldValue(c);

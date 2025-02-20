@@ -176,7 +176,7 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 
 void TMarkovField::update_markov_field() {
 	_update_all_Y<false>();
-	_update_all_Z();
+	_update_all_Z<false>();
 }
 
 void TMarkovField::_simulateUnderPrior(Storage *) {
@@ -204,7 +204,7 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>();
-		_update_all_Z();
+		_update_all_Z<true>();
 	}
 }
 

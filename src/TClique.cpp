@@ -13,6 +13,9 @@
 #include <utility>
 #include <vector>
 
+double TMatrices::_a;
+double TMatrices::_Delta;
+
 TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,
                  size_t increment) {
 	_start_index_in_leaves_space = start_index_in_leaves_space;
