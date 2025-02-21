@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Types/probability.h"
+#include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -21,7 +22,6 @@ class TNode {
 private:
 	std::string _id;                               // unique identifier for the node
 	size_t _parentIndex_in_tree;                   // pointer to parent node
-	TypeBinBranches _binned_branch_length{};       // discretised branch length
 	std::vector<size_t> _children_indices_in_tree; // vector to child nodes indices
 	bool _is_root;
 
@@ -41,9 +41,7 @@ public:
 	[[nodiscard]] bool isLeaf() const { return _children_indices_in_tree.empty(); };
 	[[nodiscard]] bool isRoot() const { return _is_root; };
 	[[nodiscard]] bool isInternalNode() const { return !_is_root && !_children_indices_in_tree.empty(); };
-	[[nodiscard]] TypeBinBranches get_branch_length_bin() const { return _binned_branch_length; };
 	void set_is_root(bool is_root) { _is_root = is_root; }
-	void set_bin_branch_length_to_parent(TypeBinBranches branch_length) { _binned_branch_length = branch_length; }
 	void set_parent_index_in_tree(size_t parent_index_in_tree) { _parentIndex_in_tree = parent_index_in_tree; }
 	std::string get_id() const { return _id; };
 
@@ -51,7 +49,18 @@ public:
 };
 
 /// Note: All indices are within the tree itself
-class TTree {
+class TTree : public stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField> {
+public:
+	// some type aliases, for better readability
+	using BoxType = TTree;
+	using Base    = stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField>;
+	using typename Base::Storage;
+	using typename Base::UpdatedStorage;
+
+	using TypeParamMu0         = stattools::TParameter<SpecMu_0, TTree>;
+	using TypeParamMu1         = stattools::TParameter<SpecMu_1, TTree>;
+	using TypeParamBinBranches = stattools::TParameter<SpecBinnedBranches, TTree>;
+
 private:
 	std::string _tree_name;
 	std::vector<TNode> _nodes;                         // a map to store nodes with their ids
@@ -60,11 +69,13 @@ private:
 	std::vector<size_t> _roots;
 	std::vector<size_t> _internal_nodes;
 	std::vector<size_t> _internal_nodes_without_roots;
+	std::vector<size_t> _leaves_and_internal_nodes_without_roots;
 
 	// The four vectors below have size _nodes.size()
 	std::vector<size_t> _leafIndices;
 	std::vector<size_t> _rootIndices;
 	std::vector<size_t> _internalIndices;
+	std::vector<size_t> _leaves_and_internal_nodes_without_roots_indices;
 	std::vector<size_t> _internalIndicesWithoutRoots;
 
 	// For binning branch lengths
@@ -72,10 +83,16 @@ private:
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
+	std::vector<size_t> _binned_branch_lengths_from_tree;
+	TypeParamBinBranches *_binned_branch_lengths = nullptr;
 
 	// cliques
 	std::vector<TClique> _cliques;
 	std::vector<size_t> _dimension_cliques;
+
+	// mus
+	TypeParamMu0 *_mu_c_0 = nullptr;
+	TypeParamMu1 *_mu_c_1 = nullptr;
 
 	// dimension of the tree
 	size_t _dimension;
@@ -89,9 +106,85 @@ private:
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
-	void _simulation_prepare_cliques(TClique &clique) const;
+	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
 	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
 	                   size_t node_index_in_tree);
+
+	// updating branch lengths
+	stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
+	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
+	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
+	void _add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
+	                               std::vector<coretools::TSumLogProbability> &log_sum,
+	                               const stattools::TPairIndexSampler &pairs) const;
+	double _calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length, const TClique &clique,
+	                                                 const TCurrentState &current_state) const;
+
+	void _simulateUnderPrior(Storage *) override;
+
+	template<bool UseTryMatrix>
+	void _compute_LL_old_and_new_mu(size_t index_in_tree, const TClique &clique, bool state_of_node,
+	                                coretools::TSumLogProbability &LL, const TCurrentState &current_state,
+	                                size_t branch_len_bin, double mu_0, double mu_1) {
+		if (_nodes[index_in_tree].isRoot()) {
+			LL.add(clique.get_stationary_probability(state_of_node, mu_0, mu_1));
+		} else {
+
+			double prob =
+			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, *this, branch_len_bin, current_state);
+			LL.add(prob);
+		}
+	}
+
+	template<bool IsMu0, typename TypeParamMu>
+	void _update_mu(const TCurrentState &current_state, size_t c, TypeParamMu *mu_c) {
+		// propose a new value
+		mu_c->propose(coretools::TRange(c));
+
+		// calculate LL for old mu
+		// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
+		double old_mu = mu_c->oldValue(c);
+		double new_mu = mu_c->value(c);
+		coretools::TSumLogProbability LL_old;
+		coretools::TSumLogProbability LL_new;
+		if constexpr (IsMu0) {
+			_cliques[c].update_lambda(new_mu, _mu_c_1->value(c));
+		} else {
+			_cliques[c].update_lambda(_mu_c_0->value(c), new_mu);
+		}
+
+		for (size_t i = 0; i < _nodes.size(); ++i) {
+			const auto &clique = this->get_cliques()[c];
+			bool state_of_node = current_state.get(i);
+			// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
+			const auto branch_len_bin =
+			    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
+
+			if constexpr (IsMu0) {
+				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
+				                                  old_mu, _mu_c_1->value(c));
+				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
+				                                 new_mu, _mu_c_1->value(c));
+			} else {
+				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
+				                                  _mu_c_0->value(c), old_mu);
+				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
+				                                 _mu_c_0->value(c), new_mu);
+			}
+		}
+
+		// calculate Hastings ratio
+		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
+		const double logPriorRatio = mu_c->getLogDensityRatio(c);
+		const double logH          = LLRatio + logPriorRatio;
+
+		// accept or reject
+		bool accepted = mu_c->acceptOrReject(logH, coretools::TRange(c));
+		if (accepted) { _cliques[c].accept_update_mu(); }
+	}
+
+	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
+	                                   const stattools::TPairIndexSampler &pairs);
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
@@ -134,6 +227,7 @@ public:
 	size_t get_number_of_leaves() const { return _leaves.size(); }
 	size_t get_number_of_nodes() const { return _nodes.size(); }
 	size_t get_number_of_internal_nodes() const { return _internal_nodes.size(); }
+	size_t get_number_of_roots() const { return _roots.size(); }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
@@ -163,12 +257,15 @@ public:
 	 */
 	bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
 
-	std::vector<TypeBinBranches> get_all_binned_branch_lengths() const {
-		std::vector<TypeBinBranches> branch_lengths;
-		branch_lengths.resize(_nodes.size());
-		for (size_t i = 0; i < _nodes.size(); i++) { branch_lengths[i] = _nodes[i].get_branch_length_bin(); }
-		return branch_lengths;
-	}
+	std::vector<size_t> get_all_binned_branch_lengths_from_tree() const { return _binned_branch_lengths_from_tree; }
+
+	// stattools stuff
+	[[nodiscard]] std::string name() const override;
+	void initialize() override;
+	double getSumLogPriorDensity(const Storage &) const override;
+	void guessInitialValues() override;
+	double getDensity(const Storage &, size_t) const override;
+	double getLogDensityRatio(const UpdatedStorage &, size_t) const override;
 
 	void initialize_cliques_and_Z(const std::vector<TTree> &trees);
 
@@ -183,7 +280,44 @@ public:
 	TStorageZVector &get_Z();
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
-	void update_Z(const TStorageYVector &Y);
+
+	template<bool IsSimulation> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
+		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+
+		// build pairs of branch lengths to update
+		auto pairs = _build_pairs_branch_lengths();
+		std::vector<coretools::TSumLogProbability> log_sum_b(pairs.length());
+
+		// propose new branch lengths
+		_propose_new_branch_lengths(pairs);
+
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
+		for (size_t i = 0; i < _cliques.size(); ++i) {
+			// fill the current state for this clique
+			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
+			// update Z
+			indices_to_insert[i] =
+			    _cliques[i].update_Z(current_state, _Z, *this, _mu_c_0->value(i), _mu_c_1->value(i),
+			                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+
+			// update mu
+			if constexpr (!IsSimulation) {
+				_update_mu<true>(current_state, i, _mu_c_0);
+				_update_mu<false>(current_state, i, _mu_c_1);
+
+				// add to likelihood ratio for branch length
+				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);
+			}
+		}
+		_Z.insert_in_Z(indices_to_insert);
+
+		// update branch lengths
+		_evalute_update_branch_length(log_sum_b, pairs);
+	}
+
+	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
+		return _binned_branch_lengths->value(_leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
+	}
 
 	const std::string &get_tree_name() const { return _tree_name; }
 	void simulate_Z(size_t tree_index);

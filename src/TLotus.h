@@ -11,6 +11,7 @@
 #include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/Priors/TPriorBase.h"
 #include <cstddef>
+#include <deque>
 #include <string>
 #include <vector>
 
