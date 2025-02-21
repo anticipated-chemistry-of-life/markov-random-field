@@ -91,19 +91,6 @@ void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools
 	sum_log[1].add(1.0 - stationary_0);
 }
 
-double TClique::calculate_prob_to_parent(size_t index_in_tree, const TTree &tree,
-                                         TypeBinnedBranchLengths binned_branch_length,
-                                         const TCurrentState &current_state) const {
-	// always use cur matrix
-	const auto &matrix = get_matrix<false>(binned_branch_length);
-
-	size_t parent_index = tree.get_node(index_in_tree).parentIndex_in_tree();
-	bool parent_state   = current_state.get(parent_index);
-	bool child_state    = current_state.get(index_in_tree);
-	double parent_prob  = matrix(parent_state, child_state); // from parent_state to child_state
-	return parent_prob;
-}
-
 void TClique::_calculate_log_prob_node_to_children(
     size_t index_in_tree, const TTree &tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,

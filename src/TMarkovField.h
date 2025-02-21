@@ -136,7 +136,7 @@ private:
 	template<bool IsSimulation> void _update_all_Z() {
 		if (_fix_Z) { return; }
 
-		for (auto &_tree : _trees) { _tree.update_Z_and_mus<IsSimulation>(_Y); }
+		for (auto &_tree : _trees) { _tree.update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
 	}
 
 public:

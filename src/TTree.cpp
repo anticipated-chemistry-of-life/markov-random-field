@@ -261,111 +261,6 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, 
 	}
 }
 
-void TTree::_update_mu_0(const TCurrentState &current_state, size_t c) {
-	// propose a new value
-	_mu_c_0->propose(coretools::TRange(c));
-
-	// calculate LL for old mu
-	// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
-	double old_mu_0 = _mu_c_0->oldValue(c);
-	coretools::TSumLogProbability LL_old;
-	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node   = _nodes[i];
-		const auto &clique = this->get_cliques()[c];
-		bool state_of_node = current_state.get(i);
-		// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
-		const auto branch_len_bin =
-		    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
-		if (node.isRoot()) {
-			LL_old.add(clique.get_stationary_probability(state_of_node, old_mu_0, _mu_c_1->value(c)));
-		} else {
-			const auto &matrix  = clique.get_matrix<false>(branch_len_bin);
-			size_t parent_index = node.parentIndex_in_tree();
-			bool parent_state   = current_state.get(parent_index);
-			double parent_prob  = matrix(parent_state, state_of_node);
-			LL_old.add(parent_prob);
-		} // TODO: put if-else in a function so that we can have a single loop instead of 2.
-		// TODO: try to use calculate_prob_to_parent from clique
-	}
-
-	// calculate LL for new mu
-	// Need to change Lambda (rate matrix) first, and then go over tree
-	double new_mu_0 = _mu_c_0->value(c);
-	_cliques[c].update_lambda(new_mu_0, _mu_c_1->value(c));
-	coretools::TSumLogProbability LL_new;
-	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node   = _nodes[i];
-		const auto &clique = this->get_cliques()[c];
-		bool state_of_node = current_state.get(i);
-		if (node.isRoot()) {
-			LL_new.add(clique.get_stationary_probability(state_of_node, new_mu_0, _mu_c_1->value(c)));
-		} else {
-			const auto &matrix  = clique.get_matrix<true>(0);
-			size_t parent_index = node.parentIndex_in_tree();
-			bool parent_state   = current_state.get(parent_index);
-			double parent_prob  = matrix(parent_state, state_of_node);
-			LL_new.add(parent_prob);
-		}
-	}
-
-	// calculate Hastings ratio
-	const double LLRatio       = LL_new.getSum() - LL_old.getSum();
-	const double logPriorRatio = _mu_c_0->getLogDensityRatio(c);
-	const double logH          = LLRatio + logPriorRatio;
-
-	// accept or reject
-	bool accepted = _mu_c_0->acceptOrReject(logH, coretools::TRange(c));
-	if (accepted) { _cliques[c].accept_update_mu(); }
-}
-
-// TODO : correct update of mu_1 and also refactor to a function
-void TTree::_update_mu_1(const TCurrentState &current_state, size_t c) {
-	_mu_c_1->propose(coretools::TRange(c));
-	double old_mu_1 = _mu_c_1->oldValue(c);
-	coretools::TSumLogProbability LL_old;
-	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node = _nodes[i];
-		if (node.isRoot()) {
-			LL_old.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), old_mu_1));
-		} else {
-			const auto &clique  = this->get_cliques()[c];
-			const auto &matrix  = clique.get_matrix<false>(0);
-			size_t parent_index = node.parentIndex_in_tree();
-			bool parent_state   = current_state.get(parent_index);
-			bool child_state    = current_state.get(i);
-			double parent_prob  = matrix(parent_state, child_state);
-			LL_old.add(parent_prob);
-		}
-	}
-
-	double new_mu_1 = _mu_c_1->value(c);
-	_cliques[c].update_lambda(_mu_c_0->value(c), new_mu_1);
-	coretools::TSumLogProbability LL_new;
-	for (size_t i = 0; i < _nodes.size(); ++i) {
-		const auto &node = _nodes[i];
-		if (node.isRoot()) {
-			LL_new.add(this->get_cliques()[c].get_stationary_probability(true, _mu_c_0->value(c), new_mu_1));
-		} else {
-			const auto &clique  = this->get_cliques()[c];
-			const auto &matrix  = clique.get_matrix<true>(0);
-			size_t parent_index = node.parentIndex_in_tree();
-			bool parent_state   = current_state.get(parent_index);
-			bool child_state    = current_state.get(i);
-			double parent_prob  = matrix(parent_state, child_state);
-			LL_new.add(parent_prob);
-		}
-	}
-
-	// calculate Hastings ratio
-	const double LLRatio       = LL_new.getSum() - LL_old.getSum();
-	const double logPriorRatio = _mu_c_1->getLogDensityRatio(c);
-	const double logH          = LLRatio + logPriorRatio;
-
-	// accept or reject
-	bool accepted = _mu_c_1->acceptOrReject(logH, coretools::TRange(c));
-	if (accepted) { _cliques[c].accept_update_mu(); }
-}
-
 stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
 	const size_t num_branches = _nodes.size() - get_number_of_roots();
 	stattools::TPairIndexSampler sampler(num_branches);
@@ -419,12 +314,12 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in nodes
 	const size_t index_in_tree = _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
 
-	// calculate probability of parent to node for new branch length
-	double prob_old = clique.calculate_prob_to_parent(
+	// calculate probability of parent to node for old branch length
+	double prob_old = clique.calculate_prob_to_parent<false>(
 	    index_in_tree, *this, _binned_branch_lengths->oldValue(index_in_binned_branch_length), current_state);
 
 	// calculate probability of parent to node for new branch length
-	double prob_new = clique.calculate_prob_to_parent(
+	double prob_new = clique.calculate_prob_to_parent<false>(
 	    index_in_tree, *this, _binned_branch_lengths->value(index_in_binned_branch_length), current_state);
 
 	return prob_new / prob_old;
@@ -445,6 +340,18 @@ void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_sta
 		// TODO: make sure we don't have issues with parallelization, probably need pragma once
 		log_sum[p].add(ratio_p1);
 		log_sum[p].add(ratio_p2);
+	}
+}
+
+void TTree::_evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
+                                          const stattools::TPairIndexSampler &pairs) {
+	for (size_t p = 0; p < pairs.length(); ++p) {
+		const double LL = log_sum[p].getSum();
+		auto [p1, p2]   = pairs.getIndexPair(p);
+		const double log_prior_ratio =
+		    _binned_branch_lengths->getLogDensityRatio(p1) + _binned_branch_lengths->getLogDensityRatio(p2);
+		const double log_H = LL + log_prior_ratio;
+		_binned_branch_lengths->acceptOrReject(log_H, coretools::TRange(p1, p2), coretools::TRange());
 	}
 }
 

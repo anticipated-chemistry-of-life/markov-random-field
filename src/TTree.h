@@ -110,10 +110,6 @@ private:
 	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
 	                   size_t node_index_in_tree);
 
-	// updating mu
-	void _update_mu_0(const TCurrentState &current_state, size_t c);
-	void _update_mu_1(const TCurrentState &current_state, size_t c);
-
 	// updating branch lengths
 	stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
 	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
@@ -125,6 +121,70 @@ private:
 	                                                 const TCurrentState &current_state) const;
 
 	void _simulateUnderPrior(Storage *) override;
+
+	template<bool UseTryMatrix>
+	void _compute_LL_old_and_new_mu(size_t index_in_tree, const TClique &clique, bool state_of_node,
+	                                coretools::TSumLogProbability &LL, const TCurrentState &current_state,
+	                                size_t branch_len_bin, double mu_0, double mu_1) {
+		if (_nodes[index_in_tree].isRoot()) {
+			LL.add(clique.get_stationary_probability(state_of_node, mu_0, mu_1));
+		} else {
+
+			double prob =
+			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, *this, branch_len_bin, current_state);
+			LL.add(prob);
+		}
+	}
+
+	template<bool IsMu0, typename TypeParamMu>
+	void _update_mu(const TCurrentState &current_state, size_t c, TypeParamMu *mu_c) {
+		// propose a new value
+		mu_c->propose(coretools::TRange(c));
+
+		// calculate LL for old mu
+		// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
+		double old_mu = mu_c->oldValue(c);
+		double new_mu = mu_c->value(c);
+		coretools::TSumLogProbability LL_old;
+		coretools::TSumLogProbability LL_new;
+		if constexpr (IsMu0) {
+			_cliques[c].update_lambda(new_mu, _mu_c_1->value(c));
+		} else {
+			_cliques[c].update_lambda(_mu_c_0->value(c), new_mu);
+		}
+
+		for (size_t i = 0; i < _nodes.size(); ++i) {
+			const auto &clique = this->get_cliques()[c];
+			bool state_of_node = current_state.get(i);
+			// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
+			const auto branch_len_bin =
+			    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
+
+			if constexpr (IsMu0) {
+				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
+				                                  old_mu, _mu_c_1->value(c));
+				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
+				                                 new_mu, _mu_c_1->value(c));
+			} else {
+				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
+				                                  _mu_c_0->value(c), old_mu);
+				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
+				                                 _mu_c_0->value(c), new_mu);
+			}
+		}
+
+		// calculate Hastings ratio
+		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
+		const double logPriorRatio = mu_c->getLogDensityRatio(c);
+		const double logH          = LLRatio + logPriorRatio;
+
+		// accept or reject
+		bool accepted = mu_c->acceptOrReject(logH, coretools::TRange(c));
+		if (accepted) { _cliques[c].accept_update_mu(); }
+	}
+
+	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
+	                                   const stattools::TPairIndexSampler &pairs);
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
@@ -221,7 +281,7 @@ public:
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
-	template<bool IsSimulation> void update_Z_and_mus(const TStorageYVector &Y) {
+	template<bool IsSimulation> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
@@ -242,16 +302,17 @@ public:
 
 			// update mu
 			if constexpr (!IsSimulation) {
-				_update_mu_0(current_state, i);
-				_update_mu_1(current_state, i);
+				_update_mu<true>(current_state, i, _mu_c_0);
+				_update_mu<false>(current_state, i, _mu_c_1);
+
+				// add to likelihood ratio for branch length
+				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);
 			}
-			// add to likelihood ratio for branch length
-			if constexpr (!IsSimulation) { _add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs); }
 		}
 		_Z.insert_in_Z(indices_to_insert);
 
 		// update branch lengths
-		//_update_branch_length(log_sum_b);
+		_evalute_update_branch_length(log_sum_b, pairs);
 	}
 
 	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {

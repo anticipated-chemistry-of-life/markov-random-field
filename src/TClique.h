@@ -249,10 +249,6 @@ public:
 		return _cur_matrices[bin_length];
 	}
 
-	double calculate_prob_to_parent(size_t index_in_tree, const TTree &tree,
-	                                TypeBinnedBranchLengths binned_branch_length,
-	                                const TCurrentState &current_state) const;
-
 	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
 	                                       const TTree &tree, size_t leaf_index_in_tree_of_last_dim,
@@ -271,6 +267,21 @@ public:
 	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
 	size_t get_increment() const { return _increment; }
 	const std::vector<size_t> &get_start_index_in_leaf_space() const { return _start_index_in_leaves_space; }
+
+	template<bool UseTryMatrix>
+	double calculate_prob_to_parent(size_t index_in_tree, const TTree &tree,
+	                                TypeBinnedBranchLengths binned_branch_length,
+	                                const TCurrentState &current_state) const {
+		// always use cur matrix
+		const auto &matrix = get_matrix<UseTryMatrix>(binned_branch_length);
+
+		size_t parent_index = _get_parent_index(index_in_tree, tree);
+
+		bool parent_state  = current_state.get(parent_index);
+		bool child_state   = current_state.get(index_in_tree);
+		double parent_prob = matrix(parent_state, child_state); // from parent_state to child_state
+		return parent_prob;
+	}
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
