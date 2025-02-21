@@ -119,11 +119,13 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 		// calculate P(parent | node = 0) and P(parent | node = 1)
 		// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
 		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
-			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim], leaf_index_in_tree_of_last_dim,
-			                                         _clique_last_dim, sum_log);
+			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim].get_binned_branch_length(index_in_tree),
+			                                         _trees[dim], leaf_index_in_tree_of_last_dim, _clique_last_dim,
+			                                         sum_log);
 		} else { // use sheet
-			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim], leaf_index_in_tree_of_last_dim,
-			                                         _sheets[dim], sum_log);
+			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim].get_binned_branch_length(index_in_tree),
+			                                         _trees[dim], leaf_index_in_tree_of_last_dim, _sheets[dim],
+			                                         sum_log);
 		}
 	}
 }
@@ -225,7 +227,8 @@ void TMarkovField::_simulate_Y() {
 			const size_t index_in_tree = _trees[dim].get_node_index_from_leaf_index(multidim_index_in_Y[dim]);
 			// calculate P(parent | node = 0) and P(parent | node = 1)
 			// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
-			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim], 0, current_state, sum_log);
+			clique.calculate_log_prob_parent_to_node(index_in_tree, _trees[dim].get_binned_branch_length(index_in_tree),
+			                                         _trees[dim], 0, current_state, sum_log);
 		}
 		bool y_state = sample(sum_log);
 		if (y_state) {
