@@ -223,7 +223,10 @@ public:
 			// update Z
 			indices_to_insert[i] = _cliques[i].update_Z(current_state, _Z, *this, _mu_c_0->value(i), _mu_c_1->value(i));
 			// update mu
-			if constexpr (!IsSimulation) { _update_mu_0(current_state, i); }
+			if constexpr (!IsSimulation) {
+				_update_mu_0(current_state, i);
+				_update_mu_1(current_state, i);
+			}
 		}
 		_Z.insert_in_Z(indices_to_insert);
 	}
