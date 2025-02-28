@@ -15,5 +15,15 @@
 using namespace coretools::instances;
 
 //--------------------------------------
-// TMetaboliteModel
+// TModel
 //--------------------------------------
+
+void TCore::infer() {
+
+	// TODO: fix arguments
+	if (parameters().exists("simple_error_model")) {
+		TModel<true> model(1000, "out");
+	} else {
+		TModel<false> model(1000, "out");
+	}
+}

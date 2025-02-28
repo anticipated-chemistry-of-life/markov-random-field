@@ -12,7 +12,7 @@
 class TCollapser {
 private:
 	// trees
-	const std::vector<TTree> &_trees;
+	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// dimensions
 	std::vector<size_t> _dimensions_to_keep;
@@ -21,7 +21,7 @@ private:
 	template<bool ModifyCounter>
 	bool _x_is_one_in_clique(size_t dim_along_which_clique_runs, const std::vector<size_t> &index_in_leaves) const {
 		// count the number of leaves with state = 1 in current clique (corresponds to old_state)
-		const auto c = _trees[dim_along_which_clique_runs].get_clique(index_in_leaves).get_counter_leaves_state_1();
+		const auto c = _trees[dim_along_which_clique_runs]->get_clique(index_in_leaves).get_counter_leaves_state_1();
 
 		// new_state is always zero once we get here
 		// 0 and 0 -> c does not change
@@ -50,7 +50,7 @@ private:
 		std::vector<size_t> dimensions_clique_starts(_dimensions_to_collapse.size() - 1);
 		for (size_t i = 0; i < _dimensions_to_collapse.size() - 1; ++i) {
 			const size_t tree_index     = _dimensions_to_collapse[i];
-			dimensions_clique_starts[i] = _trees[tree_index].get_number_of_leaves();
+			dimensions_clique_starts[i] = _trees[tree_index]->get_number_of_leaves();
 		}
 
 		const size_t num_loops = coretools::containerProduct(dimensions_clique_starts);
@@ -70,7 +70,7 @@ private:
 	}
 
 public:
-	TCollapser(const std::vector<TTree> &trees);
+	TCollapser(const std::vector<std::unique_ptr<TTree>> &trees);
 	~TCollapser() = default;
 
 	std::vector<size_t> initialize(const std::vector<std::string> &dimension_names_to_keep, std::string_view data_name);

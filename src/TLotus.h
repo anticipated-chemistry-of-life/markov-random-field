@@ -29,7 +29,7 @@ public:
 
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy them
-	const std::vector<TTree> &_trees;
+	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
 	TStorageYVector _L;
@@ -152,7 +152,7 @@ private:
 	void _simulateUnderPrior(Storage *) override {
 		// by default we keep all the trees
 		std::vector<std::string> tree_names_to_keep_default;
-		for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree.get_tree_name()); }
+		for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree->get_tree_name()); }
 
 		// else get the tree names to keep from CLI
 		std::vector<std::string> tree_names_to_keep =
@@ -188,8 +188,8 @@ private:
 				for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
 					const size_t tree_index         = _collapser.dim_to_keep(j);
 					const size_t leaf_index         = multi_dim_index_in_L_space[j];
-					const size_t node_index_in_tree = _trees[tree_index].get_node_index_from_leaf_index(leaf_index);
-					line[j]                         = _trees[tree_index].get_node_id(node_index_in_tree);
+					const size_t node_index_in_tree = _trees[tree_index]->get_node_index_from_leaf_index(leaf_index);
+					line[j]                         = _trees[tree_index]->get_node_id(node_index_in_tree);
 				}
 				node_names.push_back(line);
 			}
@@ -202,7 +202,7 @@ private:
 		std::vector<std::string> header(_collapser.num_dim_to_keep());
 		for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
 			const size_t tree_index = _collapser.dim_to_keep(j);
-			header[j]               = _trees[tree_index].get_tree_name();
+			header[j]               = _trees[tree_index]->get_tree_name();
 		}
 
 		coretools::TOutputFile file(file_name, header, "\t");
@@ -210,8 +210,9 @@ private:
 	};
 
 public:
-	TLotus(const std::vector<TTree> &trees, TypeParamGamma *gamma, const TStorageYVector &Y, const std::string &prefix)
-	    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(trees.back(), 1),
+	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, const TStorageYVector &Y,
+	       const std::string &prefix)
+	    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1),
 	      _prefix(prefix) {
 		this->addPriorParameter(_gamma);
 
@@ -237,7 +238,7 @@ public:
 
 		// initialize collapser: know which dimensions to keep and which to collapse
 		std::vector<std::string> tree_names(_trees.size());
-		for (const auto &tree : _trees) { tree_names.push_back(tree.get_tree_name()); }
+		for (const auto &tree : _trees) { tree_names.push_back(tree->get_tree_name()); }
 
 		// check if all headers in file match a tree name
 		for (const auto &header_name : file.header()) {
@@ -267,7 +268,7 @@ public:
 		_occurrence_counters.resize(
 		    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
 		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-			_occurrence_counters[i].resize(_trees[_collapser.dim_to_keep(i)].get_number_of_leaves(), 0);
+			_occurrence_counters[i].resize(_trees[_collapser.dim_to_keep(i)]->get_number_of_leaves(), 0);
 		}
 
 		std::vector<size_t> index_in_collapsed_space(_collapser.num_dim_to_keep());
@@ -277,11 +278,12 @@ public:
 				std::string node_name = std::string(file.get(i));
 
 				const size_t tree_index = _collapser.dim_to_keep(i);
-				if (!_trees[tree_index].isLeaf(_trees[tree_index].get_node_index(node_name))) {
-					UERROR("Node '", node_name, "' in tree '", _trees[tree_index].get_tree_name(), "' is not a leaf !");
+				if (!_trees[tree_index]->isLeaf(_trees[tree_index]->get_node_index(node_name))) {
+					UERROR("Node '", node_name, "' in tree '", _trees[tree_index]->get_tree_name(),
+					       "' is not a leaf !");
 				}
 
-				const size_t ix             = _trees[tree_index].get_index_within_leaves(node_name);
+				const size_t ix             = _trees[tree_index]->get_index_within_leaves(node_name);
 				index_in_collapsed_space[i] = ix;
 				++_occurrence_counters[i][ix];
 			}

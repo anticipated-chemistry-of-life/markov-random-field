@@ -25,7 +25,7 @@ public:
 
 private:
 	// trees and Y
-	std::vector<TTree> _trees;
+	std::vector<std::unique_ptr<TTree>> &_trees;
 	TStorageYVector _Y;
 
 	// stuff for updating Y
@@ -38,9 +38,6 @@ private:
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
-
-	// functions for initializing
-	static std::vector<TTree> _make_trees();
 
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
@@ -102,7 +99,7 @@ private:
 				start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
 				// calculate size of current sheet (make sure not to overshoot)
 				const size_t K_cur_sheet =
-				    std::min(_K, _trees.back().get_number_of_leaves() - start_ix_in_leaves_last_dim);
+				    std::min(_K, _trees.back()->get_number_of_leaves() - start_ix_in_leaves_last_dim);
 				// update sheet(s), if necessary
 				_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
 
@@ -124,8 +121,7 @@ private:
 				// insert new 1-valued indices into Y
 				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
 				_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-				_trees.back()
-				    .get_clique(start_index_in_leaves_space)
+				_trees.back()->get_clique(start_index_in_leaves_space)
 				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
 
 				previous_ix = start_index_in_leaves_space;
@@ -136,11 +132,11 @@ private:
 	template<bool IsSimulation> void _update_all_Z() {
 		if (_fix_Z) { return; }
 
-		for (auto &_tree : _trees) { _tree.update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
+		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
 	}
 
 public:
-	TMarkovField(size_t n_iterations);
+	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> & Trees);
 	~TMarkovField() override = default;
 
 	[[nodiscard]] std::string name() const override;
@@ -150,6 +146,9 @@ public:
 	void update_markov_field();
 
 	void guessInitialValues() override;
+
+	// get Y
+	const TStorageYVector &get_Y() const;
 };
 
 #endif // ACOL_TMARKOVFIELD_H

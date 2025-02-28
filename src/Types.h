@@ -24,13 +24,13 @@ using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), P
 
 // Mu
 using PriorOnMu = stattools::prior::TExponentialFixed<TypeMu>;
-using SpecMu_0  = stattools::ParamSpec<TypeMu, stattools::name("mu_0"), PriorOnMu>;
-using SpecMu_1  = stattools::ParamSpec<TypeMu, stattools::name("mu_1"), PriorOnMu>;
+using SpecMu_0  = stattools::ParamSpec<TypeMu, stattools::name("mu_0"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
+using SpecMu_1  = stattools::ParamSpec<TypeMu, stattools::name("mu_1"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
 
 // binned branch lengths
 using PriorOnBinnedBranches = stattools::prior::TUniformFixed<TypeBinnedBranchLengths>;
-using SpecBinnedBranches =
-    stattools::ParamSpec<TypeBinnedBranchLengths, stattools::name("bin_branch"), PriorOnBinnedBranches>;
+using SpecBinnedBranches    = stattools::ParamSpec<TypeBinnedBranchLengths, stattools::name("bin_branch"),
+                                                   PriorOnBinnedBranches, stattools::EnforceUniqueHash<false>>;
 
 // Markov Field
 using TypeMarkovField                     = coretools::Boolean;
@@ -41,7 +41,6 @@ template<bool SimpleErrorModel> class TLotus; // forward declaration to avoid ci
 using TypeLotus                     = coretools::Boolean;
 constexpr static size_t NumDimLotus = 2;
 using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
-using SpecLotus = stattools::TObservation<TypeLotus, stattools::name("lotus"), NumDimLotus, TLotus<false>>;
 
 // Type for calculating the number of 1's per clique
 using TypeCounter1 = uint32_t;

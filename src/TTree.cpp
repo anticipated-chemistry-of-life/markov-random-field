@@ -19,8 +19,9 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name) {
-	_dimension = dimension;
+TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamMu0 *Mu_0,
+             TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
+    : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _mu_c_0(Mu_0), _mu_c_1(Mu_1) {
 	_load_from_file(filename, tree_name);
 }
 TTree::~TTree() = default;
@@ -196,11 +197,11 @@ size_t TTree::get_node_index(const std::string &Id) const {
 	return it->second; // Return the index from the map
 }
 
-void TTree::initialize_cliques_and_Z(const std::vector<TTree> &all_trees) {
+void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees) {
 
 	// we initialize the number of leaves we have in each tree
 	std::vector<size_t> num_leaves_per_tree(all_trees.size());
-	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i].get_number_of_leaves(); }
+	for (size_t i = 0; i < all_trees.size(); ++i) { num_leaves_per_tree[i] = all_trees[i]->get_number_of_leaves(); }
 
 	_initialize_Z(num_leaves_per_tree);
 	_initialize_cliques(num_leaves_per_tree, all_trees);
@@ -239,7 +240,8 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	_Z.initialize_dimensions(num_leaves_per_tree);
 }
 
-void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees) {
+void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
+                                const std::vector<std::unique_ptr<TTree>> &all_trees) {
 	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working on.
 	_dimension_cliques             = num_leaves_per_tree;
@@ -251,7 +253,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, 
 
 	// calculate increment: product of the number of leaves of all subsequent dimensions
 	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i].get_number_of_leaves(); }
+	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) { increment *= all_trees[i]->get_number_of_leaves(); }
 
 	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
@@ -316,11 +318,11 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 
 	// calculate probability of parent to node for old branch length
 	double prob_old = clique.calculate_prob_to_parent<false>(
-	    index_in_tree, *this, _binned_branch_lengths->oldValue(index_in_binned_branch_length), current_state);
+	    index_in_tree, this, _binned_branch_lengths->oldValue(index_in_binned_branch_length), current_state);
 
 	// calculate probability of parent to node for new branch length
 	double prob_new = clique.calculate_prob_to_parent<false>(
-	    index_in_tree, *this, _binned_branch_lengths->value(index_in_binned_branch_length), current_state);
+	    index_in_tree, this, _binned_branch_lengths->value(index_in_binned_branch_length), current_state);
 
 	return prob_new / prob_old;
 }
@@ -402,7 +404,7 @@ void TTree::simulate_Z(size_t tree_index) {
 			clique.calculate_log_prob_parent_to_node(node_index,
 			                                         (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			                                             _leaves_and_internal_nodes_without_roots_indices[node_index]),
-			                                         *this, 0, current_state, sum_log);
+			                                         this, 0, current_state, sum_log);
 			bool internal_node_state = sample(sum_log);
 			if (internal_node_state) { _simulate_one(clique, current_state, tree_index, node_index); }
 
