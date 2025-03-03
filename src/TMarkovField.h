@@ -7,7 +7,6 @@
 
 #include "TClique.h"
 #include "TCurrentState.h"
-#include "TLotus.h"
 #include "TTree.h"
 #include "coretools/Main/TError.h"
 
@@ -15,14 +14,9 @@
 // TMarkovField
 //-----------------------------------
 
-class TMarkovField : public stattools::prior::TBaseLikelihoodPrior<TypeMarkovField, NumDimMarkovField> {
-public:
-	// some type aliases, for better readability
-	using BoxType = TMarkovField;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<TypeMarkovField, NumDimMarkovField>;
-	using typename Base::Storage;
-	using typename Base::UpdatedStorage;
+class TLotus; // forward declaration
 
+class TMarkovField {
 private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
@@ -35,9 +29,6 @@ private:
 	std::vector<TSheet> _sheets;
 	TCurrentState _clique_last_dim;
 
-	// pointers to lotus (below in DAG, needed to calculate LL)
-	TLotus *_lotus;
-
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
@@ -48,20 +39,20 @@ private:
 	void _fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space);
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
-	int _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index,
-	              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
 	bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
 	                           const std::vector<size_t> &previous_ix) const;
 	int _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
 	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
-	void _simulateUnderPrior(Storage *) override;
 	void _simulate_Y();
+	void _add_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
+	                   std::array<coretools::TSumLogProbability, 2> &sum_log, TLotus &lotus);
+	void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet, TLotus &lotus);
 
 	template<bool IsSimulation>
 	int _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-	              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
+	              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
 		index_in_leaves_space.back() = leaf_index_last_dim;
 
 		// prepare log probabilities for the two possible states
@@ -71,10 +62,7 @@ private:
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
 
 		// calculate log likelihood (lotus)
-		if constexpr (!IsSimulation) {
-			// calculate log likelihood (lotus)
-			// TODO: call LL function here!
-		}
+		if constexpr (!IsSimulation) { _add_lotus_LL(index_in_leaves_space, leaf_index_last_dim, sum_log, lotus); }
 
 		// calculate log likelihood (virtual mass spec)...
 
@@ -85,7 +73,7 @@ private:
 		return _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
 	}
 
-	template<bool IsSimulation> void _update_all_Y() {
+	template<bool IsSimulation> void _update_all_Y(TLotus &lotus) {
 		if (_fix_Y) { return; }
 
 		// loop over sheets in last dimension
@@ -108,6 +96,7 @@ private:
 				// fill clique along last dimension
 				start_index_in_leaves_space.back() = 0; // start from the beginning
 				_fill_clique_along_last_dim(start_index_in_leaves_space);
+				_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
 
 				// now loop along all leaves of the last dimension for updating (only K leaves for which we have
 				// everything)
@@ -116,8 +105,9 @@ private:
 				int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-					diff_counter_1_in_last_dim += _update_Y<IsSimulation>(
-					    start_index_in_leaves_space, j, linear_indices_in_Y_space_to_insert[omp_get_thread_num()]);
+					diff_counter_1_in_last_dim +=
+					    _update_Y<IsSimulation>(start_index_in_leaves_space, j,
+					                            linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
 				}
 
 				// insert new 1-valued indices into Y
@@ -140,19 +130,18 @@ private:
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees);
-	~TMarkovField() override = default;
-
-	[[nodiscard]] std::string name() const override;
-	void initialize() override;
-	void addPtrToLotus(TLotus *lotus);
+	~TMarkovField() = default;
 
 	// updates
-	void update_markov_field(size_t iteration);
+	void update(TLotus &lotus);
 
-	void guessInitialValues() override;
+	// simulation
+	void simulate(TLotus &lotus);
 
 	// get Y
-	const TStorageYVector &get_Y() const;
+	[[nodiscard]] const TStorageYVector &get_Y_vector() const;
+	[[nodiscard]] const TStorageY &get_Y(size_t index) const;
+	[[nodiscard]] size_t size_Y() const;
 };
 
 #endif // ACOL_TMARKOVFIELD_H

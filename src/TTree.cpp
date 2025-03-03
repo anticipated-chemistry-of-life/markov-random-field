@@ -26,7 +26,6 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
 	this->addPriorParameter({_binned_branch_lengths, _mu_c_0, _mu_c_1});
 
 	_load_from_file(filename, tree_name);
-
 }
 
 TTree::~TTree() = default;
@@ -239,7 +238,9 @@ void TTree::guessInitialValues() {
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
-void TTree::_simulateUnderPrior(Storage *) { DEVERROR("Should never be called"); }
+void TTree::_simulateUnderPrior(Storage *) {
+	// stays empty - simulation is coordinated via TMarkovField
+}
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();

@@ -5,6 +5,7 @@
 #include "TMarkovField.h"
 #include "TClique.h"
 #include "TCurrentState.h"
+#include "TLotus.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "coretools/Main/TParameters.h"
@@ -42,14 +43,6 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	num_leaves_per_dim.back() = _trees.back()->get_number_of_leaves();
 	_Y.initialize(n_iterations, num_leaves_per_dim);
 }
-
-std::string TMarkovField::name() const { return "markov_field"; }
-
-void TMarkovField::initialize() {
-	// nothing to do - all sizes are initialized in constructor
-}
-
-void TMarkovField::addPtrToLotus(TLotus *lotus) { _lotus = lotus; }
 
 bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
                                          const std::vector<size_t> &previous_ix) const {
@@ -148,12 +141,23 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::update_markov_field(size_t /*iteration*/) {
-	_update_all_Y<false>();
+void TMarkovField::update(TLotus &lotus) {
+	_update_all_Y<false>(lotus);
 	_update_all_Z<false>();
 }
 
-void TMarkovField::_simulateUnderPrior(Storage *) {
+void TMarkovField::_add_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
+                                 std::array<coretools::TSumLogProbability, 2> &sum_log, TLotus &lotus) {
+	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
+	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, sum_log);
+}
+
+void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
+                                     TLotus &lotus) {
+	lotus.fill_tmp_state_along_last_dim(start_index_in_leaves_space, K_cur_sheet);
+}
+
+void TMarkovField::simulate(TLotus &lotus) {
 	// For simulation we always draw from the prior. (top-down)
 	// 1. Draw branch len -> draw mus
 	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes based on the state of
@@ -166,7 +170,6 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	//
 	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
 		auto &tree = _trees[tree_index];
-		tree->initialize_cliques_and_Z(_trees);
 		tree->simulate_Z(tree_index);
 	}
 
@@ -177,7 +180,7 @@ void TMarkovField::_simulateUnderPrior(Storage *) {
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
-		_update_all_Y<true>();
+		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
 	}
 }
@@ -217,8 +220,6 @@ void TMarkovField::_simulate_Y() {
 	}
 }
 
-void TMarkovField::guessInitialValues() {
-	// TODO: What to do here?
-}
-
-const TStorageYVector &TMarkovField::get_Y() const { return _Y; }
+const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
+const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const { return _Y[index_in_TStorageYVector]; }
+size_t TMarkovField::size_Y() const { return _Y.size(); }

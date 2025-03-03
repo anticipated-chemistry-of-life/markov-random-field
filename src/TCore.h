@@ -16,6 +16,7 @@
 #include "stattools/DAG/TDAGBuilder.h"
 #include "stattools/MCMC/TMCMC.h"
 #include <memory>
+#include "TLotus.h"
 
 //--------------------------------------
 // TModel
@@ -35,8 +36,8 @@ private:
 	// trees
 	std::vector<std::unique_ptr<TTree>> _trees;
 
-	// Markov field
-	std::unique_ptr<TMarkovField> _markov_field;
+	// Markov field parameters (only needed for stattools)
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> _markov_field_stattools_param;
 
 	// gamma
 	PriorOnGamma _prior_on_gamma{};
@@ -44,10 +45,10 @@ private:
 
 	// observation
 	std::unique_ptr<TLotus> _lotus;
-	std::unique_ptr<SpecLotus> _obs;
+	std::unique_ptr<SpecLotus> _obs; // "fake" observation, only needed for stattools
 
 	// functions that are called when updating
-	void (TMarkovField::*_fun_update_mrf)(size_t);
+	void (TLotus::*_fun_update_mrf)(size_t);
 
 	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name);
 	void _create_trees();
