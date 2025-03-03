@@ -10,6 +10,16 @@
 //-----------------------------------
 
 TCurrentState::TCurrentState(const TTree &tree, size_t increment) : _increment(increment), _tree(tree) {}
+TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z)
+    : _increment(increment), _tree(tree) {
+	_current_state_Y.resize(size_of_Y, false);
+	_exists_in_Y.resize(size_of_Y, false);
+	_index_in_TStorageYVector.resize(size_of_Y);
+
+	_current_state_Z.resize(size_of_Z, false);
+	_exists_in_Z.resize(size_of_Z, false);
+	_index_in_TStorageZVector.resize(size_of_Z);
+}
 
 void TCurrentState::fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYVector &Y,
                          const TStorageZVector &Z) {

@@ -197,7 +197,8 @@ void TMarkovField::_simulate_Y() {
 		for (size_t dim = 0; dim < _trees.size(); ++dim) {
 			// get relevant clique
 			const auto &clique = _trees[dim]->get_clique(multidim_index_in_Y);
-			TCurrentState current_state(*_trees[dim].get(), clique.get_increment());
+			TCurrentState current_state(*_trees[dim].get(), clique.get_increment(), _trees[dim]->get_number_of_leaves(),
+			                            _trees[dim]->get_number_of_internal_nodes());
 			// translate index in leaves to the index in tree
 			const size_t index_in_tree = _trees[dim]->get_node_index_from_leaf_index(multidim_index_in_Y[dim]);
 			// calculate P(parent | node = 0) and P(parent | node = 1)

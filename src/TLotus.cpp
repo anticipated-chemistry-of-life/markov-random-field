@@ -14,6 +14,8 @@ TLotus::TLotus(
 
 	_oldLL = 0.0;
 	_curLL = 0.0;
+	// _L.initialize(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) TODO : should we
+	// initialize this ?
 }
 
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }

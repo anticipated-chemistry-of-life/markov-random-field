@@ -384,7 +384,8 @@ void TTree::simulate_Z(size_t tree_index) {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
-		TCurrentState current_state(*this, clique.get_increment());
+		TCurrentState current_state(*this, clique.get_increment(), get_number_of_leaves(),
+		                            get_number_of_internal_nodes());
 
 		// we sample the roots
 		double proba_root = clique.get_stationary_probability(true, _mu_c_0->value(c), _mu_c_1->value(c));
@@ -426,8 +427,8 @@ void TTree::simulate_Z(size_t tree_index) {
 }
 
 void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
-	clique.set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
 	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
+	clique.set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
 };
 
 void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,

@@ -5,6 +5,7 @@
 #ifndef ACOL_TCURRENTSTATE_H
 #define ACOL_TCURRENTSTATE_H
 
+#include "TStorageY.h"
 #include "smart_binary_search.h"
 
 //-----------------------------------
@@ -29,6 +30,7 @@ private:
 
 public:
 	TCurrentState(const TTree &tree, size_t increment);
+	TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
 	void fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYVector &Y,
 	          const TStorageZVector &Z);

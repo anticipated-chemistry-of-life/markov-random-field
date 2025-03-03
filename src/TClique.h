@@ -187,7 +187,7 @@ private:
 	void _calculate_log_prob_node_to_children(
 	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t>& leaves_and_internal_nodes_without_roots_indices) const;
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
@@ -256,6 +256,7 @@ public:
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const size_t parent_index_in_tree = _get_parent_index(index_in_tree, tree);
 		const auto &matrix_for_bin        = get_matrix<UseTry>(binned_branch_length);
+		matrix_for_bin.print();
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
