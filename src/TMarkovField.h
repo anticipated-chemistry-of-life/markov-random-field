@@ -35,6 +35,9 @@ private:
 	std::vector<TSheet> _sheets;
 	TCurrentState _clique_last_dim;
 
+	// pointers to lotus (below in DAG, needed to calculate LL)
+	TLotus *_lotus;
+
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
@@ -54,11 +57,9 @@ private:
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulateUnderPrior(Storage *) override;
-	static void _simulate_one(const TClique &clique, const TTree &tree, TStorageZVector &z,
-	                          TCurrentState &current_state, size_t tree_index, size_t node_index_in_tree);
 	void _simulate_Y();
 
-	template<bool IsSimuluation>
+	template<bool IsSimulation>
 	int _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
 	              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 		index_in_leaves_space.back() = leaf_index_last_dim;
@@ -70,8 +71,9 @@ private:
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
 
 		// calculate log likelihood (lotus)
-		if constexpr (!IsSimuluation) {
+		if constexpr (!IsSimulation) {
 			// calculate log likelihood (lotus)
+			// TODO: call LL function here!
 		}
 
 		// calculate log likelihood (virtual mass spec)...
@@ -121,7 +123,8 @@ private:
 				// insert new 1-valued indices into Y
 				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
 				_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-				_trees.back()->get_clique(start_index_in_leaves_space)
+				_trees.back()
+				    ->get_clique(start_index_in_leaves_space)
 				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
 
 				previous_ix = start_index_in_leaves_space;
@@ -136,14 +139,15 @@ private:
 	}
 
 public:
-	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> & Trees);
+	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees);
 	~TMarkovField() override = default;
 
 	[[nodiscard]] std::string name() const override;
 	void initialize() override;
+	void addPtrToLotus(TLotus *lotus);
 
 	// updates
-	void update_markov_field();
+	void update_markov_field(size_t iteration);
 
 	void guessInitialValues() override;
 

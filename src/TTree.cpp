@@ -13,7 +13,6 @@
 #include "coretools/algorithms.h"
 #include "stattools/Updates/TPairIndexSampler.h"
 
-#include "omp.h"
 #include <cstddef>
 #include <queue>
 #include <string>
@@ -22,8 +21,14 @@
 TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamMu0 *Mu_0,
              TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
     : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _mu_c_0(Mu_0), _mu_c_1(Mu_1) {
+
+	// tell stattools that these parameters belong to a prior distribution
+	this->addPriorParameter({_binned_branch_lengths, _mu_c_0, _mu_c_1});
+
 	_load_from_file(filename, tree_name);
+
 }
+
 TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
@@ -32,10 +37,13 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
 	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);
-	if (_number_of_bins >= (size_t)std::numeric_limits<TypeBinnedBranchLengths>::max()) {
-		UERROR("More bins (", _number_of_bins, ") required than type allows (",
-		       std::numeric_limits<TypeBinnedBranchLengths>::max(), ")! Please decrease K or change type of bins.");
+
+	const size_t max_type = std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
+	if (_number_of_bins >= max_type) {
+		UERROR("More bins (", _number_of_bins, ") required than type allows (", max_type,
+		       ")! Please decrease K or change type of bins.");
 	}
+	TypeBinnedBranchLengths::setMax(_number_of_bins);
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
@@ -133,7 +141,6 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			} else {
 				// if the child was a root and the parent was already in the tree
 				// we set the parent as the parent of the child
-				size_t parent_index = get_node_index(parent);
 				_nodes[child_index].set_is_root(false);
 				branch_lengths[child_index] = branch_length;
 				_nodes[child_index].set_parent_index_in_tree(parent_index);

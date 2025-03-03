@@ -6,11 +6,8 @@
 #include "TClique.h"
 #include "TCurrentState.h"
 #include "TStorageYVector.h"
-#include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Main/TParameters.h"
-#include "coretools/algorithms.h"
-#include "smart_binary_search.h"
 #include <cstddef>
 #include <vector>
 
@@ -51,6 +48,8 @@ std::string TMarkovField::name() const { return "markov_field"; }
 void TMarkovField::initialize() {
 	// nothing to do - all sizes are initialized in constructor
 }
+
+void TMarkovField::addPtrToLotus(TLotus *lotus) { _lotus = lotus; }
 
 bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
                                          const std::vector<size_t> &previous_ix) const {
@@ -149,13 +148,13 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::update_markov_field() {
+void TMarkovField::update_markov_field(size_t /*iteration*/) {
 	_update_all_Y<false>();
 	_update_all_Z<false>();
 }
 
 void TMarkovField::_simulateUnderPrior(Storage *) {
-	// For simulation we always draw from the the prior. (top-down)
+	// For simulation we always draw from the prior. (top-down)
 	// 1. Draw branch len -> draw mus
 	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes based on the state of
 	// the parent. At the end also draw the state of the leaves. For each tree we know which leaves and which internal

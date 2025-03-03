@@ -10,7 +10,6 @@
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
 #include <cstddef>
-#include <utility>
 #include <vector>
 
 double TMatrices::_a;
@@ -94,7 +93,7 @@ void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools
 void TClique::_calculate_log_prob_node_to_children(
     size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
-    const std::vector<size_t> leaves_and_internal_nodes_without_roots_indices) const {
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	const auto &node = tree->get_node(index_in_tree);
 	for (const auto &child_index : node.children_indices_in_tree()) {
 		// Note: need to take old value of branch length because new values were proposed before the loop started

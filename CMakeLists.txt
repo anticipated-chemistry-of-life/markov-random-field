@@ -22,7 +22,7 @@ FetchContent_Declare(coretools
 
 FetchContent_Declare(stattools
         GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
-        GIT_TAG madleina/allow_same_hash
+        GIT_TAG madleina/interface
         SOURCE_DIR "${CMAKE_SOURCE_DIR}/stattools"
 )
 

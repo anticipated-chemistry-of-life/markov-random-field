@@ -13,11 +13,12 @@
 #include <cstddef>
 #include <deque>
 #include <string>
+#include <utility>
 #include <vector>
 
 // For this class, we need to enforce that the first tree will always be the one of the species and
 // the second tree will always be the one of the molecules. The rest of the trees, we won't care.
-template<bool SimpleErrorModel> class TLotus : public stattools::prior::TBaseLikelihoodPrior<TypeLotus, NumDimLotus> {
+class TLotus : public stattools::prior::TBaseLikelihoodPrior<TypeLotus, NumDimLotus> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TLotus;
@@ -65,15 +66,15 @@ private:
 	};
 	double _calculate_probability_of_L_given_x(bool x, bool L,
 	                                           const std::vector<size_t> &index_in_collapsed_space) const {
-		if constexpr (SimpleErrorModel) {
+		if constexpr (UseSimpleErrorModel) {
 			if (x && L) { return 1 - _epsilon; }
-			if (x && !L) { return _epsilon; }
-			if (!x && L) { return _epsilon; }
+			if (x) { return _epsilon; }
+			if (L) { return _epsilon; }
 			return 1 - _epsilon;
 		} else {
 			if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
-			if (x && !L) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
-			if (!x && L) { return 0.0; }
+			if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
+			if (L) { return 0.0; }
 			return 1.0;
 		}
 	};
@@ -150,7 +151,7 @@ private:
 	};
 
 	void _simulateUnderPrior(Storage *) override {
-		// by default we keep all the trees
+		// by default, we keep all the trees
 		std::vector<std::string> tree_names_to_keep_default;
 		for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree->get_tree_name()); }
 
@@ -211,9 +212,9 @@ private:
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, const TStorageYVector &Y,
-	       const std::string &prefix)
+	       std::string prefix)
 	    : _trees(trees), _Y(Y), _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1),
-	      _prefix(prefix) {
+	      _prefix(std::move(prefix)) {
 		this->addPriorParameter(_gamma);
 
 		_oldLL = 0.0;
@@ -226,7 +227,7 @@ public:
 	void initialize() override {
 		// initialize storage
 		_gamma->initStorage(this, {_collapser.num_dim_to_keep()});
-		if constexpr (SimpleErrorModel) {
+		if constexpr (UseSimpleErrorModel) {
 			_epsilon = coretools::instances::parameters().get<double>("epsilon", 0.0001);
 			coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
 		}
@@ -314,6 +315,7 @@ public:
 	/// This function will be used when we update Y.
 	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
 	                           std::array<coretools::TSumLogProbability, 2> &sum_log) {
+		// TODO: who is supposed to call this function? Never used
 		// function gets the old_state and needs to calculate LL for new_state = 0 and 1
 		// for state 1, we know that the new x will always be 1 (at least one is a one)
 		bool x_is_one_for_Y_0 = false; // Y = 0 -> x = 0 if we don't collapse
@@ -333,12 +335,13 @@ public:
 		}
 	};
 
-	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t Index, const Storage &) {
+	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &) {
 		_oldLL = _curLL;                          // store current likelihood
 		_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
 		return _curLL - _oldLL;
 	};
-	void updateTempVals(TypeParamGamma *, size_t Index, bool Accepted) {
+
+	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted) {
 		if (!Accepted) {
 			_curLL = _oldLL; // reset
 		}

@@ -7,10 +7,7 @@
 
 #include "TCore.h"
 #include "coretools/Main/TError.h"
-#include "coretools/Storage/TDataFile.h"
 #include "stattools/MCMC/TMCMC.h"
-#include "stattools/Priors/TPriorExponential.h"
-#include "stattools/Priors/TPriorNormal.h"
 
 using namespace coretools::instances;
 
@@ -18,12 +15,100 @@ using namespace coretools::instances;
 // TModel
 //--------------------------------------
 
-void TCore::infer() {
+void TModel::_create_tree(size_t dimension, const std::string &filename, const std::string &tree_name) {
+	// create mu_0
+	stattools::TRuntimeConfigParam config_mu_0;
+	config_mu_0.set_name(tree_name + "_mu_0");
+	_mu_0.push_back(std::make_unique<stattools::TParameter<SpecMu_0, TTree>>(&_prior_on_mu, config_mu_0));
 
-	// TODO: fix arguments
-	if (parameters().exists("simple_error_model")) {
-		TModel<true> model(1000, "out");
-	} else {
-		TModel<false> model(1000, "out");
-	}
+	// create mu_1
+	stattools::TRuntimeConfigParam config_mu_1;
+	config_mu_1.set_name(tree_name + "_mu_1");
+	_mu_1.push_back(std::make_unique<stattools::TParameter<SpecMu_1, TTree>>(&_prior_on_mu, config_mu_1));
+
+	// create branch lengths
+	stattools::TRuntimeConfigParam config_branch_lengths;
+	config_branch_lengths.set_name(tree_name + "_branch_lengths");
+	_binned_branch_lengths.push_back(std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
+	    &_prior_on_binned_branch_lengths, config_branch_lengths));
+
+	// create tree
+	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _mu_0.back().get(),
+	                                            _mu_1.back().get(), _binned_branch_lengths.back().get()));
 }
+
+void TModel::_create_trees() {
+	using namespace coretools::instances;
+	// read filenames
+	std::string filename_tree_species   = parameters().get("tree_species");
+	std::string filename_tree_molecules = parameters().get("tree_molecules");
+	std::vector<std::string> filenames_tree_others;
+	if (parameters().exists("tree_others")) { parameters().fill("tree_others", filenames_tree_others); }
+
+	size_t num_trees = 2 + filenames_tree_others.size();
+	_trees.reserve(num_trees);
+
+	// first tree: molecules
+	_create_tree(0, filename_tree_molecules, "molecules");
+
+	// middle trees: all others (e.g. tissues)
+	for (size_t i = 1; i < num_trees - 1; ++i) {
+		std::string name = coretools::str::split(filenames_tree_others[i - 1], ':');
+		if (name.empty()) {
+			UERROR("Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
+			       "filename (e.g. myTreeName:pathToFile)");
+		}
+		_create_tree(i, filenames_tree_others[i - 1], name);
+	}
+	// last tree: species
+	_create_tree(num_trees - 1, filename_tree_species, "species");
+}
+
+TModel::TModel(size_t n_iterations, const std::string &prefix) {
+	// create trees (including mu_0, mu_1 and binned branch lengths)
+	_create_trees();
+
+	// create markov field
+	_markov_field = std::make_unique<TMarkovField>(n_iterations, _trees);
+
+	// create lotus
+	_lotus = std::make_unique<TLotus>(_trees, &_gamma, _markov_field->get_Y(), prefix);
+	_markov_field->addPtrToLotus(_lotus.get());
+
+	// create (fake) observation for stattools
+	_obs = std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
+
+	// define function that is called when updating
+	_fun_update_mrf = &TMarkovField::update_markov_field;
+	stattools::instances::dagBuilder().addFuncToUpdate(*_markov_field, _fun_update_mrf);
+};
+
+//--------------------------------------
+// TCore
+//--------------------------------------
+
+void TCore::infer() {
+	std::string prefix = "acol"; // TODO: fix arguments
+
+	size_t n_iterations = 1000; // todo fix
+
+	// build model
+	TModel model(n_iterations, prefix);
+
+	// run MCMC
+	stattools::TMCMC mcmc;
+	mcmc.runMCMC(prefix);
+}
+
+void TCore::simulate() {
+	std::string prefix = "acol"; // TODO: fix arguments
+
+	// build model
+	TModel model(1, prefix);
+
+	// simulate
+	stattools::TSimulator::simulate(prefix);
+}
+
+// other TODO's
+// - write posteriors of Y and Z to file after MCMC
