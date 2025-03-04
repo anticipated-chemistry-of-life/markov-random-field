@@ -79,7 +79,7 @@ public:
 	TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim);
 	~TSheet() = default;
 
-	void fill(std::vector<size_t> start_index_in_leaves_space, size_t K, const TStorageYVector &Y);
+	void fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K, const TStorageYVector &Y);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
