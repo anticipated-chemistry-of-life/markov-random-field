@@ -22,7 +22,8 @@ TLotus::TLotus(
 
 void TLotus::initialize() {
 	// initialize storage
-	_gamma->initStorage(this, {_collapser.num_dim_to_keep()});
+	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
+	                    {std::make_shared<coretools::TNamesIndices>(_collapser.num_dim_to_keep())});
 	if constexpr (UseSimpleErrorModel) {
 		_epsilon = coretools::instances::parameters().get<double>("epsilon", 0.0001);
 		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);

@@ -218,10 +218,12 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 
 void TTree::initialize() {
 	// stattools initialization function
-	_mu_c_0->initStorage(this, {_cliques.size()});
-	_mu_c_1->initStorage(this, {_cliques.size()});
+	_mu_c_0->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	_mu_c_1->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
 	// number of branches = number of leaves + number of internal nodes without roots
-	_binned_branch_lengths->initStorage(this, {get_number_of_nodes() - get_number_of_roots()});
+	_binned_branch_lengths->initStorage(
+	    this, {get_number_of_nodes() - get_number_of_roots()},
+	    {std::make_shared<coretools::TNamesIndices>(get_number_of_nodes() - get_number_of_roots())});
 }
 
 void TTree::guessInitialValues() {
