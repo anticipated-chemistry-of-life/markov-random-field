@@ -291,7 +291,7 @@ public:
 		std::vector<coretools::TSumLogProbability> log_sum_b(pairs.length());
 
 		// propose new branch lengths
-		_propose_new_branch_lengths(pairs);
+		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
@@ -314,7 +314,7 @@ public:
 		_Z.insert_in_Z(indices_to_insert);
 
 		// update branch lengths
-		_evalute_update_branch_length(log_sum_b, pairs);
+		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
 	}
 
 	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {

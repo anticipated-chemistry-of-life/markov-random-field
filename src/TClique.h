@@ -259,6 +259,7 @@ public:
 		matrix_for_bin.print();
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
+			matrix_for_bin.print();
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
 		}
 	}

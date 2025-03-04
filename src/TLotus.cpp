@@ -247,9 +247,6 @@ double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
 };
 
 void TLotus::_simulateUnderPrior(Storage *) {
-	// first simulate Markov random field
-	_markov_field.simulate(*this);
-
 	// by default, we keep all the trees
 	std::vector<std::string> tree_names_to_keep_default;
 	for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree->get_tree_name()); }
@@ -261,6 +258,9 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	const auto len_per_dimension_lotus = _collapser.initialize(tree_names_to_keep, "LOTUS");
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
+
+	// first simulate Markov random field
+	_markov_field.simulate(*this);
 
 	std::vector<std::vector<std::string>> node_names;
 	bool x;

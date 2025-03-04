@@ -130,7 +130,8 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 		auto upper_linear_index_in_container_space = container[upper_bound].get_linear_index_in_container_space();
 
 		// calculate the lower bound
-		auto lower_bound                           = index_in_TStorage + jump_left;
+		auto lower_bound = index_in_TStorage + jump_left;
+		if (lower_bound >= container.size()) { lower_bound = container.size() - 1; }
 		auto lower_linear_index_in_container_space = container[lower_bound].get_linear_index_in_container_space();
 
 		if (linear_index_in_container_space_of_i == upper_linear_index_in_container_space) {
