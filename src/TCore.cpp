@@ -103,6 +103,8 @@ TModel::TModel(size_t n_iterations, const std::string &prefix) {
 // TCore
 //--------------------------------------
 
+TCore::TCore() { NUMBER_OF_THREADS = coretools::getNumThreads(); }
+
 void TCore::infer() {
 	std::string prefix  = "acol"; // TODO: fix arguments
 	size_t n_iterations = 1000;   // todo fix

@@ -13,6 +13,8 @@
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>
 
+inline size_t NUMBER_OF_THREADS;
+
 // use simple error model for Lotus?
 constexpr static bool UseSimpleErrorModel = true;
 

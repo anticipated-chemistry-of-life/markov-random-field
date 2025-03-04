@@ -64,6 +64,8 @@ public:
 class TCore {
 private:
 public:
+	TCore();
+	~TCore() = default;
 	void infer();
 	void simulate();
 };

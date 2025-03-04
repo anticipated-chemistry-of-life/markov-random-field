@@ -17,8 +17,6 @@
 #include <string>
 #include <vector>
 
-static const size_t NUMBER_OF_THREADS = coretools::getNumThreads();
-
 class TNode {
 private:
 	std::string _id;                               // unique identifier for the node
