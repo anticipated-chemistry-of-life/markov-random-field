@@ -8,33 +8,66 @@
 #ifndef TEXAMPLETASK_H_
 #define TEXAMPLETASK_H_
 
+#include "TMarkovField.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/TTask.h"
-#include "coretools/Types/TStringHash.h"
 #include "stattools/DAG/TDAGBuilder.h"
-#include "stattools/ParametersObservations/TNodeBase.h"
-#include "stattools/ParametersObservations/TObservation.h"
-#include "stattools/ParametersObservations/TParameter.h"
-#include "stattools/ParametersObservations/spec.h"
-#include "stattools/Priors/TPriorBernoulli.h"
-#include "stattools/Priors/TPriorExponential.h"
-#include "stattools/Priors/TPriorNormal.h"
-#include "stattools/Priors/TPriorPoisson.h"
+#include "stattools/MCMC/TMCMC.h"
 #include <memory>
-#include "TMarkovField.h"
+#include "TLotus.h"
+
+//--------------------------------------
+// TModel
+//--------------------------------------
+
+class TModel {
+private:
+	// mu_0 and mu_1
+	PriorOnMu _prior_on_mu{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_0, TTree>>> _mu_0;
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_1, TTree>>> _mu_1;
+
+	// binned branch lengths
+	PriorOnBinnedBranches _prior_on_binned_branch_lengths{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecBinnedBranches, TTree>>> _binned_branch_lengths;
+
+	// trees
+	std::vector<std::unique_ptr<TTree>> _trees;
+
+	// Markov field parameters (only needed for stattools)
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> _markov_field_stattools_param;
+
+	// gamma
+	PriorOnGamma _prior_on_gamma{};
+	stattools::TParameter<SpecGamma, TLotus> _gamma{&_prior_on_gamma};
+
+	// observation
+	std::unique_ptr<TLotus> _lotus;
+	std::unique_ptr<SpecLotus> _obs; // "fake" observation, only needed for stattools
+
+	// functions that are called when updating
+	void (TLotus::*_fun_update_mrf)(size_t);
+
+	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name);
+	void _create_trees();
+
+public:
+	TModel(size_t n_iterations, const std::string &prefix);
+};
+
+//--------------------------------------
+// TCore
+//--------------------------------------
 
 class TCore {
 private:
-	void (TMarkovField:: *_fun_update_mrf)();
-
 public:
-	void infer(){
-		// define function that is called when updating
-		//_fun_update_mrf = &TMarkovField::update_markov_field;
-		//stattools::instances::dagBuilder().addFuncToUpdate(*_lotus, _funUpdateLotus);
-	};
+	TCore();
+	~TCore() = default;
+	void infer();
+	void simulate();
 };
 
 //--------------------------------------
@@ -42,15 +75,22 @@ public:
 //--------------------------------------
 class TTask_infer : public coretools::TTask {
 public:
-	// constructor must fill explanation shown to users
-	TTask_infer() : coretools::TTask("Inferring metabolite presence in all the species there are on this planet!!"){};
+	TTask_infer() : coretools::TTask("Inferring metabolite presence in all the species there are on this planet!!") {};
 
-	// a task must overload the run function that takes two arguments:
-	// coretools::TParameters & Parameters, coretools::TLog* Logfile Usually, a
-	// task creates an object and calls its function
 	void run() override {
 		TCore core;
 		core.infer();
+	};
+};
+
+class TTask_simulate : public coretools::TTask {
+public:
+	TTask_simulate()
+	    : coretools::TTask("Simulating metabolite presence in all the species there are on this planet!!") {};
+
+	void run() override {
+		TCore core;
+		core.simulate();
 	};
 };
 

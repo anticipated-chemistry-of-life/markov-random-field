@@ -3,9 +3,10 @@
 //
 
 #include "TCollapser.h"
+
 #include "coretools/Main/TLog.h"
 
-TCollapser::TCollapser(const std::vector<TTree> &trees) : _trees(trees) {}
+TCollapser::TCollapser(const std::vector<std::unique_ptr<TTree>> &trees) : _trees(trees) {}
 
 std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimension_names_to_keep,
                                            std::string_view data_name) {
@@ -20,12 +21,12 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	for (const auto &tree_name : dimension_names_to_keep) {
 		bool found = false;
 		for (size_t j = 0; j < _trees.size(); ++j) {
-			if (_trees[j].get_tree_name() == tree_name) {
+			if (_trees[j]->get_tree_name() == tree_name) {
 				// already found before -> duplicated!
 				if (found) { UERROR("Duplicate column name '", tree_name, "' in ", data_name, " file!"); }
 				// else: remember this dimension -> we will not collapse it
 				_dimensions_to_keep.push_back(j);
-				len_per_dimension.push_back(_trees[j].get_number_of_leaves());
+				len_per_dimension.push_back(_trees[j]->get_number_of_leaves());
 				found = true;
 			}
 		}
@@ -50,27 +51,27 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 
 	// report to logfile
 	logfile().startIndent("Will keep the following dimensions for ", data_name, ":");
-	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i].get_tree_name(), " [", i, "]"); }
+	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i]->get_tree_name(), " [", i, "]"); }
 	logfile().endIndent();
 	if (_dimensions_to_collapse.empty()) {
 		logfile().list("Will not collapse any dimensions for ", data_name, ".");
 	} else {
 		logfile().startIndent("Will collapse the following dimensions for ", data_name, ":");
-		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i].get_tree_name(), " [", i, "]"); }
+		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i]->get_tree_name(), " [", i, "]"); }
 		logfile().endIndent();
 	}
 
 	return len_per_dimension;
 }
 
-bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves, bool old_state) const {
+bool TCollapser::x_is_one(const std::vector<size_t>& index_in_leaves, bool old_state) const {
 	// used for calculating likelihood when updating Y, used to evaluate if x=1 if Y=0
 	// need to modify counter if old_state == 1
 	if (old_state) { return _x_is_one<true>(index_in_leaves); }
 	return _x_is_one<false>(index_in_leaves);
 }
 
-bool TCollapser::x_is_one(std::vector<size_t> index_in_leaves) const {
+bool TCollapser::x_is_one(const std::vector<size_t>& index_in_leaves) const {
 	// used for calculating likelihood when updating gamma
 	// don't need to modify counter of cliques, always take current counter
 	return _x_is_one<false>(index_in_leaves);

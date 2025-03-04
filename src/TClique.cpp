@@ -10,7 +10,6 @@
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
 #include <cstddef>
-#include <utility>
 #include <vector>
 
 double TMatrices::_a;
@@ -32,17 +31,17 @@ TCurrentState TClique::create_current_state(const TStorageYVector &Y, TStorageZV
 }
 
 std::vector<TStorageZ>
-TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree &tree, double mu_c_0, double mu_c_1,
+TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree, double mu_c_0, double mu_c_1,
                   const TypeParamBinBranches *binned_branch_lengths,
-                  const std::vector<size_t> leaves_and_internal_nodes_without_roots_indices) const {
+                  const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
 
 	const double stationary_0 = get_stationary_probability(false, mu_c_0, mu_c_1);
 
-	for (const auto index_in_tree : tree.get_internal_nodes()) {
+	for (const auto index_in_tree : tree->get_internal_nodes()) {
 		// prepare log probabilities for the two possible states
 		std::array<coretools::TSumLogProbability, 2> sum_log;
-		const auto &node = tree.get_node(index_in_tree);
+		const auto &node = tree->get_node(index_in_tree);
 		if (node.isRoot()) { // calculate stationary
 			_calculate_log_prob_root(stationary_0, sum_log);
 		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
@@ -68,7 +67,7 @@ TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree 
 
 void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
                                     bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-                                    const TTree &tree) const {
+                                    const TTree *tree) const {
 	auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
 	// 1 -> 0: can simply set Z to zero (element exists already)
 	if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
@@ -78,7 +77,7 @@ void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_s
 			Z.set_to_one(index_in_TStorageZVector);
 		} else { // it does not exist -> remember linear index in Z to be inserted later!
 			auto multidim_index_in_Z_space                 = _start_index_in_leaves_space;
-			multidim_index_in_Z_space[_variable_dimension] = tree.get_index_within_internal_nodes(index_in_tree);
+			multidim_index_in_Z_space[_variable_dimension] = tree->get_index_within_internal_nodes(index_in_tree);
 			size_t linear_index_in_Z_space                 = Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
 			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
 		}
@@ -92,10 +91,10 @@ void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools
 }
 
 void TClique::_calculate_log_prob_node_to_children(
-    size_t index_in_tree, const TTree &tree, const TCurrentState &current_state,
+    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
-    const std::vector<size_t> leaves_and_internal_nodes_without_roots_indices) const {
-	const auto &node = tree.get_node(index_in_tree);
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+	const auto &node = tree->get_node(index_in_tree);
 	for (const auto &child_index : node.children_indices_in_tree()) {
 		// Note: need to take old value of branch length because new values were proposed before the loop started
 		auto bin_length = binned_branch_lengths->oldValue(leaves_and_internal_nodes_without_roots_indices[child_index]);
@@ -120,8 +119,8 @@ bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	return coretools::TAcceptOddsRatio::accept(log_Q);
 }
 
-size_t TClique::_get_parent_index(size_t index_in_tree, const TTree &tree) {
-	const auto &node                  = tree.get_node(index_in_tree);
+size_t TClique::_get_parent_index(size_t index_in_tree, const TTree *tree) {
+	const auto &node                  = tree->get_node(index_in_tree);
 	const size_t parent_index_in_tree = node.parentIndex_in_tree();
 	return parent_index_in_tree;
 }

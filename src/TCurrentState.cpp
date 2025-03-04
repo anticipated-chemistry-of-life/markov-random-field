@@ -10,6 +10,16 @@
 //-----------------------------------
 
 TCurrentState::TCurrentState(const TTree &tree, size_t increment) : _increment(increment), _tree(tree) {}
+TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z)
+    : _increment(increment), _tree(tree) {
+	_current_state_Y.resize(size_of_Y, false);
+	_exists_in_Y.resize(size_of_Y, false);
+	_index_in_TStorageYVector.resize(size_of_Y);
+
+	_current_state_Z.resize(size_of_Z, false);
+	_exists_in_Z.resize(size_of_Z, false);
+	_index_in_TStorageZVector.resize(size_of_Z);
+}
 
 void TCurrentState::fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYVector &Y,
                          const TStorageZVector &Z) {
@@ -91,23 +101,25 @@ TSheet::TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim)
 	for (size_t i = 0; i < _tree.get_number_of_nodes(); ++i) { _cur_states.emplace_back(_tree_last_dim, increment); }
 }
 
-void TSheet::fill(std::vector<size_t> start_index_in_leaves_space, size_t K, const TStorageYVector &Y) {
+void TSheet::fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K, const TStorageYVector &Y) {
 	// start index and how many Y need to be parsed
 	_start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back();
 
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 	for (size_t i = 0; i < _tree.get_number_of_nodes(); ++i) { // loop over all nodes along current dimension
+		std::vector<size_t> local_start_index_in_leaves_space = start_index_in_leaves_space; // thread-local copy
+
 		if (_tree.isLeaf(i)) { // only fill Y (ignore Z along last dimensions, not needed when updating)
-			start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_leaves(i);
-			_cur_states[i].fill_Y_along_last_dim(start_index_in_leaves_space, K, Y);
+			local_start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_leaves(i);
+			_cur_states[i].fill_Y_along_last_dim(local_start_index_in_leaves_space, K, Y);
 		} else {
 			// get start index: leaf space in all dimensions except _dim_ix, for which we use the internal node index
-			start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_internal_nodes(i);
+			local_start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_internal_nodes(i);
 			// fill Z. There are as many Z as there are leaves along the last dimension
 			// use z of your own dimension for filling
 			// Note: we do not need to fill Y here, as there are no Y when the node(i) is internal
 			// Note: this will not fill nodes that are not part of Z, i.e. which are internal in the last dimension
-			_cur_states[i].fill_Z_along_last_dim(start_index_in_leaves_space, K, _tree.get_Z());
+			_cur_states[i].fill_Z_along_last_dim(local_start_index_in_leaves_space, K, _tree.get_Z());
 		}
 	}
 }

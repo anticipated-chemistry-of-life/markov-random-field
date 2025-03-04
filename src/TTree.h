@@ -10,13 +10,12 @@
 #include "TStorageZVector.h"
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
 #include <vector>
-
-static const size_t NUMBER_OF_THREADS = coretools::instances::parameters().get("n_cpus", coretools::getNumThreads());
 
 class TNode {
 private:
@@ -78,8 +77,11 @@ private:
 	std::vector<size_t> _leaves_and_internal_nodes_without_roots_indices;
 	std::vector<size_t> _internalIndicesWithoutRoots;
 
+	// dimension of the tree
+	size_t _dimension;
+
 	// For binning branch lengths
-	coretools::Probability _a;
+	coretools::ZeroOpenOneClosed _a;
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
@@ -94,9 +96,6 @@ private:
 	TypeParamMu0 *_mu_c_0 = nullptr;
 	TypeParamMu1 *_mu_c_1 = nullptr;
 
-	// dimension of the tree
-	size_t _dimension;
-
 	// Set Z
 	TStorageZVector _Z;
 
@@ -104,7 +103,8 @@ private:
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
-	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree, const std::vector<TTree> &all_trees);
+	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
+	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
 	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
 	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
@@ -131,7 +131,7 @@ private:
 		} else {
 
 			double prob =
-			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, *this, branch_len_bin, current_state);
+			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, this, branch_len_bin, current_state);
 			LL.add(prob);
 		}
 	}
@@ -187,7 +187,8 @@ private:
 	                                   const stattools::TPairIndexSampler &pairs);
 
 public:
-	TTree(size_t dimension, const std::string &filename, const std::string &tree_name);
+	TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamMu0 *Mu_0,
+	      TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts);
 	~TTree();
 
 	size_t size() const { return _nodes.size(); };
@@ -267,9 +268,9 @@ public:
 	double getDensity(const Storage &, size_t) const override;
 	double getLogDensityRatio(const UpdatedStorage &, size_t) const override;
 
-	void initialize_cliques_and_Z(const std::vector<TTree> &trees);
+	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	coretools::Probability get_a() const { return _a; }
+	coretools::ZeroOpenOneClosed get_a() const { return _a; }
 	coretools::Probability get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
@@ -289,7 +290,7 @@ public:
 		std::vector<coretools::TSumLogProbability> log_sum_b(pairs.length());
 
 		// propose new branch lengths
-		_propose_new_branch_lengths(pairs);
+		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
@@ -297,7 +298,7 @@ public:
 			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
 			indices_to_insert[i] =
-			    _cliques[i].update_Z(current_state, _Z, *this, _mu_c_0->value(i), _mu_c_1->value(i),
+			    _cliques[i].update_Z(current_state, _Z, this, _mu_c_0->value(i), _mu_c_1->value(i),
 			                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
 
 			// update mu
@@ -312,7 +313,7 @@ public:
 		_Z.insert_in_Z(indices_to_insert);
 
 		// update branch lengths
-		_evalute_update_branch_length(log_sum_b, pairs);
+		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
 	}
 
 	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {

@@ -21,8 +21,8 @@ void addTask(coretools::TMain &main) {
 	// list of available tasks) Use main.addDebugTask() to add a
 	// debug task (not shown in list of available tasks)
 
-	// TODO: add all your tasks here (infer and simulate)
 	main.addRegularTask("infer", new TTask_infer());
+	main.addRegularTask("simulate", new TTask_simulate());
 };
 
 //---------------------------------------------------------------------------
