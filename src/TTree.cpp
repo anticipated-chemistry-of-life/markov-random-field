@@ -10,6 +10,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
+#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/algorithms.h"
 #include "stattools/Updates/TPairIndexSampler.h"
 
@@ -32,7 +33,7 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	_a               = coretools::instances::parameters().get("a", coretools::Probability(0.0));
+	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(1e-10));
 	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
 	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);

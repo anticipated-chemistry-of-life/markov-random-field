@@ -10,13 +10,14 @@
 #include "TStorageZVector.h"
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
 #include <vector>
 
-static const size_t NUMBER_OF_THREADS = coretools::instances::parameters().get("n_cpus", coretools::getNumThreads());
+static const size_t NUMBER_OF_THREADS = coretools::getNumThreads();
 
 class TNode {
 private:
@@ -82,7 +83,7 @@ private:
 	size_t _dimension;
 
 	// For binning branch lengths
-	coretools::Probability _a;
+	coretools::ZeroOpenOneClosed _a;
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
@@ -271,7 +272,7 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	coretools::Probability get_a() const { return _a; }
+	coretools::ZeroOpenOneClosed get_a() const { return _a; }
 	coretools::Probability get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
