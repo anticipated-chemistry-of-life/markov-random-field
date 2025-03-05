@@ -1,4 +1,4 @@
-fixedSeed	100392388
+fixedSeed	100923728
 molecules_branch_lengths	acol_simulated.txt
 num_iterations	30000
 task	simulate

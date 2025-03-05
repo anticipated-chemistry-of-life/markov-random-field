@@ -321,6 +321,31 @@ public:
 	}
 
 	const std::string &get_tree_name() const { return _tree_name; }
+
 	void simulate_Z(size_t tree_index);
+
+	template<bool WriteFullZ> void write_Z_to_file(const std::string &filename) const {
+		std::vector<std::string> header = {"position", "state"};
+		if constexpr (WriteFullZ) {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			for (size_t i = 0; i < _Z.total_size_of_container_space(); ++i) {
+				auto [found, position] = _Z.binary_search(i);
+				if (found) {
+					line = {i, _Z.is_one(position)};
+				} else {
+					line = {i, 0};
+				}
+				file.writeln(line);
+			}
+		} else {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			for (size_t i = 0; i < _Z.size(); ++i) {
+				line = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
+				file.writeln(line);
+			}
+		}
+	}
 };
 #endif // METABOLITE_INFERENCE_TREE_H

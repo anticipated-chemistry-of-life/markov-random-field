@@ -138,6 +138,11 @@ public:
 		}
 		std::sort(_vec.begin(), _vec.end());
 	}
+
+	[[nodiscard]]
+	size_t total_size_of_container_space() const {
+		return coretools::containerProduct(_dimensions_in_Z_space);
+	}
 };
 
 #endif // TSTORAGEZVECTOR_H

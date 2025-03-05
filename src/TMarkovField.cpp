@@ -185,6 +185,9 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_Y.add_to_counter(iteration);
 	}
 	_write_Y_to_file<true>("acol_simulated_Y.txt");
+	for (const auto &tree : _trees) {
+		tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt");
+	}
 }
 
 void TMarkovField::_simulate_Y() {

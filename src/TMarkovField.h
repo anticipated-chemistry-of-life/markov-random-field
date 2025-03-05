@@ -133,9 +133,9 @@ private:
 
 	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
 		std::vector<std::string> header = {"position", "state", "fraction_of_one"};
+		std::array<size_t, 2> line{};
+		coretools::TOutputFile file(filename, header, "\t");
 		if constexpr (WriteFullY) {
-			std::array<size_t, 2> line{};
-			coretools::TOutputFile file(filename, header, "\t");
 			double fraction;
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
 				auto [found, position] = _Y.binary_search(i);
@@ -148,8 +148,6 @@ private:
 				file.writeln(line, fraction);
 			}
 		} else {
-			std::array<size_t, 2> line{};
-			coretools::TOutputFile file(filename, header, "\t");
 			double fraction;
 			for (size_t i = 0; i < _Y.size(); ++i) {
 				line     = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
