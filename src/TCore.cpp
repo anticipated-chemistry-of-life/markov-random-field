@@ -119,7 +119,7 @@ void TCore::infer() {
 
 void TCore::simulate() {
 	std::string prefix  = "acol"; // TODO: fix arguments
-	size_t n_iterations = 1000;   // todo fix
+	size_t n_iterations = coretools::instances::parameters().get("num_iterations", 5000);
 
 	// build model
 	TModel model(n_iterations, prefix);

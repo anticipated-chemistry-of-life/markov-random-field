@@ -8,7 +8,10 @@
 #include "TClique.h"
 #include "TCurrentState.h"
 #include "TTree.h"
+#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include <string>
+#include <vector>
 
 //-----------------------------------
 // TMarkovField
@@ -127,6 +130,34 @@ private:
 
 		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
 	}
+
+	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
+		std::vector<std::string> header = {"position", "state", "fraction_of_one"};
+		if constexpr (WriteFullY) {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			double fraction;
+			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
+				auto [found, position] = _Y.binary_search(i);
+				if (found) {
+					line = {i, _Y.is_one(position)};
+				} else {
+					line = {i, 0};
+				}
+				fraction = _Y.get_fraction_of_ones(i);
+				file.writeln(line, fraction);
+			}
+		} else {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			double fraction;
+			for (size_t i = 0; i < _Y.size(); ++i) {
+				line     = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
+				fraction = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());
+				file.writeln(line, fraction);
+			}
+		}
+	};
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees);

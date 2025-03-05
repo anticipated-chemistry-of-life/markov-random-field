@@ -182,7 +182,9 @@ void TMarkovField::simulate(TLotus &lotus) {
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
+		_Y.add_to_counter(iteration);
 	}
+	_write_Y_to_file<true>("acol_simulated_Y.txt");
 }
 
 void TMarkovField::_simulate_Y() {

@@ -13,6 +13,7 @@
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>
 
+class TTree; // forward declaration to avoid circular inclusion
 inline size_t NUMBER_OF_THREADS;
 
 // use simple error model for Lotus?

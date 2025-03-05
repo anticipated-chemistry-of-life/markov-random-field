@@ -1,4 +1,4 @@
-fixedSeed	92901728
+fixedSeed	100176013
 num_iterations	10000
 species_mu_0	acol_simulated.txt
 task	simulate
