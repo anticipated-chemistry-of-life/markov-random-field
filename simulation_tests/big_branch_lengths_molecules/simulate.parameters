@@ -1,6 +1,6 @@
-fixedSeed	100117118
+fixedSeed	100392388
 molecules_branch_lengths	acol_simulated.txt
-num_iterations	10000
+num_iterations	30000
 task	simulate
 tree_molecules	../../tests/test_data/molecules.tsv
 tree_species	../../tests/test_data/loading_tree.tsv
