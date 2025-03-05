@@ -1,0 +1,6 @@
+fixedSeed	93535829
+num_iterations	10000
+species_branch_lengths	acol_simulated.txt
+task	simulate
+tree_molecules	../../tests/test_data/molecules.tsv
+tree_species	../../tests/test_data/loading_tree.tsv

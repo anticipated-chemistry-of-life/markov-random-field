@@ -178,7 +178,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// for iteration in 1->max_iteration, (max_iteration should be passed from CLI)
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
-	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
+	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 5000);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();

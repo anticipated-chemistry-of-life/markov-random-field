@@ -98,10 +98,6 @@ private:
 		// calculate matrix exponential for first bin
 		TMatrix P_0;
 		P_0.set_from_matrix_exponential(_lambda_c * _a);
-		OUT("DEBUG:");
-		OUT(_a);
-		_lambda_c.print();
-		P_0.print();
 
 		// calculate matrix exponential of scaling matrix
 		TMatrix matrix_alpha;
@@ -260,8 +256,6 @@ public:
 	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const size_t parent_index_in_tree = _get_parent_index(index_in_tree, tree);
 		const auto &matrix_for_bin        = get_matrix<UseTry>(binned_branch_length);
-		OUT(binned_branch_length);
-		matrix_for_bin.print();
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
