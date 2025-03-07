@@ -69,6 +69,8 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 			_binned_branch_lengths_from_tree.push_back(std::distance(grid.begin(), it));
 		}
 	}
+
+	// TODO: do the binned branch lengths still sum to one? I don't think so
 };
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
@@ -241,8 +243,14 @@ void TTree::guessInitialValues() {
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
+
 void TTree::_simulateUnderPrior(Storage *) {
-	// stays empty - simulation is coordinated via TMarkovField
+	using namespace coretools::instances;
+
+	// overwrite simulated branch length: use branch lengths from tree
+	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
+	}
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
