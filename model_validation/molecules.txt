@@ -1,0 +1,8 @@
+child	parent	length
+cholesterol	steroid	0.2
+sugar	monosaccharide	0.2
+leucine	amino_acid	0.2
+morphine	alkaloid	0.2
+fentanyl	drug	0.2
+protein	molecule	0.2
+hydrogen	atom	0.2
