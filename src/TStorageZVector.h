@@ -9,6 +9,7 @@
 #include "coretools/algorithms.h"
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <numeric>
 #include <vector>
@@ -142,6 +143,19 @@ public:
 	[[nodiscard]]
 	size_t total_size_of_container_space() const {
 		return coretools::containerProduct(_dimensions_in_Z_space);
+	}
+
+	[[nodiscard]] std::vector<size_t> get_full_Z_binary_vector() const {
+		std::vector<size_t> Z_as_vector;
+		for (size_t i = 0; i < total_size_of_container_space(); ++i) {
+			auto [found, idx] = binary_search(i);
+			if (found) {
+				Z_as_vector.push_back(_vec[idx].is_one());
+			} else {
+				Z_as_vector.push_back(false);
+			}
+		}
+		return Z_as_vector;
 	}
 };
 

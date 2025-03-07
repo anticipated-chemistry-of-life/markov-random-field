@@ -23,6 +23,7 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
              TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
     : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _mu_c_0(Mu_0), _mu_c_1(Mu_1) {
 
+	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
 	this->addPriorParameter({_binned_branch_lengths, _mu_c_0, _mu_c_1});
 
