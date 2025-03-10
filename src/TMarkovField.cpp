@@ -179,10 +179,27 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 5000);
+
+	std::vector<size_t> Y_trace_header;
+	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+	coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+	std::vector<coretools::TOutputFile> Z_trace_files;
+	for (const auto &tree : _trees) {
+		std::vector<size_t> Z_trace_header;
+		for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
+		Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header, "\t");
+	}
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
 		_Y.add_to_counter(iteration);
+		if (iteration % 10 == 0) {
+			Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
+			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+				const auto &tree = _trees[tree_idx];
+				Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+			}
+		}
 	}
 	_write_Y_to_file<true>("acol_simulated_Y.txt");
 	for (const auto &tree : _trees) {

@@ -180,6 +180,19 @@ public:
 		}
 		std::sort(_vec.begin(), _vec.end());
 	}
+
+	std::vector<size_t> get_full_Y_binary_vector() const {
+		std::vector<size_t> Y_as_vector;
+		for (size_t i = 0; i < total_size_of_container_space(); ++i) {
+			auto [found, idx] = binary_search(i);
+			if (found) {
+				Y_as_vector.push_back(_vec[idx].is_one());
+			} else {
+				Y_as_vector.push_back(false);
+			}
+		}
+		return Y_as_vector;
+	}
 };
 
 #endif // TSTORAGEYVECTOR_H
