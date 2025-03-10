@@ -104,6 +104,15 @@ void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
 	}
 }
 
+void TMarkovField::_update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL) {
+	double sum_new_LL = 0.0;
+	for (size_t i = 0; i < new_LL.size(); ++i) {
+		// loop over all LL (stored per thread) and sum
+		sum_new_LL += new_LL[i].getSum();
+	}
+	lotus.update_cur_LL(sum_new_LL);
+}
+
 int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
@@ -146,10 +155,10 @@ void TMarkovField::update(TLotus &lotus) {
 	_update_all_Z<false>();
 }
 
-void TMarkovField::_add_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-                                 std::array<coretools::TSumLogProbability, 2> &sum_log, TLotus &lotus) {
+void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
+                                  std::array<double, 2> &prob, TLotus &lotus) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
-	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, sum_log);
+	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, prob);
 }
 
 void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
@@ -178,7 +187,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// for iteration in 1->max_iteration, (max_iteration should be passed from CLI)
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
-	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 5000);
+	size_t max_iteration = get_num_iterations_simulation();
 
 	std::vector<size_t> Y_trace_header;
 	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
@@ -241,6 +250,12 @@ void TMarkovField::_simulate_Y() {
 
 		// TODO : refactor also Y sampling
 	}
+}
+
+void TMarkovField::burninHasFinished() { _Y.reset_counts(); }
+
+void TMarkovField::MCMCHasFinished() {
+	// TODO: write function to write the posterior state of Y to file
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }

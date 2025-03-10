@@ -17,7 +17,11 @@ class TTree; // forward declaration to avoid circular inclusion
 inline size_t NUMBER_OF_THREADS;
 
 // use simple error model for Lotus?
+#ifdef USE_LOTUS
+constexpr static bool UseSimpleErrorModel = false;
+# else
 constexpr static bool UseSimpleErrorModel = true;
+#endif
 
 // Parameter types
 using TypeGamma               = coretools::Positive;

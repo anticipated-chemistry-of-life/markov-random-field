@@ -49,13 +49,14 @@ private:
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulate_Y();
-	void _add_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-	                   std::array<coretools::TSumLogProbability, 2> &sum_log, TLotus &lotus);
+	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
+	                    std::array<double, 2> &sum_log, TLotus &lotus);
 	void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet, TLotus &lotus);
+	void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
 
 	template<bool IsSimulation>
-	int _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-	              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
+	std::pair<int, double> _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
+	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
 		index_in_leaves_space.back() = leaf_index_last_dim;
 
 		// prepare log probabilities for the two possible states
@@ -65,7 +66,11 @@ private:
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
 
 		// calculate log likelihood (lotus)
-		if constexpr (!IsSimulation) { _add_lotus_LL(index_in_leaves_space, leaf_index_last_dim, sum_log, lotus); }
+		std::array<double, 2> prob_lotus{};
+		if constexpr (!IsSimulation) {
+			_calc_lotus_LL(index_in_leaves_space, leaf_index_last_dim, prob_lotus, lotus);
+			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
+		}
 
 		// calculate log likelihood (virtual mass spec)...
 
@@ -73,13 +78,17 @@ private:
 		bool new_state = sample(sum_log);
 
 		// update Y accordingly
-		return _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
+		int diff_counter_1_in_last_dim =
+		    _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
+		double prob_new_state = prob_lotus[new_state];
+		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
 	template<bool IsSimulation> void _update_all_Y(TLotus &lotus) {
 		if (_fix_Y) { return; }
 
 		// loop over sheets in last dimension
+		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
@@ -108,9 +117,11 @@ private:
 				int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-					diff_counter_1_in_last_dim +=
+					auto [diff, prob_new_state] =
 					    _update_Y<IsSimulation>(start_index_in_leaves_space, j,
 					                            linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
+					diff_counter_1_in_last_dim += diff;
+					new_LL[omp_get_thread_num()].add(prob_new_state);
 				}
 
 				// insert new 1-valued indices into Y
@@ -123,6 +134,9 @@ private:
 				previous_ix = start_index_in_leaves_space;
 			}
 		}
+
+		// at the very end: sum the LL of all threads and store it in TLotus
+		_update_cur_LL_lotus(lotus, new_LL);
 	}
 
 	template<bool IsSimulation> void _update_all_Z() {
@@ -171,6 +185,14 @@ public:
 	[[nodiscard]] const TStorageYVector &get_Y_vector() const;
 	[[nodiscard]] const TStorageY &get_Y(size_t index) const;
 	[[nodiscard]] size_t size_Y() const;
+
+	// functions to perform stuff on Y after burnin / MCMC finished
+	void burninHasFinished();
+	void MCMCHasFinished();
+
+	static size_t get_num_iterations_simulation() {
+		return coretools::instances::parameters().get("num_iterations", 5000);
+	}
 };
 
 #endif // ACOL_TMARKOVFIELD_H

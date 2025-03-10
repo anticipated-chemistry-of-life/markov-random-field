@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TCollapser.h"
+#include "TMarkovField.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "Types.h"
@@ -15,7 +16,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "TMarkovField.h"
 
 class TLotus : public stattools::prior::TBaseLikelihoodPrior<TypeLotus, NumDimLotus> {
 public:
@@ -77,16 +77,22 @@ public:
 	void load_from_file(const std::string &filename);
 	void guessInitialValues() override;
 
+	void burninHasFinished() override;
+	void MCMCHasFinished() override;
+
 	double calculate_log_likelihood_of_L() const;
 	double getSumLogPriorDensity(const Storage &) const override;
 
 	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K);
 	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
-	                           std::array<coretools::TSumLogProbability, 2> &sum_log) const;
+	                           std::array<double, 2> &prob) const;
+	void update_cur_LL(double cur_LL);
 
 	void update_markov_field(size_t iteration);
 	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &);
 	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
 
 	const TStorageYVector &get_Lotus() const;
+
+	static std::string get_filename_lotus() { return coretools::instances::parameters().get("lotus"); }
 };

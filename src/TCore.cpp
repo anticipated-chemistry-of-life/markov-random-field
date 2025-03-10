@@ -106,20 +106,33 @@ TModel::TModel(size_t n_iterations, const std::string &prefix) {
 TCore::TCore() { NUMBER_OF_THREADS = coretools::getNumThreads(); }
 
 void TCore::infer() {
-	std::string prefix  = "acol"; // TODO: fix arguments
-	size_t n_iterations = 1000;   // todo fix
+	// read filename of lotus
+	std::string filename_lotus = TLotus::get_filename_lotus();
+
+	// read output prefix
+	std::string prefix;
+	if (parameters().exists("out")) {
+		prefix = parameters().get<std::string>("out");
+		logfile().list("Writing output to prefix '", prefix, "' (argument 'out').");
+	} else {
+		prefix = coretools::str::readBeforeLast(filename_lotus, ".");
+		logfile().list("Writing output to default prefix '", prefix, "' (use 'out' to change).");
+	}
+
+	// create MCMC object and get number of iterations that will be run
+	stattools::TMCMC mcmc;
+	size_t n_iterations = mcmc.get_num_iterations();
 
 	// build model
 	TModel model(n_iterations, prefix);
 
 	// run MCMC
-	stattools::TMCMC mcmc;
 	mcmc.runMCMC(prefix);
 }
 
 void TCore::simulate() {
-	std::string prefix  = "acol"; // TODO: fix arguments
-	size_t n_iterations = coretools::instances::parameters().get("num_iterations", 5000);
+	std::string prefix  = parameters().get("out", "acol");
+	size_t n_iterations = TMarkovField::get_num_iterations_simulation();
 
 	// build model
 	TModel model(n_iterations, prefix);
@@ -127,6 +140,3 @@ void TCore::simulate() {
 	// simulate
 	stattools::TSimulator::simulate(prefix);
 }
-
-// other TODO's
-// - write posteriors of Y and Z to file after MCMC
