@@ -1,85 +1,133 @@
-position	state
-0	1
-1	0
-2	1
-3	1
-4	1
-5	1
-6	1
-7	0
-8	0
-9	0
-10	0
-11	1
-12	0
-13	0
-14	0
-15	1
-16	0
-17	0
-18	0
-19	1
-20	0
-21	1
-22	0
-23	0
-24	1
-25	1
-26	1
-27	1
-28	1
-29	1
-30	1
-31	1
-32	1
-33	1
-34	1
-35	0
-36	1
-37	1
-38	0
-39	0
-40	0
-41	0
-42	0
-43	0
-44	0
-45	0
-46	0
-47	1
-48	0
-49	0
-50	1
-51	0
-52	0
-53	0
-54	1
-55	1
-56	0
-57	0
-58	0
-59	0
-60	1
-61	0
-62	1
-63	0
-64	1
-65	1
-66	1
-67	1
-68	0
-69	0
-70	1
-71	1
-72	0
-73	0
-74	1
-75	1
-76	0
-77	0
-78	0
-79	1
-80	0
-81	0
-82	1
-83	0
+molecules	position	state
+steroid	0	1
+steroid	1	1
+steroid	2	1
+steroid	3	1
+steroid	4	1
+steroid	5	1
+steroid	6	0
+steroid	7	1
+steroid	8	1
+steroid	9	1
+steroid	10	0
+steroid	11	0
+monosaccharide	12	0
+monosaccharide	13	0
+monosaccharide	14	0
+monosaccharide	15	0
+monosaccharide	16	0
+monosaccharide	17	0
+monosaccharide	18	0
+monosaccharide	19	0
+monosaccharide	20	0
+monosaccharide	21	0
+monosaccharide	22	0
+monosaccharide	23	0
+amino_acid	24	1
+amino_acid	25	1
+amino_acid	26	1
+amino_acid	27	1
+amino_acid	28	1
+amino_acid	29	1
+amino_acid	30	1
+amino_acid	31	1
+amino_acid	32	1
+amino_acid	33	1
+amino_acid	34	1
+amino_acid	35	0
+alkaloid	36	1
+alkaloid	37	1
+alkaloid	38	1
+alkaloid	39	1
+alkaloid	40	1
+alkaloid	41	1
+alkaloid	42	1
+alkaloid	43	1
+alkaloid	44	0
+alkaloid	45	1
+alkaloid	46	1
+alkaloid	47	1
+drug	48	1
+drug	49	1
+drug	50	1
+drug	51	1
+drug	52	1
+drug	53	1
+drug	54	1
+drug	55	0
+drug	56	1
+drug	57	1
+drug	58	1
+drug	59	1
+molecule	60	0
+molecule	61	1
+molecule	62	0
+molecule	63	1
+molecule	64	0
+molecule	65	0
+molecule	66	1
+molecule	67	0
+molecule	68	0
+molecule	69	0
+molecule	70	0
+molecule	71	0
+atom	72	1
+atom	73	1
+atom	74	1
+atom	75	0
+atom	76	1
+atom	77	1
+atom	78	1
+atom	79	1
+atom	80	1
+atom	81	1
+atom	82	1
+atom	83	1
+visani	84	1
+visani	85	1
+visani	86	0
+visani	87	1
+visani	88	0
+visani	89	1
+visani	90	1
+visani	91	1
+visani	92	1
+visani	93	0
+visani	94	1
+visani	95	1
+world	96	1
+world	97	1
+world	98	1
+world	99	0
+world	100	1
+world	101	1
+world	102	1
+world	103	1
+world	104	1
+world	105	1
+world	106	0
+world	107	1
+good_stuff	108	0
+good_stuff	109	0
+good_stuff	110	0
+good_stuff	111	0
+good_stuff	112	0
+good_stuff	113	0
+good_stuff	114	0
+good_stuff	115	0
+good_stuff	116	0
+good_stuff	117	0
+good_stuff	118	0
+good_stuff	119	0
+dreams	120	0
+dreams	121	1
+dreams	122	1
+dreams	123	1
+dreams	124	1
+dreams	125	1
+dreams	126	1
+dreams	127	1
+dreams	128	1
+dreams	129	1
+dreams	130	1
+dreams	131	0

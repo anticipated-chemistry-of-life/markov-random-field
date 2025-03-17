@@ -1,85 +1,133 @@
-position	state	fraction_of_one
-0	1	0.97928
-1	1	0.93906
-2	1	0.93958
-3	1	0.93966
-4	0	0.9384
-5	1	0.9392
-6	1	0.9395
-7	0	0.93914
-8	1	0.94008
-9	1	0.93972
-10	1	0.93802
-11	1	0.9392
-12	0	0.32266
-13	0	0.3218
-14	0	0.3241
-15	0	0.3244
-16	0	0.3233
-17	0	0.32354
-18	0	0.32538
-19	1	0.32252
-20	0	0.32216
-21	0	0.32446
-22	0	0.3217
-23	0	0.32246
-24	1	0.4818
-25	1	0.48292
-26	1	0.48516
-27	1	0.48246
-28	1	0.48406
-29	1	0.48384
-30	1	0.48184
-31	1	0.48492
-32	1	0.4851
-33	1	0.484
-34	1	0.48188
-35	1	0.48256
-36	1	0.66654
-37	1	0.6645
-38	0	0.6648
-39	0	0.66472
-40	0	0.66394
-41	0	0.66354
-42	0	0.66554
-43	0	0.66358
-44	0	0.6645
-45	0	0.66388
-46	0	0.6656
-47	0	0.66566
-48	0	0.34552
-49	0	0.3419
-50	0	0.3413
-51	0	0.34324
-52	0	0.34334
-53	0	0.34294
-54	0	0.34442
-55	0	0.34378
-56	0	0.34262
-57	0	0.34414
-58	0	0.34504
-59	0	0.34272
-60	1	0.94066
-61	0	0.939
-62	1	0.93818
-63	1	0.93842
-64	1	0.94026
-65	1	0.93904
-66	1	0.93926
-67	1	0.9387
-68	1	0.93904
-69	1	0.9385
-70	1	0.9393
-71	1	0.93756
-72	0	0.05932
-73	0	0.06058
-74	0	0.05878
-75	0	0.06124
-76	1	0.06228
-77	0	0.0607
-78	0	0.05884
-79	0	0.06258
-80	0	0.06164
-81	0	0.06066
-82	0	0.06008
-83	0	0.06352
+position	state	molecules	species	fraction_of_one
+0	1	cholesterol	human	0.98628
+1	1	cholesterol	mosquito	0.93002
+2	1	cholesterol	fly	0.93044
+3	1	cholesterol	worm	0.92968
+4	1	cholesterol	bacteria	0.93044
+5	1	cholesterol	virus	0.92822
+6	0	cholesterol	dog	0.92916
+7	1	cholesterol	cat	0.92876
+8	1	cholesterol	fish	0.93058
+9	1	cholesterol	bird	0.9298
+10	1	cholesterol	plant	0.929
+11	0	cholesterol	fungus	0.93126
+12	0	sugar	human	0.31972
+13	0	sugar	mosquito	0.32094
+14	0	sugar	fly	0.3229
+15	0	sugar	worm	0.31906
+16	0	sugar	bacteria	0.31926
+17	0	sugar	virus	0.31996
+18	0	sugar	dog	0.3199
+19	0	sugar	cat	0.321
+20	0	sugar	fish	0.32042
+21	0	sugar	bird	0.3208
+22	0	sugar	plant	0.3195
+23	0	sugar	fungus	0.3214
+24	1	leucine	human	0.66484
+25	1	leucine	mosquito	0.66422
+26	1	leucine	fly	0.66478
+27	1	leucine	worm	0.66436
+28	1	leucine	bacteria	0.66588
+29	1	leucine	virus	0.66494
+30	1	leucine	dog	0.66392
+31	1	leucine	cat	0.66562
+32	1	leucine	fish	0.66372
+33	1	leucine	bird	0.66402
+34	1	leucine	plant	0.66376
+35	0	leucine	fungus	0.66328
+36	1	morphine	human	0.77594
+37	1	morphine	mosquito	0.7755
+38	1	morphine	fly	0.77802
+39	1	morphine	worm	0.7773
+40	1	morphine	bacteria	0.7737
+41	1	morphine	virus	0.77664
+42	1	morphine	dog	0.77552
+43	1	morphine	cat	0.77518
+44	1	morphine	fish	0.77576
+45	1	morphine	bird	0.77916
+46	1	morphine	plant	0.77692
+47	1	morphine	fungus	0.77798
+48	1	fentanyl	human	0.83106
+49	1	fentanyl	mosquito	0.8293
+50	1	fentanyl	fly	0.82966
+51	1	fentanyl	worm	0.82854
+52	1	fentanyl	bacteria	0.83074
+53	1	fentanyl	virus	0.82892
+54	1	fentanyl	dog	0.82936
+55	1	fentanyl	cat	0.82788
+56	1	fentanyl	fish	0.83152
+57	1	fentanyl	bird	0.82726
+58	1	fentanyl	plant	0.8296
+59	1	fentanyl	fungus	0.82924
+60	0	protein	human	0.33682
+61	0	protein	mosquito	0.33782
+62	0	protein	fly	0.33904
+63	0	protein	worm	0.33764
+64	0	protein	bacteria	0.3394
+65	0	protein	virus	0.34112
+66	1	protein	dog	0.33772
+67	0	protein	cat	0.33818
+68	0	protein	fish	0.34074
+69	0	protein	bird	0.33828
+70	0	protein	plant	0.33826
+71	0	protein	fungus	0.33866
+72	1	hydrogen	human	0.7087
+73	1	hydrogen	mosquito	0.70632
+74	1	hydrogen	fly	0.70738
+75	1	hydrogen	worm	0.70774
+76	1	hydrogen	bacteria	0.70732
+77	1	hydrogen	virus	0.7068
+78	1	hydrogen	dog	0.70646
+79	1	hydrogen	cat	0.70714
+80	1	hydrogen	fish	0.70614
+81	1	hydrogen	bird	0.70896
+82	1	hydrogen	plant	0.70828
+83	1	hydrogen	fungus	0.70764
+84	1	marco	human	0.65098
+85	1	marco	mosquito	0.65058
+86	0	marco	fly	0.65162
+87	1	marco	worm	0.6503
+88	1	marco	bacteria	0.6521
+89	1	marco	virus	0.65046
+90	1	marco	dog	0.65042
+91	1	marco	cat	0.6515
+92	1	marco	fish	0.65174
+93	1	marco	bird	0.65026
+94	1	marco	plant	0.65002
+95	1	marco	fungus	0.65206
+96	1	hello	human	0.71706
+97	1	hello	mosquito	0.7175
+98	1	hello	fly	0.7181
+99	1	hello	worm	0.71602
+100	1	hello	bacteria	0.71684
+101	1	hello	virus	0.71814
+102	1	hello	dog	0.7171
+103	1	hello	cat	0.71608
+104	1	hello	fish	0.71622
+105	1	hello	bird	0.7172
+106	1	hello	plant	0.71694
+107	1	hello	fungus	0.71738
+108	0	cocaine	human	0.62272
+109	0	cocaine	mosquito	0.61988
+110	0	cocaine	fly	0.6214
+111	0	cocaine	worm	0.62188
+112	0	cocaine	bacteria	0.62072
+113	0	cocaine	virus	0.62018
+114	0	cocaine	dog	0.62042
+115	0	cocaine	cat	0.6188
+116	0	cocaine	fish	0.61942
+117	0	cocaine	bird	0.6222
+118	0	cocaine	plant	0.62058
+119	0	cocaine	fungus	0.6198
+120	1	dmt	human	0.40256
+121	1	dmt	mosquito	0.402
+122	1	dmt	fly	0.4022
+123	1	dmt	worm	0.40154
+124	1	dmt	bacteria	0.40274
+125	1	dmt	virus	0.40032
+126	1	dmt	dog	0.4005
+127	1	dmt	cat	0.40166
+128	1	dmt	fish	0.40014
+129	1	dmt	bird	0.40062
+130	1	dmt	plant	0.40108
+131	1	dmt	fungus	0.40066

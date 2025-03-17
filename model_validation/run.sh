@@ -2,10 +2,10 @@
     --tree_species species.txt \
     --tree_molecules molecules.txt \
     --num_iterations 200000 \
-    --molecules_branch_lengths acol_simulated.txt \
-    --species_branch_lengths acol_simulated.txt \
-    --molecules_mu_1 acol_simulated.txt \
-    --molecules_mu_0 acol_simulated.txt \
-    --species_mu_1 acol_simulated.txt \
-    --species_mu_0 acol_simulated.txt \
+    --molecules_branch_lengths acol_input_simulated.txt \
+    --species_branch_lengths acol_input_simulated.txt \
+    --molecules_mu_1 acol_input_simulated.txt \
+    --molecules_mu_0 acol_input_simulated.txt \
+    --species_mu_1 acol_input_simulated.txt \
+    --species_mu_0 acol_input_simulated.txt \
     --numThreads 1

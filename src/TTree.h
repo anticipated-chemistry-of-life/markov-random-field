@@ -239,6 +239,9 @@ public:
 		return _leafIndices[get_node_index(node_name)];
 	}
 	size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
+	size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
+		return _internal_nodes[internal_index];
+	}
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
@@ -324,8 +327,12 @@ public:
 
 	void simulate_Z(size_t tree_index);
 
-	template<bool WriteFullZ> void write_Z_to_file(const std::string &filename) const {
-		std::vector<std::string> header = {"position", "state"};
+	template<bool WriteFullZ> void write_Z_to_file(const std::string &filename, size_t dimension_number_of_tree) const {
+		std::vector<std::string> header;
+		header.emplace_back(get_tree_name());
+		header.emplace_back("position");
+		header.emplace_back("state");
+
 		if constexpr (WriteFullZ) {
 			std::array<size_t, 2> line{};
 			coretools::TOutputFile file(filename, header, "\t");
@@ -336,7 +343,9 @@ public:
 				} else {
 					line = {i, 0};
 				}
-				file.writeln(line);
+				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				auto node_idx = get_node_index_from_internal_nodes_index(multidim_index[dimension_number_of_tree]);
+				file.writeln(get_node_id(node_idx), line);
 			}
 		} else {
 			std::array<size_t, 2> line{};
@@ -344,6 +353,9 @@ public:
 			for (size_t i = 0; i < _Z.size(); ++i) {
 				line = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
 				file.writeln(line);
+				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				auto node_idx = get_node_index_from_internal_nodes_index(multidim_index[dimension_number_of_tree]);
+				file.writeln(get_node_id(node_idx), line);
 			}
 		}
 	}

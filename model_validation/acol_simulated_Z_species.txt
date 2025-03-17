@@ -1,8 +1,12 @@
-position	state
-0	1
-1	0
-2	1
-3	0
-4	0
-5	1
-6	0
+species	position	state
+species	0	1
+species	1	0
+species	2	1
+species	3	1
+species	4	1
+species	5	0
+species	6	1
+species	7	1
+species	8	1
+species	9	0
+species	10	1

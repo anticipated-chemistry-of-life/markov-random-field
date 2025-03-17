@@ -157,6 +157,11 @@ public:
 		}
 		return Z_as_vector;
 	}
+
+	std::vector<size_t> get_multi_dimensional_index(uint32_t linear_index_in_Z_space) const {
+		auto tmp = static_cast<size_t>(linear_index_in_Z_space);
+		return coretools::getSubscripts(tmp, _dimensions_in_Z_space);
+	}
 };
 
 #endif // TSTORAGEZVECTOR_H

@@ -146,7 +146,12 @@ private:
 	}
 
 	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
-		std::vector<std::string> header = {"position", "state", "fraction_of_one"};
+		std::vector<std::string> header;
+		header.emplace_back("position");
+		header.emplace_back("state");
+		for (const auto &tree : _trees) { header.push_back(tree->get_tree_name()); }
+		header.emplace_back("fraction_of_one");
+
 		std::array<size_t, 2> line{};
 		coretools::TOutputFile file(filename, header, "\t");
 		if constexpr (WriteFullY) {
@@ -158,15 +163,27 @@ private:
 				} else {
 					line = {i, 0};
 				}
+				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
+					size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+					node_names.push_back(_trees[idx]->get_node_id(node_idx));
+				};
 				fraction = _Y.get_fraction_of_ones(i);
-				file.writeln(line, fraction);
+				file.writeln(line, node_names, fraction);
 			}
 		} else {
 			double fraction;
 			for (size_t i = 0; i < _Y.size(); ++i) {
-				line     = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
-				fraction = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());
-				file.writeln(line, fraction);
+				line                                = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
+				fraction                            = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());
+				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
+					size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+					node_names.push_back(_trees[idx]->get_node_id(node_idx));
+				};
+				file.writeln(line, node_names, fraction);
 			}
 		}
 	};
