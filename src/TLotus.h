@@ -56,6 +56,9 @@ private:
 	// output file
 	std::string _prefix;
 
+	// simulate or infer?
+	bool _simulate = false;
+
 	// private functions
 	double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
 	double _calculate_probability_of_L_given_x(bool x, bool L,
@@ -69,7 +72,7 @@ public:
 	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
 	       const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	           &markov_field_stattools_param,
-	       std::string prefix);
+	       std::string prefix, bool simulate);
 	~TLotus() override = default;
 
 	[[nodiscard]] std::string name() const override;

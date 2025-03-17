@@ -6,9 +6,9 @@
 TLotus::TLotus(
     std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
-    std::string prefix)
+    std::string prefix, bool simulate)
     : _trees(trees), _markov_field(n_iterations, trees), _markov_field_stattools_param(markov_field_stattools_param),
-      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)) {
+      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix), _simulate(simulate)) {
 	this->addPriorParameter(_gamma);
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
@@ -19,7 +19,7 @@ TLotus::TLotus(
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
 void TLotus::initialize() {
-	load_from_file(get_filename_lotus());
+	if (!_simulate) { load_from_file(get_filename_lotus()); }
 
 	// initialize storage
 	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},

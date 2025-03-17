@@ -84,12 +84,12 @@ void TModel::_create_trees() {
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
 
-TModel::TModel(size_t n_iterations, const std::string &prefix) {
+TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create trees (including mu_0, mu_1 and binned branch lengths)
 	_create_trees();
 
 	// create lotus
-	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix);
+	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix, simulate);
 
 	// create (fake) observation for stattools
 	_obs = std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
@@ -124,7 +124,7 @@ void TCore::infer() {
 	size_t n_iterations = mcmc.get_num_iterations();
 
 	// build model
-	TModel model(n_iterations, prefix);
+	TModel model(n_iterations, prefix, false);
 
 	// run MCMC
 	mcmc.runMCMC(prefix);
@@ -135,7 +135,7 @@ void TCore::simulate() {
 	size_t n_iterations = TMarkovField::get_num_iterations_simulation();
 
 	// build model
-	TModel model(n_iterations, prefix);
+	TModel model(n_iterations, prefix, true);
 
 	// simulate
 	stattools::TSimulator::simulate(prefix);
