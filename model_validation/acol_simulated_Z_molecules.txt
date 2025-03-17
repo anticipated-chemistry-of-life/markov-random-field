@@ -1,133 +1,241 @@
-molecules	position	state
-steroid	0	1
-steroid	1	1
-steroid	2	1
-steroid	3	1
-steroid	4	1
-steroid	5	1
-steroid	6	0
-steroid	7	1
-steroid	8	1
-steroid	9	1
-steroid	10	0
-steroid	11	0
-monosaccharide	12	0
-monosaccharide	13	0
-monosaccharide	14	0
-monosaccharide	15	0
-monosaccharide	16	0
-monosaccharide	17	0
-monosaccharide	18	0
-monosaccharide	19	0
-monosaccharide	20	0
-monosaccharide	21	0
-monosaccharide	22	0
-monosaccharide	23	0
-amino_acid	24	1
-amino_acid	25	1
-amino_acid	26	1
-amino_acid	27	1
-amino_acid	28	1
-amino_acid	29	1
-amino_acid	30	1
-amino_acid	31	1
-amino_acid	32	1
-amino_acid	33	1
-amino_acid	34	1
-amino_acid	35	0
-alkaloid	36	1
-alkaloid	37	1
-alkaloid	38	1
-alkaloid	39	1
-alkaloid	40	1
-alkaloid	41	1
-alkaloid	42	1
-alkaloid	43	1
-alkaloid	44	0
-alkaloid	45	1
-alkaloid	46	1
-alkaloid	47	1
-drug	48	1
-drug	49	1
-drug	50	1
-drug	51	1
-drug	52	1
-drug	53	1
-drug	54	1
-drug	55	0
-drug	56	1
-drug	57	1
-drug	58	1
-drug	59	1
-molecule	60	0
-molecule	61	1
-molecule	62	0
-molecule	63	1
-molecule	64	0
-molecule	65	0
-molecule	66	1
-molecule	67	0
-molecule	68	0
-molecule	69	0
-molecule	70	0
-molecule	71	0
-atom	72	1
-atom	73	1
-atom	74	1
-atom	75	0
-atom	76	1
-atom	77	1
-atom	78	1
-atom	79	1
-atom	80	1
-atom	81	1
-atom	82	1
-atom	83	1
-visani	84	1
-visani	85	1
-visani	86	0
-visani	87	1
-visani	88	0
-visani	89	1
-visani	90	1
-visani	91	1
-visani	92	1
-visani	93	0
-visani	94	1
-visani	95	1
-world	96	1
-world	97	1
-world	98	1
-world	99	0
-world	100	1
-world	101	1
-world	102	1
-world	103	1
-world	104	1
-world	105	1
-world	106	0
-world	107	1
-good_stuff	108	0
-good_stuff	109	0
-good_stuff	110	0
-good_stuff	111	0
-good_stuff	112	0
-good_stuff	113	0
-good_stuff	114	0
-good_stuff	115	0
-good_stuff	116	0
-good_stuff	117	0
-good_stuff	118	0
-good_stuff	119	0
-dreams	120	0
-dreams	121	1
-dreams	122	1
-dreams	123	1
-dreams	124	1
-dreams	125	1
-dreams	126	1
-dreams	127	1
-dreams	128	1
-dreams	129	1
-dreams	130	1
-dreams	131	0
+molecules	species	position	Z_state
+steroid	human	0	1
+steroid	mosquito	1	0
+steroid	fly	2	1
+steroid	worm	3	0
+steroid	bacteria	4	1
+steroid	virus	5	1
+steroid	dog	6	1
+steroid	cat	7	1
+steroid	fish	8	1
+steroid	bird	9	1
+steroid	plant	10	1
+steroid	fungus	11	1
+cholesterol	human	12	1
+cholesterol	mosquito	13	1
+cholesterol	fly	14	1
+cholesterol	worm	15	1
+cholesterol	bacteria	16	1
+cholesterol	virus	17	1
+cholesterol	dog	18	1
+cholesterol	cat	19	1
+cholesterol	fish	20	1
+cholesterol	bird	21	1
+cholesterol	plant	22	1
+cholesterol	fungus	23	1
+monosaccharide	human	24	1
+monosaccharide	mosquito	25	1
+monosaccharide	fly	26	1
+monosaccharide	worm	27	1
+monosaccharide	bacteria	28	1
+monosaccharide	virus	29	1
+monosaccharide	dog	30	1
+monosaccharide	cat	31	0
+monosaccharide	fish	32	1
+monosaccharide	bird	33	1
+monosaccharide	plant	34	1
+monosaccharide	fungus	35	1
+sugar	human	36	0
+sugar	mosquito	37	1
+sugar	fly	38	1
+sugar	worm	39	0
+sugar	bacteria	40	0
+sugar	virus	41	1
+sugar	dog	42	0
+sugar	cat	43	0
+sugar	fish	44	0
+sugar	bird	45	0
+sugar	plant	46	1
+sugar	fungus	47	0
+amino_acid	human	48	0
+amino_acid	mosquito	49	1
+amino_acid	fly	50	0
+amino_acid	worm	51	0
+amino_acid	bacteria	52	0
+amino_acid	virus	53	1
+amino_acid	dog	54	0
+amino_acid	cat	55	0
+amino_acid	fish	56	1
+amino_acid	bird	57	0
+amino_acid	plant	58	1
+amino_acid	fungus	59	0
+leucine	human	60	0
+leucine	mosquito	61	0
+leucine	fly	62	0
+leucine	worm	63	0
+leucine	bacteria	64	0
+leucine	virus	65	1
+leucine	dog	66	0
+leucine	cat	67	0
+leucine	fish	68	0
+leucine	bird	69	1
+leucine	plant	70	0
+leucine	fungus	71	1
+alkaloid	human	72	1
+alkaloid	mosquito	73	1
+alkaloid	fly	74	1
+alkaloid	worm	75	1
+alkaloid	bacteria	76	1
+alkaloid	virus	77	1
+alkaloid	dog	78	1
+alkaloid	cat	79	1
+alkaloid	fish	80	1
+alkaloid	bird	81	1
+alkaloid	plant	82	1
+alkaloid	fungus	83	0
+morphine	human	84	0
+morphine	mosquito	85	1
+morphine	fly	86	0
+morphine	worm	87	0
+morphine	bacteria	88	0
+morphine	virus	89	0
+morphine	dog	90	0
+morphine	cat	91	0
+morphine	fish	92	0
+morphine	bird	93	0
+morphine	plant	94	0
+morphine	fungus	95	1
+drug	human	96	1
+drug	mosquito	97	1
+drug	fly	98	1
+drug	worm	99	1
+drug	bacteria	100	1
+drug	virus	101	1
+drug	dog	102	1
+drug	cat	103	1
+drug	fish	104	1
+drug	bird	105	1
+drug	plant	106	1
+drug	fungus	107	1
+fentanyl	human	108	0
+fentanyl	mosquito	109	0
+fentanyl	fly	110	0
+fentanyl	worm	111	0
+fentanyl	bacteria	112	0
+fentanyl	virus	113	0
+fentanyl	dog	114	0
+fentanyl	cat	115	0
+fentanyl	fish	116	0
+fentanyl	bird	117	0
+fentanyl	plant	118	0
+fentanyl	fungus	119	0
+molecule	human	120	0
+molecule	mosquito	121	0
+molecule	fly	122	0
+molecule	worm	123	0
+molecule	bacteria	124	0
+molecule	virus	125	0
+molecule	dog	126	0
+molecule	cat	127	1
+molecule	fish	128	0
+molecule	bird	129	0
+molecule	plant	130	0
+molecule	fungus	131	0
+protein	human	132	0
+protein	mosquito	133	0
+protein	fly	134	0
+protein	worm	135	1
+protein	bacteria	136	0
+protein	virus	137	0
+protein	dog	138	0
+protein	cat	139	1
+protein	fish	140	0
+protein	bird	141	0
+protein	plant	142	0
+protein	fungus	143	0
+atom	human	144	1
+atom	mosquito	145	1
+atom	fly	146	1
+atom	worm	147	1
+atom	bacteria	148	1
+atom	virus	149	1
+atom	dog	150	1
+atom	cat	151	1
+atom	fish	152	1
+atom	bird	153	1
+atom	plant	154	1
+atom	fungus	155	1
+hydrogen	human	156	1
+hydrogen	mosquito	157	1
+hydrogen	fly	158	1
+hydrogen	worm	159	1
+hydrogen	bacteria	160	0
+hydrogen	virus	161	1
+hydrogen	dog	162	1
+hydrogen	cat	163	1
+hydrogen	fish	164	1
+hydrogen	bird	165	1
+hydrogen	plant	166	1
+hydrogen	fungus	167	1
+visani	human	168	0
+visani	mosquito	169	1
+visani	fly	170	0
+visani	worm	171	1
+visani	bacteria	172	1
+visani	virus	173	1
+visani	dog	174	1
+visani	cat	175	1
+visani	fish	176	1
+visani	bird	177	1
+visani	plant	178	1
+visani	fungus	179	1
+marco	human	180	1
+marco	mosquito	181	1
+marco	fly	182	1
+marco	worm	183	1
+marco	bacteria	184	1
+marco	virus	185	1
+marco	dog	186	1
+marco	cat	187	1
+marco	fish	188	1
+marco	bird	189	0
+marco	plant	190	1
+marco	fungus	191	1
+world	human	192	1
+world	mosquito	193	1
+world	fly	194	0
+world	worm	195	0
+world	bacteria	196	0
+world	virus	197	0
+world	dog	198	0
+world	cat	199	0
+world	fish	200	0
+world	bird	201	0
+world	plant	202	0
+world	fungus	203	0
+hello	human	204	0
+hello	mosquito	205	0
+hello	fly	206	0
+hello	worm	207	0
+hello	bacteria	208	0
+hello	virus	209	0
+hello	dog	210	0
+hello	cat	211	0
+hello	fish	212	0
+hello	bird	213	0
+hello	plant	214	0
+hello	fungus	215	0
+good_stuff	human	216	1
+good_stuff	mosquito	217	1
+good_stuff	fly	218	1
+good_stuff	worm	219	1
+good_stuff	bacteria	220	1
+good_stuff	virus	221	0
+good_stuff	dog	222	0
+good_stuff	cat	223	1
+good_stuff	fish	224	1
+good_stuff	bird	225	1
+good_stuff	plant	226	1
+good_stuff	fungus	227	1
+cocaine	human	228	0
+cocaine	mosquito	229	0
+cocaine	fly	230	0
+cocaine	worm	231	0
+cocaine	bacteria	232	0
+cocaine	virus	233	0
+cocaine	dog	234	0
+cocaine	cat	235	1
+cocaine	fish	236	0
+cocaine	bird	237	0
+cocaine	plant	238	0
+cocaine	fungus	239	0

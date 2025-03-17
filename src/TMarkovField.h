@@ -148,7 +148,7 @@ private:
 	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
 		std::vector<std::string> header;
 		header.emplace_back("position");
-		header.emplace_back("state");
+		header.emplace_back("Y_state");
 		for (const auto &tree : _trees) { header.push_back(tree->get_tree_name()); }
 		header.emplace_back("fraction_of_one");
 

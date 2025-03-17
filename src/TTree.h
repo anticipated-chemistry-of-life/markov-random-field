@@ -327,11 +327,13 @@ public:
 
 	void simulate_Z(size_t tree_index);
 
-	template<bool WriteFullZ> void write_Z_to_file(const std::string &filename, size_t dimension_number_of_tree) const {
+	template<bool WriteFullZ>
+	void write_Z_to_file(const std::string &filename, std::vector<std::unique_ptr<TTree>> &trees,
+	                     size_t dimension_number_of_tree) const {
 		std::vector<std::string> header;
-		header.emplace_back(get_tree_name());
+		for (const auto &tree : trees) { header.push_back(tree->get_tree_name()); }
 		header.emplace_back("position");
-		header.emplace_back("state");
+		header.emplace_back("Z_state");
 
 		if constexpr (WriteFullZ) {
 			std::array<size_t, 2> line{};
@@ -344,18 +346,33 @@ public:
 					line = {i, 0};
 				}
 				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
-				auto node_idx = get_node_index_from_internal_nodes_index(multidim_index[dimension_number_of_tree]);
-				file.writeln(get_node_id(node_idx), line);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
+					if (idx == dimension_number_of_tree) {
+						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+					} else {
+						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
+					};
+				};
+				file.writeln(node_names, line);
 			}
 		} else {
 			std::array<size_t, 2> line{};
 			coretools::TOutputFile file(filename, header, "\t");
 			for (size_t i = 0; i < _Z.size(); ++i) {
-				line = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
-				file.writeln(line);
+				line                               = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
 				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
-				auto node_idx = get_node_index_from_internal_nodes_index(multidim_index[dimension_number_of_tree]);
-				file.writeln(get_node_id(node_idx), line);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
+					if (idx == dimension_number_of_tree) {
+						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+					} else {
+						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
+					};
+				};
+				file.writeln(node_names, line);
 			}
 		}
 	}
