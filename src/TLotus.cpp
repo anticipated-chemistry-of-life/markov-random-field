@@ -8,7 +8,7 @@ TLotus::TLotus(
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
     std::string prefix, bool simulate)
     : _trees(trees), _markov_field(n_iterations, trees), _markov_field_stattools_param(markov_field_stattools_param),
-      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix), _simulate(simulate)) {
+      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
 	this->addPriorParameter(_gamma);
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
