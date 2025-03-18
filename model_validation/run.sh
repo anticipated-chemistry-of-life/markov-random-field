@@ -1,7 +1,7 @@
 ../build/acol simulate \
     --tree_species species.txt \
     --tree_molecules molecules.txt \
-    --num_iterations 200000 \
+    --num_iterations 100000 \
     --molecules_branch_lengths acol_input_simulated.txt \
     --species_branch_lengths acol_input_simulated.txt \
     --molecules_mu_1 acol_input_simulated.txt \

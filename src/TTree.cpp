@@ -57,6 +57,7 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 
 	std::vector<double> grid(_number_of_bins);
 	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
+	_branch_length_from_tree = grid;
 
 	_binned_branch_lengths_from_tree.reserve(get_number_of_nodes() - get_number_of_roots());
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes

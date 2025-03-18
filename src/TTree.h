@@ -9,6 +9,7 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
@@ -85,6 +86,7 @@ private:
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
+	std::vector<double> _branch_length_from_tree;
 	std::vector<size_t> _binned_branch_lengths_from_tree;
 	TypeParamBinBranches *_binned_branch_lengths = nullptr;
 
@@ -374,6 +376,13 @@ public:
 				};
 				file.writeln(node_names, line);
 			}
+		}
+
+		std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
+		coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
+		                                       header_branch_len, "\t");
+		for (size_t i = 0; i < _branch_length_from_tree.size(); ++i) {
+			branch_len_file.writeln(i, _branch_length_from_tree[i]);
 		}
 	}
 };
