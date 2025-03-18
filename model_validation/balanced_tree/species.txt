@@ -1,0 +1,15 @@
+child	parent	length
+bacteria	life	0.2
+eukaryote	life	0.2
+gram_positive	bacteria	0.2
+gram_negative	bacteria	0.2
+ecoli	gram_negative	0.2
+yersinia	gram_negative	0.2
+streptococcus	gram_positive	0.2
+enterococcus	gram_positive	0.2
+plant	eukaryote	0.2
+animal	eukaryote	0.2
+arabiopsis	plant	0.2
+arnica	plant	0.2
+human	animal	0.2
+mouse	animal	0.2
