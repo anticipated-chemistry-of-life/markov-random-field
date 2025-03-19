@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Math/TSumLog.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/TParameter.h"
@@ -101,7 +102,11 @@ private:
 	// Set Z
 	TStorageZVector _Z;
 
+	// Joint probability density
+	double _joint_log_prob_density;
+
 	// private functions
+	void _reset_joint_log_prob_density() { _joint_log_prob_density = 0.0; }
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
@@ -288,6 +293,7 @@ public:
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
 	template<bool IsSimulation> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
+		_reset_joint_log_prob_density();
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
@@ -300,11 +306,11 @@ public:
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			// fill the current state for this clique
-			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
-			indices_to_insert[i] =
-			    _cliques[i].update_Z(current_state, _Z, this, _mu_c_0->value(i), _mu_c_1->value(i),
-			                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+			indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this,
+			                                            _mu_c_0->value(i), _mu_c_1->value(i), _binned_branch_lengths,
+			                                            _leaves_and_internal_nodes_without_roots_indices);
 
 			// update mu
 			if constexpr (!IsSimulation) {
@@ -319,16 +325,6 @@ public:
 
 		// update branch lengths
 		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
-	}
-
-	void calculate_joint_probability_of_Z(std::array<coretools::TSumLogProbability, 2> &sum_log,
-	                                      const TStorageYVector &Y) {
-		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
-			_cliques[i].calculate_prob_of_clique(sum_log, current_state, this, _mu_c_0->value(i), _mu_c_1->value(i),
-			                                     _binned_branch_lengths,
-			                                     _leaves_and_internal_nodes_without_roots_indices);
-		}
 	}
 
 	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
@@ -395,5 +391,7 @@ public:
 			branch_len_file.writeln(i, _branch_length_from_tree[i]);
 		}
 	}
+
+	double get_complete_joint_density() const { return _joint_log_prob_density; }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

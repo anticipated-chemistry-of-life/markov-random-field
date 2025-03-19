@@ -237,14 +237,10 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ> update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree, double mu_c_0,
-	                                double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
+	std::vector<TStorageZ> update_Z(double &joint_log_prob_density, TCurrentState &current_state, TStorageZVector &Z,
+	                                const TTree *tree, double mu_c_0, double mu_c_1,
+	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
-
-	void calculate_prob_of_clique(std::array<coretools::TSumLogProbability, 2> &sum_log, TCurrentState &current_state,
-	                              const TTree *tree, double mu_c_0, double mu_c_1,
-	                              const TypeParamBinBranches *binned_branch_lengths,
-	                              const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
@@ -291,5 +287,6 @@ public:
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
+bool sample(double log_prob_0, double log_prob_1);
 
 #endif // ACOL_TBRANCHLENGTHS_H

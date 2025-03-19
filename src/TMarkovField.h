@@ -36,6 +36,9 @@ private:
 	bool _fix_Y = false;
 	bool _fix_Z = false;
 
+	// complete joint density of the markov random field
+	double _complete_log_density;
+
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
 	                    const std::vector<size_t> &previous_ix, size_t K_cur_sheet);
@@ -53,7 +56,8 @@ private:
 	                    std::array<double, 2> &sum_log, TLotus &lotus);
 	void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet, TLotus &lotus);
 	void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
-	std::array<coretools::TSumLogProbability, 2> _calculate_complete_joint_density();
+	double _calculate_complete_joint_density();
+	void _reset_log_joint_density() { _complete_log_density = 0.0; }
 
 	template<bool IsSimulation>
 	std::pair<int, double> _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
@@ -65,6 +69,7 @@ private:
 
 		// calculate probabilities in Markov random field
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
+		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
 		std::array<double, 2> prob_lotus{};
@@ -82,10 +87,20 @@ private:
 		int diff_counter_1_in_last_dim =
 		    _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
 		double prob_new_state = prob_lotus[new_state];
+
+#pragma omp critical
+		{
+			if (new_state) {
+				_complete_log_density += sum_log_field[1].getSum();
+			} else {
+				_complete_log_density += sum_log_field[0].getSum();
+			}
+		}
 		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
 	template<bool IsSimulation> void _update_all_Y(TLotus &lotus) {
+		_reset_log_joint_density();
 		if (_fix_Y) { return; }
 
 		// loop over sheets in last dimension
