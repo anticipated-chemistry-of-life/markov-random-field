@@ -1,9 +1,10 @@
-fixedSeed	32148961
+fixedSeed	32220405
 molecules_branch_lengths	acol_input_simulated.txt
 molecules_mu_0	acol_input_simulated.txt
 molecules_mu_1	acol_input_simulated.txt
 numThreads	1
 num_iterations	10000
+simulation_no_Y_initilisation	
 simulation_no_Z_initilisation	
 species_branch_lengths	acol_input_simulated.txt
 species_mu_0	acol_input_simulated.txt
