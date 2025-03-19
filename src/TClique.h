@@ -240,6 +240,12 @@ public:
 	std::vector<TStorageZ> update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree, double mu_c_0,
 	                                double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
+	void calculate_prob_of_clique(std::array<coretools::TSumLogProbability, 2> &sum_log, TCurrentState &current_state,
+	                              const TTree *tree, double mu_c_0, double mu_c_1,
+	                              const TypeParamBinBranches *binned_branch_lengths,
+	                              const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
 	size_t get_number_of_nodes() const { return _n_nodes; }

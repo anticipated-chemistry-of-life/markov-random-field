@@ -321,6 +321,16 @@ public:
 		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
 	}
 
+	void calculate_joint_probability_of_Z(std::array<coretools::TSumLogProbability, 2> &sum_log,
+	                                      const TStorageYVector &Y) {
+		for (size_t i = 0; i < _cliques.size(); ++i) {
+			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
+			_cliques[i].calculate_prob_of_clique(sum_log, current_state, this, _mu_c_0->value(i), _mu_c_1->value(i),
+			                                     _binned_branch_lengths,
+			                                     _leaves_and_internal_nodes_without_roots_indices);
+		}
+	}
+
 	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
 		return _binned_branch_lengths->value(_leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
 	}

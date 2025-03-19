@@ -65,6 +65,32 @@ TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree 
 	return linear_indices_in_Z_space_to_insert;
 }
 
+void TClique::calculate_prob_of_clique(
+    std::array<coretools::TSumLogProbability, 2> &sum_log, TCurrentState &current_state, const TTree *tree,
+    double mu_c_0, double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+	const double stationary_0 = get_stationary_probability(false, mu_c_0, mu_c_1);
+
+	for (const auto index_in_tree : tree->get_internal_nodes()) {
+		// prepare log probabilities for the two possible states
+		const auto &node = tree->get_node(index_in_tree);
+		if (node.isRoot()) { // calculate stationary
+			_calculate_log_prob_root(stationary_0, sum_log);
+		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
+			// note: for compatibility with update of Y, we need to pass leaf_index_in_tree_of_last_dim, but this
+			// doesn't matter for this update (just pass 0)
+			// Note: need to take oldValue of binned_branch_lengths because they are updated before the loop starts
+			const auto bin_branch_len =
+			    binned_branch_lengths->oldValue(leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
+			calculate_log_prob_parent_to_node(index_in_tree, bin_branch_len, tree, 0, current_state, sum_log);
+		}
+
+		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
+		_calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
+		                                     leaves_and_internal_nodes_without_roots_indices);
+	}
+};
+
 void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
                                     bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
                                     const TTree *tree) const {

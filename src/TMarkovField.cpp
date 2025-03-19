@@ -9,6 +9,7 @@
 #include "TStorageYVector.h"
 #include "TTree.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/algorithms.h"
 #include <cstddef>
 #include <vector>
 
@@ -189,10 +190,16 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = get_num_iterations_simulation();
 
+	// write Y trace to file
 	std::vector<size_t> Y_trace_header;
 	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
 	coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+
+	// create Z trace files
 	std::vector<coretools::TOutputFile> Z_trace_files;
+
+	// create the Markov field density file
+	coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt", {"prob_0", "prob_1"}, "\t");
 	for (const auto &tree : _trees) {
 		std::vector<size_t> Z_trace_header;
 		for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
@@ -202,12 +209,18 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
 		_Y.add_to_counter(iteration);
-		if (iteration % 10 == 0) {
+		if (iteration % 100 == 0) {
 			Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];
 				Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
 			}
+		}
+
+		// calculate joint density
+		if (iteration % 10 == 0) {
+			auto sum_log_field = _calculate_complete_joint_density();
+			joint_density_file.writeln(sum_log_field[0].getSum(), sum_log_field[1].getSum());
 		}
 	}
 	_write_Y_to_file<true>("acol_simulated_Y.txt");
@@ -262,3 +275,20 @@ void TMarkovField::MCMCHasFinished() {
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
 const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const { return _Y[index_in_TStorageYVector]; }
 size_t TMarkovField::size_Y() const { return _Y.size(); }
+
+std::array<coretools::TSumLogProbability, 2> TMarkovField::_calculate_complete_joint_density() {
+
+	// we can initialize the sum_log_field for the joint probability of the Markov random field
+	std::array<coretools::TSumLogProbability, 2> sum_log_field;
+
+	// Easy case: Y
+	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
+		std::vector<size_t> multidim_index_in_Y = _Y.get_multi_dimensional_index(i);
+		_calculate_log_prob_field(multidim_index_in_Y, sum_log_field);
+	}
+
+	// now we loop over all Z to get the joint probability
+	for (const auto &tree : _trees) { tree->calculate_joint_probability_of_Z(sum_log_field, _Y); }
+
+	return sum_log_field;
+};
