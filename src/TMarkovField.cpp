@@ -8,6 +8,7 @@
 #include "TLotus.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
+#include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
 #include "coretools/devtools.h"
@@ -240,6 +241,7 @@ void TMarkovField::_simulate_Y() {
 	// We are going to iterate over all possible Y and sample givent the product of probabilities of the child given the
 	// parent.
 	// set number of leaves per dimension (set the last dimension to one)
+	if (SIMULATION_NO_Y_INITIALIZATION) { return; }
 	for (size_t linear_index_in_leaves_space = 0; linear_index_in_leaves_space < _Y.total_size_of_container_space();
 	     ++linear_index_in_leaves_space) {
 		std::vector<size_t> multidim_index_in_Y = _Y.get_multi_dimensional_index(linear_index_in_leaves_space);

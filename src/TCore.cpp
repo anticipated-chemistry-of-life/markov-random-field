@@ -107,6 +107,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 TCore::TCore() {
 	NUMBER_OF_THREADS              = coretools::getNumThreads();
 	SIMULATION_NO_Z_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Z_initilisation");
+	SIMULATION_NO_Z_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Y_initilisation");
 }
 
 void TCore::infer() {
