@@ -6,6 +6,7 @@
  */
 
 #include "TCore.h"
+#include "Types.h"
 #include "coretools/Main/TError.h"
 #include "stattools/MCMC/TMCMC.h"
 
@@ -103,7 +104,10 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 // TCore
 //--------------------------------------
 
-TCore::TCore() { NUMBER_OF_THREADS = coretools::getNumThreads(); }
+TCore::TCore() {
+	NUMBER_OF_THREADS              = coretools::getNumThreads();
+	SIMULATION_NO_Z_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Z_initilisation");
+}
 
 void TCore::infer() {
 	// read filename of lotus

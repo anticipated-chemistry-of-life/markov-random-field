@@ -15,11 +15,12 @@
 
 class TTree; // forward declaration to avoid circular inclusion
 inline size_t NUMBER_OF_THREADS;
+inline bool SIMULATION_NO_Z_INITIALIZATION;
 
 // use simple error model for Lotus?
 #ifdef USE_LOTUS
 constexpr static bool UseSimpleErrorModel = false;
-# else
+#else
 constexpr static bool UseSimpleErrorModel = true;
 #endif
 

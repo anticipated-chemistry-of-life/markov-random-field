@@ -8,4 +8,5 @@
     --molecules_mu_0 acol_input_simulated.txt \
     --species_mu_1 acol_input_simulated.txt \
     --species_mu_0 acol_input_simulated.txt \
-    --numThreads 1
+    --numThreads 1 \
+    --simulation_no_Z_initilisation \

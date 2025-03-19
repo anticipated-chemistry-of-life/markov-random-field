@@ -401,7 +401,7 @@ void TTree::simulate_Z(size_t tree_index) {
 		                            get_number_of_internal_nodes());
 
 		// we sample the roots
-		if (coretools::instances::parameters().exists("simulation_no_Z_initilisation")) { continue; }
+		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
 		double proba_root = clique.get_stationary_probability(true, _mu_c_0->value(c), _mu_c_1->value(c));
 		coretools::Probability p(proba_root);
 
