@@ -14,6 +14,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
+#include "coretools/algorithms.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
@@ -103,10 +104,13 @@ private:
 	TStorageZVector _Z;
 
 	// Joint probability density
-	double _joint_log_prob_density;
+	std::vector<double> _joint_log_prob_density;
 
 	// private functions
-	void _reset_joint_log_prob_density() { _joint_log_prob_density = 0.0; }
+	void _reset_joint_log_prob_density() {
+		_joint_log_prob_density.clear();
+		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
+	}
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
@@ -384,14 +388,16 @@ public:
 			}
 		}
 
-		std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
-		coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
-		                                       header_branch_len, "\t");
-		for (size_t i = 0; i < _branch_length_from_tree.size(); ++i) {
-			branch_len_file.writeln(i, _branch_length_from_tree[i]);
+		if (WRITE_BRANCH_LENGTHS) {
+			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
+			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
+			                                       header_branch_len, "\t");
+			for (size_t i = 0; i < _branch_length_from_tree.size(); ++i) {
+				branch_len_file.writeln(i, _branch_length_from_tree[i]);
+			}
 		}
 	}
 
-	double get_complete_joint_density() const { return _joint_log_prob_density; }
+	double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

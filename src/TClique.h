@@ -237,8 +237,8 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ> update_Z(double &joint_log_prob_density, TCurrentState &current_state, TStorageZVector &Z,
-	                                const TTree *tree, double mu_c_0, double mu_c_1,
+	std::vector<TStorageZ> update_Z(std::vector<double> &joint_log_prob_density, TCurrentState &current_state,
+	                                TStorageZVector &Z, const TTree *tree, double mu_c_0, double mu_c_1,
 	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 

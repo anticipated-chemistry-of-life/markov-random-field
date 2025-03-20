@@ -192,47 +192,61 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = get_num_iterations_simulation();
 
-	// write Y trace to file
-	std::vector<size_t> Y_trace_header;
-	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
-	coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
-
-	// create Z trace files
+	// create all output files
+	coretools::TOutputFile Y_trace_file;
 	std::vector<coretools::TOutputFile> Z_trace_files;
+	coretools::TOutputFile joint_density_file;
+
+	if (WRITE_Y_TRACE) {
+		std::vector<size_t> Y_trace_header;
+		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+		coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+	}
 
 	// create the Markov field density file
-	coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt",
-	                                          {
-	                                              "joint_density",
-	                                          },
-	                                          "\t");
-	for (const auto &tree : _trees) {
-		std::vector<size_t> Z_trace_header;
-		for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
-		Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header, "\t");
+	if (WRITE_JOINT_LOG_PROB_DENSITY) {
+		coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt",
+		                                          {
+		                                              "joint_density",
+		                                          },
+		                                          "\t");
+	}
+	if (WRITE_Z_TRACE) {
+		for (const auto &tree : _trees) {
+			std::vector<size_t> Z_trace_header;
+			for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
+			Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
+			                           "\t");
+		}
 	}
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
 		_Y.add_to_counter(iteration);
 		if (iteration % 100 == 0) {
-			Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
-			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
-				const auto &tree = _trees[tree_idx];
-				Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+			if (WRITE_Y_TRACE) { Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
+			if (WRITE_Z_TRACE) {
+				for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+					const auto &tree = _trees[tree_idx];
+					Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+				}
 			}
 		}
 
 		// calculate joint density
 		if (iteration % 10 == 0) {
-			auto sum_log_field = _calculate_complete_joint_density();
-			joint_density_file.writeln(sum_log_field);
+			if (WRITE_JOINT_LOG_PROB_DENSITY) {
+				auto sum_log_field = _calculate_complete_joint_density();
+				joint_density_file.writeln(sum_log_field);
+			}
 		}
 	}
-	_write_Y_to_file<true>("acol_simulated_Y.txt");
-	for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
-		const auto &tree = _trees[tree_idx];
-		tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+	if (WRITE_Y) { _write_Y_to_file<true>("acol_simulated_Y.txt"); }
+	if (WRITE_Z) {
+		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+			const auto &tree = _trees[tree_idx];
+			tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+		}
 	}
 }
 
@@ -268,8 +282,6 @@ void TMarkovField::_simulate_Y() {
 				clique.update_counter_leaves_state_1(true, false);
 			}
 		}
-
-		// TODO : refactor also Y sampling
 	}
 }
 
@@ -288,7 +300,7 @@ double TMarkovField::_calculate_complete_joint_density() {
 	// we can initialize the sum_log_field for the joint probability of the Markov random field
 
 	// Easy case: Y
-	double sum_log_field = _complete_log_density;
+	double sum_log_field = coretools::containerSum(_complete_log_density);
 
 	// now we loop over all Z to get the joint probability
 	for (const auto &tree : _trees) { sum_log_field += tree->get_complete_joint_density(); }

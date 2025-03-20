@@ -17,6 +17,12 @@ class TTree; // forward declaration to avoid circular inclusion
 inline size_t NUMBER_OF_THREADS;
 inline bool SIMULATION_NO_Z_INITIALIZATION;
 inline bool SIMULATION_NO_Y_INITIALIZATION;
+inline bool WRITE_Y;
+inline bool WRITE_Y_TRACE;
+inline bool WRITE_Z;
+inline bool WRITE_Z_TRACE;
+inline bool WRITE_BRANCH_LENGTHS;
+inline bool WRITE_JOINT_LOG_PROB_DENSITY;
 
 // use simple error model for Lotus?
 #ifdef USE_LOTUS
