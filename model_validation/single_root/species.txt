@@ -1,0 +1,13 @@
+child	parent	length
+human	species	0.2
+mosquito	species	0.2
+fly	species	0.2
+worm	species	0.2
+bacteria	species	0.2
+virus	species	0.2
+dog	species	0.2
+cat	species	0.2
+fish	species	0.2
+bird	species	0.2
+plant	species	0.2
+fungus	species	0.2

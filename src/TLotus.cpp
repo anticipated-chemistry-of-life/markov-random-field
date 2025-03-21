@@ -6,21 +6,21 @@
 TLotus::TLotus(
     std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
-    std::string prefix)
+    std::string prefix, bool simulate)
     : _trees(trees), _markov_field(n_iterations, trees), _markov_field_stattools_param(markov_field_stattools_param),
-      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)) {
+      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
 	this->addPriorParameter(_gamma);
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
 	_oldLL = 0.0;
 	_curLL = 0.0;
-	// _L.initialize(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) TODO : should we
-	// initialize this ?
 }
 
 [[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
 
 void TLotus::initialize() {
+	if (!_simulate) { load_from_file(get_filename_lotus()); }
+
 	// initialize storage
 	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
 	                    {std::make_shared<coretools::TNamesIndices>(_collapser.num_dim_to_keep())});
@@ -61,7 +61,7 @@ void TLotus::load_from_file(const std::string &filename) {
 	const auto len_per_dimension_lotus = _collapser.initialize(file.header(), "LOTUS");
 
 	// initialize the size of L
-	_L.initialize(0, len_per_dimension_lotus);
+	_L.initialize(1, len_per_dimension_lotus);
 
 	_occurrence_counters.resize(_collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
@@ -108,7 +108,7 @@ void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_inde
 
 /// This function will be used when we update Y.
 void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
-                                   std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+                                   std::array<double, 2> &prob) const {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
 	// for state 1, we know that the new x will always be 1 (at least one is a one)
 	bool x_is_one_for_Y_0 = false; // Y = 0 -> x = 0 if we don't collapse
@@ -123,10 +123,16 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
 	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous if-statement)
 	// new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
-		sum_log[i].add(_calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
-		                                                   index_in_collapsed_space));
+		prob[i] = _calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
+		                                              index_in_collapsed_space);
 	}
 };
+
+void TLotus::update_cur_LL(double cur_LL) {
+	// _curLL must be updated when Markov Field (Y) changes
+	// Markov Field keeps track of new LL while updating Y; at the very end, it calls this function to set _curLL
+	_curLL = cur_LL;
+}
 
 void TLotus::update_markov_field(size_t /*iteration*/) { _markov_field.update(*this); }
 
@@ -145,6 +151,10 @@ void TLotus::updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted) {
 void TLotus::guessInitialValues() {
 	// TODO: think of an initialization scheme
 	_gamma->set(0.001);
+
+	// initialize _curLL
+	_curLL = calculate_log_likelihood_of_L();
+	_oldLL = _curLL;
 }
 
 const TStorageYVector &TLotus::get_Lotus() const { return _L; }
@@ -309,3 +319,7 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	coretools::TOutputFile file(file_name, header, "\t");
 	for (const auto &line : node_names) { file.writeln(line); }
 };
+
+void TLotus::burninHasFinished() { _markov_field.burninHasFinished(); }
+
+void TLotus::MCMCHasFinished() { _markov_field.MCMCHasFinished(); }

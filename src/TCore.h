@@ -54,7 +54,7 @@ private:
 	void _create_trees();
 
 public:
-	TModel(size_t n_iterations, const std::string &prefix);
+	TModel(size_t n_iterations, const std::string &prefix, bool simulate);
 };
 
 //--------------------------------------

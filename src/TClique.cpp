@@ -9,6 +9,7 @@
 #include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/devtools.h"
 #include <cstddef>
 #include <vector>
 
@@ -31,8 +32,8 @@ TCurrentState TClique::create_current_state(const TStorageYVector &Y, TStorageZV
 }
 
 std::vector<TStorageZ>
-TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree, double mu_c_0, double mu_c_1,
-                  const TypeParamBinBranches *binned_branch_lengths,
+TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZVector &Z,
+                  const TTree *tree, double mu_c_0, double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
 
@@ -58,7 +59,16 @@ TClique::update_Z(TCurrentState &current_state, TStorageZVector &Z, const TTree 
 		                                     leaves_and_internal_nodes_without_roots_indices);
 
 		// sample new state and update Z accordingly
-		bool new_state = sample(sum_log);
+		const double log_prob_0 = sum_log[0].getSum();
+		const double log_prob_1 = sum_log[1].getSum();
+		bool new_state          = sample(log_prob_0, log_prob_1);
+
+		if (new_state) {
+			joint_prob_density[omp_get_thread_num()] += log_prob_1;
+		} else {
+			joint_prob_density[omp_get_thread_num()] += log_prob_0;
+		}
+
 		_update_current_state(Z, current_state, index_in_tree, new_state, linear_indices_in_Z_space_to_insert, tree);
 	}
 
@@ -116,6 +126,11 @@ void TClique::update_counter_leaves_state_1(int difference) {
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
+	return coretools::TAcceptOddsRatio::accept(log_Q);
+}
+
+bool sample(double log_prob_0, double log_prob_1) {
+	const double log_Q = log_prob_1 - log_prob_0;
 	return coretools::TAcceptOddsRatio::accept(log_Q);
 }
 

@@ -38,6 +38,18 @@ if (OpenMP_CXX_FOUND)
     target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
 endif ()
 
+# Use simple error model or lotus?
+# -> if you want to use lotus: compile cmake with command "cmake -DLOTUS=ON .."
+option(LOTUS "Using Lotus" OFF)
+if (LOTUS)
+    message("Using Lotus (option -DLOTUS=ON)")
+    # add compile definition to source files (everything behind -D will be replaced with bool)
+    add_definitions(-DUSE_LOTUS)
+else ()
+    message("Using simple error model (run 'cmake -DLOTUS=ON ..' to change)")
+endif ()
+
+
 target_sources(${PROJECT_NAME} PRIVATE ${CORE_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 target_link_libraries(${PROJECT_NAME} PRIVATE coretools stattools genometools ${ZLIB_LIBRARIES} ${ARMADILLO_LIBRARIES})

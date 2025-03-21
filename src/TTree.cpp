@@ -23,6 +23,7 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
              TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
     : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _mu_c_0(Mu_0), _mu_c_1(Mu_1) {
 
+	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
 	this->addPriorParameter({_binned_branch_lengths, _mu_c_0, _mu_c_1});
 
@@ -56,6 +57,7 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 
 	std::vector<double> grid(_number_of_bins);
 	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
+	_branch_length_from_tree = grid;
 
 	_binned_branch_lengths_from_tree.reserve(get_number_of_nodes() - get_number_of_roots());
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
@@ -69,6 +71,8 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 			_binned_branch_lengths_from_tree.push_back(std::distance(grid.begin(), it));
 		}
 	}
+
+	// TODO: do the binned branch lengths still sum to one? I don't think so
 };
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
@@ -241,8 +245,14 @@ void TTree::guessInitialValues() {
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
+
 void TTree::_simulateUnderPrior(Storage *) {
-	// stays empty - simulation is coordinated via TMarkovField
+	using namespace coretools::instances;
+
+	// overwrite simulated branch length: use branch lengths from tree
+	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
+	}
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
@@ -391,6 +401,7 @@ void TTree::simulate_Z(size_t tree_index) {
 		                            get_number_of_internal_nodes());
 
 		// we sample the roots
+		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
 		double proba_root = clique.get_stationary_probability(true, _mu_c_0->value(c), _mu_c_1->value(c));
 		coretools::Probability p(proba_root);
 

@@ -9,9 +9,12 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Math/TSumLog.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
+#include "coretools/algorithms.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
@@ -85,6 +88,7 @@ private:
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
+	std::vector<double> _branch_length_from_tree;
 	std::vector<size_t> _binned_branch_lengths_from_tree;
 	TypeParamBinBranches *_binned_branch_lengths = nullptr;
 
@@ -99,7 +103,14 @@ private:
 	// Set Z
 	TStorageZVector _Z;
 
+	// Joint probability density
+	std::vector<double> _joint_log_prob_density;
+
 	// private functions
+	void _reset_joint_log_prob_density() {
+		_joint_log_prob_density.clear();
+		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
+	}
 	void _bin_branch_lengths(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
@@ -239,6 +250,9 @@ public:
 		return _leafIndices[get_node_index(node_name)];
 	}
 	size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
+	size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
+		return _internal_nodes[internal_index];
+	}
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
@@ -283,6 +297,7 @@ public:
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
 	template<bool IsSimulation> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
+		_reset_joint_log_prob_density();
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
@@ -295,11 +310,11 @@ public:
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			// fill the current state for this clique
-			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
-			indices_to_insert[i] =
-			    _cliques[i].update_Z(current_state, _Z, this, _mu_c_0->value(i), _mu_c_1->value(i),
-			                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+			indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this,
+			                                            _mu_c_0->value(i), _mu_c_1->value(i), _binned_branch_lengths,
+			                                            _leaves_and_internal_nodes_without_roots_indices);
 
 			// update mu
 			if constexpr (!IsSimulation) {
@@ -321,6 +336,68 @@ public:
 	}
 
 	const std::string &get_tree_name() const { return _tree_name; }
+
 	void simulate_Z(size_t tree_index);
+
+	template<bool WriteFullZ>
+	void write_Z_to_file(const std::string &filename, std::vector<std::unique_ptr<TTree>> &trees,
+	                     size_t dimension_number_of_tree) const {
+		std::vector<std::string> header;
+		for (const auto &tree : trees) { header.push_back(tree->get_tree_name()); }
+		header.emplace_back("position");
+		header.emplace_back("Z_state");
+
+		if constexpr (WriteFullZ) {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			for (size_t i = 0; i < _Z.total_size_of_container_space(); ++i) {
+				auto [found, position] = _Z.binary_search(i);
+				if (found) {
+					line = {i, _Z.is_one(position)};
+				} else {
+					line = {i, 0};
+				}
+				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
+					if (idx == dimension_number_of_tree) {
+						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+					} else {
+						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
+					};
+				};
+				file.writeln(node_names, line);
+			}
+		} else {
+			std::array<size_t, 2> line{};
+			coretools::TOutputFile file(filename, header, "\t");
+			for (size_t i = 0; i < _Z.size(); ++i) {
+				line                               = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
+				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				std::vector<std::string> node_names;
+				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
+					if (idx == dimension_number_of_tree) {
+						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+					} else {
+						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
+					};
+				};
+				file.writeln(node_names, line);
+			}
+		}
+
+		if (WRITE_BRANCH_LENGTHS) {
+			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
+			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
+			                                       header_branch_len, "\t");
+			for (size_t i = 0; i < _branch_length_from_tree.size(); ++i) {
+				branch_len_file.writeln(i, _branch_length_from_tree[i]);
+			}
+		}
+	}
+
+	double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
 };
 #endif // METABOLITE_INFERENCE_TREE_H

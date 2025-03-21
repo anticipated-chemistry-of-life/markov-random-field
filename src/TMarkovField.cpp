@@ -8,7 +8,10 @@
 #include "TLotus.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
+#include "Types.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include <cstddef>
 #include <vector>
 
@@ -104,6 +107,15 @@ void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
 	}
 }
 
+void TMarkovField::_update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL) {
+	double sum_new_LL = 0.0;
+	for (size_t i = 0; i < new_LL.size(); ++i) {
+		// loop over all LL (stored per thread) and sum
+		sum_new_LL += new_LL[i].getSum();
+	}
+	lotus.update_cur_LL(sum_new_LL);
+}
+
 int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
@@ -146,10 +158,10 @@ void TMarkovField::update(TLotus &lotus) {
 	_update_all_Z<false>();
 }
 
-void TMarkovField::_add_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-                                 std::array<coretools::TSumLogProbability, 2> &sum_log, TLotus &lotus) {
+void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
+                                  std::array<double, 2> &prob, TLotus &lotus) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
-	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, sum_log);
+	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, prob);
 }
 
 void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
@@ -178,10 +190,63 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// for iteration in 1->max_iteration, (max_iteration should be passed from CLI)
 	// we use tree.update_Z(); and then
 	// update Y where likelihood of data is always one so it doesn't matter.
-	size_t max_iteration = coretools::instances::parameters().get("num_iterations", 1000);
+	size_t max_iteration = get_num_iterations_simulation();
+
+	// create all output files
+	coretools::TOutputFile Y_trace_file;
+	std::vector<coretools::TOutputFile> Z_trace_files;
+	coretools::TOutputFile joint_density_file;
+
+	if (WRITE_Y_TRACE) {
+		std::vector<size_t> Y_trace_header;
+		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+		coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+	}
+
+	// create the Markov field density file
+	if (WRITE_JOINT_LOG_PROB_DENSITY) {
+		coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt",
+		                                          {
+		                                              "joint_density",
+		                                          },
+		                                          "\t");
+	}
+	if (WRITE_Z_TRACE) {
+		for (const auto &tree : _trees) {
+			std::vector<size_t> Z_trace_header;
+			for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
+			Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
+			                           "\t");
+		}
+	}
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 		_update_all_Y<true>(lotus);
 		_update_all_Z<true>();
+		_Y.add_to_counter(iteration);
+		if (iteration % 100 == 0) {
+			if (WRITE_Y_TRACE) { Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
+			if (WRITE_Z_TRACE) {
+				for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+					const auto &tree = _trees[tree_idx];
+					Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+				}
+			}
+		}
+
+		// calculate joint density
+		if (iteration % 10 == 0) {
+			if (WRITE_JOINT_LOG_PROB_DENSITY) {
+				auto sum_log_field = _calculate_complete_joint_density();
+				joint_density_file.writeln(sum_log_field);
+			}
+		}
+	}
+	if (WRITE_Y) { _write_Y_to_file<true>("acol_simulated_Y.txt"); }
+	if (WRITE_Z) {
+		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+			const auto &tree = _trees[tree_idx];
+			tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+		}
 	}
 }
 
@@ -190,6 +255,7 @@ void TMarkovField::_simulate_Y() {
 	// We are going to iterate over all possible Y and sample givent the product of probabilities of the child given the
 	// parent.
 	// set number of leaves per dimension (set the last dimension to one)
+	if (SIMULATION_NO_Y_INITIALIZATION) { return; }
 	for (size_t linear_index_in_leaves_space = 0; linear_index_in_leaves_space < _Y.total_size_of_container_space();
 	     ++linear_index_in_leaves_space) {
 		std::vector<size_t> multidim_index_in_Y = _Y.get_multi_dimensional_index(linear_index_in_leaves_space);
@@ -216,11 +282,28 @@ void TMarkovField::_simulate_Y() {
 				clique.update_counter_leaves_state_1(true, false);
 			}
 		}
-
-		// TODO : refactor also Y sampling
 	}
+}
+
+void TMarkovField::burninHasFinished() { _Y.reset_counts(); }
+
+void TMarkovField::MCMCHasFinished() {
+	// TODO: write function to write the posterior state of Y to file
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
 const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const { return _Y[index_in_TStorageYVector]; }
 size_t TMarkovField::size_Y() const { return _Y.size(); }
+
+double TMarkovField::_calculate_complete_joint_density() {
+
+	// we can initialize the sum_log_field for the joint probability of the Markov random field
+
+	// Easy case: Y
+	double sum_log_field = coretools::containerSum(_complete_log_density);
+
+	// now we loop over all Z to get the joint probability
+	for (const auto &tree : _trees) { sum_log_field += tree->get_complete_joint_density(); }
+
+	return sum_log_field;
+};

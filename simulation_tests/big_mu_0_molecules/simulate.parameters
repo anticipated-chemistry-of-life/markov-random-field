@@ -1,0 +1,6 @@
+fixedSeed	100149628
+molecules_mu_0	acol_simulated.txt
+num_iterations	10000
+task	simulate
+tree_molecules	../../tests/test_data/molecules.tsv
+tree_species	../../tests/test_data/loading_tree.tsv

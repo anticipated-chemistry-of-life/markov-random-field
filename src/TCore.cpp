@@ -6,6 +6,7 @@
  */
 
 #include "TCore.h"
+#include "Types.h"
 #include "coretools/Main/TError.h"
 #include "stattools/MCMC/TMCMC.h"
 
@@ -84,12 +85,12 @@ void TModel::_create_trees() {
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
 
-TModel::TModel(size_t n_iterations, const std::string &prefix) {
+TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create trees (including mu_0, mu_1 and binned branch lengths)
 	_create_trees();
 
 	// create lotus
-	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix);
+	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix, simulate);
 
 	// create (fake) observation for stattools
 	_obs = std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
@@ -103,30 +104,50 @@ TModel::TModel(size_t n_iterations, const std::string &prefix) {
 // TCore
 //--------------------------------------
 
-TCore::TCore() { NUMBER_OF_THREADS = coretools::getNumThreads(); }
+TCore::TCore() {
+	NUMBER_OF_THREADS              = coretools::getNumThreads();
+	SIMULATION_NO_Z_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Z_initilisation");
+	SIMULATION_NO_Y_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Y_initilisation");
+	WRITE_Y                        = coretools::instances::parameters().exists("write_Y");
+	WRITE_Y_TRACE                  = coretools::instances::parameters().exists("write_Y_trace");
+	WRITE_Z                        = coretools::instances::parameters().exists("write_Z");
+	WRITE_Z_TRACE                  = coretools::instances::parameters().exists("write_Z_trace");
+	WRITE_JOINT_LOG_PROB_DENSITY   = coretools::instances::parameters().exists("write_joint_log_prob_density");
+	WRITE_BRANCH_LENGTHS           = coretools::instances::parameters().exists("write_branch_lengths");
+}
 
 void TCore::infer() {
-	std::string prefix  = "acol"; // TODO: fix arguments
-	size_t n_iterations = 1000;   // todo fix
+	// read filename of lotus
+	std::string filename_lotus = TLotus::get_filename_lotus();
+
+	// read output prefix
+	std::string prefix;
+	if (parameters().exists("out")) {
+		prefix = parameters().get<std::string>("out");
+		logfile().list("Writing output to prefix '", prefix, "' (argument 'out').");
+	} else {
+		prefix = coretools::str::readBeforeLast(filename_lotus, ".");
+		logfile().list("Writing output to default prefix '", prefix, "' (use 'out' to change).");
+	}
+
+	// create MCMC object and get number of iterations that will be run
+	stattools::TMCMC mcmc;
+	size_t n_iterations = mcmc.get_num_iterations();
 
 	// build model
-	TModel model(n_iterations, prefix);
+	TModel model(n_iterations, prefix, false);
 
 	// run MCMC
-	stattools::TMCMC mcmc;
 	mcmc.runMCMC(prefix);
 }
 
 void TCore::simulate() {
-	std::string prefix  = "acol"; // TODO: fix arguments
-	size_t n_iterations = 1000;   // todo fix
+	std::string prefix  = parameters().get("out", "acol");
+	size_t n_iterations = TMarkovField::get_num_iterations_simulation();
 
 	// build model
-	TModel model(n_iterations, prefix);
+	TModel model(n_iterations, prefix, true);
 
 	// simulate
 	stattools::TSimulator::simulate(prefix);
 }
-
-// other TODO's
-// - write posteriors of Y and Z to file after MCMC

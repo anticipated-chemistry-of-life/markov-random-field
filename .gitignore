@@ -56,3 +56,5 @@ Thumbs.db
 
 .cache/
 tests/test_data/ott_taxonomy.tsv
+.venv/
+*_trace.txt

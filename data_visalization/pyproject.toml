@@ -1,0 +1,15 @@
+[project]
+name = "data-visalization"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "jupyterlab>=4.3.5",
+    "matplotlib>=3.10.1",
+    "networkx>=3.4.2",
+    "numpy>=2.2.3",
+    "pandas>=2.2.3",
+    "scipy>=1.15.2",
+    "seaborn>=0.13.2",
+]
