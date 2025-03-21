@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include <cstddef>
 #include <omp.h>
 #include <string>
 #include <vector>
@@ -40,6 +41,11 @@ private:
 
 	// complete joint density of the markov random field
 	std::vector<double> _complete_log_density;
+
+	// output files
+	coretools::TOutputFile _Y_trace_file;
+	std::vector<coretools::TOutputFile> _Z_trace_files;
+	coretools::TOutputFile _joint_density_file;
 
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
@@ -102,8 +108,15 @@ private:
 		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
-	template<bool IsSimulation> void _update_all_Y(TLotus &lotus) {
+	template<bool IsSimulation> void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
+
+		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen()) {
+			std::vector<size_t> Y_trace_header;
+			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+			_Y_trace_file.open("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+		}
+
 		if (_fix_Y) { return; }
 
 		// loop over sheets in last dimension
@@ -156,12 +169,29 @@ private:
 
 		// at the very end: sum the LL of all threads and store it in TLotus
 		_update_cur_LL_lotus(lotus, new_LL);
+		if (WRITE_Y_TRACE && (iteration % 100 == 0)) { _Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
 	}
 
-	template<bool IsSimulation> void _update_all_Z() {
+	template<bool IsSimulation> void _update_all_Z(size_t iteration) {
+		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty()) {
+			for (const auto &tree : _trees) {
+				std::vector<size_t> Z_trace_header;
+				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
+					Z_trace_header.push_back(i);
+				}
+				_Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
+				                            "\t");
+			}
+		}
 		if (_fix_Z) { return; }
 
 		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
+		if (iteration % 100 == 0 && WRITE_Z_TRACE) {
+			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+				const auto &tree = _trees[tree_idx];
+				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+			}
+		}
 	}
 
 	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
@@ -212,7 +242,7 @@ public:
 	~TMarkovField() = default;
 
 	// updates
-	void update(TLotus &lotus);
+	void update(TLotus &lotus, size_t iteration);
 
 	// simulation
 	void simulate(TLotus &lotus);

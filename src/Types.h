@@ -62,7 +62,7 @@ class TLotus; // forward declaration to avoid circular inclusion
 using TypeLotus                     = coretools::Boolean;
 constexpr static size_t NumDimLotus = 2;
 using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
-using SpecLotus                     = stattools::TObservation<TypeLotus, stattools::name("lotus"), NumDimLotus, TLotus>;
+using SpecLotus = stattools::TObservation<TypeLotus, stattools::name("lotus_obs"), NumDimLotus, TLotus>;
 
 // Type for calculating the number of 1's per clique
 using TypeCounter1 = uint32_t;

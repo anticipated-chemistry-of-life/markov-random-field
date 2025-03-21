@@ -30,17 +30,20 @@ void TModel::_create_tree(size_t dimension, const std::string &filename, const s
 	stattools::TRuntimeConfigParam config_mu_0;
 	config_mu_0.set_name(tree_name + "_mu_0");
 	config_mu_0.setPriorParameters(lambda_on_mu);
+	config_mu_0.excludeFromDAGUpdates(true); // never update
 	_mu_0.push_back(std::make_unique<stattools::TParameter<SpecMu_0, TTree>>(&_prior_on_mu, config_mu_0));
 
 	// create mu_1
 	stattools::TRuntimeConfigParam config_mu_1;
 	config_mu_1.set_name(tree_name + "_mu_1");
 	config_mu_1.setPriorParameters(lambda_on_mu);
+	config_mu_1.excludeFromDAGUpdates(true); // never update
 	_mu_1.push_back(std::make_unique<stattools::TParameter<SpecMu_1, TTree>>(&_prior_on_mu, config_mu_1));
 
 	// create branch lengths
 	stattools::TRuntimeConfigParam config_branch_lengths;
 	config_branch_lengths.set_name(tree_name + "_branch_lengths");
+	config_branch_lengths.excludeFromDAGUpdates(true); // never update
 	_binned_branch_lengths.push_back(std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
 	    &_prior_on_binned_branch_lengths, config_branch_lengths));
 
@@ -52,7 +55,7 @@ void TModel::_create_tree(size_t dimension, const std::string &filename, const s
 	stattools::TRuntimeConfigParam config_markov_field;
 	config_markov_field.set_name(tree_name + "_MRF");
 	config_markov_field.excludeFromDAGUpdates(true); // never update
-	_markov_field_stattools_param.push_back(
+	_markov_field_stattools_param.emplace_back(
 	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(_trees.back().get(), config_markov_field));
 }
 

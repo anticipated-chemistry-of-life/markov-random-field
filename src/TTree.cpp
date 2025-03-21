@@ -44,7 +44,7 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 		UERROR("More bins (", _number_of_bins, ") required than type allows (", max_type,
 		       ")! Please decrease K or change type of bins.");
 	}
-	TypeBinnedBranchLengths::setMax(_number_of_bins);
+	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
@@ -235,6 +235,7 @@ void TTree::guessInitialValues() {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		_mu_c_0->set(c, 0.001);
 		_mu_c_1->set(c, 0.001);
+		_cliques[c].set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
 	}
 
 	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
@@ -281,6 +282,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 		// get start index of each clique in leaves space
 		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
+		_cliques.back().initialize(_a, _delta, _number_of_bins);
 	}
 }
 
@@ -293,8 +295,8 @@ stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
 }
 
 void TTree::_propose_new_branch_lengths(size_t p1, size_t p2, int val) {
-	_binned_branch_lengths->set(p1, _binned_branch_lengths->value(p1) + val);
-	_binned_branch_lengths->set(p2, _binned_branch_lengths->value(p2) - val);
+	_binned_branch_lengths->set(p1, (int)_binned_branch_lengths->value(p1) + val);
+	_binned_branch_lengths->set(p2, (int)_binned_branch_lengths->value(p2) - val);
 }
 
 void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs) {

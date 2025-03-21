@@ -1,7 +1,7 @@
 ../../build/acol simulate \
     --tree_species species.txt \
     --tree_molecules molecules.txt \
-    --num_iterations 10000 \
+    --num_iterations 100000 \
     --molecules_branch_lengths acol_input_simulated.txt \
     --species_branch_lengths acol_input_simulated.txt \
     --molecules_mu_1 acol_input_simulated.txt \
@@ -9,6 +9,5 @@
     --species_mu_1 acol_input_simulated.txt \
     --species_mu_0 acol_input_simulated.txt \
     --numThreads 1 \
-    --simulation_no_Z_initilisation \
-    --simulation_no_Y_initilisation \
-    --write_joint_log_prob_density \
+    --write_Y \
+    --write_Z \

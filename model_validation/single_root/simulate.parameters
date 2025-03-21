@@ -1,4 +1,4 @@
-fixedSeed	22011002
+fixedSeed	12824202
 molecules_branch_lengths	acol_input_simulated.txt
 molecules_mu_0	acol_input_simulated.txt
 molecules_mu_1	acol_input_simulated.txt
@@ -10,3 +10,5 @@ species_mu_1	acol_input_simulated.txt
 task	simulate
 tree_molecules	molecules.txt
 tree_species	species.txt
+write_Y	
+write_Z	

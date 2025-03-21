@@ -153,9 +153,25 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::update(TLotus &lotus) {
-	_update_all_Y<false>(lotus);
-	_update_all_Z<false>();
+void TMarkovField::update(TLotus &lotus, size_t iteration) {
+	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0) {
+		_joint_density_file.open("acol_simulated_joint_density.txt",
+		                         {
+		                             "joint_density",
+		                         },
+		                         "\t");
+	}
+
+	_update_all_Y<false>(lotus, iteration);
+	_update_all_Z<false>(iteration);
+	_Y.add_to_counter(iteration);
+	// calculate joint density
+	if (iteration % 10 == 0) {
+		if (WRITE_JOINT_LOG_PROB_DENSITY) {
+			auto sum_log_field = _calculate_complete_joint_density();
+			_joint_density_file.writeln(sum_log_field);
+		}
+	}
 }
 
 void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
@@ -193,51 +209,27 @@ void TMarkovField::simulate(TLotus &lotus) {
 	size_t max_iteration = get_num_iterations_simulation();
 
 	// create all output files
-	coretools::TOutputFile Y_trace_file;
 	std::vector<coretools::TOutputFile> Z_trace_files;
-	coretools::TOutputFile joint_density_file;
-
-	if (WRITE_Y_TRACE) {
-		std::vector<size_t> Y_trace_header;
-		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
-		coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
-	}
 
 	// create the Markov field density file
 	if (WRITE_JOINT_LOG_PROB_DENSITY) {
-		coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt",
-		                                          {
-		                                              "joint_density",
-		                                          },
-		                                          "\t");
+		_joint_density_file.open("acol_simulated_joint_density.txt",
+		                         {
+		                             "joint_density",
+		                         },
+		                         "\t");
 	}
-	if (WRITE_Z_TRACE) {
-		for (const auto &tree : _trees) {
-			std::vector<size_t> Z_trace_header;
-			for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
-			Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
-			                           "\t");
-		}
-	}
+
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
-		_update_all_Y<true>(lotus);
-		_update_all_Z<true>();
+		_update_all_Y<true>(lotus, iteration);
+		_update_all_Z<true>(iteration);
 		_Y.add_to_counter(iteration);
-		if (iteration % 100 == 0) {
-			if (WRITE_Y_TRACE) { Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
-			if (WRITE_Z_TRACE) {
-				for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
-					const auto &tree = _trees[tree_idx];
-					Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
-				}
-			}
-		}
 
 		// calculate joint density
 		if (iteration % 10 == 0) {
 			if (WRITE_JOINT_LOG_PROB_DENSITY) {
 				auto sum_log_field = _calculate_complete_joint_density();
-				joint_density_file.writeln(sum_log_field);
+				_joint_density_file.writeln(sum_log_field);
 			}
 		}
 	}
