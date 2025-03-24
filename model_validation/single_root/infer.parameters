@@ -1,7 +1,0 @@
-fixedSeed	15413148
-lotus	acol_lotus.tsv
-numThreads	1
-task	infer
-tree_molecules	molecules.txt
-tree_species	species.txt
-write_Y_trace	

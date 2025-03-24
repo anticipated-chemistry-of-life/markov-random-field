@@ -27,6 +27,7 @@ private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
 	TStorageYVector _Y;
+	std::string _prefix;
 
 	// stuff for updating Y
 	size_t _K;
@@ -114,7 +115,11 @@ private:
 		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen()) {
 			std::vector<size_t> Y_trace_header;
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
-			_Y_trace_file.open("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
+			if constexpr (IsSimulation) {
+				_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
+			} else {
+				_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
+			}
 		}
 
 		if (_fix_Y) { return; }
@@ -238,7 +243,7 @@ private:
 	};
 
 public:
-	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees);
+	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix);
 	~TMarkovField() = default;
 
 	// updates

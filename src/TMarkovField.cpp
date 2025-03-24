@@ -13,10 +13,12 @@
 #include "coretools/algorithms.h"
 #include "coretools/devtools.h"
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 
-TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees)
-    : _trees(Trees), _clique_last_dim(*_trees.back().get(), 1) {
+TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix)
+    : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(*_trees.back().get(), 1) {
 	using namespace coretools::instances;
 
 	// read K (sheet size for updating Y)
@@ -154,8 +156,26 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 }
 
 void TMarkovField::update(TLotus &lotus, size_t iteration) {
+	if (_fix_Y && _Y.empty()) {
+		std::string filename = coretools::instances::parameters().get("simulated_Y_filename", "acol_simulated_Y.txt");
+		coretools::TInputFile file(filename, coretools::FileType::Header);
+		if (file.numCols() != 5) {
+			UERROR("Simulated Y is expected to have 5 columns, but has ", file.numCols(), " !");
+		}
+
+		// read each line of the file
+		for (; !file.empty(); file.popFront()) {
+			auto linear_index_in_Y_space = file.get<uint64_t>(0);
+			bool state                   = file.get<bool>(1);
+			if (state) {
+				_Y.insert_one(linear_index_in_Y_space);
+			} else {
+				_Y.insert_zero(linear_index_in_Y_space);
+			}
+		}
+	}
 	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0) {
-		_joint_density_file.open("acol_simulated_joint_density.txt",
+		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
 		                         {
 		                             "joint_density",
 		                         },
@@ -213,7 +233,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 
 	// create the Markov field density file
 	if (WRITE_JOINT_LOG_PROB_DENSITY) {
-		_joint_density_file.open("acol_simulated_joint_density.txt",
+		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
 		                         {
 		                             "joint_density",
 		                         },
@@ -226,18 +246,18 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_Y.add_to_counter(iteration);
 
 		// calculate joint density
-		if (iteration % 10 == 0) {
+		if (iteration % 100 == 0) {
 			if (WRITE_JOINT_LOG_PROB_DENSITY) {
 				auto sum_log_field = _calculate_complete_joint_density();
 				_joint_density_file.writeln(sum_log_field);
 			}
 		}
 	}
-	if (WRITE_Y) { _write_Y_to_file<true>("acol_simulated_Y.txt"); }
+	if (WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
 	if (WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 			const auto &tree = _trees[tree_idx];
-			tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
 		}
 	}
 }
@@ -281,6 +301,7 @@ void TMarkovField::burninHasFinished() { _Y.reset_counts(); }
 
 void TMarkovField::MCMCHasFinished() {
 	// TODO: write function to write the posterior state of Y to file
+	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }

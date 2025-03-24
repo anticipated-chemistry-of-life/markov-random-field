@@ -8,6 +8,7 @@
 #ifndef TEXAMPLETASK_H_
 #define TEXAMPLETASK_H_
 
+#include "TLotus.h"
 #include "TMarkovField.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
@@ -16,7 +17,6 @@
 #include "stattools/DAG/TDAGBuilder.h"
 #include "stattools/MCMC/TMCMC.h"
 #include <memory>
-#include "TLotus.h"
 
 //--------------------------------------
 // TModel
@@ -50,8 +50,9 @@ private:
 	// functions that are called when updating
 	void (TLotus::*_fun_update_mrf)(size_t);
 
-	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name);
-	void _create_trees();
+	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
+	                  const std::string &prefix);
+	void _create_trees(const std::string &prefix);
 
 public:
 	TModel(size_t n_iterations, const std::string &prefix, bool simulate);

@@ -1,15 +1,15 @@
-fixedSeed	32631635
+fixedSeed	19913900
 molecules_branch_lengths	acol_input_simulated.txt
 molecules_mu_0	acol_input_simulated.txt
 molecules_mu_1	acol_input_simulated.txt
 numThreads	1
-num_iterations	50000
-simulation_no_Y_initilisation	
-simulation_no_Z_initilisation	
+num_iterations	100000
 species_branch_lengths	acol_input_simulated.txt
 species_mu_0	acol_input_simulated.txt
 species_mu_1	acol_input_simulated.txt
 task	simulate
 tree_molecules	molecules.txt
 tree_species	species.txt
+write_Y	
+write_Z	
 write_joint_log_prob_density	

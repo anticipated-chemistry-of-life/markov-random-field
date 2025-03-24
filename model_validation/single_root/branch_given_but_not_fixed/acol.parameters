@@ -1,15 +1,16 @@
-fixedSeed	10131057
+fixedSeed	9332807
+lotus	acol_lotus.tsv
 molecules_branch_lengths	acol_input_simulated.txt
 molecules_mu_0	acol_input_simulated.txt
 molecules_mu_1	acol_input_simulated.txt
 numThreads	1
-num_iterations	10000
-simulation_no_Y_initilisation	
-simulation_no_Z_initilisation	
+out	./branch_given_but_not_fixed/acol
 species_branch_lengths	acol_input_simulated.txt
 species_mu_0	acol_input_simulated.txt
 species_mu_1	acol_input_simulated.txt
-task	simulate
+task	infer
 tree_molecules	molecules.txt
 tree_species	species.txt
-write_joint_log_prob_density	
+writeBurnin	
+writeTrace	
+write_Y_trace	

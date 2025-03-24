@@ -193,6 +193,8 @@ public:
 		}
 		return Y_as_vector;
 	}
+
+	bool empty() const { return _vec.empty(); }
 };
 
 #endif // TSTORAGEYVECTOR_H

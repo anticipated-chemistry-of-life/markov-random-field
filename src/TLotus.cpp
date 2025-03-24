@@ -7,9 +7,9 @@ TLotus::TLotus(
     std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
     std::string prefix, bool simulate)
-    : _trees(trees), _markov_field(n_iterations, trees), _markov_field_stattools_param(markov_field_stattools_param),
-      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)),
-      _simulate(simulate) {
+    : _trees(trees), _markov_field(n_iterations, trees, prefix),
+      _markov_field_stattools_param(markov_field_stattools_param), _collapser(trees), _gamma(gamma),
+      _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
 	this->addPriorParameter(_gamma);
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
@@ -309,7 +309,7 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	}
 
 	// write to file
-	std::string file_name = _prefix + "_lotus.tsv";
+	std::string file_name = _prefix + "_simulated_lotus.tsv";
 
 	// we get the tree name for the header of the file.
 	std::vector<std::string> header(_collapser.num_dim_to_keep());
