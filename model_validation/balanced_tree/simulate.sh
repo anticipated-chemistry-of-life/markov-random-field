@@ -12,3 +12,5 @@
     --simulation_no_Z_initilisation \
     --simulation_no_Y_initilisation \
     --write_joint_log_prob_density \
+    --write_Y \
+    --write_Z \

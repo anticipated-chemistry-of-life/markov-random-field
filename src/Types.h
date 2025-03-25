@@ -41,7 +41,7 @@ using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
 // Mu
-using PriorOnMu = stattools::prior::TExponentialFixed<TypeMu>;
+using PriorOnMu = stattools::prior::TUniformFixed<TypeMu>;
 using SpecMu_0  = stattools::ParamSpec<TypeMu, stattools::name("mu_0"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
 using SpecMu_1  = stattools::ParamSpec<TypeMu, stattools::name("mu_1"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
 

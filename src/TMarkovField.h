@@ -194,7 +194,8 @@ private:
 				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
 					Z_trace_header.push_back(i);
 				}
-				_Z_trace_files.emplace_back(_prefix + tree->get_tree_name() + "_Z_trace.txt", Z_trace_header, "\t");
+				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.txt", Z_trace_header,
+				                            "\t");
 			}
 		}
 

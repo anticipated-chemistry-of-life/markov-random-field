@@ -13,10 +13,14 @@
     --species_mu_0 acol_input_simulated.txt \
     --writeTrace \
     --writeBurnin \
+    --Z.update false \
+    --set_species_Z acol_simulated_Z_species.txt \
+    --set_molecules_Z acol_simulated_Z_molecules.txt \
+    --species_mu_1.update false \
+    --molecules_mu_0.update false \
+    --molecules_mu_1.update false \
     --molecules_branch_lengths.update false \
     --species_branch_lengths.update false \
-    # --species_mu_1.update false \
-    # --species_mu_0.update false \
-    # --molecules_mu_0.update false \
-    # --molecules_mu_1.update false \
-    
+    --species_mu_0.update false \
+    # --Y.update false \
+    # --set_Y acol_simulated_Y.txt \

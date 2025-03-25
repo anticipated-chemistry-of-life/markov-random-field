@@ -30,14 +30,14 @@ void TModel::_create_tree(size_t dimension, const std::string &filename, const s
 	// create mu_0
 	stattools::TRuntimeConfigParam config_mu_0;
 	config_mu_0.set_name(tree_name + "_mu_0");
-	config_mu_0.setPriorParameters(lambda_on_mu);
+	// config_mu_0.setPriorParameters(lambda_on_mu);
 	config_mu_0.excludeFromDAGUpdates(true); // never update
 	_mu_0.push_back(std::make_unique<stattools::TParameter<SpecMu_0, TTree>>(&_prior_on_mu, config_mu_0));
 
 	// create mu_1
 	stattools::TRuntimeConfigParam config_mu_1;
 	config_mu_1.set_name(tree_name + "_mu_1");
-	config_mu_1.setPriorParameters(lambda_on_mu);
+	// config_mu_1.setPriorParameters(lambda_on_mu);
 	config_mu_1.excludeFromDAGUpdates(true); // never update
 	_mu_1.push_back(std::make_unique<stattools::TParameter<SpecMu_1, TTree>>(&_prior_on_mu, config_mu_1));
 

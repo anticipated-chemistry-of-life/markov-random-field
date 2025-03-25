@@ -1,20 +1,19 @@
-Y.update	false
-fixedSeed	29016606
+fixedSeed	33166957
 lotus	acol_simulated_lotus.tsv
 molecules_branch_lengths	acol_input_simulated.txt
-molecules_branch_lengths.update	false
 molecules_mu_0	acol_input_simulated.txt
 molecules_mu_0.update	false
 molecules_mu_1	acol_input_simulated.txt
 molecules_mu_1.update	false
 numThreads	1
-out	./branch_given_but_not_fixed/acol
+out	./test_out/acol
 species_branch_lengths	acol_input_simulated.txt
 species_mu_0	acol_input_simulated.txt
-species_mu_0.update	false
 species_mu_1	acol_input_simulated.txt
 task	infer
 tree_molecules	molecules.txt
 tree_species	species.txt
+writeBurnin	
 writeTrace	
 write_Y_trace	
+write_Z_trace	
