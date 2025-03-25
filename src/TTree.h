@@ -9,6 +9,7 @@
 #include "TStorageYVector.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
@@ -296,7 +297,7 @@ public:
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
-	template<bool IsSimulation> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
+	template<bool IsSimulation, bool FixZ> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
@@ -310,11 +311,13 @@ public:
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			// fill the current state for this clique
-			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
-			indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this,
-			                                            _mu_c_0->value(i), _mu_c_1->value(i), _binned_branch_lengths,
-			                                            _leaves_and_internal_nodes_without_roots_indices);
+			if constexpr (!FixZ) {
+				indices_to_insert[i] = _cliques[i].update_Z(
+				    _joint_log_prob_density, current_state, _Z, this, _mu_c_0->value(i), _mu_c_1->value(i),
+				    _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+			}
 
 			// update mu
 			if constexpr (!IsSimulation) {
@@ -325,7 +328,7 @@ public:
 				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);
 			}
 		}
-		_Z.insert_in_Z(indices_to_insert);
+		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 
 		// update branch lengths
 		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }

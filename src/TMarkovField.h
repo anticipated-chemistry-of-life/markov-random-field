@@ -112,7 +112,7 @@ private:
 	template<bool IsSimulation> void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
 
-		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen()) {
+		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 			std::vector<size_t> Y_trace_header;
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
 			if constexpr (IsSimulation) {
@@ -122,7 +122,13 @@ private:
 			}
 		}
 
-		if (_fix_Y) { return; }
+		if (_fix_Y) {
+			if (_Y.empty()) {
+				UERROR("Y is currently empty and fixed. Was Y read from a file ? "
+				       "(--set_Y)");
+			}
+			return;
+		}
 
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
@@ -174,23 +180,26 @@ private:
 
 		// at the very end: sum the LL of all threads and store it in TLotus
 		_update_cur_LL_lotus(lotus, new_LL);
-		if (WRITE_Y_TRACE && (iteration % 100 == 0)) { _Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
+		if (WRITE_Y_TRACE && (iteration % 100 == 0) && !_fix_Y) {
+			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
+		}
 	}
 
-	template<bool IsSimulation> void _update_all_Z(size_t iteration) {
-		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty()) {
+	void _read_Y_from_file(const std::string &filename);
+
+	template<bool IsSimulation, bool FixZ> void _update_all_Z(size_t iteration) {
+		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
 			for (const auto &tree : _trees) {
 				std::vector<size_t> Z_trace_header;
 				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
 					Z_trace_header.push_back(i);
 				}
-				_Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
-				                            "\t");
+				_Z_trace_files.emplace_back(_prefix + tree->get_tree_name() + "_Z_trace.txt", Z_trace_header, "\t");
 			}
 		}
-		if (_fix_Z) { return; }
 
-		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
+		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation, FixZ>(_Y); }
+		if (_fix_Z) { return; }
 		if (iteration % 100 == 0 && WRITE_Z_TRACE) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];

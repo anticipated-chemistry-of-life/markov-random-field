@@ -6,6 +6,7 @@
 #include "TClique.h"
 #include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
@@ -72,7 +73,8 @@ void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
 		}
 	}
 
-	// TODO: do the binned branch lengths still sum to one? I don't think so
+	// Do the binned branch lengths still sum to one? I don't think so
+	// --> they do not need to sum to one
 };
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
@@ -260,6 +262,24 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
 
 	_Z.initialize_dimensions(num_leaves_per_tree);
+
+	std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
+	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
+		std::string filename = coretools::instances::parameters().get(set_Z_cli_command);
+		coretools::TInputFile file(filename, coretools::FileType::Header);
+
+		if (file.numCols() != 4) { UERROR("The file for setting Z must have 4 columns ! "); }
+		// read each line of the file
+		for (; !file.empty(); file.popFront()) {
+			auto linear_index_in_Y_space = file.get<uint32_t>(2);
+			bool state                   = file.get<bool>(3);
+			if (state) {
+				_Z.insert_one(linear_index_in_Y_space);
+			} else {
+				_Z.insert_zero(linear_index_in_Y_space);
+			}
+		}
+	}
 }
 
 void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
