@@ -51,27 +51,33 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
 }
 
-void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
+std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths) {
+	std::vector<size_t> binned_branch_lengths;
+	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
+	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
+		if (_nodes[i].isRoot()) { continue; }
+		// find bin
+		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(), branch_lengths[i]);
+		if (it == _grid_branch_lengths.end()) {
+			// last bin
+			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
+		} else {
+			binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+		}
+	}
+
+	return binned_branch_lengths;
+}
+
+void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	_initialize_grid_branch_lengths(branch_lengths.size());
 	// normalize such that they sum to one
 	coretools::normalize(branch_lengths);
 
-	std::vector<double> grid(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
-	_branch_length_from_tree = grid;
+	_grid_branch_lengths.resize(_number_of_bins);
+	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * (k + 1.0)); }
 
-	_binned_branch_lengths_from_tree.reserve(get_number_of_nodes() - get_number_of_roots());
-	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
-		if (_nodes[i].isRoot()) { continue; }
-		// find bin
-		auto it = std::lower_bound(grid.begin(), grid.end(), branch_lengths[i]);
-		if (it == grid.end()) {
-			// last bin
-			_binned_branch_lengths_from_tree.push_back(grid.size() - 1);
-		} else {
-			_binned_branch_lengths_from_tree.push_back(std::distance(grid.begin(), it));
-		}
-	}
+	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths);
 
 	// Do the binned branch lengths still sum to one? I don't think so
 	// --> they do not need to sum to one
@@ -187,7 +193,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	}
 
 	// binned branches
-	_bin_branch_lengths(branch_lengths);
+	_bin_branch_lengths_from_tree(branch_lengths);
 
 	coretools::instances::logfile().done();
 	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),
@@ -240,22 +246,44 @@ void TTree::guessInitialValues() {
 		_cliques[c].set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
 	}
 
-	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
-	}
+	_set_initial_branch_lengths();
 }
 
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
 
+void TTree::_set_initial_branch_lengths(){
+	// overwrite simulated branch length: use branch lengths from tree
+	if (_binned_branch_lengths->hasFixedInitialValue()) { // use from simulation
+		// translate bin into actual branch lengths
+		std::vector<double> vals(_binned_branch_lengths->size());
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			vals[i] = (_a + _delta * (_binned_branch_lengths->value(i) + 1.0));
+		}
+
+		// normalize such that branch lengths sum to one
+		coretools::normalize(vals);
+
+		// translate back to bin
+		auto binned_branch_lengths = _bin_branch_lengths(vals);
+
+		// set these values (hack stattools to pretend initial values are not fixed)
+		_binned_branch_lengths->fixInitialization(false);
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
+		}
+		_binned_branch_lengths->fixInitialization(true);
+	} else { // use from tree
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
+		}
+	}
+}
+
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
-
-	// overwrite simulated branch length: use branch lengths from tree
-	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
-	}
+	_set_initial_branch_lengths();
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {

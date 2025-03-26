@@ -89,7 +89,7 @@ private:
 	coretools::Probability _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
-	std::vector<double> _branch_length_from_tree;
+	std::vector<double> _grid_branch_lengths;
 	std::vector<size_t> _binned_branch_lengths_from_tree;
 	TypeParamBinBranches *_binned_branch_lengths = nullptr;
 
@@ -112,7 +112,9 @@ private:
 		_joint_log_prob_density.clear();
 		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
 	}
-	void _bin_branch_lengths(std::vector<double> &branch_lengths);
+	void _set_initial_branch_lengths();
+	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths);
+	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
@@ -395,8 +397,8 @@ public:
 			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
 			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
 			                                       header_branch_len, "\t");
-			for (size_t i = 0; i < _branch_length_from_tree.size(); ++i) {
-				branch_len_file.writeln(i, _branch_length_from_tree[i]);
+			for (size_t i = 0; i < _grid_branch_lengths.size(); ++i) {
+				branch_len_file.writeln(i, _grid_branch_lengths[i]);
 			}
 		}
 	}
