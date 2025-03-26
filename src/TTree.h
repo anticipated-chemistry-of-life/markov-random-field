@@ -165,8 +165,8 @@ private:
 			_cliques[c].update_lambda(_mu_c_0->value(c), new_mu);
 		}
 
+		const auto &clique = _cliques[c];
 		for (size_t i = 0; i < _nodes.size(); ++i) {
-			const auto &clique = this->get_cliques()[c];
 			bool state_of_node = current_state.get(i);
 			// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
 			const auto branch_len_bin =
