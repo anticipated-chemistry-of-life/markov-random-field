@@ -60,8 +60,8 @@ public:
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
-	using TypeParamMu0         = stattools::TParameter<SpecMu_0, TTree>;
-	using TypeParamMu1         = stattools::TParameter<SpecMu_1, TTree>;
+	using TypeParamLogMu0      = stattools::TParameter<SpecLogMu_0, TTree>;
+	using TypeParamLogMu1      = stattools::TParameter<SpecLogMu_1, TTree>;
 	using TypeParamBinBranches = stattools::TParameter<SpecBinnedBranches, TTree>;
 
 private:
@@ -98,8 +98,10 @@ private:
 	std::vector<size_t> _dimension_cliques;
 
 	// mus
-	TypeParamMu0 *_mu_c_0 = nullptr;
-	TypeParamMu1 *_mu_c_1 = nullptr;
+	TypeParamLogMu0 *_log_mu_c_0 = nullptr;
+	std::vector<double> _mu_c_0;
+	TypeParamLogMu1 *_log_mu_c_1 = nullptr;
+	std::vector<double> _mu_c_1;
 
 	// Set Z
 	TStorageZVector _Z;
@@ -113,7 +115,7 @@ private:
 		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
 	}
 	void _set_initial_branch_lengths();
-	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths);
+	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
@@ -150,21 +152,26 @@ private:
 		}
 	}
 
-	template<bool IsMu0, typename TypeParamMu>
-	void _update_mu(const TCurrentState &current_state, size_t c, TypeParamMu *mu_c) {
+	template<bool IsMu0, typename TypeParamLogMu>
+	void _update_mu(const TCurrentState &current_state, size_t c, TypeParamLogMu *log_mu_c) {
 		// propose a new value
-		mu_c->propose(coretools::TRange(c));
+		log_mu_c->propose(coretools::TRange(c));
 
 		// calculate LL for old mu
 		// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
-		double old_mu = mu_c->oldValue(c);
-		double new_mu = mu_c->value(c);
+		double old_mu;
+		if constexpr (IsMu0) {
+			old_mu = _mu_c_0[c];
+		} else {
+			old_mu = _mu_c_1[c];
+		}
+		double new_mu = std::exp(log_mu_c->value(c));
 		coretools::TSumLogProbability LL_old;
 		coretools::TSumLogProbability LL_new;
 		if constexpr (IsMu0) {
-			_cliques[c].update_lambda(new_mu, _mu_c_1->value(c));
+			_cliques[c].update_lambda(new_mu, _mu_c_1[c]);
 		} else {
-			_cliques[c].update_lambda(_mu_c_0->value(c), new_mu);
+			_cliques[c].update_lambda(_mu_c_0[c], new_mu);
 		}
 
 		const auto &clique = _cliques[c];
@@ -176,33 +183,40 @@ private:
 
 			if constexpr (IsMu0) {
 				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
-				                                  old_mu, _mu_c_1->value(c));
+				                                  old_mu, _mu_c_1[c]);
 				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
-				                                 new_mu, _mu_c_1->value(c));
+				                                 new_mu, _mu_c_1[c]);
 			} else {
 				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
-				                                  _mu_c_0->value(c), old_mu);
+				                                  _mu_c_0[c], old_mu);
 				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
-				                                 _mu_c_0->value(c), new_mu);
+				                                 _mu_c_0[c], new_mu);
 			}
 		}
 
 		// calculate Hastings ratio
 		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
-		const double logPriorRatio = mu_c->getLogDensityRatio(c);
+		const double logPriorRatio = log_mu_c->getLogDensityRatio(c);
 		const double logH          = LLRatio + logPriorRatio;
 
 		// accept or reject
-		bool accepted = mu_c->acceptOrReject(logH, coretools::TRange(c));
-		if (accepted) { _cliques[c].accept_update_mu(); }
+		bool accepted = log_mu_c->acceptOrReject(logH, coretools::TRange(c));
+		if (accepted) {
+			_cliques[c].accept_update_mu();
+			if constexpr (IsMu0) {
+				_mu_c_0[c] = new_mu;
+			} else {
+				_mu_c_1[c] = new_mu;
+			}
+		}
 	}
 
 	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
 	                                   const stattools::TPairIndexSampler &pairs);
 
 public:
-	TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamMu0 *Mu_0,
-	      TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts);
+	TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamLogMu0 *Mu_0,
+	      TypeParamLogMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts);
 	~TTree();
 
 	size_t size() const { return _nodes.size(); };
@@ -316,15 +330,15 @@ public:
 			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
 			if constexpr (!FixZ) {
-				indices_to_insert[i] = _cliques[i].update_Z(
-				    _joint_log_prob_density, current_state, _Z, this, _mu_c_0->value(i), _mu_c_1->value(i),
-				    _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+				indices_to_insert[i] =
+				    _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this, _mu_c_0[i], _mu_c_1[i],
+				                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
 			}
 
 			// update mu
 			if constexpr (!IsSimulation) {
-				_update_mu<true>(current_state, i, _mu_c_0);
-				_update_mu<false>(current_state, i, _mu_c_1);
+				_update_mu<true>(current_state, i, _log_mu_c_0);
+				_update_mu<false>(current_state, i, _log_mu_c_1);
 
 				// add to likelihood ratio for branch length
 				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);

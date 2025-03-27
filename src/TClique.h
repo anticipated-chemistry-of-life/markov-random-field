@@ -137,6 +137,7 @@ public:
 	 * @param mu_c_0
 	 */
 	void set_lambda(double mu_c_0, double mu_c_1) {
+		OUT(mu_c_0, mu_c_1);
 		_lambda_c[0] = -mu_c_1;
 		_lambda_c[1] = mu_c_0;
 		_lambda_c[2] = mu_c_1;

@@ -218,8 +218,8 @@ private:
 
 		std::array<size_t, 2> line{};
 		coretools::TOutputFile file(filename, header, "\t");
+		double fraction;
 		if constexpr (WriteFullY) {
-			double fraction;
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
 				auto [found, position] = _Y.binary_search(i);
 				if (found) {
@@ -237,7 +237,6 @@ private:
 				file.writeln(line, node_names, fraction);
 			}
 		} else {
-			double fraction;
 			for (size_t i = 0; i < _Y.size(); ++i) {
 				line                                = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
 				fraction                            = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());

@@ -167,11 +167,7 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 	for (; !file.empty(); file.popFront()) {
 		auto linear_index_in_Y_space = file.get<uint64_t>(0);
 		bool state                   = file.get<bool>(1);
-		if (state) {
-			_Y.insert_one(linear_index_in_Y_space);
-		} else {
-			_Y.insert_zero(linear_index_in_Y_space);
-		}
+		if (state) { _Y.insert_one(linear_index_in_Y_space); }
 	}
 }
 

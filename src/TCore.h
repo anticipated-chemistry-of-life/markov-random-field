@@ -26,8 +26,8 @@ class TModel {
 private:
 	// mu_0 and mu_1
 	PriorOnMu _prior_on_mu{};
-	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_0, TTree>>> _mu_0;
-	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_1, TTree>>> _mu_1;
+	std::vector<std::unique_ptr<stattools::TParameter<SpecLogMu_0, TTree>>> _log_mu_0;
+	std::vector<std::unique_ptr<stattools::TParameter<SpecLogMu_1, TTree>>> _log_mu_1;
 
 	// binned branch lengths
 	PriorOnBinnedBranches _prior_on_binned_branch_lengths{};

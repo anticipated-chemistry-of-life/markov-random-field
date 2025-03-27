@@ -33,7 +33,7 @@ constexpr static bool UseSimpleErrorModel = true;
 
 // Parameter types
 using TypeGamma               = coretools::Positive;
-using TypeMu                  = coretools::StrictlyPositive;
+using TypeMu                  = coretools::Unbounded;
 using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
 
 // Gamma
@@ -42,8 +42,10 @@ using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), P
 
 // Mu
 using PriorOnMu = stattools::prior::TUniformFixed<TypeMu>;
-using SpecMu_0  = stattools::ParamSpec<TypeMu, stattools::name("mu_0"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
-using SpecMu_1  = stattools::ParamSpec<TypeMu, stattools::name("mu_1"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
+using SpecLogMu_0 =
+    stattools::ParamSpec<TypeMu, stattools::name("log_mu_0"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
+using SpecLogMu_1 =
+    stattools::ParamSpec<TypeMu, stattools::name("log_mu_1"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
 
 // binned branch lengths
 using PriorOnBinnedBranches = stattools::prior::TUniformFixed<TypeBinnedBranchLengths>;
