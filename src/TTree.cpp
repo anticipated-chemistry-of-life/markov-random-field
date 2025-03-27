@@ -51,11 +51,11 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
 }
 
-std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths) {
+std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const {
 	std::vector<size_t> binned_branch_lengths;
 	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
-		if (_nodes[i].isRoot()) { continue; }
+		if (exclude_root && _nodes[i].isRoot()) { continue; }
 		// find bin
 		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(), branch_lengths[i]);
 		if (it == _grid_branch_lengths.end()) {
@@ -77,7 +77,7 @@ void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	_grid_branch_lengths.resize(_number_of_bins);
 	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * (k + 1.0)); }
 
-	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths);
+	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 
 	// Do the binned branch lengths still sum to one? I don't think so
 	// --> they do not need to sum to one
@@ -266,7 +266,7 @@ void TTree::_set_initial_branch_lengths(){
 		coretools::normalize(vals);
 
 		// translate back to bin
-		auto binned_branch_lengths = _bin_branch_lengths(vals);
+		auto binned_branch_lengths = _bin_branch_lengths(vals, false);
 
 		// set these values (hack stattools to pretend initial values are not fixed)
 		_binned_branch_lengths->fixInitialization(false);

@@ -113,7 +113,7 @@ private:
 		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
 	}
 	void _set_initial_branch_lengths();
-	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths);
+	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
