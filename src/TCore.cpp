@@ -16,30 +16,36 @@ using namespace coretools::instances;
 // TModel
 //--------------------------------------
 
-std::string read_lambda_exponential_on_mu() {
-	using namespace coretools::instances;
-	double lambda = parameters().get<coretools::StrictlyPositive>("lambda_on_mu", 1000.0);
-	logfile().list("Will use lambda = ", lambda, " as an exponential rate parameter for the prior on mu.");
-	return coretools::str::toString(lambda);
-}
-
 void TModel::_create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
                           const std::string &prefix) {
-	std::string lambda_on_mu = read_lambda_exponential_on_mu();
 
-	// create mu_0
-	stattools::TRuntimeConfigParam config_mu_0;
-	config_mu_0.set_name(tree_name + "_log_mu_0");
-	// config_mu_0.setPriorParameters(lambda_on_mu);
-	config_mu_0.excludeFromDAGUpdates(true); // never update
-	_log_mu_0.push_back(std::make_unique<stattools::TParameter<SpecLogMu_0, TTree>>(&_prior_on_mu, config_mu_0));
+	// create mean log nu
+	stattools::TRuntimeConfigParam config_mean_log_nu;
+	config_mean_log_nu.set_name(tree_name + "_mean_log_nu");
+	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(&_prior_on_mean_log_nu,
+	                                                                                            config_mean_log_nu));
 
-	// create mu_1
-	stattools::TRuntimeConfigParam config_mu_1;
-	config_mu_1.set_name(tree_name + "_log_mu_1");
-	// config_mu_1.setPriorParameters(lambda_on_mu);
-	config_mu_1.excludeFromDAGUpdates(true); // never update
-	_log_mu_1.push_back(std::make_unique<stattools::TParameter<SpecLogMu_1, TTree>>(&_prior_on_mu, config_mu_1));
+	// create var log nu
+	stattools::TRuntimeConfigParam config_var_log_nu;
+	config_var_log_nu.set_name(tree_name + "_var_log_nu");
+	_var_log_nu.push_back(
+	    std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(&_prior_on_var_log_nu, config_var_log_nu));
+
+	// create prior on log nu
+	_prior_on_log_nu.push_back(std::make_unique<PriorOnLogNu>(_mean_log_nu.back().get(), _var_log_nu.back().get()));
+
+	// create log nu
+	stattools::TRuntimeConfigParam config_log_nu;
+	config_log_nu.set_name(tree_name + "_log_nu");
+	config_log_nu.excludeFromDAGUpdates(true); // never update
+	_log_nu.push_back(
+	    std::make_unique<stattools::TParameter<SpecLogNu, TTree>>(_prior_on_log_nu.back().get(), config_log_nu));
+
+	// create alpha
+	stattools::TRuntimeConfigParam config_alpha;
+	config_alpha.set_name(tree_name + "_alpha");
+	config_alpha.excludeFromDAGUpdates(true); // never update
+	_alpha.push_back(std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(&_prior_on_alpha, config_alpha));
 
 	// create branch lengths
 	stattools::TRuntimeConfigParam config_branch_lengths;
@@ -50,8 +56,8 @@ void TModel::_create_tree(size_t dimension, const std::string &filename, const s
 	    &_prior_on_binned_branch_lengths, config_branch_lengths));
 
 	// create tree
-	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _log_mu_0.back().get(),
-	                                            _log_mu_1.back().get(), _binned_branch_lengths.back().get()));
+	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _alpha.back().get(),
+	                                            _log_nu.back().get(), _binned_branch_lengths.back().get()));
 
 	// create markov field (only for stattools purposes such that a valid DAG can be built)
 	stattools::TRuntimeConfigParam config_markov_field;

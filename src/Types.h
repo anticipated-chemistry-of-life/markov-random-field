@@ -6,10 +6,12 @@
 #define ACOL_TYPES_H
 
 #include "coretools/Types/commonWeakTypes.h"
+#include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/THash.h"
 #include "stattools/ParametersObservations/TObservation.h"
 #include "stattools/ParametersObservations/spec.h"
 #include "stattools/Priors/TPriorExponential.h"
+#include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>
 
@@ -33,19 +35,36 @@ constexpr static bool UseSimpleErrorModel = true;
 
 // Parameter types
 using TypeGamma               = coretools::Positive;
-using TypeMu                  = coretools::Unbounded;
+using TypeAlpha               = coretools::Probability;
+using TypeLogNu               = coretools::Unbounded;
+using TypeNu                  = coretools::StrictlyPositive;
+using TypeMeanLogNu           = coretools::Unbounded;
+using TypeVarLogNu            = coretools::StrictlyPositive;
 using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
 
 // Gamma
 using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
-// Mu
-using PriorOnMu = stattools::prior::TUniformFixed<TypeMu>;
-using SpecLogMu_0 =
-    stattools::ParamSpec<TypeMu, stattools::name("log_mu_0"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
-using SpecLogMu_1 =
-    stattools::ParamSpec<TypeMu, stattools::name("log_mu_1"), PriorOnMu, stattools::EnforceUniqueHash<false>>;
+// Alpha
+using PriorOnAlpha = stattools::prior::TUniformFixed<TypeAlpha>;
+using SpecAlpha =
+    stattools::ParamSpec<TypeAlpha, stattools::name("alpha"), PriorOnAlpha, stattools::EnforceUniqueHash<false>>;
+
+// Mean Nu
+using PriorOnMeanLogNu = stattools::prior::TUniformFixed<TypeMeanLogNu>;
+using SpecMeanLogNu    = stattools::ParamSpec<TypeMeanLogNu, stattools::name("mean_log_nu"), PriorOnMeanLogNu,
+                                              stattools::EnforceUniqueHash<false>>;
+
+// Var Nu
+using PriorOnVarLogNu = stattools::prior::TUniformFixed<TypeVarLogNu>;
+using SpecVarLogNu    = stattools::ParamSpec<TypeVarLogNu, stattools::name("var_log_nu"), PriorOnVarLogNu,
+                                             stattools::EnforceUniqueHash<false>>;
+
+// Log Nu
+using PriorOnLogNu = stattools::prior::TNormalInferred<SpecMeanLogNu, SpecVarLogNu, TypeLogNu>;
+using SpecLogNu =
+    stattools::ParamSpec<TypeLogNu, stattools::name("log_nu"), PriorOnLogNu, stattools::EnforceUniqueHash<false>>;
 
 // binned branch lengths
 using PriorOnBinnedBranches = stattools::prior::TUniformFixed<TypeBinnedBranchLengths>;

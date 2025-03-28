@@ -4,7 +4,6 @@
 
 #include "TTree.h"
 #include "TClique.h"
-#include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
@@ -21,13 +20,13 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamLogMu0 *Mu_0,
-             TypeParamLogMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
-    : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _log_mu_c_0(Mu_0), _log_mu_c_1(Mu_1) {
+TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamAlpha *Alpha,
+             TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts)
+    : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _log_nu_c(LogNu), _alpha_c(Alpha) {
 
 	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
-	this->addPriorParameter({_binned_branch_lengths, _log_mu_c_0, _log_mu_c_1});
+	this->addPriorParameter({_binned_branch_lengths, _alpha_c, _log_nu_c});
 
 	_load_from_file(filename, tree_name);
 }
@@ -231,14 +230,12 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 
 void TTree::initialize() {
 	// stattools initialization function
-	_log_mu_c_0->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
-	_mu_c_0.resize(_cliques.size());
-	for (size_t c = 0; c < _cliques.size(); ++c) { _mu_c_0[c] = std::exp(_log_mu_c_0->value(c)); }
+	_alpha_c->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
 
 	// now we initialize the mu_c_1
-	_log_mu_c_1->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
-	_mu_c_1.resize(_cliques.size());
-	for (size_t c = 0; c < _cliques.size(); ++c) { _mu_c_1[c] = std::exp(_log_mu_c_1->value(c)); }
+	_log_nu_c->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	_nu_c.resize(_cliques.size());
+	for (size_t c = 0; c < _cliques.size(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
 
 	// number of branches = number of leaves + number of internal nodes without roots
 	_binned_branch_lengths->initStorage(
@@ -249,11 +246,10 @@ void TTree::initialize() {
 void TTree::guessInitialValues() {
 	// TODO: initialize mu's
 	for (size_t c = 0; c < _cliques.size(); ++c) {
-		_log_mu_c_0->set(c, -0.1);
-		_mu_c_0[c] = std::exp(_log_mu_c_0->value(c));
-		_log_mu_c_1->set(c, -0.1);
-		_mu_c_1[c] = std::exp(_log_mu_c_1->value(c));
-		_cliques[c].set_lambda(_mu_c_0[c], _mu_c_1[c]);
+		_log_nu_c->set(c, -0.1);
+		_alpha_c->set(c, coretools::Probability(0.5));
+		_nu_c[c] = std::exp(_log_nu_c->value(c));
+		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
 	}
 
 	_set_initial_branch_lengths();
@@ -458,7 +454,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 		// we sample the roots
 		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
-		double proba_root = clique.get_stationary_probability(true, _mu_c_0[c], _mu_c_1[c]);
+		double proba_root = clique.get_stationary_probability(true, _alpha_c->value(c));
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS
@@ -480,7 +476,6 @@ void TTree::simulate_Z(size_t tree_index) {
 			// we want to sample the state of the node given its parent (and independently of its children since we
 			// haven't sampled them yet).
 			std::array<coretools::TSumLogProbability, 2> sum_log;
-			OUT(_delta);
 			clique.calculate_log_prob_parent_to_node(node_index,
 			                                         (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			                                             _leaves_and_internal_nodes_without_roots_indices[node_index]),
@@ -499,7 +494,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
 	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
-	clique.set_lambda(_mu_c_0[c], _mu_c_1[c]);
+	clique.set_lambda(_alpha_c->value(c), _nu_c[c]);
 };
 
 void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
