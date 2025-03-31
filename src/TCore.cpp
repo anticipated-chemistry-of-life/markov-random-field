@@ -16,47 +16,58 @@ using namespace coretools::instances;
 // TModel
 //--------------------------------------
 
-std::string read_lambda_exponential_on_mu() {
-	using namespace coretools::instances;
-	double lambda = parameters().get<coretools::StrictlyPositive>("lambda_on_mu", 1000.0);
-	logfile().list("Will use lambda = ", lambda, " as an exponential rate parameter for the prior on mu.");
-	return coretools::str::toString(lambda);
-}
+void TModel::_create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
+                          const std::string &prefix) {
 
-void TModel::_create_tree(size_t dimension, const std::string &filename, const std::string &tree_name) {
-	std::string lambda_on_mu = read_lambda_exponential_on_mu();
+	// create mean log nu
+	stattools::TRuntimeConfigParam config_mean_log_nu;
+	config_mean_log_nu.set_name(tree_name + "_mean_log_nu");
+	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(&_prior_on_mean_log_nu,
+	                                                                                            config_mean_log_nu));
 
-	// create mu_0
-	stattools::TRuntimeConfigParam config_mu_0;
-	config_mu_0.set_name(tree_name + "_mu_0");
-	config_mu_0.setPriorParameters(lambda_on_mu);
-	_mu_0.push_back(std::make_unique<stattools::TParameter<SpecMu_0, TTree>>(&_prior_on_mu, config_mu_0));
+	// create var log nu
+	stattools::TRuntimeConfigParam config_var_log_nu;
+	config_var_log_nu.set_name(tree_name + "_var_log_nu");
+	_var_log_nu.push_back(
+	    std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(&_prior_on_var_log_nu, config_var_log_nu));
 
-	// create mu_1
-	stattools::TRuntimeConfigParam config_mu_1;
-	config_mu_1.set_name(tree_name + "_mu_1");
-	config_mu_1.setPriorParameters(lambda_on_mu);
-	_mu_1.push_back(std::make_unique<stattools::TParameter<SpecMu_1, TTree>>(&_prior_on_mu, config_mu_1));
+	// create prior on log nu
+	_prior_on_log_nu.push_back(std::make_unique<PriorOnLogNu>(_mean_log_nu.back().get(), _var_log_nu.back().get()));
+
+	// create log nu
+	stattools::TRuntimeConfigParam config_log_nu;
+	config_log_nu.set_name(tree_name + "_log_nu");
+	config_log_nu.excludeFromDAGUpdates(true); // never update
+	_log_nu.push_back(
+	    std::make_unique<stattools::TParameter<SpecLogNu, TTree>>(_prior_on_log_nu.back().get(), config_log_nu));
+
+	// create alpha
+	stattools::TRuntimeConfigParam config_alpha;
+	config_alpha.set_name(tree_name + "_alpha");
+	config_alpha.excludeFromDAGUpdates(true); // never update
+	_alpha.push_back(std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(&_prior_on_alpha, config_alpha));
 
 	// create branch lengths
 	stattools::TRuntimeConfigParam config_branch_lengths;
 	config_branch_lengths.set_name(tree_name + "_branch_lengths");
+	config_branch_lengths.excludeFromDAGUpdates(true); // never update
+	config_branch_lengths.setPrefix(prefix + "_" + tree_name);
 	_binned_branch_lengths.push_back(std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
 	    &_prior_on_binned_branch_lengths, config_branch_lengths));
 
 	// create tree
-	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _mu_0.back().get(), _mu_1.back().get(),
-	                                            _binned_branch_lengths.back().get()));
+	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _alpha.back().get(),
+	                                            _log_nu.back().get(), _binned_branch_lengths.back().get()));
 
 	// create markov field (only for stattools purposes such that a valid DAG can be built)
 	stattools::TRuntimeConfigParam config_markov_field;
 	config_markov_field.set_name(tree_name + "_MRF");
 	config_markov_field.excludeFromDAGUpdates(true); // never update
-	_markov_field_stattools_param.push_back(
+	_markov_field_stattools_param.emplace_back(
 	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(_trees.back().get(), config_markov_field));
 }
 
-void TModel::_create_trees() {
+void TModel::_create_trees(const std::string &prefix) {
 	using namespace coretools::instances;
 	// read filenames
 	std::string filename_tree_species   = parameters().get("tree_species");
@@ -68,7 +79,7 @@ void TModel::_create_trees() {
 	_trees.reserve(num_trees);
 
 	// first tree: molecules
-	_create_tree(0, filename_tree_molecules, "molecules");
+	_create_tree(0, filename_tree_molecules, "molecules", prefix);
 
 	// middle trees: all others (e.g. tissues)
 	for (size_t i = 1; i < num_trees - 1; ++i) {
@@ -77,17 +88,17 @@ void TModel::_create_trees() {
 			UERROR("Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
 			       "filename (e.g. myTreeName:pathToFile)");
 		}
-		_create_tree(i, filenames_tree_others[i - 1], name);
+		_create_tree(i, filenames_tree_others[i - 1], name, prefix);
 	}
 	// last tree: species
-	_create_tree(num_trees - 1, filename_tree_species, "species");
+	_create_tree(num_trees - 1, filename_tree_species, "species", prefix);
 
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
 
 TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create trees (including mu_0, mu_1 and binned branch lengths)
-	_create_trees();
+	_create_trees(prefix);
 
 	// create lotus
 	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix, simulate);

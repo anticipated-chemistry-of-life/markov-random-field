@@ -1,0 +1,15 @@
+name	priorParameters	summaryFile	traceFile	simulationFile	update	propKernel	sharedJumpSize
+lotus_obs							
+gamma					1	normal	1
+molecules_mean_log_nu					0	normal	1
+molecules_var_log_nu					0	normal	1
+molecules_log_nu					0	normal	1
+molecules_alpha					0	normal	1
+molecules_branch_lengths		./test_out/acol_molecules	./test_out/acol_molecules	./test_out/acol_molecules	0	normal	1
+molecules_MRF					1	normal	1
+species_mean_log_nu					0	normal	1
+species_var_log_nu					0	normal	1
+species_log_nu					0	normal	1
+species_alpha					0	normal	1
+species_branch_lengths		./test_out/acol_species	./test_out/acol_species	./test_out/acol_species	0	normal	1
+species_MRF					1	normal	1

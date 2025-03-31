@@ -33,11 +33,11 @@ TCurrentState TClique::create_current_state(const TStorageYVector &Y, TStorageZV
 
 std::vector<TStorageZ>
 TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZVector &Z,
-                  const TTree *tree, double mu_c_0, double mu_c_1, const TypeParamBinBranches *binned_branch_lengths,
+                  const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
 
-	const double stationary_0 = get_stationary_probability(false, mu_c_0, mu_c_1);
+	const double stationary_0 = get_stationary_probability(false, alpha);
 
 	for (const auto index_in_tree : tree->get_internal_nodes()) {
 		// prepare log probabilities for the two possible states

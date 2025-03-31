@@ -162,6 +162,8 @@ public:
 		auto tmp = static_cast<size_t>(linear_index_in_Z_space);
 		return coretools::getSubscripts(tmp, _dimensions_in_Z_space);
 	}
+
+	bool empty() const { return _vec.empty(); }
 };
 
 #endif // TSTORAGEZVECTOR_H

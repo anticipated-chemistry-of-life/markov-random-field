@@ -10,14 +10,11 @@
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "Types.h"
-#include "coretools/Main/TRandomGenerator.h"
-#include "coretools/Math/TAcceptOddsRation.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <armadillo>
+#include <cmath>
 #include <cstddef>
-#include <thread>
-#include <tuple>
 #include <unistd.h>
 #include <vector>
 
@@ -136,11 +133,11 @@ public:
 	 * @param mu_c_1
 	 * @param mu_c_0
 	 */
-	void set_lambda(double mu_c_0, double mu_c_1) {
-		_lambda_c[0] = -mu_c_1;
-		_lambda_c[1] = mu_c_0;
-		_lambda_c[2] = mu_c_1;
-		_lambda_c[3] = -mu_c_0;
+	void set_lambda(double alpha, TypeNu nu) { // TODO change to nu and alpha
+		_lambda_c[0] = (-alpha) * nu;
+		_lambda_c[1] = (1 - alpha) * nu;
+		_lambda_c[2] = alpha * nu;
+		_lambda_c[3] = (alpha - 1) * nu;
 
 		_fill_matrices();
 	}
@@ -215,18 +212,18 @@ public:
 	}
 
 	/// Gets the stationary probability for state 0 or 1.
-	double get_stationary_probability(bool state, double mu_c_0, double mu_c_1) const {
-		if (state) { return mu_c_1 / (mu_c_1 + mu_c_0); }
-		return mu_c_0 / (mu_c_1 + mu_c_0);
+	static double get_stationary_probability(bool state, double alpha) {
+		if (state) { return alpha; }
+		return 1.0 - alpha;
 	}
 
 	/// @brief Set the rate parameters for the clique.
-	void set_lambda(double mu_c_0, double mu_c_1) {
-		_cur_matrices.set_lambda(mu_c_0, mu_c_1);
+	void set_lambda(TypeAlpha alpha, TypeNu nu) {
+		_cur_matrices.set_lambda(alpha, nu);
 		_try_matrices = _cur_matrices;
 	}
 
-	void update_lambda(double mu_c_0, double mu_c_1) { _try_matrices.set_lambda(mu_c_0, mu_c_1); }
+	void update_lambda(double alpha, double nu) { _try_matrices.set_lambda(alpha, nu); }
 	void accept_update_mu() { _cur_matrices = _try_matrices; }
 
 	/// @brief Returns the matrices for the clique.
@@ -238,7 +235,7 @@ public:
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
 	std::vector<TStorageZ> update_Z(std::vector<double> &joint_log_prob_density, TCurrentState &current_state,
-	                                TStorageZVector &Z, const TTree *tree, double mu_c_0, double mu_c_1,
+	                                TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
 	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 

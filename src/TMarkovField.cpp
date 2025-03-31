@@ -13,10 +13,12 @@
 #include "coretools/algorithms.h"
 #include "coretools/devtools.h"
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 
-TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees)
-    : _trees(Trees), _clique_last_dim(*_trees.back().get(), 1) {
+TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix)
+    : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(*_trees.back().get(), 1) {
 	using namespace coretools::instances;
 
 	// read K (sheet size for updating Y)
@@ -27,6 +29,10 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	if (_fix_Y) { logfile().list("Will fix Y during the MCMC."); }
 	_fix_Z = !parameters().get("Z.update", true);
 	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
+	if (parameters().exists("set_Y")) {
+		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
+		_read_Y_from_file(filename);
+	}
 
 	// number of outer loops = the number of times to repeat K such that all leaves of the last dimension are parsed
 	_num_outer_loops = std::ceil((double)_trees.back()->get_number_of_leaves() / (double)_K);
@@ -153,9 +159,39 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	return diff_counter_1_in_last_dim;
 }
 
-void TMarkovField::update(TLotus &lotus) {
-	_update_all_Y<false>(lotus);
-	_update_all_Z<false>();
+void TMarkovField::_read_Y_from_file(const std::string &filename) {
+	coretools::TInputFile file(filename, coretools::FileType::Header);
+	if (file.numCols() != 5) { UERROR("Simulated Y is expected to have 5 columns, but has ", file.numCols(), " !"); }
+
+	// read each line of the file
+	for (; !file.empty(); file.popFront()) {
+		auto linear_index_in_Y_space = file.get<uint64_t>(0);
+		bool state                   = file.get<bool>(1);
+		if (state) { _Y.insert_one(linear_index_in_Y_space); }
+	}
+}
+
+void TMarkovField::update(TLotus &lotus, size_t iteration) {
+	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0) {
+		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
+		                         {
+		                             "joint_density",
+		                         },
+		                         "\t");
+	}
+
+	_update_all_Y<false>(lotus, iteration);
+	if (_fix_Z) {
+		_update_all_Z<false, true>(iteration);
+	} else {
+		_update_all_Z<false, false>(iteration);
+	}
+	_Y.add_to_counter(iteration);
+	// calculate joint density
+	if (iteration % 100 == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
+		auto sum_log_field = _calculate_complete_joint_density();
+		_joint_density_file.writeln(sum_log_field);
+	}
 }
 
 void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
@@ -192,60 +228,38 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = get_num_iterations_simulation();
 
-	// create all output files
-	coretools::TOutputFile Y_trace_file;
-	std::vector<coretools::TOutputFile> Z_trace_files;
-	coretools::TOutputFile joint_density_file;
-
-	if (WRITE_Y_TRACE) {
-		std::vector<size_t> Y_trace_header;
-		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
-		coretools::TOutputFile Y_trace_file("acol_simulated_Y_trace.txt", Y_trace_header, "\t");
-	}
-
 	// create the Markov field density file
 	if (WRITE_JOINT_LOG_PROB_DENSITY) {
-		coretools::TOutputFile joint_density_file("acol_simulated_joint_density.txt",
-		                                          {
-		                                              "joint_density",
-		                                          },
-		                                          "\t");
+		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
+		                         {
+		                             "joint_density",
+		                         },
+		                         "\t");
 	}
-	if (WRITE_Z_TRACE) {
-		for (const auto &tree : _trees) {
-			std::vector<size_t> Z_trace_header;
-			for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) { Z_trace_header.push_back(i); }
-			Z_trace_files.emplace_back("acol_simulated_Z_" + tree->get_tree_name() + "_trace.txt", Z_trace_header,
-			                           "\t");
-		}
-	}
+
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
-		_update_all_Y<true>(lotus);
-		_update_all_Z<true>();
-		_Y.add_to_counter(iteration);
-		if (iteration % 100 == 0) {
-			if (WRITE_Y_TRACE) { Y_trace_file.writeln(_Y.get_full_Y_binary_vector()); }
-			if (WRITE_Z_TRACE) {
-				for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
-					const auto &tree = _trees[tree_idx];
-					Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
-				}
-			}
+		_update_all_Y<true>(lotus, iteration);
+
+		if (_fix_Z) {
+			_update_all_Z<true, true>(iteration);
+		} else {
+			_update_all_Z<true, false>(iteration);
 		}
+		_Y.add_to_counter(iteration);
 
 		// calculate joint density
-		if (iteration % 10 == 0) {
+		if (iteration % 100 == 0) {
 			if (WRITE_JOINT_LOG_PROB_DENSITY) {
 				auto sum_log_field = _calculate_complete_joint_density();
-				joint_density_file.writeln(sum_log_field);
+				_joint_density_file.writeln(sum_log_field);
 			}
 		}
 	}
-	if (WRITE_Y) { _write_Y_to_file<true>("acol_simulated_Y.txt"); }
+	if (WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
 	if (WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 			const auto &tree = _trees[tree_idx];
-			tree->write_Z_to_file<true>("acol_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
 		}
 	}
 }
@@ -288,7 +302,8 @@ void TMarkovField::_simulate_Y() {
 void TMarkovField::burninHasFinished() { _Y.reset_counts(); }
 
 void TMarkovField::MCMCHasFinished() {
-	// TODO: write function to write the posterior state of Y to file
+	// write function to write the posterior state of Y to file
+	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }

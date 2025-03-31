@@ -1,0 +1,15 @@
+name	value
+species_branch_lengths_1	1
+species_branch_lengths_2	2
+species_branch_lengths_3	4
+species_branch_lengths_4	5
+species_branch_lengths_5	6
+species_branch_lengths_6	7
+species_branch_lengths_7	8
+species_branch_lengths_8	10
+species_branch_lengths_9	11
+species_branch_lengths_10	12
+species_branch_lengths_11	13
+species_branch_lengths_12	14
+species_branch_lengths_13	16
+species_branch_lengths_14	33

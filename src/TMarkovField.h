@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include <cstddef>
 #include <omp.h>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@ private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
 	TStorageYVector _Y;
+	std::string _prefix;
 
 	// stuff for updating Y
 	size_t _K;
@@ -40,6 +42,11 @@ private:
 
 	// complete joint density of the markov random field
 	std::vector<double> _complete_log_density;
+
+	// output files
+	coretools::TOutputFile _Y_trace_file;
+	std::vector<coretools::TOutputFile> _Z_trace_files;
+	coretools::TOutputFile _joint_density_file;
 
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
@@ -102,9 +109,26 @@ private:
 		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
-	template<bool IsSimulation> void _update_all_Y(TLotus &lotus) {
+	template<bool IsSimulation> void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
-		if (_fix_Y) { return; }
+
+		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
+			std::vector<size_t> Y_trace_header;
+			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+			if constexpr (IsSimulation) {
+				_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
+			} else {
+				_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
+			}
+		}
+
+		if (_fix_Y) {
+			if (_Y.empty()) {
+				UERROR("Y is currently empty and fixed. Was Y read from a file ? "
+				       "(--set_Y)");
+			}
+			return;
+		}
 
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
@@ -156,12 +180,33 @@ private:
 
 		// at the very end: sum the LL of all threads and store it in TLotus
 		_update_cur_LL_lotus(lotus, new_LL);
+		if (WRITE_Y_TRACE && (iteration % 100 == 0) && !_fix_Y) {
+			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
+		}
 	}
 
-	template<bool IsSimulation> void _update_all_Z() {
-		if (_fix_Z) { return; }
+	void _read_Y_from_file(const std::string &filename);
 
-		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation>(_Y); }
+	template<bool IsSimulation, bool FixZ> void _update_all_Z(size_t iteration) {
+		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
+			for (const auto &tree : _trees) {
+				std::vector<size_t> Z_trace_header;
+				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
+					Z_trace_header.push_back(i);
+				}
+				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.txt", Z_trace_header,
+				                            "\t");
+			}
+		}
+
+		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation, FixZ>(_Y); }
+		if (_fix_Z) { return; }
+		if (iteration % 100 == 0 && WRITE_Z_TRACE) {
+			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+				const auto &tree = _trees[tree_idx];
+				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
+			}
+		}
 	}
 
 	template<bool WriteFullY> void _write_Y_to_file(const std::string &filename) const {
@@ -173,8 +218,8 @@ private:
 
 		std::array<size_t, 2> line{};
 		coretools::TOutputFile file(filename, header, "\t");
+		double fraction;
 		if constexpr (WriteFullY) {
-			double fraction;
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
 				auto [found, position] = _Y.binary_search(i);
 				if (found) {
@@ -192,7 +237,6 @@ private:
 				file.writeln(line, node_names, fraction);
 			}
 		} else {
-			double fraction;
 			for (size_t i = 0; i < _Y.size(); ++i) {
 				line                                = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
 				fraction                            = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());
@@ -208,11 +252,11 @@ private:
 	};
 
 public:
-	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees);
+	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix);
 	~TMarkovField() = default;
 
 	// updates
-	void update(TLotus &lotus);
+	void update(TLotus &lotus, size_t iteration);
 
 	// simulation
 	void simulate(TLotus &lotus);

@@ -7,8 +7,9 @@ TLotus::TLotus(
     std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
     std::string prefix, bool simulate)
-    : _trees(trees), _markov_field(n_iterations, trees), _markov_field_stattools_param(markov_field_stattools_param),
-      _collapser(trees), _gamma(gamma), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
+    : _trees(trees), _markov_field(n_iterations, trees, prefix),
+      _markov_field_stattools_param(markov_field_stattools_param), _collapser(trees), _gamma(gamma),
+      _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
 	this->addPriorParameter(_gamma);
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
@@ -28,6 +29,7 @@ void TLotus::initialize() {
 		_epsilon = coretools::instances::parameters().get<double>("epsilon", 0.0001);
 		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
 	}
+	for (auto &it : _markov_field_stattools_param) { it->initStorage(this, {0}); }
 }
 
 void TLotus::load_from_file(const std::string &filename) {
@@ -134,7 +136,7 @@ void TLotus::update_cur_LL(double cur_LL) {
 	_curLL = cur_LL;
 }
 
-void TLotus::update_markov_field(size_t /*iteration*/) { _markov_field.update(*this); }
+void TLotus::update_markov_field(size_t iteration) { _markov_field.update(*this, iteration); }
 
 [[nodiscard]] double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &) {
 	_oldLL = _curLL;                          // store current likelihood
@@ -307,7 +309,7 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	}
 
 	// write to file
-	std::string file_name = _prefix + "_lotus.tsv";
+	std::string file_name = _prefix + "_simulated_lotus.tsv";
 
 	// we get the tree name for the header of the file.
 	std::vector<std::string> header(_collapser.num_dim_to_keep());

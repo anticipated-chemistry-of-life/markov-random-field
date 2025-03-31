@@ -4,14 +4,15 @@
 
 #include "TTree.h"
 #include "TClique.h"
-#include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
@@ -19,13 +20,13 @@
 #include <string>
 #include <vector>
 
-TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamMu0 *Mu_0,
-             TypeParamMu1 *Mu_1, TypeParamBinBranches *Binned_Branch_Lenghts)
-    : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _mu_c_0(Mu_0), _mu_c_1(Mu_1) {
+TTree::TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamAlpha *Alpha,
+             TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts)
+    : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _log_nu_c(LogNu), _alpha_c(Alpha) {
 
 	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
-	this->addPriorParameter({_binned_branch_lengths, _mu_c_0, _mu_c_1});
+	this->addPriorParameter({_binned_branch_lengths, _alpha_c, _log_nu_c});
 
 	_load_from_file(filename, tree_name);
 }
@@ -44,35 +45,42 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 		UERROR("More bins (", _number_of_bins, ") required than type allows (", max_type,
 		       ")! Please decrease K or change type of bins.");
 	}
-	TypeBinnedBranchLengths::setMax(_number_of_bins);
+	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
 
 	// calculate Delta
 	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
 }
 
-void TTree::_bin_branch_lengths(std::vector<double> &branch_lengths) {
+std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const {
+	std::vector<size_t> binned_branch_lengths;
+	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
+	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
+		if (exclude_root && _nodes[i].isRoot()) { continue; }
+		// find bin
+		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(), branch_lengths[i]);
+		if (it == _grid_branch_lengths.end()) {
+			// last bin
+			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
+		} else {
+			binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+		}
+	}
+
+	return binned_branch_lengths;
+}
+
+void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	_initialize_grid_branch_lengths(branch_lengths.size());
 	// normalize such that they sum to one
 	coretools::normalize(branch_lengths);
 
-	std::vector<double> grid(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { grid[k] = (_a + _delta * (k + 1.0)); }
-	_branch_length_from_tree = grid;
+	_grid_branch_lengths.resize(_number_of_bins);
+	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * (k + 1.0)); }
 
-	_binned_branch_lengths_from_tree.reserve(get_number_of_nodes() - get_number_of_roots());
-	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
-		if (_nodes[i].isRoot()) { continue; }
-		// find bin
-		auto it = std::lower_bound(grid.begin(), grid.end(), branch_lengths[i]);
-		if (it == grid.end()) {
-			// last bin
-			_binned_branch_lengths_from_tree.push_back(grid.size() - 1);
-		} else {
-			_binned_branch_lengths_from_tree.push_back(std::distance(grid.begin(), it));
-		}
-	}
+	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 
-	// TODO: do the binned branch lengths still sum to one? I don't think so
+	// Do the binned branch lengths still sum to one? I don't think so
+	// --> they do not need to sum to one
 };
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
@@ -185,7 +193,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	}
 
 	// binned branches
-	_bin_branch_lengths(branch_lengths);
+	_bin_branch_lengths_from_tree(branch_lengths);
 
 	coretools::instances::logfile().done();
 	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),
@@ -222,8 +230,13 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 
 void TTree::initialize() {
 	// stattools initialization function
-	_mu_c_0->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
-	_mu_c_1->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	_alpha_c->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+
+	// now we initialize the mu_c_1
+	_log_nu_c->initStorage(this, {_cliques.size()}, {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	_nu_c.resize(_cliques.size());
+	for (size_t c = 0; c < _cliques.size(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
+
 	// number of branches = number of leaves + number of internal nodes without roots
 	_binned_branch_lengths->initStorage(
 	    this, {get_number_of_nodes() - get_number_of_roots()},
@@ -233,32 +246,70 @@ void TTree::initialize() {
 void TTree::guessInitialValues() {
 	// TODO: initialize mu's
 	for (size_t c = 0; c < _cliques.size(); ++c) {
-		_mu_c_0->set(c, 0.001);
-		_mu_c_1->set(c, 0.001);
+		_log_nu_c->set(c, -0.1);
+		_alpha_c->set(c, coretools::Probability(0.5));
+		_nu_c[c] = std::exp(_log_nu_c->value(c));
+		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
 	}
 
-	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
-	}
+	_set_initial_branch_lengths();
 }
 
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
 
+void TTree::_set_initial_branch_lengths() {
+	// overwrite simulated branch length: use branch lengths from tree
+	if (_binned_branch_lengths->hasFixedInitialValue()) { // use from simulation
+		// translate bin into actual branch lengths
+		std::vector<double> vals(_binned_branch_lengths->size());
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			vals[i] = (_a + _delta * (_binned_branch_lengths->value(i) + 1.0));
+		}
+
+		// normalize such that branch lengths sum to one
+		coretools::normalize(vals);
+
+		// translate back to bin
+		auto binned_branch_lengths = _bin_branch_lengths(vals, false);
+
+		// set these values (hack stattools to pretend initial values are not fixed)
+		_binned_branch_lengths->fixInitialization(false);
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
+		}
+		_binned_branch_lengths->fixInitialization(true);
+	} else { // use from tree
+		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
+			_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
+		}
+	}
+}
+
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
-
-	// overwrite simulated branch length: use branch lengths from tree
-	for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-		_binned_branch_lengths->set(i, _binned_branch_lengths_from_tree[i]);
-	}
+	_set_initial_branch_lengths();
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
 
 	_Z.initialize_dimensions(num_leaves_per_tree);
+
+	std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
+	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
+		std::string filename = coretools::instances::parameters().get(set_Z_cli_command);
+		coretools::TInputFile file(filename, coretools::FileType::Header);
+
+		if (file.numCols() != 4) { UERROR("The file for setting Z must have 4 columns ! "); }
+		// read each line of the file
+		for (; !file.empty(); file.popFront()) {
+			auto linear_index_in_Z_space = file.get<uint32_t>(2);
+			bool state                   = file.get<bool>(3);
+			if (state) { _Z.insert_one(linear_index_in_Z_space); }
+		}
+	}
 }
 
 void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
@@ -281,6 +332,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 		// get start index of each clique in leaves space
 		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
+		_cliques.back().initialize(_a, _delta, _number_of_bins);
 	}
 }
 
@@ -293,8 +345,8 @@ stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
 }
 
 void TTree::_propose_new_branch_lengths(size_t p1, size_t p2, int val) {
-	_binned_branch_lengths->set(p1, _binned_branch_lengths->value(p1) + val);
-	_binned_branch_lengths->set(p2, _binned_branch_lengths->value(p2) - val);
+	_binned_branch_lengths->set(p1, (int)_binned_branch_lengths->value(p1) + val);
+	_binned_branch_lengths->set(p2, (int)_binned_branch_lengths->value(p2) - val);
 }
 
 void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs) {
@@ -402,7 +454,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 		// we sample the roots
 		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
-		double proba_root = clique.get_stationary_probability(true, _mu_c_0->value(c), _mu_c_1->value(c));
+		double proba_root = clique.get_stationary_probability(true, _alpha_c->value(c));
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS
@@ -442,7 +494,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
 	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
-	clique.set_lambda(_mu_c_0->value(c), _mu_c_1->value(c));
+	clique.set_lambda(_alpha_c->value(c), _nu_c[c]);
 };
 
 void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,

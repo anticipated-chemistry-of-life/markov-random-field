@@ -8,15 +8,16 @@
 #ifndef TEXAMPLETASK_H_
 #define TEXAMPLETASK_H_
 
+#include "TLotus.h"
 #include "TMarkovField.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
+#include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/TTask.h"
 #include "stattools/DAG/TDAGBuilder.h"
 #include "stattools/MCMC/TMCMC.h"
 #include <memory>
-#include "TLotus.h"
 
 //--------------------------------------
 // TModel
@@ -24,10 +25,21 @@
 
 class TModel {
 private:
-	// mu_0 and mu_1
-	PriorOnMu _prior_on_mu{};
-	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_0, TTree>>> _mu_0;
-	std::vector<std::unique_ptr<stattools::TParameter<SpecMu_1, TTree>>> _mu_1;
+	// mean log nu
+	PriorOnMeanLogNu _prior_on_mean_log_nu{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>> _mean_log_nu;
+
+	// var log nu
+	PriorOnVarLogNu _prior_on_var_log_nu{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>> _var_log_nu;
+
+	// Now we can make the log nu
+	std::vector<std::unique_ptr<PriorOnLogNu>> _prior_on_log_nu{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecLogNu, TTree>>> _log_nu;
+
+	// alpha
+	PriorOnAlpha _prior_on_alpha{};
+	std::vector<std::unique_ptr<stattools::TParameter<SpecAlpha, TTree>>> _alpha{};
 
 	// binned branch lengths
 	PriorOnBinnedBranches _prior_on_binned_branch_lengths{};
@@ -50,8 +62,9 @@ private:
 	// functions that are called when updating
 	void (TLotus::*_fun_update_mrf)(size_t);
 
-	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name);
-	void _create_trees();
+	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
+	                  const std::string &prefix);
+	void _create_trees(const std::string &prefix);
 
 public:
 	TModel(size_t n_iterations, const std::string &prefix, bool simulate);

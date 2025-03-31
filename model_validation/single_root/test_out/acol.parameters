@@ -1,0 +1,33 @@
+Y.update	false
+fixedSeed	26877637
+lotus	acol_simulated_lotus.tsv
+molecules_alpha	acol_input_simulated.txt
+molecules_alpha.update	false
+molecules_branch_lengths	acol_input_simulated.txt
+molecules_branch_lengths.update	false
+molecules_log_nu	acol_input_simulated.txt
+molecules_log_nu.update	false
+molecules_mean_log_nu	acol_input_simulated.txt
+molecules_mean_log_nu.update	false
+molecules_var_log_nu	acol_input_simulated.txt
+molecules_var_log_nu.update	false
+numThreads	1
+out	./test_out/acol
+set_Y	acol_simulated_Y.txt
+species_alpha	acol_input_simulated.txt
+species_alpha.update	false
+species_branch_lengths	acol_input_simulated.txt
+species_branch_lengths.update	false
+species_log_nu	acol_input_simulated.txt
+species_log_nu.update	false
+species_mean_log_nu	acol_input_simulated.txt
+species_mean_log_nu.update	false
+species_var_log_nu	acol_input_simulated.txt
+species_var_log_nu.update	false
+task	infer
+tree_molecules	molecules.txt
+tree_species	species.txt
+writeBurnin	
+writeTrace	
+write_Y_trace	
+write_Z_trace	
