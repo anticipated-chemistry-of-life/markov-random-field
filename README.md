@@ -3,7 +3,7 @@
 ## Compiling the repo
 
 ```bash
-git clone https://github.com/anticipated-chemistry-of-life/random-markov-field
+git clone https://github.com/anticipated-chemistry-of-life/markov-random-field
 mkdir build
 cd build
 cmake ..

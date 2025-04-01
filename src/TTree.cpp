@@ -278,6 +278,7 @@ void TTree::_set_initial_branch_lengths() {
 		_binned_branch_lengths->fixInitialization(false);
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
 			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
+			OUT(vals[_binned_branch_lengths->value(i)]);
 		}
 		_binned_branch_lengths->fixInitialization(true);
 	} else { // use from tree

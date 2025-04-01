@@ -1,12 +1,12 @@
 ../../build/acol simulate \
     --tree_species species.txt \
     --tree_molecules molecules.txt \
-    --num_iterations 100000 \
+    --num_iterations 10000 \
     --species_branch_lengths acol_input_simulated.txt \
     --species_var_log_nu acol_input_simulated.txt \
     --species_mean_log_nu acol_input_simulated.txt \
-    --species_log_nu acol_input_simulated.txt \
-    --species_alpha acol_input_simulated.txt \
+    --species_log_nu 0.5 \
+    --species_alpha 0.5 \
     --molecules_branch_lengths acol_input_simulated.txt \
     --molecules_var_log_nu acol_input_simulated.txt \
     --molecules_mean_log_nu acol_input_simulated.txt \
@@ -18,5 +18,4 @@
     --write_joint_log_prob_density \
     --write_Y_trace \
     --write_Z_trace \
-    --fixedSeed 456284939 \
-    
+    --fixedSeed 42 \

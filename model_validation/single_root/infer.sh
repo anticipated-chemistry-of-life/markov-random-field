@@ -3,6 +3,7 @@
     --tree_species species.txt \
     --tree_molecules molecules.txt \
     --lotus acol_simulated_lotus.tsv \
+    --iterations 20000 \
     --numThreads 1 \
     --writeTrace \
     --writeBurnin \
@@ -10,6 +11,9 @@
     --set_Y acol_simulated_Y.txt \
     --Y.update false \
     --write_Z_trace \
+    --Z.update false \
+    --set_species_Z acol_simulated_Z_species.txt \
+    --set_molecules_Z acol_simulated_Z_molecules.txt \
     --molecules_branch_lengths acol_input_simulated.txt \
     --molecules_branch_lengths.update false \
     --molecules_log_nu acol_input_simulated.txt \
@@ -26,10 +30,7 @@
     --species_var_log_nu.update false \
     --species_mean_log_nu acol_input_simulated.txt \
     --species_mean_log_nu.update false \
-    --species_log_nu acol_input_simulated.txt \
+    --species_log_nu 0.5 \
     --species_log_nu.update false \
-    --species_alpha acol_input_simulated.txt \
-    --species_alpha.update false \
-    # --Z.update false \
-    # --set_species_Z acol_simulated_Z_species.txt \
-    # --set_molecules_Z acol_simulated_Z_molecules.txt \
+    --species_alpha 0.5 \
+    # --species_alpha.update false \
