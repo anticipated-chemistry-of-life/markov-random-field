@@ -1,6 +1,6 @@
 Y.update	false
 Z.update	false
-fixedSeed	10376716
+fixedSeed	20474503
 iterations	20000
 lotus	acol_simulated_lotus.tsv
 molecules_alpha	acol_input_simulated.txt

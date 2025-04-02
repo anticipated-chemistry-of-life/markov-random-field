@@ -13,6 +13,35 @@ TREE_TYPE = {
 }
 
 
+def create_simulate_file(
+    species_tree_name: str,
+    molecules_tree_name: str,
+) -> str:
+    return f"""
+../../build/acol simulate \\
+    --tree_species {species_tree_name}.txt \\
+    --tree_molecules {molecules_tree_name}.txt \\
+    --num_iterations 10000 \\
+    --species_branch_lengths acol_input_simulated.txt \\
+    --species_var_log_nu acol_input_simulated.txt \\
+    --species_mean_log_nu acol_input_simulated.txt \\
+    --species_log_nu acol_input_simulated.txt \\
+    --species_alpha acol_input_simulated.txt \\
+    --molecules_branch_lengths acol_input_simulated.txt \\
+    --molecules_var_log_nu acol_input_simulated.txt \\
+    --molecules_mean_log_nu acol_input_simulated.txt \\
+    --molecules_log_nu acol_input_simulated.txt \\
+    --molecules_alpha acol_input_simulated.txt \\
+    --numThreads 1 \\
+    --write_Y \\
+    --write_Z \\
+    --write_joint_log_prob_density \\
+    --write_Y_trace \\
+    --write_Z_trace \\
+    --fixedSeed 42 \\
+        """
+
+
 def main():
     args = parse_args()
     # Check if the output directory exists
@@ -77,6 +106,14 @@ def main():
         sep="\t",
         index=False,
     )
+
+    # Write the simulate file
+    sim_file = create_simulate_file(
+        species_tree_name=args.species_tree_name,
+        molecules_tree_name=args.molecules_tree_name,
+    )
+    with open(os.path.join(args.out, "simulate.sh"), "w") as f:
+        f.write(sim_file)
 
 
 if __name__ == "__main__":

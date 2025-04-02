@@ -16,6 +16,7 @@
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
 #include <string>
@@ -144,9 +145,8 @@ private:
 	                                coretools::TSumLogProbability &LL, const TCurrentState &current_state,
 	                                size_t branch_len_bin, double alpha) {
 		if (_nodes[index_in_tree].isRoot()) {
-			LL.add(clique.get_stationary_probability(state_of_node, alpha));
+			// LL.add(clique.get_stationary_probability(state_of_node, alpha));
 		} else {
-
 			double prob =
 			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, this, branch_len_bin, current_state);
 			LL.add(prob);
