@@ -278,7 +278,11 @@ void TTree::_set_initial_branch_lengths() {
 		_binned_branch_lengths->fixInitialization(false);
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
 			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
-			OUT(vals[_binned_branch_lengths->value(i)]);
+
+			// we have to do it a second else the oldValue is still the one not normalized.
+			// Indeed we first propose the update of the branch length so then in the "update_mu"
+			// function, we will have to take the oldValue of the binned branch length.
+			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
 		}
 		_binned_branch_lengths->fixInitialization(true);
 	} else { // use from tree
