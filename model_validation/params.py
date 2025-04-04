@@ -53,7 +53,7 @@ class ParameterGenerator:
         length_of_dataframe = (
             self._this_tree.number_of_leaves()
             + self._this_tree.number_of_internal_nodes()
-        ) + 1
+        )
         self._binned_branch_lengths = pd.DataFrame(
             {
                 "name": [
@@ -81,7 +81,7 @@ class ParameterGenerator:
         )
 
     def _generate_log_nu_params(self, log_nu) -> None:
-        length_of_dataframe = self._other_tree.number_of_leaves() + 1
+        length_of_dataframe = self._other_tree.number_of_leaves()
 
         self._log_nu = pd.DataFrame(
             {
@@ -94,7 +94,7 @@ class ParameterGenerator:
         )
 
     def _generate_alpha_params(self, alpha) -> None:
-        length_of_dataframe = self._other_tree.number_of_leaves() + 1
+        length_of_dataframe = self._other_tree.number_of_leaves()
 
         self._alpha = pd.DataFrame(
             {
