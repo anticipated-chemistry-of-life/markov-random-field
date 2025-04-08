@@ -14,3 +14,6 @@ dependencies = [
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
 ]
+
+[tool.uv.workspace]
+members = ["single_root", "convergence_bigger_tree", "balanced_tree"]

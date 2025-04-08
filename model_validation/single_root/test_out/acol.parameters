@@ -1,4 +1,6 @@
-fixedSeed	29807406
+Y.update	false
+Z.update	false
+fixedSeed	12564320
 iterations	20000
 lotus	acol_simulated_lotus.tsv
 molecules_alpha	acol_input_simulated.txt
@@ -17,10 +19,10 @@ set_Y	acol_simulated_Y.txt
 set_molecules_Z	acol_simulated_Z_molecules.txt
 set_species_Z	acol_simulated_Z_species.txt
 species_alpha	acol_input_simulated.txt
+species_alpha.update	false
 species_branch_lengths	acol_input_simulated.txt
 species_branch_lengths.update	false
 species_log_nu	acol_input_simulated.txt
-species_log_nu.update	false
 species_mean_log_nu	acol_input_simulated.txt
 species_mean_log_nu.update	false
 species_var_log_nu	acol_input_simulated.txt
