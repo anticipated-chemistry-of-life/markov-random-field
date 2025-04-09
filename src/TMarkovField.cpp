@@ -10,6 +10,7 @@
 #include "TTree.h"
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
 #include "coretools/devtools.h"
 #include <cstddef>
@@ -237,7 +238,10 @@ void TMarkovField::simulate(TLotus &lotus) {
 		                         "\t");
 	}
 
+	std::string report = "Running an MCMC chain of " + coretools::str::toString(max_iteration) + " iterations";
+	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
+
 		_update_all_Y<true>(lotus, iteration);
 
 		if (_fix_Z) {
@@ -254,7 +258,9 @@ void TMarkovField::simulate(TLotus &lotus) {
 				_joint_density_file.writeln(sum_log_field);
 			}
 		}
+		prog.next();
 	}
+	prog.done();
 	if (WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
 	if (WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
@@ -299,7 +305,10 @@ void TMarkovField::_simulate_Y() {
 	}
 }
 
-void TMarkovField::burninHasFinished() { _Y.reset_counts(); }
+void TMarkovField::burninHasFinished() {
+	_Y.reset_counts();
+	_Y.remove_zeros();
+}
 
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file

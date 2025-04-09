@@ -9,7 +9,7 @@ molecules_branch_lengths		./test_out/acol_molecules	./test_out/acol_molecules	./
 molecules_MRF					1	normal	1
 species_mean_log_nu					0	normal	1
 species_var_log_nu					0	normal	1
-species_log_nu					1	normal	1
+species_log_nu					0	normal	1
 species_alpha					0	normal	1
 species_branch_lengths		./test_out/acol_species	./test_out/acol_species	./test_out/acol_species	0	normal	1
 species_MRF					1	normal	1

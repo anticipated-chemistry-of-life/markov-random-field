@@ -24,7 +24,6 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
              TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts)
     : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _log_nu_c(LogNu), _alpha_c(Alpha) {
 
-	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
 	this->addPriorParameter({_binned_branch_lengths, _alpha_c, _log_nu_c});
 
@@ -35,7 +34,8 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(1e-10));
+	double default_a = std::min(1e-15, 1.0 / ((double)number_of_branches * 1000));
+	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(default_a));
 	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
 	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);
@@ -252,16 +252,16 @@ void TTree::guessInitialValues() {
 		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
 	}
 
-	_set_initial_branch_lengths();
+	_set_initial_branch_lengths(false);
 }
 
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
 
-void TTree::_set_initial_branch_lengths() {
+void TTree::_set_initial_branch_lengths(bool is_simulation) {
 	// overwrite simulated branch length: use branch lengths from tree
-	if (_binned_branch_lengths->hasFixedInitialValue()) { // use from simulation
+	if (_binned_branch_lengths->hasFixedInitialValue() || is_simulation) { // use from simulation
 		// translate bin into actual branch lengths
 		std::vector<double> vals(_binned_branch_lengths->size());
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
@@ -294,7 +294,11 @@ void TTree::_set_initial_branch_lengths() {
 
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
-	_set_initial_branch_lengths();
+	_set_initial_branch_lengths(true);
+	for (size_t c = 0; c < _cliques.size(); ++c) {
+		_nu_c[c] = std::exp(_log_nu_c->value(c));
+		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
+	}
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {

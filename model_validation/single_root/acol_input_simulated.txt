@@ -1,8 +1,8 @@
 name	value
 molecules_mean_log_nu	0.5
 molecules_var_log_nu	0.2
-species_mean_log_nu	0.5
-species_var_log_nu	0.2
+species_mean_log_nu	0.58
+species_var_log_nu	0.01
 molecules_log_nu_1	10.0
 molecules_log_nu_2	10.0
 molecules_log_nu_3	10.0

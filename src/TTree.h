@@ -116,7 +116,7 @@ private:
 		_joint_log_prob_density.clear();
 		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
 	}
-	void _set_initial_branch_lengths();
+	void _set_initial_branch_lengths(bool is_simulation);
 	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
@@ -217,15 +217,15 @@ private:
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamAlpha *Alpha,
 	      TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts);
-	~TTree();
+	~TTree() override;
 
-	size_t size() const { return _nodes.size(); };
+	[[nodiscard]] size_t size() const { return _nodes.size(); };
 
 	/** Get node by its id
 	 * @param Id: the id of the node
 	 * @return a reference to the node with the given id
 	 */
-	const TNode &get_node(const std::string &Id) const;
+	[[nodiscard]] const TNode &get_node(const std::string &Id) const;
 
 	/** Get node by its index
 	 * @param Id: the index of the node wihtin the tree
