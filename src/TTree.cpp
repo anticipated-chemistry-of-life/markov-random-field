@@ -54,6 +54,8 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const {
 	std::vector<size_t> binned_branch_lengths;
 	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
+
+	double total_branch_length = 0.0;
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
 		if (exclude_root && _nodes[i].isRoot()) { continue; }
 		// find bin
@@ -62,6 +64,7 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 		if (it == _grid_branch_lengths.end()) {
 			// last bin
 			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
+			total_branch_length += _grid_branch_lengths.back();
 		} else {
 			// take the distance between the lower bin and the value and the higher bin and the value
 			// and then we take the one that is closer to the value
@@ -70,15 +73,58 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 			if (it_next == _grid_branch_lengths.end()) {
 				// last bin
 				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+				total_branch_length += _grid_branch_lengths.back();
 			} else if (std::abs(branch_lengths[i] - *it) < std::abs(branch_lengths[i] - *it_next)) {
 				// take the lower bin
 				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+				total_branch_length += *it;
 			} else {
 				// take the higher bin
 				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it_next));
+				total_branch_length += *it_next;
 			}
 		}
 	}
+	OUT(get_tree_name(), total_branch_length);
+	OUT(total_branch_length == 1.0);
+	OUT(total_branch_length == 1);
+	OUT(total_branch_length < 1.0);
+	OUT(total_branch_length > 1.0);
+	std::cout << "total branch length: " << total_branch_length << std::endl;
+
+	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
+	// we get a total branch length of one
+	// Adjust total_branch_length to exactly 1.0
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	while (total_branch_length < 1.0) {
+		std::uniform_int_distribution<size_t> distrib(0, binned_branch_lengths.size() - 1);
+		size_t idx = distrib(gen);
+
+		// Ensure we don't go out of bounds
+		if (binned_branch_lengths[idx] < _grid_branch_lengths.size() - 1) {
+			// Increase bin index
+			size_t new_bin = binned_branch_lengths[idx] + 1;
+			total_branch_length += (_grid_branch_lengths[new_bin] - _grid_branch_lengths[binned_branch_lengths[idx]]);
+			binned_branch_lengths[idx] = new_bin;
+		}
+	}
+
+	while (total_branch_length > 1.0) {
+		std::uniform_int_distribution<size_t> distrib(0, binned_branch_lengths.size() - 1);
+		size_t idx = distrib(gen);
+
+		// Ensure we don't go out of bounds
+		if (binned_branch_lengths[idx] > 0) {
+			// Decrease bin index
+			size_t new_bin = binned_branch_lengths[idx] - 1;
+			total_branch_length -= (_grid_branch_lengths[binned_branch_lengths[idx]] - _grid_branch_lengths[new_bin]);
+			binned_branch_lengths[idx] = new_bin;
+		}
+	}
+
+	OUT(get_tree_name(), total_branch_length);
 
 	return binned_branch_lengths;
 }
