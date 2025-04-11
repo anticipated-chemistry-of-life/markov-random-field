@@ -85,11 +85,14 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
                                              std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	for (size_t dim = 0; dim < _trees.size(); ++dim) {
 		// get relevant clique
-		const auto &clique         = _trees[dim]->get_clique(index_in_leaves_space);
+		const auto &clique = _trees[dim]->get_clique(index_in_leaves_space);
+
 		// translate index in leaves to the index in tree
 		const size_t index_in_tree = _trees[dim]->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
+
 		// get leaf index in tree of last dimension
 		const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
+
 		// calculate P(parent | node = 0) and P(parent | node = 1)
 		// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
 		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
@@ -252,11 +255,9 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_Y.add_to_counter(iteration);
 
 		// calculate joint density
-		if (iteration % 100 == 0) {
-			if (WRITE_JOINT_LOG_PROB_DENSITY) {
-				auto sum_log_field = _calculate_complete_joint_density();
-				_joint_density_file.writeln(sum_log_field);
-			}
+		if (iteration % 100 == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
+			auto sum_log_field = _calculate_complete_joint_density();
+			_joint_density_file.writeln(sum_log_field);
 		}
 		prog.next();
 	}

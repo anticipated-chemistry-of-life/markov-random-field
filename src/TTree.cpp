@@ -58,11 +58,25 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 		if (exclude_root && _nodes[i].isRoot()) { continue; }
 		// find bin
 		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(), branch_lengths[i]);
+
 		if (it == _grid_branch_lengths.end()) {
 			// last bin
 			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
 		} else {
-			binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+			// take the distance between the lower bin and the value and the higher bin and the value
+			// and then we take the one that is closer to the value
+
+			auto it_next = it + 1;
+			if (it_next == _grid_branch_lengths.end()) {
+				// last bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+			} else if (std::abs(branch_lengths[i] - *it) < std::abs(branch_lengths[i] - *it_next)) {
+				// take the lower bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+			} else {
+				// take the higher bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it_next));
+			}
 		}
 	}
 
@@ -395,7 +409,8 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 
 double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length, const TClique &clique,
                                                         const TCurrentState &current_state) const {
-	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in nodes
+	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in
+	// nodes
 	const size_t index_in_tree = _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
 
 	// calculate probability of parent to node for old branch length
@@ -416,7 +431,8 @@ void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_sta
 
 	for (size_t p = 0; p < pairs.length(); ++p) { // loop over all possible pairs
 		// get index of branches to calculate LL: p1 and p2
-		// that index corresponds to the index in fake, concatenated vector of leaves and internal nodes without roots
+		// that index corresponds to the index in fake, concatenated vector of leaves and internal nodes without
+		// roots
 		auto [p1, p2]   = pairs.getIndexPair(p);
 		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, current_state);
 		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, current_state);
