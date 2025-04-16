@@ -8,6 +8,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
 #include "coretools/Types/commonWeakTypes.h"
@@ -16,6 +17,8 @@
 #include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
+#include <cstdlib>
+#include <iomanip>
 #include <queue>
 #include <string>
 #include <vector>
@@ -85,46 +88,26 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 			}
 		}
 	}
-	OUT(get_tree_name(), total_branch_length);
-	OUT(total_branch_length == 1.0);
-	OUT(total_branch_length == 1);
-	OUT(total_branch_length < 1.0);
-	OUT(total_branch_length > 1.0);
-	std::cout << "total branch length: " << total_branch_length << std::endl;
 
 	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
 	// we get a total branch length of one
 	// Adjust total_branch_length to exactly 1.0
-	std::random_device rd;
-	std::mt19937 gen(rd());
-
-	while (total_branch_length < 1.0) {
-		std::uniform_int_distribution<size_t> distrib(0, binned_branch_lengths.size() - 1);
-		size_t idx = distrib(gen);
-
-		// Ensure we don't go out of bounds
-		if (binned_branch_lengths[idx] < _grid_branch_lengths.size() - 1) {
+	while (std::abs(total_branch_length - 1.0) > _delta / 2.0) {
+		size_t idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
+		size_t new_bin;
+		if (total_branch_length < 1.0) {
 			// Increase bin index
-			size_t new_bin = binned_branch_lengths[idx] + 1;
-			total_branch_length += (_grid_branch_lengths[new_bin] - _grid_branch_lengths[binned_branch_lengths[idx]]);
-			binned_branch_lengths[idx] = new_bin;
-		}
-	}
+			if (binned_branch_lengths[idx] >= _grid_branch_lengths.size() - 1) { continue; }
+			new_bin = binned_branch_lengths[idx] + 1;
 
-	while (total_branch_length > 1.0) {
-		std::uniform_int_distribution<size_t> distrib(0, binned_branch_lengths.size() - 1);
-		size_t idx = distrib(gen);
-
-		// Ensure we don't go out of bounds
-		if (binned_branch_lengths[idx] > 0) {
+		} else {
 			// Decrease bin index
-			size_t new_bin = binned_branch_lengths[idx] - 1;
-			total_branch_length -= (_grid_branch_lengths[binned_branch_lengths[idx]] - _grid_branch_lengths[new_bin]);
-			binned_branch_lengths[idx] = new_bin;
+			if (binned_branch_lengths[idx] == 0) { continue; }
+			new_bin = binned_branch_lengths[idx] - 1;
 		}
+		total_branch_length += (_grid_branch_lengths[new_bin] - _grid_branch_lengths[binned_branch_lengths[idx]]);
+		binned_branch_lengths[idx] = new_bin;
 	}
-
-	OUT(get_tree_name(), total_branch_length);
 
 	return binned_branch_lengths;
 }
@@ -135,7 +118,7 @@ void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	coretools::normalize(branch_lengths);
 
 	_grid_branch_lengths.resize(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * (k + 1.0)); }
+	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * ((double)k + 1.0)); }
 
 	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 
