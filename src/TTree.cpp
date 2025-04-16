@@ -8,6 +8,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
+#include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
 #include "coretools/Types/commonWeakTypes.h"
@@ -16,6 +17,8 @@
 #include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
+#include <cstdlib>
+#include <iomanip>
 #include <queue>
 #include <string>
 #include <vector>
@@ -24,7 +27,6 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
              TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts)
     : _dimension(dimension), _binned_branch_lengths(Binned_Branch_Lenghts), _log_nu_c(LogNu), _alpha_c(Alpha) {
 
-	// _bin_branch_lengths();
 	// tell stattools that these parameters belong to a prior distribution
 	this->addPriorParameter({_binned_branch_lengths, _alpha_c, _log_nu_c});
 
@@ -35,7 +37,8 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(1e-10));
+	double default_a = std::min(1e-15, 1.0 / ((double)number_of_branches * 1000));
+	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(default_a));
 	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
 	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);
@@ -54,16 +57,56 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const {
 	std::vector<size_t> binned_branch_lengths;
 	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
+
+	double total_branch_length = 0.0;
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
 		if (exclude_root && _nodes[i].isRoot()) { continue; }
 		// find bin
 		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(), branch_lengths[i]);
+
 		if (it == _grid_branch_lengths.end()) {
 			// last bin
 			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
+			total_branch_length += _grid_branch_lengths.back();
 		} else {
-			binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+			// take the distance between the lower bin and the value and the higher bin and the value
+			// and then we take the one that is closer to the value
+
+			auto it_next = it + 1;
+			if (it_next == _grid_branch_lengths.end()) {
+				// last bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+				total_branch_length += _grid_branch_lengths.back();
+			} else if (std::abs(branch_lengths[i] - *it) < std::abs(branch_lengths[i] - *it_next)) {
+				// take the lower bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
+				total_branch_length += *it;
+			} else {
+				// take the higher bin
+				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it_next));
+				total_branch_length += *it_next;
+			}
 		}
+	}
+
+	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
+	// we get a total branch length of one
+	// Adjust total_branch_length to exactly 1.0
+	while (std::abs(total_branch_length - 1.0) > _delta / 2.0) {
+		size_t idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
+		size_t new_bin;
+		if (total_branch_length < 1.0) {
+			// Increase bin index
+			if (binned_branch_lengths[idx] >= _grid_branch_lengths.size() - 1) { continue; }
+			new_bin = binned_branch_lengths[idx] + 1;
+
+		} else {
+			// Decrease bin index
+			if (binned_branch_lengths[idx] == 0) { continue; }
+			new_bin = binned_branch_lengths[idx] - 1;
+		}
+		total_branch_length += (_grid_branch_lengths[new_bin] - _grid_branch_lengths[binned_branch_lengths[idx]]);
+		binned_branch_lengths[idx] = new_bin;
 	}
 
 	return binned_branch_lengths;
@@ -75,7 +118,7 @@ void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	coretools::normalize(branch_lengths);
 
 	_grid_branch_lengths.resize(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * (k + 1.0)); }
+	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * ((double)k + 1.0)); }
 
 	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 
@@ -252,16 +295,16 @@ void TTree::guessInitialValues() {
 		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
 	}
 
-	_set_initial_branch_lengths();
+	_set_initial_branch_lengths(false);
 }
 
 double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
 double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
 double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
 
-void TTree::_set_initial_branch_lengths() {
+void TTree::_set_initial_branch_lengths(bool is_simulation) {
 	// overwrite simulated branch length: use branch lengths from tree
-	if (_binned_branch_lengths->hasFixedInitialValue()) { // use from simulation
+	if (_binned_branch_lengths->hasFixedInitialValue() || is_simulation) { // use from simulation
 		// translate bin into actual branch lengths
 		std::vector<double> vals(_binned_branch_lengths->size());
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
@@ -278,6 +321,11 @@ void TTree::_set_initial_branch_lengths() {
 		_binned_branch_lengths->fixInitialization(false);
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
 			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
+
+			// we have to do it a second else the oldValue is still the one not normalized.
+			// Indeed we first propose the update of the branch length so then in the "update_mu"
+			// function, we will have to take the oldValue of the binned branch length.
+			_binned_branch_lengths->set(i, binned_branch_lengths[i]);
 		}
 		_binned_branch_lengths->fixInitialization(true);
 	} else { // use from tree
@@ -289,7 +337,11 @@ void TTree::_set_initial_branch_lengths() {
 
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
-	_set_initial_branch_lengths();
+	_set_initial_branch_lengths(true);
+	for (size_t c = 0; c < _cliques.size(); ++c) {
+		_nu_c[c] = std::exp(_log_nu_c->value(c));
+		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
+	}
 }
 
 void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
@@ -386,7 +438,8 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 
 double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length, const TClique &clique,
                                                         const TCurrentState &current_state) const {
-	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in nodes
+	// translate index in binned branch length vector (of size leaves + internal nodes without roots) to index in
+	// nodes
 	const size_t index_in_tree = _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
 
 	// calculate probability of parent to node for old branch length
@@ -407,7 +460,8 @@ void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_sta
 
 	for (size_t p = 0; p < pairs.length(); ++p) { // loop over all possible pairs
 		// get index of branches to calculate LL: p1 and p2
-		// that index corresponds to the index in fake, concatenated vector of leaves and internal nodes without roots
+		// that index corresponds to the index in fake, concatenated vector of leaves and internal nodes without
+		// roots
 		auto [p1, p2]   = pairs.getIndexPair(p);
 		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, current_state);
 		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, current_state);

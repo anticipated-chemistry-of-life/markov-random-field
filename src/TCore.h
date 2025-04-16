@@ -1,22 +1,11 @@
-/*
- * TExampleTask.h
- *
- *  Created on: Nov 30, 2020
- *      Author: phaentu
- */
-
 #ifndef TEXAMPLETASK_H_
 #define TEXAMPLETASK_H_
 
 #include "TLotus.h"
 #include "TMarkovField.h"
-#include "TStorageYVector.h"
 #include "TTree.h"
 #include "Types.h"
-#include "coretools/Main/TParameters.h"
 #include "coretools/Main/TTask.h"
-#include "stattools/DAG/TDAGBuilder.h"
-#include "stattools/MCMC/TMCMC.h"
 #include <memory>
 
 //--------------------------------------

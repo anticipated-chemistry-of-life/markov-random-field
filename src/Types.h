@@ -10,7 +10,6 @@
 #include "stattools/ParametersObservations/THash.h"
 #include "stattools/ParametersObservations/TObservation.h"
 #include "stattools/ParametersObservations/spec.h"
-#include "stattools/Priors/TPriorExponential.h"
 #include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>

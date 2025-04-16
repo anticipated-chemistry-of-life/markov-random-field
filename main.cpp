@@ -9,7 +9,6 @@
 //---------------------------------------------------------------------------
 
 #include "TCore.h"
-#include "TTree.h"
 
 //---------------------------------------------------------------------------
 // Existing Tasks
@@ -43,7 +42,7 @@ int main(int argc, char *argv[]) {
 	// Create main by providing a program name, a version, an
 	// affiliation, link to repo and contact email
 	coretools::TMain main("acol", "0.1", "University of Fribourg",
-	                      "https://github.com/anticipated-chemistry-of-life/random-markov-field",
+	                      "https://github.com/anticipated-chemistry-of-life/markov-random-field",
 	                      "marco.visani@unifr.ch");
 
 	// add existing tasks and tests

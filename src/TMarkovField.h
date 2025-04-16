@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include "coretools/devtools.h"
 #include <cstddef>
 #include <omp.h>
 #include <string>
@@ -62,7 +63,7 @@ private:
 
 	void _simulate_Y();
 	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-	                    std::array<double, 2> &sum_log, TLotus &lotus);
+	                    std::array<double, 2> &prob, TLotus &lotus);
 	void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet, TLotus &lotus);
 	void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
 	double _calculate_complete_joint_density();

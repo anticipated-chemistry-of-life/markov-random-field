@@ -48,7 +48,6 @@ public:
 	 */
 	void set_from_product(const TMatrix &First, const TMatrix &Second) {
 		// do matrix multiplication
-		// _mat(0,0) = First(0,0) * Second(0,0) + First(0,1) * Second(1,0)
 		_mat[0] = First[0] * Second[0] + First[2] * Second[1];
 		_mat[2] = 1.0 - _mat[0];
 		_mat[1] = First[1] * Second[0] + First[3] * Second[1];
