@@ -5,12 +5,6 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="A simple data generator to test our model."
     )
-    parser.add_argument(
-        "--out",
-        type=str,
-        help="The directory where the output files will be saved",
-        required=True,
-    )
 
     # species tree
     parser.add_argument(
@@ -121,6 +115,16 @@ def parse_args():
         default=0.5,
     )
 
+    parser.add_argument(
+        "--out",
+        type=str,
+        help="The directory where the output files will be saved",
+    )
+
     args = parser.parse_args()
+
+    # Set default for `out` if not provided
+    if args.out is None:
+        args.out = f"s_{args.species_tree_type}_{args.number_of_species}_m_{args.molecules_tree_type}_{args.number_of_molecules}"
 
     return args
