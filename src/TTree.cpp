@@ -92,8 +92,8 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
 	// we get a total branch length of one
 	// Adjust total_branch_length to exactly 1.0
-	while (std::abs(total_branch_length - 1.0) > _delta / 2.0) {
-		size_t idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
+	while (std::abs(total_branch_length - 1.0) > _delta / 2.0) { // TODO: check why _delta / 2.0
+		auto idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
 		size_t new_bin;
 		if (total_branch_length < 1.0) {
 			// Increase bin index

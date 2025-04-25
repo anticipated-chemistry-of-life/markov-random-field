@@ -19,13 +19,11 @@ def create_simulate_file(
 ) -> str:
     return f"""
 ../../build/acol simulate \\
-    --tree_species {species_tree_name}.txt \\
-    --tree_molecules {molecules_tree_name}.txt \\
-    --num_iterations 10000 \\
-    --species_branch_lengths acol_input_simulated.txt \\
+    --tree_species species.txt \\
+    --tree_molecules molecules.txt \\
+    --num_iterations 2000 \\
     --species_var_log_nu acol_input_simulated.txt \\
     --species_mean_log_nu acol_input_simulated.txt \\
-    --species_log_nu acol_input_simulated.txt \\
     --species_alpha acol_input_simulated.txt \\
     --molecules_branch_lengths acol_input_simulated.txt \\
     --molecules_var_log_nu acol_input_simulated.txt \\
@@ -38,7 +36,9 @@ def create_simulate_file(
     --write_joint_log_prob_density \\
     --write_Y_trace \\
     --write_Z_trace \\
-    --fixedSeed 42 \\
+    --fixedSeed 12345 \\
+    --species_log_nu acol_input_simulated.txt \\
+    # --species_branch_lengths acol_species_simulated.txt \\
  """
 
 
