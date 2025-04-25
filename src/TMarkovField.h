@@ -165,7 +165,7 @@ private:
 					    _update_Y<IsSimulation>(start_index_in_leaves_space, j,
 					                            linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
 					diff_counter_1_in_last_dim += diff;
-					new_LL[omp_get_thread_num()].add(prob_new_state);
+					if constexpr (!IsSimulation) { new_LL[omp_get_thread_num()].add(prob_new_state); }
 				}
 
 				// insert new 1-valued indices into Y
@@ -180,7 +180,7 @@ private:
 		}
 
 		// at the very end: sum the LL of all threads and store it in TLotus
-		_update_cur_LL_lotus(lotus, new_LL);
+		if constexpr (!IsSimulation) { _update_cur_LL_lotus(lotus, new_LL); }
 		if (WRITE_Y_TRACE && (iteration % 100 == 0) && !_fix_Y) {
 			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 		}
