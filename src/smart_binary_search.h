@@ -46,14 +46,14 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 };
 
 template<typename Container>
-std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
 fill_current_state_easy(const Container &container, const std::vector<size_t> &start_index_in_leaves_space,
                         size_t n_nodes_in_clique_of_container) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
 	// index in the Y vector by 1 and get the next element in the Y vector.
-	std::vector<bool> current_state(n_nodes_in_clique_of_container, false);
-	std::vector<bool> exists_in_container(n_nodes_in_clique_of_container, false);
+	std::vector<int> current_state(n_nodes_in_clique_of_container, 0);
+	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, 0);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
 	size_t start_linear_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
@@ -92,12 +92,12 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 }
 
 template<typename Container>
-std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
 fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_container,
                         const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
                         size_t total_size_of_container) {
-	std::vector<bool> current_state(n_nodes_in_clique_of_container, false);
-	std::vector<bool> exists_in_container(n_nodes_in_clique_of_container, false);
+	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
+	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
 	auto linear_start_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
@@ -186,7 +186,7 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 }
 
 template<bool AlongLastDim, typename Container>
-std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
 fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
                    const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
                    size_t total_size_of_container) {
@@ -198,7 +198,7 @@ fill_current_state(const Container &container, size_t n_nodes_in_clique_of_conta
 }
 
 template<typename Container>
-std::tuple<std::vector<bool>, std::vector<bool>, std::vector<size_t>>
+std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
 fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
                    const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
                    size_t total_size_of_container) {

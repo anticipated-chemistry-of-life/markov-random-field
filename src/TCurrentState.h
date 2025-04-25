@@ -15,13 +15,13 @@
 class TCurrentState {
 private:
 	// current state of Y
-	std::vector<bool> _current_state_Y;
-	std::vector<bool> _exists_in_Y;
+	std::vector<int> _current_state_Y;
+	std::vector<int> _exists_in_Y;
 	std::vector<size_t> _index_in_TStorageYVector;
 
 	// current state of Z
-	std::vector<bool> _current_state_Z;
-	std::vector<bool> _exists_in_Z;
+	std::vector<int> _current_state_Z;
+	std::vector<int> _exists_in_Z;
 	std::vector<size_t> _index_in_TStorageZVector;
 
 	// increment and tree

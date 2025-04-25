@@ -487,15 +487,17 @@ void TTree::_evalute_update_branch_length(std::vector<coretools::TSumLogProbabil
 const TStorageZVector &TTree::get_Z() const { return _Z; };
 TStorageZVector &TTree::get_Z() { return _Z; };
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
-const TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) const {
-	index_in_leaves_space[_dimension] = 0; // set to start index
-	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
+const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) const {
+	std::vector<size_t> local_index = index_in_leaves_space;
+	local_index[_dimension]         = 0; // set to start index
+	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
 	return _cliques[ix_clique];
 }
 
-TClique &TTree::get_clique(std::vector<size_t> index_in_leaves_space) {
-	index_in_leaves_space[_dimension] = 0; // set to start index
-	const size_t ix_clique            = coretools::getLinearIndex(index_in_leaves_space, _dimension_cliques);
+TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
+	std::vector<size_t> local_index = index_in_leaves_space;
+	local_index[_dimension]         = 0; // set to start index
+	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
 	return _cliques[ix_clique];
 }
 

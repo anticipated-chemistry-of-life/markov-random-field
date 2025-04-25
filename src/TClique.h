@@ -186,8 +186,8 @@ private:
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
-	bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
-	               size_t leaf_index_in_tree_of_last_dim) const {
+	inline bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
+	                      size_t leaf_index_in_tree_of_last_dim) const {
 		if constexpr (std::is_same_v<ContainerStates, TSheet>) { // is a sheet
 			return states.get(parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 		} else { // TCurrentState

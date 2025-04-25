@@ -42,7 +42,7 @@ public:
 	[[nodiscard]] size_t parentIndex_in_tree() const { return _parentIndex_in_tree; };
 	[[nodiscard]] size_t numChildren() const { return _children_indices_in_tree.size(); };
 	[[nodiscard]] const std::vector<size_t> &children_indices_in_tree() const { return _children_indices_in_tree; };
-	[[nodiscard]] bool isLeaf() const { return _children_indices_in_tree.empty(); };
+	[[nodiscard]] inline bool isLeaf() const { return _children_indices_in_tree.empty(); };
 	[[nodiscard]] bool isRoot() const { return _is_root; };
 	[[nodiscard]] bool isInternalNode() const { return !_is_root && !_children_indices_in_tree.empty(); };
 	void set_is_root(bool is_root) { _is_root = is_root; }
@@ -306,8 +306,8 @@ public:
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
-	const TClique &get_clique(std::vector<size_t> index_in_leaves_space) const;
-	TClique &get_clique(std::vector<size_t> index_in_leaves_space);
+	const TClique &get_clique(const std::vector<size_t> &index_in_leaves_space) const;
+	TClique &get_clique(const std::vector<size_t> &index_in_leaves_space);
 	const TStorageZVector &get_Z() const;
 	TStorageZVector &get_Z();
 
