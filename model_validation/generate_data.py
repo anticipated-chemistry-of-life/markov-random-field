@@ -19,8 +19,8 @@ def create_simulate_file(
 ) -> str:
     return f"""
 ../../build/acol simulate \\
-    --tree_species species.txt \\
-    --tree_molecules molecules.txt \\
+    --tree_species {species_tree_name}.txt \\
+    --tree_molecules {molecules_tree_name}.txt \\
     --num_iterations 2000 \\
     --species_var_log_nu acol_input_simulated.txt \\
     --species_mean_log_nu acol_input_simulated.txt \\
@@ -52,7 +52,7 @@ def create_infer_file(
     --tree_species {species_tree_name}.txt \\
     --tree_molecules {molecules_tree_name}.txt \\
     --lotus acol_simulated_lotus.tsv \\
-    --iterations 20000 \\
+    --iterations 10000 \\
     --numThreads 1 \\
     --writeTrace \\
     --writeBurnin \\
@@ -63,7 +63,7 @@ def create_infer_file(
     --Z.update false \\
     --set_species_Z acol_simulated_Z_species.txt \\
     --set_molecules_Z acol_simulated_Z_molecules.txt \\
-    --molecules_branch_lengths acol_input_simulated.txt \\
+    --molecules_branch_lengths acol_molecules_simulated.txt \\
     --molecules_branch_lengths.update false \\
     --molecules_log_nu acol_input_simulated.txt \\
     --molecules_log_nu.update false \\
@@ -73,7 +73,7 @@ def create_infer_file(
     --molecules_var_log_nu.update false \\
     --molecules_alpha acol_input_simulated.txt \\
     --molecules_alpha.update false \\
-    --species_branch_lengths acol_input_simulated.txt \\
+    --species_branch_lengths acol_species_simulated.txt \\
     --species_branch_lengths.update false \\
     --species_var_log_nu acol_input_simulated.txt \\
     --species_var_log_nu.update false \\
