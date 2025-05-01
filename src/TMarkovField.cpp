@@ -73,7 +73,8 @@ void TMarkovField::_update_sheets(bool first, const std::vector<size_t> &start_i
 	}
 }
 
-void TMarkovField::_fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space) {
+void TMarkovField::_fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space) {
+	start_index_in_leaves_space.back() = 0; // set last dimension to zero
 	// fill all Y along last dimension
 	_clique_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, _trees.back()->get_number_of_leaves(), _Y);
 	// fill all Z along last dimension
@@ -201,6 +202,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
                                   std::array<double, 2> &prob, TLotus &lotus) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
+	// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) { OUT(cur_state); }
 	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, prob);
 }
 
@@ -313,7 +315,7 @@ void TMarkovField::burninHasFinished() {
 
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
-	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
+	_write_Y_to_file<true>(_prefix + "_Y_posterior.txt");
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }

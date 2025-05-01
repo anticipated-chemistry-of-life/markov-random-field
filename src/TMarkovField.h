@@ -52,7 +52,7 @@ private:
 	// functions for updating Y
 	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
 	                    const std::vector<size_t> &previous_ix, size_t K_cur_sheet);
-	void _fill_clique_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space);
+	void _fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space);
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 	bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
@@ -82,19 +82,29 @@ private:
 
 		// calculate probabilities in Markov random field
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
+		// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
+		// OUT(sum_log[0].getSum(), sum_log[1].getSum());
+		// }
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
 		std::array<double, 2> prob_lotus{};
 		if constexpr (!IsSimulation) {
 			_calc_lotus_LL(index_in_leaves_space, leaf_index_last_dim, prob_lotus, lotus);
+			if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
+				OUT(index_in_leaves_space, leaf_index_last_dim);
+			}
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
+			// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
+			// OUT(sum_log[0].getSum(), sum_log[1].getSum());
+			// }
 		}
 
 		// calculate log likelihood (virtual mass spec)...
 
 		// sample state
 		bool new_state = sample(sum_log);
+		// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) { OUT(new_state); }
 
 		// update Y accordingly
 		int diff_counter_1_in_last_dim =
@@ -133,6 +143,7 @@ private:
 
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
+
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
@@ -150,7 +161,6 @@ private:
 				_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
 
 				// fill clique along last dimension
-				start_index_in_leaves_space.back() = 0; // start from the beginning
 				_fill_clique_along_last_dim(start_index_in_leaves_space);
 				_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
 

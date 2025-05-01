@@ -67,6 +67,8 @@ private:
 	double _calculate_log_likelihood_of_L_no_collapsing() const;
 	double _calculate_log_likelihood_of_L_do_collapse() const;
 	void _simulateUnderPrior(Storage *) override;
+	std::pair<bool, size_t> _get_state_of_Y(size_t i, size_t index_in_TStorage_Y_vector) const;
+	std::pair<bool, size_t> _get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const;
 
 public:
 	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,

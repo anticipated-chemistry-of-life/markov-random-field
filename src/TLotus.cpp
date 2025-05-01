@@ -2,6 +2,10 @@
 // Created by madleina on 03.03.25.
 //
 #include "TLotus.h"
+#include <cassert>
+#include <cstddef>
+#include <tuple>
+#include <utility>
 
 TLotus::TLotus(
     std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
@@ -100,11 +104,15 @@ double TLotus::calculate_log_likelihood_of_L() const {
 double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; };
 
 void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
+	OUT(start_index_clique_along_last_dim);
 	// collapse start_index_in_leaves (this is the index in Y)
 	if (_collapser.do_collapse()) {
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(_collapser.collapse(start_index_clique_along_last_dim), K, _L);
 	} else { // no need to collapse
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
+		if (start_index_clique_along_last_dim[0] == 0 && start_index_clique_along_last_dim[1] == 0) {
+			OUT(_tmp_state_along_last_dim.get_Y(100));
+		}
 	}
 };
 
@@ -125,6 +133,13 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
 	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous if-statement)
 	// new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
+		if (_L.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
+			auto [is_one, index] = _L.binary_search(100);
+			OUT(is_one, index);
+			OUT(index_in_leaves_space);
+			OUT(leaf_index_last_dim, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim));
+			OUT(_tmp_state_along_last_dim.get_Y(100));
+		}
 		prob[i] = _calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
 		                                              index_in_collapsed_space);
 	}
@@ -191,53 +206,42 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L, size_t linear
 	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 };
 
-/// Note that this function does not go through the whole vector L, but only through the 1's in L or Y. This is
-/// justified because if L and Y are both 0, the probability is 1 and that does not matter.
 double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
-
-	// Y = L
-	size_t index_in_Y = 0;
-	size_t index_in_L = 0;
-
-	const auto length_Y = _markov_field.size_Y();
-	const auto length_L = _L.size();
-
 	coretools::TSumLogProbability sum_log;
 
-	for (size_t i = 0; i < std::max(length_Y, length_L); ++i) {
+	size_t index_in_TStorage_Y_vector = 0;
+	size_t index_in_TStorage_L_vector = 0;
+	bool state_of_Y;
+	bool state_of_L;
 
-		// if we reach the end of vector L but not the end of vector Y, that means that all the other Ls are 0.
-		// But Y can still be 1 or 0.
-		if (index_in_L == length_L) {
-			const auto index_in_L_space = _markov_field.get_Y(index_in_Y).get_linear_index_in_container_space();
-			sum_log.add(
-			    _calculate_probability_of_L_given_x(_markov_field.get_Y(index_in_Y).is_one(), false, index_in_L_space));
-			++index_in_Y;
-		} else if (index_in_Y == length_Y) {
-			// if we reach the end of vector Y but not the end of vector L, that means that all the other Y are 0.
-			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
-			sum_log.add(_calculate_probability_of_L_given_x(false, _L[index_in_L].is_one(), index_in_L_space));
-			++index_in_L;
-		} else if (_markov_field.get_Y(index_in_Y).get_linear_index_in_container_space() ==
-		           _L[index_in_L].get_linear_index_in_container_space()) {
-			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
-			sum_log.add(_calculate_probability_of_L_given_x(_markov_field.get_Y(index_in_Y).is_one(),
-			                                                _L[index_in_L].is_one(), index_in_L_space));
-			++index_in_Y;
-			++index_in_L;
-		} else if (_markov_field.get_Y(index_in_Y).get_linear_index_in_container_space() <
-		           _L[index_in_L].get_linear_index_in_container_space()) {
-			const auto index_in_L_space = _markov_field.get_Y(index_in_Y).get_linear_index_in_container_space();
-			sum_log.add(
-			    _calculate_probability_of_L_given_x(_markov_field.get_Y(index_in_Y).is_one(), false, index_in_L_space));
-			++index_in_Y;
-		} else {
-			const auto index_in_L_space = _L[index_in_L].get_linear_index_in_container_space();
-			sum_log.add(_calculate_probability_of_L_given_x(false, _L[index_in_L].is_one(), index_in_L_space));
-			++index_in_L;
-		}
+	for (size_t i = 0; i < _markov_field.get_Y_vector().total_size_of_container_space(); ++i) {
+		std::tie(state_of_Y, index_in_TStorage_Y_vector) = _get_state_of_Y(i, index_in_TStorage_Y_vector);
+		std::tie(state_of_L, index_in_TStorage_L_vector) = _get_state_of_L(i, index_in_TStorage_L_vector);
+
+		sum_log.add(_calculate_probability_of_L_given_x(state_of_Y, state_of_L, i));
 	}
 	return sum_log.getSum();
+}
+
+std::pair<bool, size_t> TLotus::_get_state_of_Y(size_t i, size_t index_in_TStorage_Y_vector) const {
+	if (index_in_TStorage_Y_vector >= _markov_field.size_Y()) {
+		return {false, index_in_TStorage_Y_vector};
+	} // make sure we don't overshoot
+
+	auto index_in_Y = _markov_field.get_Y(index_in_TStorage_Y_vector).get_linear_index_in_container_space();
+	if (i == index_in_Y) {
+		return {_markov_field.get_Y(index_in_TStorage_Y_vector).is_one(), index_in_TStorage_Y_vector + 1};
+	}
+	assert(i < index_in_Y);
+	return {false, index_in_TStorage_Y_vector};
+}
+std::pair<bool, size_t> TLotus::_get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const {
+	if (index_in_TStorage_L_vector >= _L.size()) { return {false, index_in_TStorage_L_vector}; }
+
+	auto index_in_L = _L[index_in_TStorage_L_vector].get_linear_index_in_container_space();
+	if (i == index_in_L) { return {true, index_in_TStorage_L_vector + 1}; }
+	assert(i < index_in_L);
+	return {false, index_in_TStorage_L_vector};
 }
 
 double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
@@ -249,6 +253,8 @@ double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
 	for (size_t i = 0; i < length_L; ++i) { // loop over all 1's in L
 		const auto linear_index_in_L_space = _L[i].get_linear_index_in_container_space();
 		auto multi_dim_index_in_L_space    = _L.get_multi_dimensional_index(linear_index_in_L_space);
+
+		// loop over all 0's in L that occured before that 1.
 		for (size_t j = previous_index_in_L_space; j <= linear_index_in_L_space; ++j) {
 			const bool L = (j == linear_index_in_L_space);
 			const bool x = _collapser.x_is_one(multi_dim_index_in_L_space);
