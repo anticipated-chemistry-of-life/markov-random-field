@@ -89,8 +89,8 @@ public:
 	double getSumLogPriorDensity(const Storage &) const override;
 
 	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K);
-	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
-	                           std::array<double, 2> &prob) const;
+	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
+	                           bool old_state, std::array<double, 2> &prob) const;
 	void update_cur_LL(double cur_LL);
 
 	void update_markov_field(size_t iteration);

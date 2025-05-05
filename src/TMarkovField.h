@@ -62,8 +62,8 @@ private:
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulate_Y();
-	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-	                    std::array<double, 2> &prob, TLotus &lotus);
+	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
+	                    size_t leaf_index_last_dim, std::array<double, 2> &prob, TLotus &lotus);
 	void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet, TLotus &lotus);
 	void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
 	double _calculate_complete_joint_density();
@@ -74,6 +74,7 @@ private:
 
 	template<bool IsSimulation>
 	std::pair<int, double> _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
+	                                 size_t index_for_tmp_state,
 	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
 		index_in_leaves_space.back() = leaf_index_last_dim;
 
@@ -82,29 +83,19 @@ private:
 
 		// calculate probabilities in Markov random field
 		_calculate_log_prob_field(index_in_leaves_space, sum_log);
-		// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
-		// OUT(sum_log[0].getSum(), sum_log[1].getSum());
-		// }
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
 		std::array<double, 2> prob_lotus{};
 		if constexpr (!IsSimulation) {
-			_calc_lotus_LL(index_in_leaves_space, leaf_index_last_dim, prob_lotus, lotus);
-			if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
-				OUT(index_in_leaves_space, leaf_index_last_dim);
-			}
+			_calc_lotus_LL(index_in_leaves_space, index_for_tmp_state, leaf_index_last_dim, prob_lotus, lotus);
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
-			// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
-			// OUT(sum_log[0].getSum(), sum_log[1].getSum());
-			// }
 		}
 
 		// calculate log likelihood (virtual mass spec)...
 
 		// sample state
 		bool new_state = sample(sum_log);
-		// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) { OUT(new_state); }
 
 		// update Y accordingly
 		int diff_counter_1_in_last_dim =
@@ -172,7 +163,7 @@ private:
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
 					auto [diff, prob_new_state] =
-					    _update_Y<IsSimulation>(start_index_in_leaves_space, j,
+					    _update_Y<IsSimulation>(start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
 					                            linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
 					diff_counter_1_in_last_dim += diff;
 					if constexpr (!IsSimulation) { new_LL[omp_get_thread_num()].add(prob_new_state); }

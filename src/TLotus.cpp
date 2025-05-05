@@ -2,6 +2,7 @@
 // Created by madleina on 03.03.25.
 //
 #include "TLotus.h"
+#include "coretools/Main/TError.h"
 #include <cassert>
 #include <cstddef>
 #include <tuple>
@@ -104,21 +105,17 @@ double TLotus::calculate_log_likelihood_of_L() const {
 double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; };
 
 void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
-	OUT(start_index_clique_along_last_dim);
 	// collapse start_index_in_leaves (this is the index in Y)
 	if (_collapser.do_collapse()) {
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(_collapser.collapse(start_index_clique_along_last_dim), K, _L);
 	} else { // no need to collapse
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
-		if (start_index_clique_along_last_dim[0] == 0 && start_index_clique_along_last_dim[1] == 0) {
-			OUT(_tmp_state_along_last_dim.get_Y(100));
-		}
 	}
 };
 
 /// This function will be used when we update Y.
-void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, bool old_state,
-                                   std::array<double, 2> &prob) const {
+void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
+                                   bool old_state, std::array<double, 2> &prob) const {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
 	// for state 1, we know that the new x will always be 1 (at least one is a one)
 	bool x_is_one_for_Y_0 = false; // Y = 0 -> x = 0 if we don't collapse
@@ -128,19 +125,11 @@ void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_sp
 		return;             // x is one for both states (due to collapsing) -> likelihood doesn't matter
 	}
 
-	const size_t leaf_index_last_dim    = index_in_leaves_space.back();
 	const auto index_in_collapsed_space = _collapser.collapse(index_in_leaves_space);
 	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous if-statement)
 	// new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
-		if (_L.get_linear_index_in_container_space(index_in_leaves_space) == 100) {
-			auto [is_one, index] = _L.binary_search(100);
-			OUT(is_one, index);
-			OUT(index_in_leaves_space);
-			OUT(leaf_index_last_dim, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim));
-			OUT(_tmp_state_along_last_dim.get_Y(100));
-		}
-		prob[i] = _calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(leaf_index_last_dim),
+		prob[i] = _calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state),
 		                                              index_in_collapsed_space);
 	}
 };

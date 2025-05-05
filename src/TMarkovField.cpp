@@ -199,11 +199,10 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 }
 
-void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t leaf_index_last_dim,
-                                  std::array<double, 2> &prob, TLotus &lotus) {
+void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
+                                  size_t leaf_index_last_dim, std::array<double, 2> &prob, TLotus &lotus) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
-	// if (_Y.get_linear_index_in_container_space(index_in_leaves_space) == 100) { OUT(cur_state); }
-	lotus.calculate_LL_update_Y(index_in_leaves_space, cur_state, prob);
+	lotus.calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state, cur_state, prob);
 }
 
 void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
