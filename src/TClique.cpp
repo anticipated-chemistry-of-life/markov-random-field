@@ -25,7 +25,8 @@ TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t 
 }
 
 TCurrentState TClique::create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree) {
-	TCurrentState current_state(tree, this->_increment);
+	TCurrentState current_state(tree, this->_increment, tree.get_number_of_leaves(),
+	                            tree.get_number_of_internal_nodes());
 	current_state.fill(_start_index_in_leaves_space, Y, Z);
 
 	return current_state;
