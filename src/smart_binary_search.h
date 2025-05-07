@@ -52,8 +52,8 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
 	// index in the Y vector by 1 and get the next element in the Y vector.
-	std::vector<int> current_state(n_nodes_in_clique_of_container, 0);
-	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, 0);
+	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
+	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
 	size_t start_linear_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
@@ -112,7 +112,7 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 	const double p                      = (double)container.size() / (double)total_size_of_container;
 	const double increment_p            = (double)increment * p;
 	const double two_standard_deviation = 2 * std::sqrt(increment_p * (1 - p));
-	const size_t jump_right             = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
+	const auto jump_right               = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
 	const size_t jump_left = static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
 
 	for (size_t i = 1; i < n_nodes_in_clique_of_container; ++i) {

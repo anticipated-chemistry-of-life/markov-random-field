@@ -15,6 +15,7 @@
 #include <armadillo>
 #include <cmath>
 #include <cstddef>
+#include <iomanip>
 #include <unistd.h>
 #include <vector>
 
@@ -69,10 +70,11 @@ public:
 
 		std::cout << "---------------" << std::endl;
 		for (uint i = 0; i < rows; i++) {
-			for (uint j = 0; j < cols; j++) { std::cout << _mat(i, j) << " "; }
+			for (uint j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;
+		OUT("Row sum: ", _mat(0, 0) + _mat(0, 1), " ", _mat(1, 0) + _mat(1, 1));
 	}
 };
 
@@ -132,7 +134,7 @@ public:
 	 * @param mu_c_1
 	 * @param mu_c_0
 	 */
-	void set_lambda(double alpha, TypeNu nu) { // TODO change to nu and alpha
+	void set_lambda(double alpha, TypeNu nu) {
 		_lambda_c[0] = (-alpha) * nu;
 		_lambda_c[1] = (1 - alpha) * nu;
 		_lambda_c[2] = alpha * nu;

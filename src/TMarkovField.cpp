@@ -30,10 +30,6 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	if (_fix_Y) { logfile().list("Will fix Y during the MCMC."); }
 	_fix_Z = !parameters().get("Z.update", true);
 	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
-	if (parameters().exists("set_Y")) {
-		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
-		_read_Y_from_file(filename);
-	}
 
 	// number of outer loops = the number of times to repeat K such that all leaves of the last dimension are parsed
 	_num_outer_loops = std::ceil((double)_trees.back()->get_number_of_leaves() / (double)_K);
@@ -52,6 +48,10 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	auto num_leaves_per_dim   = _num_leaves_per_dim_except_last;
 	num_leaves_per_dim.back() = _trees.back()->get_number_of_leaves();
 	_Y.initialize(n_iterations, num_leaves_per_dim);
+	if (parameters().exists("set_Y")) {
+		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
+		_read_Y_from_file(filename);
+	}
 }
 
 bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,

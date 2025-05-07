@@ -51,6 +51,7 @@ public:
 	void set(size_t index_in_tree, bool value);
 	void set_Y(size_t index_in_leaves, bool value);
 	size_t size_of_Y() const { return _current_state_Y.size(); }
+	size_t size_of_Z() const { return _current_state_Z.size(); }
 
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
 	bool exists_in_TStorageVector(size_t index_in_tree) const;

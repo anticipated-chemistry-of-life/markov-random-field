@@ -281,6 +281,7 @@ public:
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 	const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
+	const std::vector<size_t> &get_internal_indicies() const { return _internalIndices; }
 	const std::vector<size_t> &get_internal_nodes_without_roots() const { return _internal_nodes_without_roots; }
 
 	/** Checks whether a node is in the tree
@@ -380,7 +381,8 @@ public:
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
-						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					} else {
 						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));
@@ -397,7 +399,8 @@ public:
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
-						node_names.push_back(_nodes[multidim_index[idx]].get_id());
+						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(multidim_index[idx]);
+						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					} else {
 						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));

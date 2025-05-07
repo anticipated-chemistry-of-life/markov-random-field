@@ -257,6 +257,7 @@ double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
 void TLotus::_simulateUnderPrior(Storage *) {
 	// by default, we keep all the trees
 	std::vector<std::string> tree_names_to_keep_default;
+	tree_names_to_keep_default.reserve(_trees.size());
 	for (const auto &tree : _trees) { tree_names_to_keep_default.push_back(tree->get_tree_name()); }
 
 	// else get the tree names to keep from CLI
