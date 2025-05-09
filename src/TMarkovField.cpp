@@ -186,6 +186,9 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 
 	_update_all_Y<false>(lotus, iteration);
+	if (iteration == 0) {
+		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
+	}
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);
 	} else {

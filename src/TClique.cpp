@@ -56,8 +56,8 @@ TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &curren
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
-		_calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
-		                                     leaves_and_internal_nodes_without_roots_indices);
+		calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
+		                                    leaves_and_internal_nodes_without_roots_indices);
 
 		// sample new state and update Z accordingly
 		const double log_prob_0 = sum_log[0].getSum();
@@ -70,15 +70,15 @@ TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &curren
 			joint_prob_density[omp_get_thread_num()] += log_prob_0;
 		}
 
-		_update_current_state(Z, current_state, index_in_tree, new_state, linear_indices_in_Z_space_to_insert, tree);
+		update_current_state(Z, current_state, index_in_tree, new_state, linear_indices_in_Z_space_to_insert, tree);
 	}
 
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
-                                    bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-                                    const TTree *tree) const {
+void TClique::update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
+                                   bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
+                                   const TTree *tree) const {
 	auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
 	// 1 -> 0: can simply set Z to zero (element exists already)
 	if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
@@ -101,7 +101,7 @@ void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools
 	sum_log[1].add(1.0 - stationary_0);
 }
 
-void TClique::_calculate_log_prob_node_to_children(
+void TClique::calculate_log_prob_node_to_children(
     size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {

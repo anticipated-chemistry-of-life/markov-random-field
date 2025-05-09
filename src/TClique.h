@@ -178,14 +178,7 @@ private:
 	// count the number of leaves with value 1 in a clique
 	TypeCounter1 _counter_leaves_state_1 = 0;
 
-	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
-	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
-
 	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
-	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	inline bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
@@ -239,6 +232,14 @@ public:
 	                                TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
 	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
+	void calculate_log_prob_node_to_children(
+	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
+	void update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
+	                          std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
 
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 

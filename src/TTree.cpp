@@ -4,6 +4,8 @@
 
 #include "TTree.h"
 #include "TClique.h"
+#include "TStorageYVector.h"
+#include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
@@ -19,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <list>
 #include <numeric>
 #include <queue>
 #include <string>
@@ -377,10 +380,6 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 		}
 		return;
 	}
-}
-
-void TTree::_initialize_Z_from_children() {
-	// we'll have to do a dequeue of the internal nodes and iterate bottom up from the leaves to the roots
 }
 
 void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,

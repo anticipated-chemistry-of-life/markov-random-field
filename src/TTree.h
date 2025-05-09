@@ -19,6 +19,7 @@
 #include "coretools/devtools.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
+#include <list>
 #include <string>
 #include <vector>
 
@@ -121,7 +122,6 @@ private:
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
-	void _initialize_Z_from_children();
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
@@ -422,5 +422,54 @@ public:
 	}
 
 	double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
+
+	void initialize_Z_from_children(const TStorageYVector &Y) {
+		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
+		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
+
+		// Each clique is independent of each other so we should be able to parallelize this
+		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+		for (size_t i = 0; i < _cliques.size(); ++i) {
+			auto &clique       = _cliques[i];
+			auto current_state = clique.create_current_state(Y, _Z, *this);
+			std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
+
+			std::list<size_t> processing_queue;
+			// start with the leaves
+			for (size_t leaf_index : _leaves) { processing_queue.push_back(leaf_index); }
+
+			// bottom-up update of Z
+			while (!processing_queue.empty()) {
+				// get the first node in the queue. At the first iteration they should be all leaves
+				size_t node_index = processing_queue.front();
+				processing_queue.pop_front();
+
+				const TNode &node = _nodes[node_index];
+
+				if (!node.isLeaf()) {
+					std::array<coretools::TSumLogProbability, 2> sum_log;
+
+					clique.calculate_log_prob_node_to_children(node_index, this, current_state, sum_log,
+					                                           _binned_branch_lengths,
+					                                           _leaves_and_internal_nodes_without_roots_indices);
+
+					// sample new state and update Z accordingly
+					const double log_prob_0 = sum_log[0].getSum();
+					const double log_prob_1 = sum_log[1].getSum();
+
+					bool new_state = log_prob_1 > log_prob_0;
+					clique.update_current_state(_Z, current_state, node_index, new_state,
+					                            linear_indices_in_Z_space_to_insert, this);
+				}
+
+				size_t parent_index = node.parentIndex_in_tree();
+				if (!node.isRoot()) { processing_queue.push_front(parent_index); }
+			}
+			// add the indices to the clique
+			indices_to_insert[i] = linear_indices_in_Z_space_to_insert;
+		}
+
+		_Z.insert_in_Z(indices_to_insert);
+	};
 };
 #endif // METABOLITE_INFERENCE_TREE_H
