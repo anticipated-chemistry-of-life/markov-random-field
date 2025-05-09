@@ -12,13 +12,14 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
 #include "coretools/Types/commonWeakTypes.h"
+#include "coretools/Types/probability.h"
 #include "coretools/algorithms.h"
 #include "coretools/devtools.h"
 #include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
 #include <cstdlib>
-#include <iomanip>
+#include <numeric>
 #include <queue>
 #include <string>
 #include <vector>
@@ -37,10 +38,10 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	double default_a = std::min(1e-15, 1.0 / ((double)number_of_branches * 1000));
-	_a               = coretools::instances::parameters().get("a", coretools::ZeroOpenOneClosed(default_a));
-	double default_b = std::min(1.0, 1.0 / (double)number_of_branches * 10);
-	_b               = coretools::instances::parameters().get("b", coretools::Probability(default_b));
+	double default_a = 1.0 / 2; // TODO : change to min 1/1000 as per discussion with Dan
+	_a               = coretools::instances::parameters().get("a", default_a);
+	double default_b = 1.5;
+	_b               = coretools::instances::parameters().get("b", default_b);
 	_number_of_bins  = coretools::instances::parameters().get("K", 100);
 
 	const size_t max_type = std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
@@ -92,10 +93,11 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
 	// we get a total branch length of one
 	// Adjust total_branch_length to exactly 1.0
-	while (std::abs(total_branch_length - 1.0) > _delta / 2.0) { // TODO: check why _delta / 2.0
+	double number_of_branches = double(get_number_of_nodes() - get_number_of_roots());
+	while (std::abs(total_branch_length - number_of_branches) > _delta / 2.0) { // TODO: check why _delta / 2.0
 		auto idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
 		size_t new_bin;
-		if (total_branch_length < 1.0) {
+		if (total_branch_length < number_of_branches) {
 			// Increase bin index
 			if (binned_branch_lengths[idx] >= _grid_branch_lengths.size() - 1) { continue; }
 			new_bin = binned_branch_lengths[idx] + 1;
@@ -115,15 +117,25 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	_initialize_grid_branch_lengths(branch_lengths.size());
 	// normalize such that they sum to one
-	coretools::normalize(branch_lengths);
+
+	double sum = 0.0;
+	int count  = 0;
+	for (const double &branch_length : branch_lengths) {
+		if (branch_length <= 0.0) { continue; }
+		sum += branch_length;
+		++count;
+	}
+	double average = sum / (double)count;
+
+	for (double &branch_length : branch_lengths) {
+		if (branch_length <= 0.0) { continue; }
+		branch_length = branch_length / average;
+	}
 
 	_grid_branch_lengths.resize(_number_of_bins);
 	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * ((double)k + 1.0)); }
 
 	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
-
-	// Do the binned branch lengths still sum to one? I don't think so
-	// --> they do not need to sum to one
 };
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
@@ -145,6 +157,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		std::string child  = std::string(file.get(0));
 		std::string parent = std::string(file.get(1));
 		auto branch_length = file.get<double>(2);
+		if (branch_length <= 0.0) { UERROR("You can't have a negative branch length or equal to 0.0 !"); }
 
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
@@ -311,8 +324,9 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 			vals[i] = (_a + _delta * (_binned_branch_lengths->value(i) + 1.0));
 		}
 
-		// normalize such that branch lengths sum to one
-		coretools::normalize(vals);
+		// normalize such that the average branch length is 1
+		double average = std::reduce(vals.begin(), vals.end(), 0.0) / (double)vals.size();
+		for (double &val : vals) { val = val / average; }
 
 		// translate back to bin
 		auto binned_branch_lengths = _bin_branch_lengths(vals, false);
@@ -361,7 +375,12 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 			bool state                   = file.get<bool>(3);
 			if (state) { _Z.insert_one(linear_index_in_Z_space); }
 		}
+		return;
 	}
+}
+
+void TTree::_initialize_Z_from_children() {
+	// we'll have to do a dequeue of the internal nodes and iterate bottom up from the leaves to the roots
 }
 
 void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
