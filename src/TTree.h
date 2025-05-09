@@ -86,8 +86,8 @@ private:
 	size_t _dimension;
 
 	// For binning branch lengths
-	coretools::ZeroOpenOneClosed _a;
-	coretools::Probability _b;
+	double _a;
+	double _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
 	std::vector<double> _grid_branch_lengths;
@@ -121,6 +121,7 @@ private:
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths(size_t number_of_branches);
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
+	void _initialize_Z_from_children();
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
@@ -302,8 +303,8 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	coretools::ZeroOpenOneClosed get_a() const { return _a; }
-	coretools::Probability get_b() const { return _b; }
+	double get_a() const { return _a; }
+	double get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();

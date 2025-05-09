@@ -65,12 +65,12 @@ public:
 	double operator[](size_t i) const { return _mat[i]; }
 
 	void print() const {
-		uint cols = _mat.n_cols;
-		uint rows = _mat.n_rows;
+		auto cols = _mat.n_cols;
+		auto rows = _mat.n_rows;
 
 		std::cout << "---------------" << std::endl;
-		for (uint i = 0; i < rows; i++) {
-			for (uint j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
+		for (auto i = 0; i < rows; i++) {
+			for (auto j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;
@@ -144,12 +144,12 @@ public:
 	}
 
 	static void print_mat(const TMatrix &my_matrix) {
-		uint cols = my_matrix.get_matrix().n_cols;
-		uint rows = my_matrix.get_matrix().n_rows;
+		auto cols = my_matrix.get_matrix().n_cols;
+		auto rows = my_matrix.get_matrix().n_rows;
 
 		std::cout << "---------------" << std::endl;
-		for (uint i = 0; i < rows; i++) {
-			for (uint j = 0; j < cols; j++) { std::cout << my_matrix(i, j) << " "; }
+		for (auto i = 0; i < rows; i++) {
+			for (auto j = 0; j < cols; j++) { std::cout << my_matrix(i, j) << " "; }
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;

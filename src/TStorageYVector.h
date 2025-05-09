@@ -5,6 +5,7 @@
 #ifndef TSTORAGEYVECTOR_H
 #define TSTORAGEYVECTOR_H
 #include "TStorageY.h"
+#include "Types.h"
 #include "coretools/algorithms.h"
 
 #include <cstddef>
@@ -88,6 +89,8 @@ public:
 
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {
+// TODO: can we do this in parallel ?
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 			for (auto &elem : _vec) { elem.update_counter(); }
 		}
 	}

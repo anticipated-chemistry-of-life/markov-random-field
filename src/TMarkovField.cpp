@@ -193,7 +193,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 	_Y.add_to_counter(iteration);
 	// calculate joint density
-	if (iteration % 100 == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
+	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration % 100 == 0) {
 		auto sum_log_field = _calculate_complete_joint_density();
 		_joint_density_file.writeln(sum_log_field);
 	}
