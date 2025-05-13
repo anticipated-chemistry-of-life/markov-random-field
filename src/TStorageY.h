@@ -48,7 +48,7 @@ public:
 	}
 
 	/** @return Wheter the element is one or zero. */
-	bool is_one() const { return (_value & _state_mask) >> 47; }
+	inline bool is_one() const { return (_value & _state_mask) >> 47; }
 
 	/** The state is stored in the 17th bit of our 64 bits integer.
 	 * If set_state(true) then we set the 17th bit to 1.

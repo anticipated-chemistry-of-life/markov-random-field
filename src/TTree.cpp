@@ -513,9 +513,14 @@ const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_spac
 }
 
 TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
+	const size_t ix_clique          = getLinearIndexSkippingDim(index_in_leaves_space, _dimension, _dimension_cliques);
 	std::vector<size_t> local_index = index_in_leaves_space;
 	local_index[_dimension]         = 0; // set to start index
-	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
+	const size_t ix_clique_2        = coretools::getLinearIndex(local_index, _dimension_cliques);
+	if (ix_clique != ix_clique_2) {
+		UERROR("The index in leaves space is not the same as the index in cliques space !",
+		       " index in leaves space: ", ix_clique, " index in cliques space: ", ix_clique_2);
+	}
 	return _cliques[ix_clique];
 }
 

@@ -45,10 +45,16 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 	return {true, distance, it->get_linear_index_in_container_space(), (unsigned long)distance == vec.size() - 1};
 };
 
+struct CurrentStateResult {
+	std::vector<int> current_state;
+	std::vector<int> exists_in_container;
+	std::vector<size_t> index_in_TStorageVector;
+};
+
 template<typename Container>
-std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
-fill_current_state_easy(const Container &container, const std::vector<size_t> &start_index_in_leaves_space,
-                        size_t n_nodes_in_clique_of_container) {
+CurrentStateResult fill_current_state_easy(const Container &container,
+                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           size_t n_nodes_in_clique_of_container) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
 	// index in the Y vector by 1 and get the next element in the Y vector.
@@ -63,14 +69,14 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 	if (found) {
 		current_state[0]       = container.is_one(index_in_TStorage);
 		exists_in_container[0] = true;
-		if (is_last_element) { return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector); }
+		if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
 		index_in_TStorage += 1;
 		linear_index_in_container_space = container[index_in_TStorage].get_linear_index_in_container_space();
 	}
-	if (is_last_element) { return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector); }
+	if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
 
 	for (size_t i = 1; i < n_nodes_in_clique_of_container; ++i) {
-		auto linear_index_in_container_space_of_i = start_linear_index + i;
+		const auto linear_index_in_container_space_of_i = start_linear_index + i;
 		if (linear_index_in_container_space_of_i < linear_index_in_container_space) {
 			index_in_TStorageVector[i] = index_in_TStorage;
 			continue;
@@ -80,7 +86,7 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 			index_in_TStorageVector[i] = index_in_TStorage;
 			index_in_TStorage += 1;
 			if (index_in_TStorage == container.size()) {
-				return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector);
+				return {current_state, exists_in_container, index_in_TStorageVector};
 			}
 			linear_index_in_container_space = container[index_in_TStorage].get_linear_index_in_container_space();
 		} else {
@@ -88,14 +94,13 @@ fill_current_state_easy(const Container &container, const std::vector<size_t> &s
 			       "the container than in the total possible combinations of container !");
 		}
 	}
-	return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector);
+	return {current_state, exists_in_container, index_in_TStorageVector};
 }
 
 template<typename Container>
-std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
-fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_container,
-                        const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                        size_t total_size_of_container) {
+CurrentStateResult fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_container,
+                                           const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
+                                           size_t total_size_of_container) {
 	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
@@ -122,7 +127,7 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 			index_in_TStorageVector[i] = index_in_TStorage;
 			continue;
 		}
-		if (is_last_element) { return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector); }
+		if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
 
 		// calculate the upper bound
 		auto upper_bound = index_in_TStorage + jump_right;
@@ -182,14 +187,13 @@ fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_
 			}
 		}
 	}
-	return std::make_tuple(current_state, exists_in_container, index_in_TStorageVector);
+	return {current_state, exists_in_container, index_in_TStorageVector};
 }
 
 template<bool AlongLastDim, typename Container>
-std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
-fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
-                   const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                   size_t total_size_of_container) {
+CurrentStateResult fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
+                                      const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
+                                      size_t total_size_of_container) {
 	if constexpr (AlongLastDim) {
 		return fill_current_state_easy(container, start_index_in_leaves_space, n_nodes_in_clique_of_container);
 	}
@@ -198,10 +202,9 @@ fill_current_state(const Container &container, size_t n_nodes_in_clique_of_conta
 }
 
 template<typename Container>
-std::tuple<std::vector<int>, std::vector<int>, std::vector<size_t>>
-fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
-                   const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                   size_t total_size_of_container) {
+CurrentStateResult fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
+                                      const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
+                                      size_t total_size_of_container) {
 	if (increment == 1) {
 		return fill_current_state<true>(container, n_nodes_in_clique_of_container, start_index_in_leaves_space,
 		                                increment, total_size_of_container);

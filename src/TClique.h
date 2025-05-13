@@ -13,7 +13,6 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <armadillo>
-#include <cmath>
 #include <cstddef>
 #include <iomanip>
 #include <unistd.h>
@@ -190,6 +189,19 @@ private:
 		}
 	}
 
+	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
+	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
+
+	void _calculate_log_prob_node_to_children(
+	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
+	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+	                   const TypeParamBinBranches *binned_branch_lengths,
+	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
+	                   std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert) const;
+
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
 public:
@@ -233,13 +245,10 @@ public:
 	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	void calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
-
-	void update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
-	                          std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
+	std::vector<TStorageZ>
+	initialize_Z_from_children(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+	                           const TypeParamBinBranches *binned_branch_lengths,
+	                           const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
@@ -287,5 +296,31 @@ public:
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
 bool sample(double log_prob_0, double log_prob_1);
+inline size_t getLinearIndexSkippingDim(const std::vector<size_t> &index, size_t skip_dim,
+                                        const std::vector<size_t> &dims) {
+	// check if size matches and if coordinates are within dimensions
+	assert(index.size() == dims.size());
+	assert(([dims = std::as_const(dims), &index = std::as_const(index)]() constexpr {
+		for (size_t i = 0; i < dims.size(); i++) {
+			if (index[i] >= dims[i]) { return false; }
+		}
+		return true;
+	})());
+
+	size_t linear_index;
+	if (skip_dim == index.size() - 1) {
+		linear_index = 0;
+	} else {
+		linear_index = index.back();
+	}
+	size_t prod = 1;
+
+	for (size_t i = dims.size() - 1; i > 0; i--) {
+		prod *= dims[i];
+		if (i - 1 == skip_dim) { continue; };
+		linear_index += prod * index[i - 1];
+	}
+	return linear_index;
+}
 
 #endif // ACOL_TBRANCHLENGTHS_H

@@ -22,7 +22,7 @@ public:
 
 	void set_linear_index_in_Z_space(const int32_t linear_index_in_Z_space) { _value = linear_index_in_Z_space; }
 
-	[[nodiscard]] bool is_one() const { return !std::signbit(_value); } // this should be ok
+	[[nodiscard]] inline bool is_one() const { return !std::signbit(_value); } // this should be ok
 	void set_state(const bool state) {
 		// we want to set the state this is given
 		// so if the state is false, the value should be negative

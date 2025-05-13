@@ -429,44 +429,12 @@ public:
 
 		// Each clique is independent of each other so we should be able to parallelize this
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto &clique       = _cliques[i];
-			auto current_state = clique.create_current_state(Y, _Z, *this);
-			std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
-
-			std::list<size_t> processing_queue;
-			// start with the leaves
-			for (size_t leaf_index : _leaves) { processing_queue.push_back(leaf_index); }
-
-			// bottom-up update of Z
-			while (!processing_queue.empty()) {
-				// get the first node in the queue. At the first iteration they should be all leaves
-				size_t node_index = processing_queue.front();
-				processing_queue.pop_front();
-
-				const TNode &node = _nodes[node_index];
-
-				if (!node.isLeaf()) {
-					std::array<coretools::TSumLogProbability, 2> sum_log;
-
-					clique.calculate_log_prob_node_to_children(node_index, this, current_state, sum_log,
-					                                           _binned_branch_lengths,
-					                                           _leaves_and_internal_nodes_without_roots_indices);
-
-					// sample new state and update Z accordingly
-					const double log_prob_0 = sum_log[0].getSum();
-					const double log_prob_1 = sum_log[1].getSum();
-
-					bool new_state = log_prob_1 > log_prob_0;
-					clique.update_current_state(_Z, current_state, node_index, new_state,
-					                            linear_indices_in_Z_space_to_insert, this);
-				}
-
-				size_t parent_index = node.parentIndex_in_tree();
-				if (!node.isRoot()) { processing_queue.push_front(parent_index); }
-			}
-			// add the indices to the clique
-			indices_to_insert[i] = linear_indices_in_Z_space_to_insert;
+			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
+			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
+			    current_state, _Z, this, _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
 		}
 
 		_Z.insert_in_Z(indices_to_insert);

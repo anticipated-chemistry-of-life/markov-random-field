@@ -11,6 +11,8 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <cstddef>
+#include <set>
+#include <unordered_set>
 #include <vector>
 
 double TMatrices::_a;
@@ -56,8 +58,8 @@ TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &curren
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
-		calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
-		                                    leaves_and_internal_nodes_without_roots_indices);
+		_calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
+		                                     leaves_and_internal_nodes_without_roots_indices);
 
 		// sample new state and update Z accordingly
 		const double log_prob_0 = sum_log[0].getSum();
@@ -70,15 +72,15 @@ TClique::update_Z(std::vector<double> &joint_prob_density, TCurrentState &curren
 			joint_prob_density[omp_get_thread_num()] += log_prob_0;
 		}
 
-		update_current_state(Z, current_state, index_in_tree, new_state, linear_indices_in_Z_space_to_insert, tree);
+		_update_current_state(Z, current_state, index_in_tree, new_state, linear_indices_in_Z_space_to_insert, tree);
 	}
 
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
-                                   bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-                                   const TTree *tree) const {
+void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree,
+                                    bool new_state, std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
+                                    const TTree *tree) const {
 	auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
 	// 1 -> 0: can simply set Z to zero (element exists already)
 	if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
@@ -96,12 +98,69 @@ void TClique::update_current_state(TStorageZVector &Z, TCurrentState &current_st
 	current_state.set(index_in_tree, new_state);
 }
 
+std::vector<TStorageZ>
+TClique::initialize_Z_from_children(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+                                    const TypeParamBinBranches *binned_branch_lengths,
+                                    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+
+	// initialise vector that will insert the Z not in parallel
+	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
+	std::unordered_set<size_t> remaining;
+	std::vector<int> was_initilized(tree->get_number_of_nodes(), false);
+	for (size_t leaf_index : tree->get_leaf_nodes()) { was_initilized[leaf_index] = true; }
+
+	// start with the leaves
+	for (size_t internal_node_index : tree->get_internal_nodes()) { remaining.insert(internal_node_index); }
+
+	// bottom-up update of Z
+	while (!remaining.empty()) {
+		for (auto it = remaining.begin(); it != remaining.end();) {
+			const size_t node_index = *it;
+			bool ready              = true;
+			for (size_t child_index : tree->get_node(node_index).children_indices_in_tree()) {
+				if (!was_initilized[child_index]) {
+					ready = false;
+					break;
+				}
+			}
+
+			if (ready) {
+				_set_Z_to_MLE(node_index, current_state, Z, tree, binned_branch_lengths,
+				              leaves_and_internal_nodes_without_roots_indices, linear_indices_in_Z_space_to_insert);
+				was_initilized[node_index] = true;
+				it                         = remaining.erase(it);
+			} else {
+				++it;
+			}
+		}
+	}
+
+	return linear_indices_in_Z_space_to_insert;
+}
+
+void TClique::_set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+                            const TypeParamBinBranches *binned_branch_lengths,
+                            const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
+                            std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert) const {
+	std::array<coretools::TSumLogProbability, 2> sum_log;
+
+	_calculate_log_prob_node_to_children(node_index, tree, current_state, sum_log, binned_branch_lengths,
+	                                     leaves_and_internal_nodes_without_roots_indices);
+
+	// sample new state and update Z accordingly
+	const double log_prob_0 = sum_log[0].getSum();
+	const double log_prob_1 = sum_log[1].getSum();
+
+	bool new_state = log_prob_1 > log_prob_0;
+	_update_current_state(Z, current_state, node_index, new_state, linear_indices_in_Z_space_to_insert, tree);
+}
+
 void TClique::_calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	sum_log[0].add(stationary_0);
 	sum_log[1].add(1.0 - stationary_0);
 }
 
-void TClique::calculate_log_prob_node_to_children(
+void TClique::_calculate_log_prob_node_to_children(
     size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
@@ -110,8 +169,9 @@ void TClique::calculate_log_prob_node_to_children(
 		// Note: need to take old value of branch length because new values were proposed before the loop started
 		auto bin_length = binned_branch_lengths->oldValue(leaves_and_internal_nodes_without_roots_indices[child_index]);
 		const auto &matrix_for_bin = _cur_matrices[bin_length];
+		const bool child_state     = current_state.get(child_index);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			sum_log[i].add(matrix_for_bin(i, current_state.get(child_index)));
+			sum_log[i].add(matrix_for_bin(i, child_state));
 		}
 	}
 }

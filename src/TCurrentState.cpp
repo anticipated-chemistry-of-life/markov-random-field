@@ -30,26 +30,38 @@ void TCurrentState::fill(const std::vector<size_t> &start_index_in_leaves_space,
 
 void TCurrentState::fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse, const TStorageYVector &Y) {
-	std::tie(_current_state_Y, _exists_in_Y, _index_in_TStorageYVector) = fill_current_state<true>(
-	    Y, num_nodes_to_parse, start_index_in_leaves_space, _increment, Y.total_size_of_container_space());
+	auto result               = fill_current_state<true>(Y, num_nodes_to_parse, start_index_in_leaves_space, _increment,
+	                                                     Y.total_size_of_container_space());
+	_current_state_Y          = std::move(result.current_state);
+	_exists_in_Y              = std::move(result.exists_in_container);
+	_index_in_TStorageYVector = std::move(result.index_in_TStorageVector);
 }
 
 void TCurrentState::fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse, const TStorageZVector &Z) {
-	std::tie(_current_state_Z, _exists_in_Z, _index_in_TStorageZVector) = fill_current_state<true>(
-	    Z, num_nodes_to_parse, start_index_in_leaves_space, _increment, Z.total_size_of_container_space());
+	auto result               = fill_current_state<true>(Z, num_nodes_to_parse, start_index_in_leaves_space, _increment,
+	                                                     Z.total_size_of_container_space());
+	_current_state_Z          = std::move(result.current_state);
+	_exists_in_Z              = std::move(result.exists_in_container);
+	_index_in_TStorageZVector = std::move(result.index_in_TStorageVector);
 }
 
 void TCurrentState::fill_Y(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
                            const TStorageYVector &Y) {
-	std::tie(_current_state_Y, _exists_in_Y, _index_in_TStorageYVector) = fill_current_state(
-	    Y, num_nodes_to_parse, start_index_in_leaves_space, _increment, Y.total_size_of_container_space());
+	auto result               = fill_current_state(Y, num_nodes_to_parse, start_index_in_leaves_space, _increment,
+	                                               Y.total_size_of_container_space());
+	_current_state_Y          = std::move(result.current_state);
+	_exists_in_Y              = std::move(result.exists_in_container);
+	_index_in_TStorageYVector = std::move(result.index_in_TStorageVector);
 }
 
 void TCurrentState::fill_Z(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
                            const TStorageZVector &Z) {
-	std::tie(_current_state_Z, _exists_in_Z, _index_in_TStorageZVector) = fill_current_state(
-	    Z, num_nodes_to_parse, start_index_in_leaves_space, _increment, Z.total_size_of_container_space());
+	auto result               = fill_current_state(Z, num_nodes_to_parse, start_index_in_leaves_space, _increment,
+	                                               Z.total_size_of_container_space());
+	_current_state_Z          = std::move(result.current_state);
+	_exists_in_Z              = std::move(result.exists_in_container);
+	_index_in_TStorageZVector = std::move(result.index_in_TStorageVector);
 }
 
 bool TCurrentState::get(size_t index_in_tree) const { return get(index_in_tree, 0, 0); }
