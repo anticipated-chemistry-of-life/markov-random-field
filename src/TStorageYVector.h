@@ -7,7 +7,6 @@
 #include "TStorageY.h"
 #include "Types.h"
 #include "coretools/algorithms.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -176,20 +175,18 @@ public:
 		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
 		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
 
-		// size_t old_size = this->size();
+		const size_t old_size = this->size();
 		this->_vec.reserve(this->_vec.size() + size_to_insert);
 
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
-		// std::sort(_vec.begin() + old_size, _vec.end());
-		std::sort(_vec.begin(), _vec.end());
-
-		// std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
+		std::sort(_vec.begin() + old_size, _vec.end());
+		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 
-	std::vector<size_t> get_full_Y_binary_vector() const {
-		std::vector<size_t> Y_as_vector;
+	std::vector<int> get_full_Y_binary_vector() const {
+		std::vector<int> Y_as_vector;
 		for (size_t i = 0; i < total_size_of_container_space(); ++i) {
 			auto [found, idx] = binary_search(i);
 			if (found) {
@@ -202,6 +199,7 @@ public:
 	}
 
 	bool empty() const { return _vec.empty(); }
+	bool is_sorted() const { return std::is_sorted(_vec.begin(), _vec.end()); }
 };
 
 #endif // TSTORAGEYVECTOR_H
