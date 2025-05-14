@@ -176,15 +176,16 @@ public:
 		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
 		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
 
-		size_t old_size = this->size();
+		// size_t old_size = this->size();
 		this->_vec.reserve(this->_vec.size() + size_to_insert);
 
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
-		std::sort(_vec.begin() + old_size, _vec.end());
+		// std::sort(_vec.begin() + old_size, _vec.end());
+		std::sort(_vec.begin(), _vec.end());
 
-		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
+		// std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 
 	std::vector<size_t> get_full_Y_binary_vector() const {
