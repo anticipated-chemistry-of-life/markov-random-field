@@ -176,7 +176,7 @@ public:
 		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
 
 		const size_t old_size = this->size();
-		this->_vec.reserve(this->_vec.size() + size_to_insert);
+		this->_vec.reserve(old_size + size_to_insert);
 
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
