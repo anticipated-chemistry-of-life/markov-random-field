@@ -87,8 +87,6 @@ private:
 	size_t _dimension;
 
 	// For binning branch lengths
-	double _a;
-	double _b;
 	double _delta          = 0.0;
 	size_t _number_of_bins = 0;
 	std::vector<double> _grid_branch_lengths;
@@ -303,8 +301,6 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	double get_a() const { return _a; }
-	double get_b() const { return _b; }
 	double get_delta() const { return _delta; }
 	size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();

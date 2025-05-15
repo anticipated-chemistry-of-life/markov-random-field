@@ -41,11 +41,7 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	double default_a = 1.0 / 2; // TODO : change to min 1/1000 as per discussion with Dan
-	_a               = coretools::instances::parameters().get("a", default_a);
-	double default_b = 1.5;
-	_b               = coretools::instances::parameters().get("b", default_b);
-	_number_of_bins  = coretools::instances::parameters().get("K", 100);
+	_number_of_bins = coretools::instances::parameters().get("K", 100);
 
 	const size_t max_type = std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
 	if (_number_of_bins >= max_type) {
@@ -55,14 +51,17 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
 
 	// calculate Delta
-	_delta = ((double)_b - (double)_a) / (double)_number_of_bins;
+	_delta = 2.0 / ((double)_number_of_bins + 1.0);
+
+	_grid_branch_lengths.resize(_number_of_bins);
+	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = _delta * (double)k; }
 }
 
 std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const {
 	std::vector<size_t> binned_branch_lengths;
 	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
 
-	double total_branch_length = 0.0;
+	size_t sum_index_branches = 0;
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
 		if (exclude_root && _nodes[i].isRoot()) { continue; }
 		// find bin
@@ -71,24 +70,27 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 		if (it == _grid_branch_lengths.end()) {
 			// last bin
 			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
-			total_branch_length += _grid_branch_lengths.back();
+			sum_index_branches += _grid_branch_lengths.size() - 1;
 		} else {
 			// take the distance between the lower bin and the value and the higher bin and the value
 			// and then we take the one that is closer to the value
 
 			auto it_next = it + 1;
+
 			if (it_next == _grid_branch_lengths.end()) {
 				// last bin
 				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
-				total_branch_length += _grid_branch_lengths.back();
+				sum_index_branches += _grid_branch_lengths.size() - 1;
 			} else if (std::abs(branch_lengths[i] - *it) < std::abs(branch_lengths[i] - *it_next)) {
 				// take the lower bin
-				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
-				total_branch_length += *it;
+				auto index = std::distance(_grid_branch_lengths.begin(), it);
+				binned_branch_lengths.push_back(index);
+				sum_index_branches += index;
 			} else {
 				// take the higher bin
-				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it_next));
-				total_branch_length += *it_next;
+				auto index = std::distance(_grid_branch_lengths.begin(), it_next);
+				binned_branch_lengths.push_back(index);
+				sum_index_branches += index;
 			}
 		}
 	}
@@ -96,21 +98,21 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 	// if total branch length is smaller than one, we randomly sample some branch lengths and increase them of one until
 	// we get a total branch length of one
 	// Adjust total_branch_length to exactly 1.0
-	double number_of_branches = double(get_number_of_nodes() - get_number_of_roots());
-	while (std::abs(total_branch_length - number_of_branches) > _delta / 2.0) { // TODO: check why _delta / 2.0
+	size_t number_of_branches = get_number_of_nodes() - get_number_of_roots();
+	size_t goal               = (number_of_branches * _number_of_bins) / 2;
+	while (sum_index_branches != goal) {
 		auto idx = coretools::instances::randomGenerator().getRand<size_t>(0, binned_branch_lengths.size() - 1);
 		size_t new_bin;
-		if (total_branch_length < number_of_branches) {
+		if (sum_index_branches < goal) {
 			// Increase bin index
 			if (binned_branch_lengths[idx] >= _grid_branch_lengths.size() - 1) { continue; }
 			new_bin = binned_branch_lengths[idx] + 1;
-
 		} else {
 			// Decrease bin index
 			if (binned_branch_lengths[idx] == 0) { continue; }
 			new_bin = binned_branch_lengths[idx] - 1;
 		}
-		total_branch_length += (_grid_branch_lengths[new_bin] - _grid_branch_lengths[binned_branch_lengths[idx]]);
+		sum_index_branches += (new_bin - binned_branch_lengths[idx]);
 		binned_branch_lengths[idx] = new_bin;
 	}
 
@@ -134,9 +136,6 @@ void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 		if (branch_length <= 0.0) { continue; }
 		branch_length = branch_length / average;
 	}
-
-	_grid_branch_lengths.resize(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = (_a + _delta * ((double)k + 1.0)); }
 
 	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 };
@@ -324,7 +323,7 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 		// translate bin into actual branch lengths
 		std::vector<double> vals(_binned_branch_lengths->size());
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-			vals[i] = (_a + _delta * (_binned_branch_lengths->value(i) + 1.0));
+			vals[i] = (_delta * (_binned_branch_lengths->value(i) + 0.5));
 		}
 
 		// normalize such that the average branch length is 1
@@ -402,7 +401,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 		// get start index of each clique in leaves space
 		std::vector<size_t> start_index_in_leaves_space = coretools::getSubscripts(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
-		_cliques.back().initialize(_a, _delta, _number_of_bins);
+		_cliques.back().initialize(_delta, _number_of_bins);
 	}
 }
 
@@ -515,7 +514,7 @@ const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_spac
 TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
 	std::vector<size_t> local_index = index_in_leaves_space;
 	local_index[_dimension]         = 0; // set to start index
-	const size_t ix_clique        = coretools::getLinearIndex(local_index, _dimension_cliques);
+	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
 	return _cliques[ix_clique];
 }
 
@@ -567,7 +566,7 @@ void TTree::simulate_Z(size_t tree_index) {
 }
 
 void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
-	clique.initialize(this->get_a(), this->get_delta(), this->get_number_of_bins());
+	clique.initialize(this->get_delta(), this->get_number_of_bins());
 	clique.set_lambda(_alpha_c->value(c), _nu_c[c]);
 };
 

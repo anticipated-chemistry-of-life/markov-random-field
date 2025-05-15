@@ -15,7 +15,6 @@
 #include <unordered_set>
 #include <vector>
 
-double TMatrices::_a;
 double TMatrices::_Delta;
 
 TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,

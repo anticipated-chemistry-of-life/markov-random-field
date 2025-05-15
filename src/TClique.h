@@ -84,7 +84,6 @@ private:
 	std::vector<TMatrix> _matrices;
 	arma::mat _lambda_c = arma::zeros(2, 2);
 
-	static double _a;
 	static double _Delta;
 
 	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix
@@ -94,7 +93,7 @@ private:
 	void _fill_matrices() {
 		// calculate matrix exponential for first bin
 		TMatrix P_0;
-		P_0.set_from_matrix_exponential(_lambda_c * _a);
+		P_0.set_from_matrix_exponential(_lambda_c * _Delta / 2.0);
 
 		// calculate matrix exponential of scaling matrix
 		TMatrix matrix_alpha;
@@ -107,14 +106,13 @@ private:
 
 public:
 	TMatrices() = default;
-	explicit TMatrices(size_t NumBins, double a, double Delta) { resize(NumBins, a, Delta); }
+	explicit TMatrices(size_t NumBins, double Delta) { resize(NumBins, Delta); }
 
 	/** @brief Resize the vector of matrices to the given number of bins.
 	 * @param NumBins
 	 */
-	void resize(size_t NumBins, double a, double Delta) {
+	void resize(size_t NumBins, double Delta) {
 		_matrices.resize(NumBins);
-		_a     = a;
 		_Delta = Delta;
 	}
 
@@ -212,9 +210,9 @@ public:
 	/// @param a The lower bound of the bin.
 	/// @param delta The bin width.
 	/// @param n_bins The number of bins.
-	void initialize(double a, double delta, size_t n_bins) {
-		_cur_matrices.resize(n_bins, a, delta);
-		_try_matrices.resize(n_bins, a, delta);
+	void initialize(double delta, size_t n_bins) {
+		_cur_matrices.resize(n_bins, delta);
+		_try_matrices.resize(n_bins, delta);
 	}
 
 	/// Gets the stationary probability for state 0 or 1.
