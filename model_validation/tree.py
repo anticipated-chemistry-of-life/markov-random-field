@@ -80,13 +80,25 @@ class Tree:
 
         self._graph = nx.star_graph(self._number_of_leaves)
 
+    def isPowerofTwo(self, n):
+        if n <= 0:
+            return False
+
+        # Calculate log base 2 of n
+        logValue = int(np.log2(n))
+
+        # Check if log2(n) is an integer
+        # and 2^(logn) = n
+        return pow(2, logValue) == n
+
     def _create_balanced_tree(self, number_of_nodes: int) -> None:
         if number_of_nodes < 3:
             raise ValueError("Balanced tree must have at least 3 nodes.")
 
         # the number of nodes must be odd and it can only be 3 or 7 or 15
         # this means that the number of nodes must be 2^k - 1
-        if np.log2(number_of_nodes + 1) % 2 != 0:
+
+        if not self.isPowerofTwo(number_of_nodes + 1):
             raise ValueError("Balanced tree must have 2^k - 1 nodes.")
 
         self._number_of_roots = 1

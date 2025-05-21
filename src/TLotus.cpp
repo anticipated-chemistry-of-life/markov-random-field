@@ -2,20 +2,24 @@
 // Created by madleina on 03.03.25.
 //
 #include "TLotus.h"
+#include "Types.h"
 #include "coretools/Main/TError.h"
+#include "coretools/Types/probability.h"
 #include <cassert>
 #include <cstddef>
 #include <tuple>
 #include <utility>
 
 TLotus::TLotus(
-    std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
+    std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, TypeParamErrorRate *error_rate,
+    size_t n_iterations,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
     std::string prefix, bool simulate)
     : _trees(trees), _markov_field(n_iterations, trees, prefix),
       _markov_field_stattools_param(markov_field_stattools_param), _collapser(trees), _gamma(gamma),
-      _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)), _simulate(simulate) {
-	this->addPriorParameter(_gamma);
+      _error_rate(error_rate), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)),
+      _simulate(simulate) {
+	this->addPriorParameter({_gamma, _error_rate});
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
 	_oldLL = 0.0;
@@ -28,8 +32,12 @@ void TLotus::initialize() {
 	if (!_simulate) { load_from_file(get_filename_lotus()); }
 
 	// initialize storage
-	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
-	                    {std::make_shared<coretools::TNamesIndices>(_collapser.num_dim_to_keep())});
+	_gamma->initStorage(
+	    this, {_collapser.num_dim_to_keep()},
+	    {std::make_shared<coretools::TNamesIndices>(
+	        _collapser.num_dim_to_keep())}); // TODO: use coretool::TNamesStrings and add vector of string of tree name
+
+	_error_rate->initStorage(this, {1});
 	if constexpr (UseSimpleErrorModel) {
 		_epsilon = coretools::instances::parameters().get<double>("epsilon", 0.0001);
 		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
@@ -148,15 +156,27 @@ void TLotus::update_markov_field(size_t iteration) { _markov_field.update(*this,
 	return _curLL - _oldLL;
 }
 
+double TLotus::calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/, const Storage &) {
+	_oldLL = _curLL;                          // store current likelihood
+	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
+	return _curLL - _oldLL;
+}
+
 void TLotus::updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted) {
 	if (!Accepted) {
 		_curLL = _oldLL; // reset
 	}
 }
 
+void TLotus::updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted) {
+	if (!Accepted) {
+		_curLL = _oldLL; // reset
+	}
+}
+
 void TLotus::guessInitialValues() {
-	// TODO: think of an initialization scheme
-	_gamma->set(0.001);
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, 0.001); }
+	_error_rate->set(0.001);
 
 	// initialize _curLL
 	_curLL = calculate_log_likelihood_of_L();
@@ -185,8 +205,8 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 	} else {
 		if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
 		if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
-		if (L) { return 0.0; }
-		return 1.0;
+		if (L) { return _error_rate->value(); }
+		return 1.0 - _error_rate->value();
 	}
 }
 

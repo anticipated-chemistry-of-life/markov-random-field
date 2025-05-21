@@ -101,7 +101,9 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	_create_trees(prefix);
 
 	// create lotus
-	_lotus = std::make_unique<TLotus>(_trees, &_gamma, n_iterations, _markov_field_stattools_param, prefix, simulate);
+	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations, _markov_field_stattools_param,
+	                                  prefix, simulate);
+	_error_rate.getConfig().setPriorParameters("1");
 
 	// create (fake) observation for stattools
 	_obs = std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());

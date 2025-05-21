@@ -25,7 +25,8 @@ public:
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
-	using TypeParamGamma = stattools::TParameter<SpecGamma, BoxType>;
+	using TypeParamGamma     = stattools::TParameter<SpecGamma, BoxType>;
+	using TypeParamErrorRate = stattools::TParameter<SpecErrorRate, BoxType>;
 
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy them
@@ -46,7 +47,12 @@ private:
 
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
-	double _epsilon        = 0.0001;
+
+	// Error rate of lotus
+	TypeParamErrorRate *_error_rate = nullptr;
+
+	// Error rate of simple error model
+	double _epsilon = 0.0001;
 
 	// temporary values
 	double _oldLL;
@@ -71,7 +77,8 @@ private:
 	std::pair<bool, size_t> _get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const;
 
 public:
-	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, size_t n_iterations,
+	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, TypeParamErrorRate *error_rate,
+	       size_t n_iterations,
 	       const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	           &markov_field_stattools_param,
 	       std::string prefix, bool simulate);
@@ -95,7 +102,9 @@ public:
 
 	void update_markov_field(size_t iteration);
 	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &);
+	double calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/, const Storage &);
 	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
+	void updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted);
 
 	const TStorageYVector &get_Lotus() const;
 
