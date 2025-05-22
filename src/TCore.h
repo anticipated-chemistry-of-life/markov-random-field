@@ -45,9 +45,7 @@ private:
 	stattools::TParameter<SpecGamma, TLotus> _gamma{&_prior_on_gamma};
 
 	// error rate
-	PriorOnLambda _prior_on_lambda{};
-	stattools::TParameter<SpecLambda, PriorOnErrorRate> _lambda{&_prior_on_lambda};
-	PriorOnErrorRate _prior_on_error_rate{&_lambda};
+	PriorOnErrorRate _prior_on_error_rate{};
 	stattools::TParameter<SpecErrorRate, TLotus> _error_rate{&_prior_on_error_rate};
 
 	// observation

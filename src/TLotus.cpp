@@ -4,6 +4,7 @@
 #include "TLotus.h"
 #include "Types.h"
 #include "coretools/Main/TError.h"
+#include "coretools/Storage/TNames.h"
 #include "coretools/Types/probability.h"
 #include <cassert>
 #include <cstddef>
@@ -31,11 +32,14 @@ TLotus::TLotus(
 void TLotus::initialize() {
 	if (!_simulate) { load_from_file(get_filename_lotus()); }
 
+	std::vector<std::string> tree_names;
+	tree_names.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		tree_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
+	}
+
 	// initialize storage
-	_gamma->initStorage(
-	    this, {_collapser.num_dim_to_keep()},
-	    {std::make_shared<coretools::TNamesIndices>(
-	        _collapser.num_dim_to_keep())}); // TODO: use coretool::TNamesStrings and add vector of string of tree name
+	_gamma->initStorage(this, {_collapser.num_dim_to_keep()}, {std::make_shared<coretools::TNamesStrings>(tree_names)});
 
 	_error_rate->initStorage(this, {1});
 	if constexpr (UseSimpleErrorModel) {

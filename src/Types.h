@@ -36,7 +36,6 @@ constexpr static bool UseSimpleErrorModel = true;
 // Parameter types
 using TypeGamma               = coretools::Positive;
 using TypeErrorRate           = coretools::Positive;
-using TypeLambda              = coretools::StrictlyPositive;
 using TypeAlpha               = coretools::Probability;
 using TypeLogNu               = coretools::Unbounded;
 using TypeNu                  = coretools::StrictlyPositive;
@@ -49,10 +48,7 @@ using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
 // Epsilon
-using PriorOnLambda = stattools::prior::TUniformFixed<TypeLambda>;
-using SpecLambda =
-    stattools::ParamSpec<TypeLambda, stattools::name("lambda"), PriorOnLambda, stattools::EnforceUniqueHash<false>>;
-using PriorOnErrorRate = stattools::prior::TExponentialInferred<SpecLambda, TypeErrorRate>;
+using PriorOnErrorRate = stattools::prior::TExponentialFixed<TypeErrorRate>;
 using SpecErrorRate    = stattools::ParamSpec<TypeErrorRate, stattools::name("epsilon"), PriorOnErrorRate,
                                               stattools::EnforceUniqueHash<false>>;
 
