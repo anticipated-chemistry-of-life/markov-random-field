@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <execution>
 #include <numeric>
 #include <vector>
 
@@ -139,7 +140,7 @@ public:
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
 
-		std::sort(_vec.begin() + old_size, _vec.end());
+		std::sort(std::execution::par, _vec.begin() + old_size, _vec.end());
 		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 

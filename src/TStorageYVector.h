@@ -200,7 +200,7 @@ public:
 	}
 
 	bool empty() const { return _vec.empty(); }
-	bool is_sorted() const { return std::is_sorted(_vec.begin(), _vec.end()); }
+	bool is_sorted() const { return std::is_sorted(std::execution::par, _vec.begin(), _vec.end()); }
 };
 
 #endif // TSTORAGEYVECTOR_H
