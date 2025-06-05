@@ -175,6 +175,7 @@ private:
 	// count the number of leaves with value 1 in a clique
 	TypeCounter1 _counter_leaves_state_1 = 0;
 
+	/// @brief Calculates the log probability of the root given the stationary distribution
 	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
@@ -190,11 +191,21 @@ private:
 	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
 	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
 
+	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
 	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
+	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid that Z is stuck in a
+	/// state and cannot change.
+	/// @param node_index The index of the internal node we want to set
+	/// @param current_state The current state of the clique.
+	/// @param Z the Z vector of that tree (i.e that clique)
+	/// @param tree the tree of interest
+	/// @param binned_branch_lengths the vector of branch length
+	/// @param leaves_and_internal_nodes_without_roots_indices Same as the variable name
+	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
 	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
 	                   const TypeParamBinBranches *binned_branch_lengths,
 	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
@@ -207,7 +218,6 @@ public:
 	~TClique() = default;
 
 	/// @brief Initialize the matrices for the clique.
-	/// @param a The lower bound of the bin.
 	/// @param delta The bin width.
 	/// @param n_bins The number of bins.
 	void initialize(double delta, size_t n_bins) {
@@ -227,7 +237,10 @@ public:
 		_try_matrices = _cur_matrices;
 	}
 
+	/// @brief Sets the "try Matrix" to the given values
 	void update_lambda(double alpha, double nu) { _try_matrices.set_lambda(alpha, nu); }
+
+	/// @brief If the "try matrix" is accepted, then we change our "current matrix" to the "try matrix"
 	void accept_update_mu() { _cur_matrices = _try_matrices; }
 
 	/// @brief Returns the matrices for the clique.
@@ -250,13 +263,19 @@ public:
 
 	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
 
+	/// @brief Return the number of nodes in the clique
+	/// @return Return the number of nodes in the clique
 	size_t get_number_of_nodes() const { return _n_nodes; }
 
+	/// @brief Gets the matrix at the corresponding bin
+	/// @param bin_length: a size_t the is the index where to get the matrix
+	/// @return A reference to the asked matrix
 	template<bool UseTry> const TMatrix &get_matrix(size_t bin_length) const {
 		if constexpr (UseTry) { return _try_matrices[bin_length]; }
 		return _cur_matrices[bin_length];
 	}
 
+	/// @brief Calculates the log probability of a node to its parent.
 	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
 	void calculate_log_prob_parent_to_node(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
 	                                       const TTree *tree, size_t leaf_index_in_tree_of_last_dim,
@@ -270,10 +289,15 @@ public:
 		}
 	}
 
+	/// Updates the counter of the clique. This is used by the collapser.
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
 	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
+
+	/// @return Returns the jump size of the clique
 	size_t get_increment() const { return _increment; }
+
+	/// @return Returns the start index in the leaf space of that specific clique
 	const std::vector<size_t> &get_start_index_in_leaf_space() const { return _start_index_in_leaves_space; }
 
 	template<bool UseTryMatrix>

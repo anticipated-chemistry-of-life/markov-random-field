@@ -9,6 +9,7 @@
 #include "coretools/algorithms.h"
 #include <cstddef>
 #include <cstdint>
+#include <execution>
 #include <vector>
 
 class TStorageYVector {
@@ -181,7 +182,7 @@ public:
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
-		std::sort(_vec.begin() + old_size, _vec.end());
+		std::sort(std::execution::par, _vec.begin() + old_size, _vec.end());
 		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 
