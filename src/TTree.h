@@ -11,6 +11,7 @@
 #include "Types.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/commonWeakTypes.h"
@@ -435,5 +436,41 @@ public:
 
 		_Z.insert_in_Z(indices_to_insert);
 	};
+
+	std::vector<size_t> get_paper_counts() const {
+		std::string parameter_name = get_tree_name() + "_paper_counts";
+		if (!coretools::instances::parameters().exists(parameter_name)) {
+			UERROR("Parameter '", parameter_name, "' not found. Please provide it.");
+		}
+
+		const auto filename = coretools::instances::parameters().get<std::string>(parameter_name);
+		coretools::TInputFile file(filename, coretools::FileType::Header);
+
+		if (file.numCols() != 2) {
+			UERROR("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(), " !");
+		}
+
+		// now we initilise the vector of paper counts. The entries should only be leaves
+		std::vector<size_t> paper_counts(get_number_of_leaves(), 0);
+
+		for (; !file.empty(); file.popFront()) {
+			const std::string leaf_name = std::string(file.get(0));
+			const auto count            = file.get<size_t>(1);
+
+			// get the node index from the leaf name
+			const size_t node_index = this->get_node_index(leaf_name);
+			if (!isLeaf(node_index)) { UERROR("All nodes should be leaves."); }
+			const size_t leaf_index = this->get_index_within_leaves(node_index);
+
+			if (leaf_index >= paper_counts.size()) {
+				UERROR("Leaf index ", leaf_index, " is out of bounds for paper counts vector of size ",
+				       paper_counts.size(), ".");
+			}
+
+			paper_counts[leaf_index] = count;
+		}
+
+		return paper_counts;
+	}
 };
 #endif // METABOLITE_INFERENCE_TREE_H

@@ -84,7 +84,7 @@ void TLotus::load_from_file(const std::string &filename) {
 
 	_occurrence_counters.resize(_collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		_occurrence_counters[i].resize(_trees[_collapser.dim_to_keep(i)]->get_number_of_leaves(), 0);
+		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
 
 	std::vector<size_t> index_in_collapsed_space(_collapser.num_dim_to_keep());
@@ -100,7 +100,6 @@ void TLotus::load_from_file(const std::string &filename) {
 
 			const size_t ix             = _trees[tree_index]->get_index_within_leaves(node_name);
 			index_in_collapsed_space[i] = ix;
-			++_occurrence_counters[i][ix];
 		}
 
 		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_collapsed_space);
