@@ -2,9 +2,9 @@ import os
 
 import pandas as pd
 
-from cli import parse_args
-from params import ParameterGenerator
-from tree import Tree, TreeType
+from .src.cli import parse_args
+from .src.params import ParameterGenerator
+from .src.tree import Tree, TreeType
 
 TREE_TYPE = {
     "grass": TreeType.grass,
