@@ -291,6 +291,27 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
 
+	// 2025.06.16 after discussion of last week with Dan, we should be able to also simuate and provide the number of
+	// papers prior to the simulation.
+	if constexpr (!UseSimpleErrorModel) {
+		// initialize the error rate
+		const auto error_rate = coretools::instances::parameters().get<double>("error_rate", 0.001);
+		_error_rate->set(error_rate);
+
+		// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the gamma is never
+		// initilized. That is why we need to do it here.
+		_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
+		                    {std::make_shared<coretools::TNamesStrings>(tree_names_to_keep)});
+		const auto gamma = coretools::instances::parameters().get<double>("gamma", 1.5);
+		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, gamma); }
+
+		_occurrence_counters.resize(
+		    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
+		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+			_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
+		}
+	}
+
 	// first simulate Markov random field
 	_markov_field.simulate(*this);
 
@@ -312,6 +333,7 @@ void TLotus::_simulateUnderPrior(Storage *) {
 			}
 		}
 		double proba = _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
+		OUT(proba);
 		coretools::Probability p(proba);
 		bool draw = coretools::instances::randomGenerator().pickOneOfTwo(p);
 		if (draw) {

@@ -2,7 +2,7 @@ from typing import Tuple
 
 import pandas as pd
 
-from tree import Tree
+from .tree import Tree
 
 
 class ParameterGenerator:

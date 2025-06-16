@@ -89,7 +89,6 @@ public:
 
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {
-// TODO: can we do this in parallel ?
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 			for (auto &elem : _vec) { elem.update_counter(); }
 		}
@@ -110,6 +109,7 @@ public:
 	const TStorageY &operator[](size_t index_in_TStorageYVector) const { return _vec[index_in_TStorageYVector]; }
 
 	void reset_counts() {
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
 		for (auto &elem : _vec) { elem.reset_counter(); }
 	}
 

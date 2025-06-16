@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Union
 
 import networkx as nx
 import numpy as np
@@ -16,7 +17,7 @@ class Tree:
         self._tree_name: str = tree_name
         self._generated: bool = False
         self._tree_type: str = tree_type
-        self._graph: nx.Graph
+        self._graph: Union[nx.Graph, nx.DiGraph]
         self._branch_length: float = 0.2
 
         if tree_type is TreeType.grass:
@@ -66,7 +67,7 @@ class Tree:
         self._number_of_roots = int(number_of_nodes / 2)
         self._number_of_internal_nodes = 0
 
-        self._graph = nx.Graph()
+        self._graph = nx.DiGraph()
         for i in range(self._number_of_leaves):
             self._graph.add_edge(f"root_{i}", f"leaf_{i}")
 
@@ -121,3 +122,29 @@ class Tree:
         if not self._generated:
             raise ValueError("Graph has not been generated yet.")
         return self._graph
+
+    def generate_papers_number(self) -> pd.DataFrame:
+        """Sample from a Poisson distribution the number of papers for each node if the node is a leaf."""
+        if not self._generated:
+            raise ValueError("Graph has not been generated yet.")
+
+        papers = []
+        nodes = []
+        if isinstance(self._graph, nx.DiGraph):
+            condition = (
+                lambda node: self._graph.in_degree(node) == 1
+                and self._graph.out_degree(node) == 0
+            )
+        else:
+            condition = lambda node: self._graph.degree(node) == 1
+
+        for node in self._graph.nodes():
+            if condition(node):
+                # Leaf node, sample number of papers
+                papers.append(np.random.poisson(2))
+                nodes.append(node)
+        df = pd.DataFrame({self.tree_name: nodes, "number_of_papers": papers})
+
+        # drop all nodes with 0 papers
+        df = df[df["number_of_papers"] > 0].reset_index(drop=True)
+        return df
