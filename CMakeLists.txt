@@ -17,15 +17,15 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS src/* tests/integrationtests/*)
 # Download coretools and stattools
 include(FetchContent)
 FetchContent_Declare(coretools
-								GIT_REPOSITORY https://bitbucket.org/wegmannlab/coretools.git
-								GIT_TAG madleina/interface_stattools
-								SOURCE_DIR "${CMAKE_SOURCE_DIR}/coretools"
+	GIT_REPOSITORY https://bitbucket.org/wegmannlab/coretools.git
+	GIT_TAG madleina/interface_stattools
+	SOURCE_DIR "${CMAKE_SOURCE_DIR}/coretools"
 )
 
 FetchContent_Declare(stattools
-								GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
-								GIT_TAG madleina/interface
-								SOURCE_DIR "${CMAKE_SOURCE_DIR}/stattools"
+	GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
+	GIT_TAG madleina/interface
+	SOURCE_DIR "${CMAKE_SOURCE_DIR}/stattools"
 )
 
 FetchContent_MakeAvailable(coretools stattools)
