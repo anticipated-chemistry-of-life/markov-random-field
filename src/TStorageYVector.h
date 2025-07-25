@@ -173,12 +173,12 @@ public:
 	}
 
 	void insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
-		OUT("calculating size...")
+		OUT("calculating size...");
 		auto size_to_insert =
 		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
 		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
 
-		OUT("size to insert is : ", size_to_insert);
+		OUT("size to insert is", size_to_insert);
 
 		const size_t old_size = this->size();
 		this->_vec.reserve(old_size + size_to_insert);
