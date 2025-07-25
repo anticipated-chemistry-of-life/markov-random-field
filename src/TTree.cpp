@@ -41,12 +41,12 @@ TTree::~TTree() = default;
 
 void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 	// read a, b and K from command-line
-	_number_of_bins = coretools::instances::parameters().get("K", 100);
+	_number_of_bins = coretools::instances::parameters().get("n_bins", 100);
 
 	const size_t max_type = std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
 	if (_number_of_bins >= max_type) {
 		UERROR("More bins (", _number_of_bins, ") required than type allows (", max_type,
-		       ")! Please decrease K or change type of bins.");
+		       ")! Please decrease n_bins or change type of bins.");
 	}
 	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
 
