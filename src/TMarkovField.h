@@ -176,7 +176,6 @@ private:
 				// insert new 1-valued indices into Y
 				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
 				_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-				OUT("done inserting");
 				_trees.back()
 				    ->get_clique(start_index_in_leaves_space)
 				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
