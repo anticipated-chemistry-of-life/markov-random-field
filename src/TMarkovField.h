@@ -137,14 +137,14 @@ private:
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
 
-		OUT("There are ", _num_outer_loops, "outer loops.")
+		OUT("There are ", _num_outer_loops, "outer loops.");
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
 			// loop over all dimensions except last (linearized)
 			size_t num_inner_loops = coretools::containerProduct(_num_leaves_per_dim_except_last);
 			std::vector<size_t> previous_ix;
-			OUT("there are ", num_inner_loops, " inner loops.")
+			OUT("there are ", num_inner_loops, " inner loops.");
 			for (size_t i = 0; i < num_inner_loops; ++i) {
 				// get multi-dimensional index from linear coordinate and set the start of the last dimension
 				auto start_index_in_leaves_space   = coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
