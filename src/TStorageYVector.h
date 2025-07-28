@@ -173,9 +173,10 @@ public:
 	}
 
 	void insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
-		auto size_to_insert =
-		    std::accumulate(linear_indices_in_Y_space_to_insert.begin(), linear_indices_in_Y_space_to_insert.end(), 0,
-		                    [](size_t sum, const std::vector<TStorageY> &i) { return sum + i.size(); });
+		// Step 1: Compute total size to insert
+		size_t size_to_insert = 0;
+		for (const auto &vec : linear_indices_in_Y_space_to_insert) { size_to_insert += vec.size(); }
+		if (size_to_insert == 0) { return; }
 
 		const size_t old_size = this->size();
 		this->_vec.reserve(old_size + size_to_insert);
@@ -183,7 +184,7 @@ public:
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
-		std::sort(std::execution::par, _vec.begin() + old_size, _vec.end());
+		std::sort(_vec.begin() + old_size, _vec.end());
 		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 
