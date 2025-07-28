@@ -67,7 +67,7 @@ private:
 	                    size_t leaf_index_last_dim, std::array<double, 2> &prob, TLotus &lotus);
 	static void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
 	                              TLotus &lotus);
-	void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
+	static void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
 	double _calculate_complete_joint_density();
 	void _reset_log_joint_density() {
 		_complete_log_density.clear();
