@@ -44,8 +44,6 @@ public:
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
 		_dimensions_Y_space          = dimensions_Y_space;
-		auto total_possible_values   = coretools::containerProduct(dimensions_Y_space);
-		if (total_possible_values < static_cast<size_t>(1e8)) { _initialize_vector(total_possible_values); }
 	}
 
 	/// We want to check if element at position index_in_TStorageYVector is one.
