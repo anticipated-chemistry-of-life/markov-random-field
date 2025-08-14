@@ -184,7 +184,7 @@ private:
 
 		// at the very end: sum the LL of all threads and store it in TLotus
 		if constexpr (!IsSimulation) { _update_cur_LL_lotus(lotus, new_LL); }
-		if (WRITE_Y_TRACE && (iteration % 100 == 0) && !_fix_Y) {
+		if (WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {
 			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 		}
 	}
@@ -205,7 +205,7 @@ private:
 
 		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation, FixZ>(_Y); }
 		if (_fix_Z) { return; }
-		if (iteration % 100 == 0 && WRITE_Z_TRACE) {
+		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_Z_TRACE) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];
 				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());

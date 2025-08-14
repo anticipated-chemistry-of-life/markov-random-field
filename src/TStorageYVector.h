@@ -7,7 +7,7 @@
 #include "TStorageY.h"
 #include "Types.h"
 #include "coretools/algorithms.h"
-#include "coretools/devtools.h"
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <execution>
@@ -21,6 +21,14 @@ private:
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
 	std::vector<size_t> _dimensions_Y_space;
+
+	void _initialize_vector(const size_t total_possible_values) {
+		_vec.reserve(total_possible_values);
+		for (size_t i = 0; i < total_possible_values; ++i) {
+			_vec.emplace_back(i);
+			_vec.back().set_state(false);
+		}
+	}
 
 public:
 	using value_type     = uint64_t;
@@ -36,6 +44,8 @@ public:
 		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
 		_total_counts                = n_iterations / _thinning_factor;
 		_dimensions_Y_space          = dimensions_Y_space;
+		auto total_possible_values   = coretools::containerProduct(dimensions_Y_space);
+		if (total_possible_values < static_cast<size_t>(1e8)) { _initialize_vector(total_possible_values); }
 	}
 
 	/// We want to check if element at position index_in_TStorageYVector is one.
@@ -133,7 +143,7 @@ public:
 
 	/// Given a linear index, we want to get the multi-dimensional index.
 	[[nodiscard]] std::vector<size_t> get_multi_dimensional_index(uint64_t linear_index_in_Y_space) const {
-		auto tmp = static_cast<size_t>(linear_index_in_Y_space);
+		const auto tmp = static_cast<size_t>(linear_index_in_Y_space);
 		return coretools::getSubscripts(tmp, _dimensions_Y_space);
 	}
 
@@ -203,6 +213,7 @@ public:
 
 	bool empty() const { return _vec.empty(); }
 	bool is_sorted() const { return std::is_sorted(std::execution::par, _vec.begin(), _vec.end()); }
+	size_t get_thinning_factor() const { return _thinning_factor; }
 };
 
 #endif // TSTORAGEYVECTOR_H

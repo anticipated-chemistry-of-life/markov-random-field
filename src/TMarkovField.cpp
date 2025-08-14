@@ -200,7 +200,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 	_Y.add_to_counter(iteration);
 	// calculate joint density
-	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration % 100 == 0) {
+	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration % _Y.get_thinning_factor() == 0) {
 		auto sum_log_field = _calculate_complete_joint_density();
 		_joint_density_file.writeln(sum_log_field);
 	}
@@ -263,7 +263,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_Y.add_to_counter(iteration);
 
 		// calculate joint density
-		if (iteration % 100 == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
+		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
 			auto sum_log_field = _calculate_complete_joint_density();
 			_joint_density_file.writeln(sum_log_field);
 		}
@@ -321,7 +321,7 @@ void TMarkovField::burninHasFinished() {
 
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
-	_write_Y_to_file<true>(_prefix + "_Y_posterior.txt");
+	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
