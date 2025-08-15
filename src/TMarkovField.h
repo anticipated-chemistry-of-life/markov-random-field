@@ -136,7 +136,7 @@ private:
 
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
-
+		std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
@@ -160,8 +160,7 @@ private:
 				// now loop along all leaves of the last dimension for updating (only K leaves for which we have
 				// everything)
 				const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
-				std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
-				int diff_counter_1_in_last_dim = 0;
+				int diff_counter_1_in_last_dim         = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
 					auto [diff, prob_new_state] =
@@ -172,8 +171,8 @@ private:
 				}
 
 				// insert new 1-valued indices into Y
-				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's ok
-				_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
+				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's
+				// ok
 				_trees.back()
 				    ->get_clique(start_index_in_leaves_space)
 				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
@@ -182,6 +181,7 @@ private:
 			}
 		}
 
+		_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
 		// at the very end: sum the LL of all threads and store it in TLotus
 		if constexpr (!IsSimulation) { _update_cur_LL_lotus(lotus, new_LL); }
 		if (WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {

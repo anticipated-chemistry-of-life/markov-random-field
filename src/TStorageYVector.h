@@ -7,6 +7,7 @@
 #include "TStorageY.h"
 #include "Types.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -192,8 +193,8 @@ public:
 		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
 			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
 		}
-		std::sort(_vec.begin() + old_size, _vec.end());
-		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
+		std::sort(std::execution::par, _vec.begin() + old_size, _vec.end());
+		std::inplace_merge(std::execution::par, _vec.begin(), _vec.begin() + old_size, _vec.end());
 	}
 
 	std::vector<int> get_full_Y_binary_vector() const {

@@ -67,11 +67,6 @@ void TMarkovField::_update_sheets(bool first, const std::vector<size_t> &start_i
 	for (size_t j = 0; j < _sheets.size(); ++j) {
 		if (first || _need_to_update_sheet(j, start_index_in_leaves_space, previous_ix)) {
 			// first iteration or different index than before -> re-compute sheet
-
-			// TODO create a check where all threads want to update the same sheet
-			// -> only one thread should do it, the others can skip
-			// #pragma omp barrier
-			// if (std::all_of) TODO
 			_sheets[j].fill(start_index_in_leaves_space, K_cur_sheet, _Y);
 		}
 	}
