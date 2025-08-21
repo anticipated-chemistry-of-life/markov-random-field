@@ -179,7 +179,7 @@ void TLotus::updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepte
 
 void TLotus::guessInitialValues() {
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, 0.001); }
-	_error_rate->set(0.001);
+	_error_rate->set(0.0001);
 
 	// initialize _curLL
 	_curLL = calculate_log_likelihood_of_L();
