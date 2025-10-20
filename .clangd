@@ -1,6 +1,6 @@
 CompileFlags:
   Add:
-    - "-isystem/opt/homebrew/Cellar/gcc/15.1.0/include/c++/15"
-    - "-isystem/opt/homebrew/Cellar/gcc/15.1.0/include/c++/15/aarch64-apple-darwin24"
+    - "-isystem/opt/homebrew/Cellar/gcc/15.2.0/include/c++/15"
+    - "-isystem/opt/homebrew/Cellar/gcc/15.2.0/include/c++/15/aarch64-apple-darwin24"
     - "-std=c++20"
     - "-stdlib=libstdc++"

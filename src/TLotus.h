@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TCollapser.h"
+#include "TCurrentState.h"
 #include "TMarkovField.h"
 #include "TStorageYVector.h"
 #include "TTree.h"
@@ -109,4 +110,5 @@ public:
 	const TStorageYVector &get_Lotus() const;
 
 	static std::string get_filename_lotus() { return coretools::instances::parameters().get("lotus"); }
+	const TCurrentState &get_tmp_state_along_last_dim() const { return _tmp_state_along_last_dim; }
 };

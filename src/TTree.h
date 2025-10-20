@@ -141,9 +141,9 @@ private:
 	void _simulateUnderPrior(Storage *) override;
 
 	template<bool UseTryMatrix>
-	void _compute_LL_old_and_new_mu(size_t index_in_tree, const TClique &clique, bool state_of_node,
-	                                coretools::TSumLogProbability &LL, const TCurrentState &current_state,
-	                                size_t branch_len_bin, double alpha) {
+	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique, bool state_of_node,
+	                                         coretools::TSumLogProbability &LL, const TCurrentState &current_state,
+	                                         size_t branch_len_bin, double alpha) {
 		if (_nodes[index_in_tree].isRoot()) {
 			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
 		} else {
@@ -154,7 +154,7 @@ private:
 	}
 
 	template<bool IsAlpha, typename TypeParam>
-	void _update_mu(const TCurrentState &current_state, size_t c, TypeParam *param) {
+	void _update_nu_or_alpha(const TCurrentState &current_state, size_t c, TypeParam *param) {
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
@@ -186,15 +186,15 @@ private:
 			    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
 
 			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
-				                                  old_value);
-				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
-				                                 new_value);
+				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old, current_state,
+				                                           branch_len_bin, old_value);
+				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new, current_state,
+				                                          branch_len_bin, new_value);
 			} else {
-				_compute_LL_old_and_new_mu<false>(i, clique, state_of_node, LL_old, current_state, branch_len_bin,
-				                                  _alpha_c->value(c));
-				_compute_LL_old_and_new_mu<true>(i, clique, state_of_node, LL_new, current_state, branch_len_bin,
-				                                 _alpha_c->value(c));
+				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old, current_state,
+				                                           branch_len_bin, _alpha_c->value(c));
+				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new, current_state,
+				                                          branch_len_bin, _alpha_c->value(c));
 			}
 		}
 
@@ -336,8 +336,8 @@ public:
 
 			// update mu
 			if constexpr (!IsSimulation) {
-				_update_mu<true>(current_state, i, _alpha_c);
-				_update_mu<false>(current_state, i, _log_nu_c);
+				_update_nu_or_alpha<true>(current_state, i, _alpha_c);
+				_update_nu_or_alpha<false>(current_state, i, _log_nu_c);
 
 				// add to likelihood ratio for branch length
 				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);

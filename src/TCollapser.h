@@ -76,8 +76,8 @@ public:
 	std::vector<size_t> initialize(const std::vector<std::string> &dimension_names_to_keep, std::string_view data_name);
 
 	// getters
-	bool x_is_one(const std::vector<size_t>& index_in_leaves, bool old_state) const;
-	bool x_is_one(const std::vector<size_t>& index_in_leaves) const;
+	bool x_is_one(const std::vector<size_t> &index_in_leaves, bool old_state) const;
+	bool x_is_one(const std::vector<size_t> &index_in_leaves) const;
 
 	std::vector<size_t> collapse(const std::vector<size_t> &index_in_full_space) const;
 	std::vector<size_t> expand(const std::vector<size_t> &index_in_collapsed_space) const;
