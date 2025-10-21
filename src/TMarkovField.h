@@ -45,6 +45,9 @@ private:
 	// complete joint density of the markov random field
 	std::vector<double> _complete_log_density;
 
+	/// Was Z initialized from children ?
+	bool _z_initialized_from_children = false;
+
 	// output files
 	coretools::TOutputFile _Y_trace_file;
 	std::vector<coretools::TOutputFile> _Z_trace_files;

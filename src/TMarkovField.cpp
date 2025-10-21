@@ -12,6 +12,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -176,17 +177,17 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 }
 
 void TMarkovField::update(TLotus &lotus, size_t iteration) {
-	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0) {
+	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0 && !_joint_density_file.isOpen()) {
 		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
 		                         {
 		                             "joint_density",
 		                         },
 		                         "\t");
 	}
-
 	_update_all_Y<false>(lotus, iteration);
-	if (iteration == 0) {
+	if (iteration == 0 && !_z_initialized_from_children) {
 		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
+		_z_initialized_from_children = true;
 	}
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);

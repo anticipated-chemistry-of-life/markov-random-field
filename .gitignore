@@ -60,3 +60,4 @@ tests/test_data/ott_taxonomy.tsv
 *_trace.txt
 documentation/
 inference_test/
+inference_test_small/
