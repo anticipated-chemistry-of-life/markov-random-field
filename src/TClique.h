@@ -10,11 +10,13 @@
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "Types.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <armadillo>
 #include <cstddef>
 #include <iomanip>
+#include <stdexcept>
 #include <unistd.h>
 #include <vector>
 
@@ -34,15 +36,22 @@ public:
 	/** @brief Set _mat to the matrix exponential of the provided matrix.
 	 * @param Lambda Matrix to calculate the matrix exponential from.
 	 */
-	void set_from_matrix_exponential(const arma::mat &Lambda) { _mat = arma::expmat(Lambda); }
+	void set_from_matrix_exponential(const arma::mat &Lambda) {
+		try {
+			_mat = arma::expmat(Lambda);
+		} catch (const std::runtime_error &e) {
+			DEVERROR("can't perform matrix exponential from the following matrix : ");
+			Lambda.print();
+		}
+	}
 
 	/** @brief Get the matrix.
 	 * @return Matrix.
 	 */
 	[[nodiscard]] arma::mat get_matrix() const { return _mat; }
 
-	/** @brief Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second value
-	 * of the row can easily be calculted.
+	/** @brief Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second
+	 * value of the row can easily be calculted.
 	 * @param First
 	 * @param Second
 	 */

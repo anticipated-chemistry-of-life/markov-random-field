@@ -8,6 +8,7 @@
 #include "coretools/Types/probability.h"
 #include "coretools/devtools.h"
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <tuple>
 #include <utility>
