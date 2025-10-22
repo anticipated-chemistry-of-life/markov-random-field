@@ -40,8 +40,8 @@ public:
 		try {
 			_mat = arma::expmat(Lambda);
 		} catch (const std::runtime_error &e) {
-			DEVERROR("can't perform matrix exponential from the following matrix : ");
 			Lambda.print();
+			DEVERROR("can't perform matrix exponential from above matrix.");
 		}
 	}
 
