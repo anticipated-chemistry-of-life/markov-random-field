@@ -4,6 +4,7 @@
 
 ```bash
 git clone https://github.com/anticipated-chemistry-of-life/markov-random-field
+cd markov-random-field
 mkdir build
 cd build
 cmake ..
