@@ -23,7 +23,7 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	using namespace coretools::instances;
 
 	// read K (sheet size for updating Y)
-	_K = parameters().get("K", 100);
+	_K = parameters().get("K", 10000);
 
 	// read: fix Y or Z?
 	_fix_Y = !parameters().get("Y.update", true);
