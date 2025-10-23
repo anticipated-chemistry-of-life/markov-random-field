@@ -36,14 +36,7 @@ public:
 	/** @brief Set _mat to the matrix exponential of the provided matrix.
 	 * @param Lambda Matrix to calculate the matrix exponential from.
 	 */
-	void set_from_matrix_exponential(const arma::mat &Lambda) {
-		try {
-			_mat = arma::expmat(Lambda);
-		} catch (const std::runtime_error &e) {
-			Lambda.print();
-			DEVERROR("can't perform matrix exponential from above matrix.");
-		}
-	}
+	void set_from_matrix_exponential(const arma::mat &Lambda) { _mat = arma::expmat(Lambda); }
 
 	/** @brief Get the matrix.
 	 * @return Matrix.
@@ -146,7 +139,14 @@ public:
 		_lambda_c[2] = alpha * nu;
 		_lambda_c[3] = (alpha - 1) * nu;
 
-		_fill_matrices();
+		try {
+			_fill_matrices();
+		} catch (const std::runtime_error &e) {
+			std::cout << "_lambda_c: " << std::endl;
+			_lambda_c.print();
+			OUT(alpha, nu, _Delta);
+			DEVERROR("can't perform matrix exponential from above matrix.");
+		}
 	}
 
 	static void print_mat(const TMatrix &my_matrix) {
