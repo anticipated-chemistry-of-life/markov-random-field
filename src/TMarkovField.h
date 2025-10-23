@@ -130,6 +130,7 @@ private:
 		}
 
 		if (_fix_Y) {
+			// keep the two ifs separate because if Y is not empty, then we just return
 			if (_Y.empty()) {
 				UERROR("Y is currently empty and fixed. Was Y read from a file ? "
 				       "(--set_Y)");

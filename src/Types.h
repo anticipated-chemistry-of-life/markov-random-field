@@ -63,7 +63,7 @@ using SpecMeanLogNu    = stattools::ParamSpec<TypeMeanLogNu, stattools::name("me
                                               stattools::EnforceUniqueHash<false>>;
 
 // Var Nu
-using PriorOnVarLogNu = stattools::prior::TUniformFixed<TypeVarLogNu>;
+using PriorOnVarLogNu = stattools::prior::TExponentialFixed<TypeVarLogNu>;
 using SpecVarLogNu    = stattools::ParamSpec<TypeVarLogNu, stattools::name("var_log_nu"), PriorOnVarLogNu,
                                              stattools::EnforceUniqueHash<false>>;
 

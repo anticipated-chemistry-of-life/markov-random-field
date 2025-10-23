@@ -63,6 +63,13 @@ public:
 		return _mat[i + 2 * j];
 	}
 
+	void set_value(size_t i, size_t j, double value) {
+		// set element in matrix
+		// 0  2
+		// 1  3
+		_mat[i + 2 * j] = value;
+	}
+
 	double operator[](size_t i) const { return _mat[i]; }
 
 	void print() const {
@@ -106,6 +113,15 @@ private:
 		for (size_t k = 1; k < _matrices.size(); ++k) { _matrices[k].set_from_product(_matrices[k - 1], matrix_alpha); }
 	}
 
+	void _fill_matrices_with_stationary_distribution(double alpha) {
+		for (auto &matrix : _matrices) {
+			matrix.set_value(0, 0, 1 - alpha);
+			matrix.set_value(0, 1, alpha);
+			matrix.set_value(1, 0, 1 - alpha);
+			matrix.set_value(1, 1, alpha);
+		}
+	}
+
 public:
 	TMatrices() = default;
 	explicit TMatrices(size_t NumBins, double Delta) { resize(NumBins, Delta); }
@@ -134,18 +150,24 @@ public:
 	 * @param mu_c_0
 	 */
 	void set_lambda(double alpha, TypeNu nu) {
-		_lambda_c[0] = (-alpha) * nu;
-		_lambda_c[1] = (1 - alpha) * nu;
-		_lambda_c[2] = alpha * nu;
-		_lambda_c[3] = (alpha - 1) * nu;
+		// TODO: if nu > 25.0 then we use the stationary distribution for all the matrices
+		// this value was obtained by TODO script
+		// it is independent of alpha and above this threshold the difference between the matrix exponential
+		// and the stationary distribution is below 1e-10
+		//
+		if (nu > 25.0) {
+			_lambda_c[0] = 1 - alpha;
+			_lambda_c[1] = 1 - alpha;
+			_lambda_c[2] = alpha;
+			_lambda_c[3] = alpha;
+			_fill_matrices_with_stationary_distribution(alpha);
 
-		try {
+		} else {
+			_lambda_c[0] = (-alpha) * nu;
+			_lambda_c[1] = (1 - alpha) * nu;
+			_lambda_c[2] = alpha * nu;
+			_lambda_c[3] = (alpha - 1) * nu;
 			_fill_matrices();
-		} catch (const std::runtime_error &e) {
-			std::cout << "_lambda_c: " << std::endl;
-			_lambda_c.print();
-			OUT(alpha, nu, _Delta);
-			DEVERROR("can't perform matrix exponential from above matrix.");
 		}
 	}
 
