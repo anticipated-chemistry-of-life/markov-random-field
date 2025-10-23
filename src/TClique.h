@@ -150,18 +150,17 @@ public:
 	 * @param mu_c_0
 	 */
 	void set_lambda(double alpha, TypeNu nu) {
-		// TODO: if nu > 25.0 then we use the stationary distribution for all the matrices
-		// this value was obtained by TODO script
-		// it is independent of alpha and above this threshold the difference between the matrix exponential
-		// and the stationary distribution is below 1e-10
-		//
-		if (nu > 25.0) {
+		// if nu > 25.0 then we use the stationary distribution for all the matrices.
+		// This value was obtained by this script :
+		// https://github.com/anticipated-chemistry-of-life/RMF-manuscript/blob/34ac59ccf4b6e70135dd22d13a8604d690965725/R-scripts/when_to_use_stationary_for_P.R
+		// Above this threshold the difference between the matrix exponential and the stationary distribution is below
+		// 1e-10
+		if (nu.get() > 25.0) {
 			_lambda_c[0] = 1 - alpha;
 			_lambda_c[1] = 1 - alpha;
 			_lambda_c[2] = alpha;
 			_lambda_c[3] = alpha;
 			_fill_matrices_with_stationary_distribution(alpha);
-
 		} else {
 			_lambda_c[0] = (-alpha) * nu;
 			_lambda_c[1] = (1 - alpha) * nu;

@@ -312,7 +312,8 @@ public:
 
 	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
-	template<bool IsSimulation, bool FixZ> void update_Z_and_mus_and_branch_lengths(const TStorageYVector &Y) {
+	template<bool IsSimulation, bool FixZ>
+	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYVector &Y) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
@@ -334,7 +335,7 @@ public:
 				                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
 			}
 
-			// update mu
+			// update nu and alpha
 			if constexpr (!IsSimulation) {
 				_update_nu_or_alpha<true>(current_state, i, _alpha_c);
 				_update_nu_or_alpha<false>(current_state, i, _log_nu_c);

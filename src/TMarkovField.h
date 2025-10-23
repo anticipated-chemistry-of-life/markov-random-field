@@ -207,7 +207,7 @@ private:
 			}
 		}
 
-		for (auto &_tree : _trees) { _tree->update_Z_and_mus_and_branch_lengths<IsSimulation, FixZ>(_Y); }
+		for (auto &_tree : _trees) { _tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y); }
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_Z_TRACE) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
