@@ -184,10 +184,13 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 		                         },
 		                         "\t");
 	}
-	_update_all_Y<false>(lotus, iteration);
+
 	if (iteration == 0 && !_z_initialized_from_children) {
+		_update_all_Y<false, true>(lotus, iteration);
 		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
 		_z_initialized_from_children = true;
+	} else {
+		_update_all_Y<false, false>(lotus, iteration);
 	}
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);
@@ -249,7 +252,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 
-		_update_all_Y<true>(lotus, iteration);
+		_update_all_Y<true, false>(lotus, iteration);
 
 		if (_fix_Z) {
 			_update_all_Z<true, true>(iteration);

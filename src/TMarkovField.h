@@ -77,7 +77,7 @@ private:
 		_complete_log_density.resize(NUMBER_OF_THREADS);
 	}
 
-	template<bool IsSimulation>
+	template<bool IsSimulation, bool initYFromLotus>
 	std::pair<int, double> _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
 	                                 size_t index_for_tmp_state,
 	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
@@ -87,7 +87,7 @@ private:
 		std::array<coretools::TSumLogProbability, 2> sum_log;
 
 		// calculate probabilities in Markov random field
-		_calculate_log_prob_field(index_in_leaves_space, sum_log);
+		if constexpr (!initYFromLotus) { _calculate_log_prob_field(index_in_leaves_space, sum_log); }
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
@@ -116,7 +116,7 @@ private:
 		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
-	template<bool IsSimulation> void _update_all_Y(TLotus &lotus, size_t iteration) {
+	template<bool IsSimulation, bool initYFromLotus> void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
 
 		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
@@ -167,9 +167,9 @@ private:
 				int diff_counter_1_in_last_dim         = 0;
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-					auto [diff, prob_new_state] =
-					    _update_Y<IsSimulation>(start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
-					                            linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
+					auto [diff, prob_new_state] = _update_Y<IsSimulation, initYFromLotus>(
+					    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
+					    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
 					diff_counter_1_in_last_dim += diff;
 					if constexpr (!IsSimulation) { new_LL[omp_get_thread_num()].add(prob_new_state); }
 				}
