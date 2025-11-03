@@ -246,9 +246,11 @@ private:
 			}
 		} else {
 			for (size_t i = 0; i < _Y.size(); ++i) {
-				line                                = {_Y[i].get_linear_index_in_Y_space(), _Y[i].is_one()};
-				fraction                            = _Y.get_fraction_of_ones(_Y[i].get_linear_index_in_Y_space());
-				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
+				const auto linear_index_in_y        = _Y[i].get_linear_index_in_Y_space();
+				const auto state                    = _Y[i].is_one();
+				line                                = {linear_index_in_y, state};
+				fraction                            = _Y.get_fraction_of_ones(linear_index_in_y);
+				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
 					size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);

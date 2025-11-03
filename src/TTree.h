@@ -393,8 +393,10 @@ public:
 			std::array<size_t, 2> line{};
 			coretools::TOutputFile file(filename, header, "\t");
 			for (size_t i = 0; i < _Z.size(); ++i) {
-				line                               = {_Z[i].get_linear_index_in_Z_space(), _Z[i].is_one()};
-				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				const auto linear_index_in_Z_space = _Z[i].get_linear_index_in_Z_space();
+				const auto state                   = _Z[i].is_one();
+				line                               = {linear_index_in_Z_space, state};
+				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
