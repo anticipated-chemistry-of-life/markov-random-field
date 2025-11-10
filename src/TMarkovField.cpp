@@ -166,7 +166,9 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 
 void TMarkovField::_read_Y_from_file(const std::string &filename) {
 	coretools::TInputFile file(filename, coretools::FileType::Header);
-	if (file.numCols() != 5) { UERROR("Simulated Y is expected to have 5 columns, but has ", file.numCols(), " !"); }
+	if (file.numCols() != 5) {
+		throw coretools::TUserError("Simulated Y is expected to have 5 columns, but has ", file.numCols(), " !");
+	}
 
 	// read each line of the file
 	for (; !file.empty(); file.popFront()) {

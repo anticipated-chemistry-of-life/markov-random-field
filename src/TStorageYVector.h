@@ -53,8 +53,8 @@ public:
 	/// @return true if the element is one, false otherwise.
 	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageYVector) const {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			UERROR("Index '", index_in_TStorageYVector,
-			       "' is out of range. The length of the vector is : ", _vec.size(), ".");
+			throw coretools::TUserError("Index '", index_in_TStorageYVector,
+			                            "' is out of range. The length of the vector is : ", _vec.size(), ".");
 		}
 		return _vec[index_in_TStorageYVector].is_one();
 	};
@@ -64,15 +64,15 @@ public:
 	 */
 	void set_to_one(size_t index_in_TStorageYVector) {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			UERROR("Index '", index_in_TStorageYVector,
-			       "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError("Index '", index_in_TStorageYVector,
+			                            "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageYVector].set_state(true);
 	}
 	void set_to_zero(size_t index_in_TStorageYVector) {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			UERROR("Index '", index_in_TStorageYVector,
-			       "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError("Index '", index_in_TStorageYVector,
+			                            "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageYVector].set_state(false);
 	}

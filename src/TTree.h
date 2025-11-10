@@ -443,14 +443,15 @@ public:
 	std::vector<size_t> get_paper_counts() const {
 		std::string parameter_name = get_tree_name() + "_paper_counts";
 		if (!coretools::instances::parameters().exists(parameter_name)) {
-			UERROR("Parameter '", parameter_name, "' not found. Please provide it.");
+			throw coretools::TUserError("Parameter '", parameter_name, "' not found. Please provide it.");
 		}
 
 		const auto filename = coretools::instances::parameters().get<std::string>(parameter_name);
 		coretools::TInputFile file(filename, coretools::FileType::Header);
 
 		if (file.numCols() != 2) {
-			UERROR("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(), " !");
+			throw coretools::TUserError("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(),
+			                            " !");
 		}
 
 		// now we initilise the vector of paper counts. The entries should only be leaves
@@ -462,12 +463,13 @@ public:
 
 			// get the node index from the leaf name
 			const size_t node_index = this->get_node_index(leaf_name);
-			if (!isLeaf(node_index)) { UERROR("All nodes should be leaves."); }
+			if (!isLeaf(node_index)) { throw coretools::TUserError("All nodes should be leaves."); }
 			const size_t leaf_index = this->get_index_within_leaves(node_index);
 
 			if (leaf_index >= paper_counts.size()) {
-				UERROR("Leaf index ", leaf_index, " is out of bounds for paper counts vector of size ",
-				       paper_counts.size(), ".");
+				throw coretools::TUserError("Leaf index ", leaf_index,
+				                            " is out of bounds for paper counts vector of size ", paper_counts.size(),
+				                            ".");
 			}
 
 			paper_counts[leaf_index] = count;

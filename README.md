@@ -5,21 +5,32 @@
 ```bash
 git clone https://github.com/anticipated-chemistry-of-life/markov-random-field
 cd markov-random-field
-mkdir build
-cd build
-cmake ..
+```
+
+```bash
+micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt lapack openblas -c conda-forge
+micromamba activate acol_env
+export CC=$CONDA_PREFIX/bin/gcc
+export CXX=$CONDA_PREFIX/bin/g++
+export FC=$CONDA_PREFIX/bin/gfortran
+cmake -S . -B build -DLOTUS=ON
+```
+
+Or on Mac :
+
+```bash
+micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt lapack openblas -c conda-forge
+micromamba activate acol_env
+export CC=$CONDA_PREFIX/bin/clang
+export CXX=$CONDA_PREFIX/bin/clang++
+export FC=$CONDA_PREFIX/bin/gfortran
+cmake -S . -B build -DLOTUS=ON
 ```
 
 Once this is done, you can compile the files using :
 
 ```bash
-make
-```
-
-or with multiple cores by replacing `N` by the number of cores you want:
-
-```bash
-make -j N
+cmake --build build -j8
 ```
 
 ## Running the test suite

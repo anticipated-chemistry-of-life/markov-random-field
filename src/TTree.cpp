@@ -45,8 +45,8 @@ void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
 
 	const size_t max_type = std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
 	if (_number_of_bins >= max_type) {
-		UERROR("More bins (", _number_of_bins, ") required than type allows (", max_type,
-		       ")! Please decrease n_bins or change type of bins.");
+		throw coretools::TUserError("More bins (", _number_of_bins, ") required than type allows (", max_type,
+		                            ")! Please decrease n_bins or change type of bins.");
 	}
 	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
 
@@ -145,7 +145,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	this->_tree_name = tree_name;
 	if (file.numCols() != 3) {
-		UERROR("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(), " !");
+		throw coretools::TUserError("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(),
+		                            " !");
 	}
 
 	std::vector<double> branch_lengths;
@@ -159,7 +160,9 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		std::string child  = std::string(file.get(0));
 		std::string parent = std::string(file.get(1));
 		auto branch_length = file.get<double>(2);
-		if (branch_length <= 0.0) { UERROR("You can't have a negative branch length or equal to 0.0 !"); }
+		if (branch_length <= 0.0) {
+			throw coretools::TUserError("You can't have a negative branch length or equal to 0.0 !");
+		}
 
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
@@ -189,7 +192,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			if (!_nodes[child_index].isRoot()) {
 				// if the child was not a root and the parent was not in the tree
 				// we throw an error because the child already has a parent
-				UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+				throw coretools::TUserError(
+				    "Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
 			}
 			_nodes[child_index].set_is_root(false);
 			branch_lengths[child_index] = branch_length;
@@ -206,7 +210,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			if (!node.isRoot()) {
 				// if the child was not a root and the parent was already in the tree
 				// we throw an error because the child already has a parent
-				UERROR("Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+				throw coretools::TUserError(
+				    "Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
 
 			} else {
 				// if the child was a root and the parent was already in the tree
@@ -261,7 +266,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 
 const TNode &TTree::get_node(const std::string &Id) const {
 	auto it = _node_map.find(Id);
-	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist!"); }
+	if (it == _node_map.end()) { throw coretools::TUserError("Node '", Id, "' does not exist!"); }
 	return _nodes[it->second]; // Retrieve node from vector using the index
 }
 
@@ -270,7 +275,7 @@ bool TTree::isLeaf(size_t index) const { return _nodes[index].isLeaf(); }
 
 size_t TTree::get_node_index(const std::string &Id) const {
 	auto it = _node_map.find(Id);
-	if (it == _node_map.end()) { UERROR("Node '", Id, "' does not exist in the tree !"); }
+	if (it == _node_map.end()) { throw coretools::TUserError("Node '", Id, "' does not exist in the tree !"); }
 	return it->second; // Return the index from the map
 }
 
@@ -313,9 +318,11 @@ void TTree::guessInitialValues() {
 	_set_initial_branch_lengths(false);
 }
 
-double TTree::getSumLogPriorDensity(const Storage &) const { DEVERROR("Should never be called"); }
-double TTree::getDensity(const Storage &, size_t) const { DEVERROR("Should never be called"); }
-double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const { DEVERROR("Should never be called"); }
+double TTree::getSumLogPriorDensity(const Storage &) const { throw coretools::TDevError("Should never be called"); }
+double TTree::getDensity(const Storage &, size_t) const { throw coretools::TDevError("Should never be called"); }
+double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const {
+	throw coretools::TDevError("Should never be called");
+}
 
 void TTree::_set_initial_branch_lengths(bool is_simulation) {
 	// overwrite simulated branch length: use branch lengths from tree
@@ -370,7 +377,7 @@ void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
 		std::string filename = coretools::instances::parameters().get(set_Z_cli_command);
 		coretools::TInputFile file(filename, coretools::FileType::Header);
 
-		if (file.numCols() != 4) { UERROR("The file for setting Z must have 4 columns ! "); }
+		if (file.numCols() != 4) { throw coretools::TUserError("The file for setting Z must have 4 columns ! "); }
 		// read each line of the file
 		for (; !file.empty(); file.popFront()) {
 			auto linear_index_in_Z_space = file.get<uint32_t>(2);

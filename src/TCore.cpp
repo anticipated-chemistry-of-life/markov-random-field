@@ -85,8 +85,9 @@ void TModel::_create_trees(const std::string &prefix) {
 	for (size_t i = 1; i < num_trees - 1; ++i) {
 		std::string name = coretools::str::split(filenames_tree_others[i - 1], ':');
 		if (name.empty()) {
-			UERROR("Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
-			       "filename (e.g. myTreeName:pathToFile)");
+			throw coretools::TUserError(
+			    "Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
+			    "filename (e.g. myTreeName:pathToFile)");
 		}
 		_create_tree(i, filenames_tree_others[i - 1], name, prefix);
 	}

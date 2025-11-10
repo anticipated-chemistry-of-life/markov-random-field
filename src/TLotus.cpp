@@ -62,7 +62,8 @@ void TLotus::load_from_file(const std::string &filename) {
 	// check if all headers in file match a tree name
 	for (const auto &header_name : file.header()) {
 		if (std::find(tree_names.begin(), tree_names.end(), header_name) == tree_names.end()) {
-			UERROR("Header '", header_name, "' in file '", filename, "' does not match any tree name!");
+			throw coretools::TUserError("Header '", header_name, "' in file '", filename,
+			                            "' does not match any tree name!");
 		}
 	}
 
@@ -76,7 +77,7 @@ void TLotus::load_from_file(const std::string &filename) {
 		if (header_names_deque.front() == tree_name) { header_names_deque.pop_front(); }
 	}
 	if (!header_names_deque.empty()) {
-		UERROR("Headers in file '", filename, "' should be ordered in the same way as the trees.");
+		throw coretools::TUserError("Headers in file '", filename, "' should be ordered in the same way as the trees.");
 	}
 
 	const auto len_per_dimension_lotus = _collapser.initialize(file.header(), "LOTUS");
@@ -97,7 +98,8 @@ void TLotus::load_from_file(const std::string &filename) {
 
 			const size_t tree_index = _collapser.dim_to_keep(i);
 			if (!_trees[tree_index]->isLeaf(_trees[tree_index]->get_node_index(node_name))) {
-				UERROR("Node '", node_name, "' in tree '", _trees[tree_index]->get_tree_name(), "' is not a leaf !");
+				throw coretools::TUserError("Node '", node_name, "' in tree '", _trees[tree_index]->get_tree_name(),
+				                            "' is not a leaf !");
 			}
 
 			const size_t ix             = _trees[tree_index]->get_index_within_leaves(node_name);

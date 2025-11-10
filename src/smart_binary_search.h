@@ -90,8 +90,9 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 			}
 			linear_index_in_container_space = container[index_in_TStorage].get_linear_index_in_container_space();
 		} else {
-			UERROR("The linear index can't be bigger than the upper bound ! That means that there are more elements in "
-			       "the container than in the total possible combinations of container !");
+			throw coretools::TUserError(
+			    "The linear index can't be bigger than the upper bound ! That means that there are more elements in "
+			    "the container than in the total possible combinations of container !");
 		}
 	}
 	return {current_state, exists_in_container, index_in_TStorageVector};

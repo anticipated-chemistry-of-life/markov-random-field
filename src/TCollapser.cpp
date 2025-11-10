@@ -13,8 +13,8 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	using namespace coretools::instances;
 	// all dimensions that are not present in header will be collapsed
 	if (dimension_names_to_keep.size() > _trees.size()) {
-		UERROR(data_name, " can not have more dimensions than there are trees (", dimension_names_to_keep.size(),
-		       " vs ", _trees.size(), ")");
+		throw coretools::TUserError(data_name, " can not have more dimensions than there are trees (",
+		                            dimension_names_to_keep.size(), " vs ", _trees.size(), ")");
 	}
 
 	std::vector<size_t> len_per_dimension;
@@ -23,7 +23,9 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 		for (size_t j = 0; j < _trees.size(); ++j) {
 			if (_trees[j]->get_tree_name() == tree_name) {
 				// already found before -> duplicated!
-				if (found) { UERROR("Duplicate column name '", tree_name, "' in ", data_name, " file!"); }
+				if (found) {
+					throw coretools::TUserError("Duplicate column name '", tree_name, "' in ", data_name, " file!");
+				}
 				// else: remember this dimension -> we will not collapse it
 				_dimensions_to_keep.push_back(j);
 				len_per_dimension.push_back(_trees[j]->get_number_of_leaves());
@@ -31,14 +33,15 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 			}
 		}
 		if (!found) {
-			UERROR("Could not find tree with name '", tree_name, "' in trees (required by ", data_name, ").");
+			throw coretools::TUserError("Could not find tree with name '", tree_name, "' in trees (required by ",
+			                            data_name, ").");
 		}
 	}
 
-	if (_dimensions_to_keep.empty()) { UERROR("No dimensions in ", data_name, " file are kept!"); }
+	if (_dimensions_to_keep.empty()) { throw coretools::TUserError("No dimensions in ", data_name, " file are kept!"); }
 	if (_dimensions_to_keep.back() != _trees.size() - 1) {
-		UERROR("Last dimension of trees and ", data_name, " must be identical (", _dimensions_to_keep.back(), " vs ",
-		       _trees.size() - 1, ")!");
+		throw coretools::TUserError("Last dimension of trees and ", data_name, " must be identical (",
+		                            _dimensions_to_keep.back(), " vs ", _trees.size() - 1, ")!");
 	}
 
 	// find dimensions to collapse
@@ -64,14 +67,14 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	return len_per_dimension;
 }
 
-bool TCollapser::x_is_one(const std::vector<size_t>& index_in_leaves, bool old_state) const {
+bool TCollapser::x_is_one(const std::vector<size_t> &index_in_leaves, bool old_state) const {
 	// used for calculating likelihood when updating Y, used to evaluate if x=1 if Y=0
 	// need to modify counter if old_state == 1
 	if (old_state) { return _x_is_one<true>(index_in_leaves); }
 	return _x_is_one<false>(index_in_leaves);
 }
 
-bool TCollapser::x_is_one(const std::vector<size_t>& index_in_leaves) const {
+bool TCollapser::x_is_one(const std::vector<size_t> &index_in_leaves) const {
 	// used for calculating likelihood when updating gamma
 	// don't need to modify counter of cliques, always take current counter
 	return _x_is_one<false>(index_in_leaves);
