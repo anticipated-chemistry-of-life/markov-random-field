@@ -8,7 +8,7 @@ cd markov-random-field
 ```
 
 ```bash
-micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt lapack openblas -c conda-forge
+micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt armadillo "libopenblas=*=*openmp*" -c conda-forge
 micromamba activate acol_env
 export CC=$CONDA_PREFIX/bin/gcc
 export CXX=$CONDA_PREFIX/bin/g++
@@ -19,7 +19,7 @@ cmake -S . -B build -DLOTUS=ON
 Or on Mac :
 
 ```bash
-micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt lapack openblas -c conda-forge
+micromamba create -n acol_env "cmake>=3.30" compilers zlib fmt armadillo "libopenblas=*=*openmp*" -c conda-forge
 micromamba activate acol_env
 export CC=$CONDA_PREFIX/bin/clang
 export CXX=$CONDA_PREFIX/bin/clang++

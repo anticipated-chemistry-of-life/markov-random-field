@@ -159,6 +159,10 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		// as long as it has no parents.
 		std::string child  = std::string(file.get(0));
 		std::string parent = std::string(file.get(1));
+		if (child == parent) {
+			throw coretools::TUserError("Node '", child, "' can not be parent of itself ! Got ", child,
+			                            "for the child and ", parent, " for the parent.");
+		}
 		auto branch_length = file.get<double>(2);
 		if (branch_length <= 0.0) {
 			throw coretools::TUserError("You can't have a negative branch length or equal to 0.0 !");

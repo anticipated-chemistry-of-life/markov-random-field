@@ -77,8 +77,8 @@ public:
 		auto rows = _mat.n_rows;
 
 		std::cout << "---------------" << std::endl;
-		for (auto i = 0; i < rows; i++) {
-			for (auto j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
+		for (size_t i = 0; i < rows; i++) {
+			for (size_t j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;
@@ -175,8 +175,8 @@ public:
 		auto rows = my_matrix.get_matrix().n_rows;
 
 		std::cout << "---------------" << std::endl;
-		for (auto i = 0; i < rows; i++) {
-			for (auto j = 0; j < cols; j++) { std::cout << my_matrix(i, j) << " "; }
+		for (size_t i = 0; i < rows; i++) {
+			for (size_t j = 0; j < cols; j++) { std::cout << my_matrix(i, j) << " "; }
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;
