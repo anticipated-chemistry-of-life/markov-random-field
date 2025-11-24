@@ -440,7 +440,7 @@ public:
 		_Z.insert_in_Z(indices_to_insert);
 	};
 
-	std::vector<size_t> get_paper_counts() const {
+	std::vector<double> get_paper_counts() const {
 		std::string parameter_name = get_tree_name() + "_paper_counts";
 		if (!coretools::instances::parameters().exists(parameter_name)) {
 			throw coretools::TUserError("Parameter '", parameter_name, "' not found. Please provide it.");
@@ -455,7 +455,7 @@ public:
 		}
 
 		// now we initilise the vector of paper counts. The entries should only be leaves
-		std::vector<size_t> paper_counts(get_number_of_leaves(), 0);
+		std::vector<double> paper_counts(get_number_of_leaves(), 0.0);
 
 		for (; !file.empty(); file.popFront()) {
 			const std::string leaf_name = std::string(file.get(0));
@@ -472,7 +472,7 @@ public:
 				                            ".");
 			}
 
-			paper_counts[leaf_index] = count;
+			paper_counts[leaf_index] = std::sqrt(count);
 		}
 
 		return paper_counts;

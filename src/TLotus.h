@@ -35,7 +35,7 @@ private:
 
 	// data
 	TStorageYVector _L;
-	std::vector<std::vector<size_t>> _occurrence_counters;
+	std::vector<std::vector<double>> _occurrence_counters;
 
 	// Markov field
 	TMarkovField _markov_field;
