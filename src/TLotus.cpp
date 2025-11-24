@@ -196,7 +196,8 @@ double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_co
 	double prod = 1.0;
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		const size_t leaf_index = index_in_collapsed_space[i];
-		const auto counts       = (double)_occurrence_counters[i][leaf_index];
+		// const auto counts       = (double)_occurrence_counters[i][leaf_index];
+		const auto counts       = std::sqrt(_occurrence_counters[i][leaf_index]);
 		prod *= 1.0 - exp(-(double)_gamma->value(i) * counts);
 	}
 	return prod;
