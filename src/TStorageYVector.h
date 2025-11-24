@@ -23,14 +23,6 @@ private:
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
 	std::vector<size_t> _dimensions_Y_space;
 
-	void _initialize_vector(const size_t total_possible_values) {
-		_vec.reserve(total_possible_values);
-		for (size_t i = 0; i < total_possible_values; ++i) {
-			_vec.emplace_back(i);
-			_vec.back().set_state(false);
-		}
-	}
-
 public:
 	using value_type     = uint64_t;
 	using const_iterator = typename std::vector<TStorageY>::const_iterator;
