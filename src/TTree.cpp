@@ -39,7 +39,7 @@ TTree::TTree(size_t dimension, const std::string &filename, const std::string &t
 
 TTree::~TTree() = default;
 
-void TTree::_initialize_grid_branch_lengths(size_t number_of_branches) {
+void TTree::_initialize_grid_branch_lengths() {
 	// read a, b and K from command-line
 	_number_of_bins = coretools::instances::parameters().get("n_bins", 100);
 
@@ -120,7 +120,7 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 }
 
 void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
-	_initialize_grid_branch_lengths(branch_lengths.size());
+	_initialize_grid_branch_lengths();
 	// normalize such that they sum to one
 
 	double sum = 0.0;

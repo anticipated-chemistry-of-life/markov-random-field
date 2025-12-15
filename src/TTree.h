@@ -118,7 +118,7 @@ private:
 	void _set_initial_branch_lengths(bool is_simulation);
 	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
-	void _initialize_grid_branch_lengths(size_t number_of_branches);
+	void _initialize_grid_branch_lengths();
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
 	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
