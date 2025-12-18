@@ -5,6 +5,7 @@
 #ifndef ACOL_TYPES_H
 #define ACOL_TYPES_H
 
+#include "coretools/Types/TStringHash.h"
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/THash.h"

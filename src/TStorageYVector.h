@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <execution>
 #include <vector>
 
 class TStorageYVector {

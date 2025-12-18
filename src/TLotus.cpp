@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <deque>
 #include <tuple>
 #include <utility>
 

@@ -38,6 +38,7 @@ cmake --build build -j8
 In the build directory:
 
 ```bash
+cd build
 make -j8 acol_unitTests
 ./acol_unitTests
 ```
