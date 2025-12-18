@@ -54,9 +54,11 @@ TEST(TFeatureLikelihood_Tests, nested_vector) {
 	fl_2.set_binned_likelihood(120);
 	fl_2.set_molecule_index(245);
 
+	std::vector<TFeatureLikelihood> vec_1 = {fl_1};
+	std::vector<TFeatureLikelihood> vec_2 = {fl_1, fl_2};
 	TMassSpecRun nested_vector;
-	nested_vector.add_likelihood_vector({fl_1});
-	nested_vector.add_likelihood_vector({fl_1, fl_2});
+	nested_vector.add_likelihood_vector(vec_1);
+	nested_vector.add_likelihood_vector(vec_2);
 
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(0).size(), 1);
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).size(), 2);
@@ -66,5 +68,5 @@ TEST(TFeatureLikelihood_Tests, nested_vector) {
 		}
 	};
 
-	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).at(0).get_binned_likelihood(), 128);
+	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).at(0).get_binned_likelihood(), 120);
 }

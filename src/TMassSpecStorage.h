@@ -4,15 +4,17 @@
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
+#include <optional>
 #include <vector>
 
 struct BinarySearchResult {
-	bool found;
-	size_t index;
+	bool found{};
+	std::optional<uint8_t> binned_likelihood;
+	size_t index{};
 };
 
 /// Class TRun that stores 2 vectors :
@@ -77,14 +79,11 @@ public:
 	bool empty() const { return _features.empty(); }
 	void add_empty_feature() { _features.push_back(); }
 
-	/// Adds a molecule likelihood to the last feature (back feature)
-	void add_molecule_likelihood_to_last_feature(const TFeatureLikelihood &feature_likelihood) {
-		_features.push_back(feature_likelihood);
-	}
-
 	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule likelihoods that are
-	/// associated to it.
-	void add_likelihood_vector(const std::vector<TFeatureLikelihood> &feature_likelihoods) {
+	/// associated to it. The vector will be sorted before being added to guarantee the order and be able to do binary
+	/// search.
+	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
+		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
 		_features.push_back(feature_likelihoods);
 	}
 
@@ -97,17 +96,14 @@ public:
 	BinarySearchResult is_molecule_in_feature(size_t feature_idx, uint32_t molecule_index) const {
 		const auto &likelihoods = _features.get(feature_idx);
 		auto it                 = std::lower_bound(likelihoods.begin(), likelihoods.end(), molecule_index);
-		if (it == likelihoods.end()) { return {false, likelihoods.size()}; }
+		if (it == likelihoods.end()) { return {false, std::nullopt, likelihoods.size()}; }
 		size_t index = std::distance(likelihoods.begin(), it);
-		if (it->get_molecule_index() != molecule_index) { return {false, index}; }
-		return {true, index};
+		if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
+		return {true, it->get_binned_likelihood(), index};
 	}
-
-	const TFeatureLikelihood *get_likelihood_for_molecule_in_feature(size_t feature_idx,
-	                                                                 uint32_t molecule_index) const {
-		const auto &likelihoods = _features.get(feature_idx);
-		auto it                 = std::lower_bound(likelihoods.begin(), likelihoods.end(), molecule_index);
-		return it;
+	static double get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
+	                                               uint8_t binned_value) {
+		return binned_likelihoods[binned_value];
 	}
 };
 
@@ -118,7 +114,7 @@ public:
 class TMSMSData {
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
-	std::array<double, 256> _binned_likelihoods;
+	std::array<double, 256> _binned_likelihoods{};
 
 public:
 	TMSMSData() = default;
