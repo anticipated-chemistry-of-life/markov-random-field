@@ -70,7 +70,7 @@ private:
 	}
 
 public:
-	TCollapser(const std::vector<std::unique_ptr<TTree>> &trees);
+	explicit TCollapser(const std::vector<std::unique_ptr<TTree>> &trees);
 	~TCollapser() = default;
 
 	std::vector<size_t> initialize(const std::vector<std::string> &dimension_names_to_keep, std::string_view data_name);

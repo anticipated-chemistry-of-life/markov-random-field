@@ -5,7 +5,8 @@
 #ifndef ACOL_TCURRENTSTATE_H
 #define ACOL_TCURRENTSTATE_H
 
-#include "TStorageY.h"
+#include "TStorageYVector.h"
+#include "TStorageZVector.h"
 #include "smart_binary_search.h"
 #include <cstddef>
 

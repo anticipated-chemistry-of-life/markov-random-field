@@ -1,6 +1,5 @@
 #pragma once
 
-#include "coretools/Containers/TNestedIterator.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"

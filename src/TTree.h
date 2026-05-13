@@ -14,13 +14,9 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
-#include "coretools/Types/commonWeakTypes.h"
-#include "coretools/Types/probability.h"
 #include "coretools/algorithms.h"
-#include "coretools/devtools.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include <cstddef>
-#include <list>
 #include <string>
 #include <vector>
 

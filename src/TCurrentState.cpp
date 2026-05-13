@@ -4,7 +4,6 @@
 
 #include "TCurrentState.h"
 #include "TTree.h"
-#include "coretools/devtools.h"
 
 //-----------------------------------
 // TCurrentState

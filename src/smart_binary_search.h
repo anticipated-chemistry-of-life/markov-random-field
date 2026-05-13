@@ -1,7 +1,5 @@
 #pragma once
 
-#include "TStorageYVector.h"
-#include "TStorageZVector.h"
 #include "coretools/Main/TError.h"
 #include <cmath>
 #include <cstddef>
@@ -20,8 +18,8 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 	auto begin_it = std::holds_alternative<size_t>(lower_interval)
 	                    ? vec.begin() + std::get<size_t>(lower_interval)
 	                    : std::get<typename T::const_iterator>(lower_interval);
-	auto end_it   = std::holds_alternative<size_t>(upper_interval) ? vec.begin() + std::get<size_t>(upper_interval)
-	                                                               : std::get<typename T::const_iterator>(upper_interval);
+	auto end_it = std::holds_alternative<size_t>(upper_interval) ? vec.begin() + std::get<size_t>(upper_interval)
+	                                                             : std::get<typename T::const_iterator>(upper_interval);
 
 	if (end_it > vec.end()) { end_it = vec.end(); }
 

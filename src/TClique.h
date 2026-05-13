@@ -10,13 +10,11 @@
 #include "TStorageZ.h"
 #include "TStorageZVector.h"
 #include "Types.h"
-#include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <armadillo>
 #include <cstddef>
 #include <iomanip>
-#include <stdexcept>
 #include <unistd.h>
 #include <vector>
 
@@ -281,7 +279,7 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ> update_Z(std::vector<double> &joint_log_prob_density, TCurrentState &current_state,
+	std::vector<TStorageZ> update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
 	                                TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
 	                                const TypeParamBinBranches *binned_branch_lengths,
 	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
