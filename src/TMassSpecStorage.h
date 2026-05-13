@@ -17,8 +17,8 @@ struct BinarySearchResult {
 };
 
 /// Class TRun that stores 2 vectors :
-/// - vector of 32 bit with value uin8t and molecule index
-/// - vetor of size_t that tells where the feature starts
+/// - vector of 32 bit with value uin8t which is the binned likelihood and molecule index
+/// - vector of size_t that tells where the feature starts
 /// Use TNestedVector from coretools
 ///
 /// TMSMSData (which is also a wrapper around nested vector)
@@ -65,6 +65,15 @@ public:
 	bool operator==(const uint32_t right) const { return get_molecule_index() == right; }
 };
 
+inline BinarySearchResult is_molecule_in_feature(const coretools::TConstView<TFeatureLikelihood> &feature,
+                                                 uint32_t molecule_index) {
+	auto it = std::lower_bound(feature.begin(), feature.end(), molecule_index);
+	if (it == feature.end()) { return {false, std::nullopt, feature.size()}; }
+	size_t index = std::distance(feature.begin(), it);
+	if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
+	return {true, it->get_binned_likelihood(), index};
+}
+
 /// Class storing a mass spectrometry run. The iterator goes along the
 /// molecule dimension. So for each feature, we have a list of molecule indices and binned likelihoods.
 class TMassSpecRun {
@@ -92,14 +101,11 @@ public:
 	auto end() const { return _features.end(); }
 	auto begin() { return _features.begin(); }
 	auto end() { return _features.end(); }
-	BinarySearchResult is_molecule_in_feature(size_t feature_idx, uint32_t molecule_index) const {
+	BinarySearchResult is_molecule_in_feature_at_idx(size_t feature_idx, uint32_t molecule_index) const {
 		const auto &likelihoods = _features.get(feature_idx);
-		auto it                 = std::lower_bound(likelihoods.begin(), likelihoods.end(), molecule_index);
-		if (it == likelihoods.end()) { return {false, std::nullopt, likelihoods.size()}; }
-		size_t index = std::distance(likelihoods.begin(), it);
-		if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
-		return {true, it->get_binned_likelihood(), index};
+		return is_molecule_in_feature(likelihoods, molecule_index);
 	}
+
 	static double get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
 	                                               uint8_t binned_value) {
 		return binned_likelihoods[binned_value];

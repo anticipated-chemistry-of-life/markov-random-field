@@ -11,7 +11,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <execution>
 #include <numeric>
 #include <vector>
 

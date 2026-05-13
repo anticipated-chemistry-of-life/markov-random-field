@@ -11,11 +11,9 @@
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
-#include "coretools/devtools.h"
 #include "omp.h"
 #include <cstddef>
 #include <string>
-#include <tuple>
 #include <vector>
 
 //-----------------------------------
