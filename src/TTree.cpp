@@ -4,8 +4,6 @@
 
 #include "TTree.h"
 #include "TClique.h"
-#include "TStorageYVector.h"
-#include "TStorageZ.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
@@ -13,15 +11,12 @@
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Storage/TDimension.h"
-#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "coretools/algorithms.h"
-#include "coretools/devtools.h"
 #include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
 #include <cstdlib>
-#include <list>
 #include <numeric>
 #include <queue>
 #include <string>

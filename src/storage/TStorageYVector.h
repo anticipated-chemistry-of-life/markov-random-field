@@ -189,7 +189,9 @@ public:
 
 	std::vector<int> get_full_Y_binary_vector() const {
 		std::vector<int> Y_as_vector;
-		for (size_t i = 0; i < total_size_of_container_space(); ++i) {
+		size_t total_size = total_size_of_container_space();
+		Y_as_vector.reserve(total_size);
+		for (size_t i = 0; i < total_size; ++i) {
 			auto [found, idx] = binary_search(i);
 			if (found) {
 				Y_as_vector.push_back(_vec[idx].is_one());

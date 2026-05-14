@@ -6,8 +6,6 @@
 #define METABOLITE_INFERENCE_TREE_H
 
 #include "TClique.h"
-#include "TStorageYVector.h"
-#include "TStorageZVector.h"
 #include "Types.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
@@ -16,6 +14,8 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "stattools/ParametersObservations/TParameter.h"
+#include "storage/TStorageYVector.h"
+#include "storage/TStorageZVector.h"
 #include <cstddef>
 #include <string>
 #include <vector>

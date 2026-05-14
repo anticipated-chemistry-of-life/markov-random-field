@@ -7,6 +7,7 @@
 
 #include "TClique.h"
 #include "TCurrentState.h"
+#include "TMassSpecStorage.h"
 #include "TTree.h"
 #include "Types.h"
 #include "coretools/Files/TOutputFile.h"

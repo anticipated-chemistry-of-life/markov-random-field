@@ -4,15 +4,14 @@
 
 #include "TClique.h"
 #include "TCurrentState.h"
-#include "TStorageYVector.h"
-#include "TStorageZ.h"
-#include "TStorageZVector.h"
 #include "TTree.h"
 #include "coretools/Math/TSumLog.h"
+#include "storage/TStorageYVector.h"
+#include "storage/TStorageZ.h"
+#include "storage/TStorageZVector.h"
 #include <cstddef>
 #include <unordered_set>
 #include <vector>
-
 double TMatrices::_Delta;
 
 TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,

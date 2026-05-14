@@ -38,15 +38,7 @@ private:
 	/// The remaining bits for the linear index
 	/// This also defines the maximum number of molecules that can be stored
 	static constexpr uint32_t _molecule_index_mask = (_one << 24) - 1;
-
-public:
-	TFeatureLikelihood() = default;
-	explicit TFeatureLikelihood(const uint32_t linear_index, const uint8_t binned_likelihood) {
-		set_molecule_index(linear_index);
-		set_binned_likelihood(binned_likelihood);
-	}
-	uint32_t get_molecule_index() const { return _value & _molecule_index_mask; };
-	void set_molecule_index(const uint32_t linear_index) {
+	void _set_molecule_index(const uint32_t linear_index) {
 		if (linear_index > _molecule_index_mask) {
 			throw coretools::TUserError("Molecule index '", linear_index,
 			                            "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask,
@@ -54,10 +46,19 @@ public:
 		}
 		_value = (_value & ~_molecule_index_mask) | (linear_index & _molecule_index_mask);
 	}
-	uint32_t get_binned_likelihood() const { return (_value & _likelihood_mask) >> 24; }
-	void set_binned_likelihood(const uint8_t binned_likelihood) {
+	void _set_binned_likelihood(const uint8_t binned_likelihood) {
 		_value = (_value & ~_likelihood_mask) | (static_cast<uint32_t>(binned_likelihood) << 24);
 	}
+
+public:
+	TFeatureLikelihood() = default;
+	explicit TFeatureLikelihood(const uint32_t linear_index, const uint8_t binned_likelihood) {
+		this->_set_molecule_index(linear_index);
+		this->_set_binned_likelihood(binned_likelihood);
+	}
+	uint32_t get_molecule_index() const { return _value & _molecule_index_mask; };
+
+	uint32_t get_binned_likelihood() const { return (_value & _likelihood_mask) >> 24; }
 
 	bool operator<(const TFeatureLikelihood &right) const { return get_molecule_index() < right.get_molecule_index(); }
 	bool operator<(const uint32_t right) const { return get_molecule_index() < right; }
@@ -65,20 +66,18 @@ public:
 	bool operator==(const uint32_t right) const { return get_molecule_index() == right; }
 };
 
-inline BinarySearchResult is_molecule_in_feature(const coretools::TConstView<TFeatureLikelihood> &feature,
-                                                 uint32_t molecule_index) {
-	auto it = std::lower_bound(feature.begin(), feature.end(), molecule_index);
-	if (it == feature.end()) { return {false, std::nullopt, feature.size()}; }
-	size_t index = std::distance(feature.begin(), it);
-	if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
-	return {true, it->get_binned_likelihood(), index};
-}
-
 /// Class storing a mass spectrometry run. The iterator goes along the
 /// molecule dimension. So for each feature, we have a list of molecule indices and binned likelihoods.
 class TMassSpecRun {
 private:
 	coretools::TNestedVector<TFeatureLikelihood> _features;
+	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule likelihoods that are
+	/// associated to it. The vector will be sorted before being added to guarantee the order and be able to do binary
+	/// search.
+	void _add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
+		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
+		_features.push_back(feature_likelihoods);
+	}
 
 public:
 	TMassSpecRun() = default;
@@ -87,23 +86,24 @@ public:
 	bool empty() const { return _features.empty(); }
 	void add_empty_feature() { _features.push_back(); }
 
-	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule likelihoods that are
-	/// associated to it. The vector will be sorted before being added to guarantee the order and be able to do binary
-	/// search.
-	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
-		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
-		_features.push_back(feature_likelihoods);
-	}
-
 	coretools::TConstView<TFeatureLikelihood> get_likelihoods_for_feature(size_t i) const { return _features.get(i); }
 	size_t size() const { return _features.size(); }
 	auto begin() const { return _features.begin(); };
 	auto end() const { return _features.end(); }
 	auto begin() { return _features.begin(); }
 	auto end() { return _features.end(); }
-	BinarySearchResult is_molecule_in_feature_at_idx(size_t feature_idx, uint32_t molecule_index) const {
+	BinarySearchResult is_molecule_in_feature(size_t feature_idx, uint32_t molecule_index) const {
 		const auto &likelihoods = _features.get(feature_idx);
 		return is_molecule_in_feature(likelihoods, molecule_index);
+	}
+
+	inline static BinarySearchResult is_molecule_in_feature(const coretools::TConstView<TFeatureLikelihood> &feature,
+	                                                        uint32_t molecule_index) {
+		auto it = std::lower_bound(feature.begin(), feature.end(), molecule_index);
+		if (it == feature.end()) { return {false, std::nullopt, feature.size()}; }
+		size_t index = std::distance(feature.begin(), it);
+		if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
+		return {true, it->get_binned_likelihood(), index};
 	}
 
 	static double get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
@@ -120,6 +120,7 @@ class TMSMSData {
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
 	std::array<double, 256> _binned_likelihoods{};
+	void _add_mass_spec_run_for_species(const std::vector<TMassSpecRun> &runs) { _msms_data.push_back(runs); }
 
 public:
 	TMSMSData() = default;
@@ -128,7 +129,7 @@ public:
 	bool empty() const { return _msms_data.empty(); }
 	/// Note : This function assumes that the species were sorted to have first the ones with data
 	/// and then the ones without data i.e. the indices of the NestedVector must not contain any repeated indices.
-	bool species_has_data(size_t species_idx) const { return species_idx < _msms_data.size(); }
+	bool species_has_msms_data(size_t species_idx) const { return species_idx < _msms_data.size(); }
 	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const {
 		sum_log.add(get_likelihood_from_binned_value(binned_value));
 	}
@@ -136,6 +137,4 @@ public:
 		sum_log[0].add(1.0 - get_likelihood_from_binned_value(binned_value));
 		sum_log[1].add(get_likelihood_from_binned_value(binned_value));
 	}
-
-	void add_mass_spec_run_for_species(const std::vector<TMassSpecRun> &runs) { _msms_data.push_back(runs); }
 };
