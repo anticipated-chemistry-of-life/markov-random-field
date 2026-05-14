@@ -9,9 +9,9 @@
 #include "Types.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
-#include "storage/TStorageYVector.h"
-#include "storage/TStorageZ.h"
-#include "storage/TStorageZVector.h"
+#include "storages/TStorageYVector.h"
+#include "storages/TStorageZ.h"
+#include "storages/TStorageZVector.h"
 #include <armadillo>
 #include <cstddef>
 #include <iomanip>

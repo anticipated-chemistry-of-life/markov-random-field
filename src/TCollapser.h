@@ -5,7 +5,7 @@
 #ifndef ACOL_TCOLLAPSER_H
 #define ACOL_TCOLLAPSER_H
 
-#include "TTree.h"
+#include "tree/TTree.h"
 #include <string>
 #include <vector>
 

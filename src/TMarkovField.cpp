@@ -6,12 +6,12 @@
 #include "TClique.h"
 #include "TCurrentState.h"
 #include "TLotus.h"
-#include "TTree.h"
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "storage/TStorageYVector.h"
+#include "storages/TStorageYVector.h"
+#include "tree/TTree.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>

@@ -3,7 +3,7 @@
 //
 
 #include "TCurrentState.h"
-#include "TTree.h"
+#include "tree/TTree.h"
 
 //-----------------------------------
 // TCurrentState

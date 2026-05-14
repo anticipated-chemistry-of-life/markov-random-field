@@ -3,9 +3,9 @@
 
 #include "TLotus.h"
 #include "TMarkovField.h"
-#include "TTree.h"
 #include "Types.h"
 #include "coretools/Main/TTask.h"
+#include "tree/TTree.h"
 #include <memory>
 
 //--------------------------------------

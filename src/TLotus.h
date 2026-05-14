@@ -3,12 +3,12 @@
 #include "TCollapser.h"
 #include "TCurrentState.h"
 #include "TMarkovField.h"
-#include "TTree.h"
 #include "Types.h"
 #include "coretools/Main/TParameters.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/Priors/TPriorBase.h"
-#include "storage/TStorageYVector.h"
+#include "storages/TStorageYVector.h"
+#include "tree/TTree.h"
 #include <cstddef>
 #include <string>
 #include <utility>
