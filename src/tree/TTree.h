@@ -14,8 +14,8 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/TStorageYVector.h"
-#include "storages/TStorageZVector.h"
+#include "storages/y_storage/TStorageYVector.h"
+#include "storages/z_storage/TStorageZVector.h"
 #include "tree/node.h"
 #include <cstddef>
 #include <string>

@@ -7,7 +7,7 @@
 #include "coretools/Main/TParameters.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/Priors/TPriorBase.h"
-#include "storages/TStorageYVector.h"
+#include "storages/y_storage/TStorageYVector.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <string>

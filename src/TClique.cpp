@@ -5,9 +5,9 @@
 #include "TClique.h"
 #include "TCurrentState.h"
 #include "coretools/Math/TSumLog.h"
-#include "storages/TStorageYVector.h"
-#include "storages/TStorageZ.h"
-#include "storages/TStorageZVector.h"
+#include "storages/y_storage/TStorageYVector.h"
+#include "storages/z_storage/TStorageZ.h"
+#include "storages/z_storage/TStorageZVector.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <unordered_set>

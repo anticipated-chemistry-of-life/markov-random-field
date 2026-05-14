@@ -10,7 +10,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "storages/TStorageYVector.h"
+#include "storages/y_storage/TStorageYVector.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <cstdint>
