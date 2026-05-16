@@ -5,7 +5,6 @@
 #ifndef TSTORAGEY_H
 #define TSTORAGEY_H
 
-#include <arm_neon.h>
 #include <cstdint>
 /** TStorage Y is the class to store a single value Y of the Random Markov Field
  * We store in a single 64 bits integer (8 bytes) the following information:
