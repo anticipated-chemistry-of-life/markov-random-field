@@ -5,9 +5,9 @@
 
 build/
 cmake-build-debug/
-coretools/
+#coretools/
 genometools/
-stattools/
+#stattools/
 
 # TNode artifact files
 node_modules/
@@ -61,3 +61,4 @@ tests/test_data/ott_taxonomy.tsv
 documentation/
 inference_test/
 inference_test_small/
+.xmake/

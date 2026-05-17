@@ -1,0 +1,8 @@
+[submodule "coretools"]
+	path = coretools
+	url = https://bitbucket.org/WegmannLab/coretools.git
+	branch = madleina/interface_stattools
+[submodule "stattools"]
+	path = stattools
+	url = https://bitbucket.org/wegmannlab/stattools.git
+	branch = madleina/interface
