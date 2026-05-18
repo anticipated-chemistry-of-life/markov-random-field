@@ -37,6 +37,9 @@ public:
 	}
 	bool operator<(const uint32_t right) const { return get_linear_index_in_Z_space() < right; }
 	bool operator==(const uint32_t right) const { return get_linear_index_in_Z_space() == right; }
+	bool operator==(const TStorageZ &right) const {
+		return get_linear_index_in_Z_space() < right.get_linear_index_in_Z_space();
+	}
 	bool operator!=(const uint32_t right) const { return get_linear_index_in_Z_space() != right; }
 };
 
