@@ -6,6 +6,7 @@ add_rules("mode.debug", "mode.release")
 set_languages("c++20")
 
 set_policy("generator.compile_commands", true)
+set_policy("build.release.strip", false) -- allows to see the function names in CPU profiling
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
 
 
