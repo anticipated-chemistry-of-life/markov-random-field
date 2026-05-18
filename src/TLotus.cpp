@@ -14,15 +14,15 @@
 #include <tuple>
 #include <utility>
 
-TLotus::TLotus(
-    std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, TypeParamErrorRate *error_rate,
-    size_t n_iterations,
-    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> &markov_field_stattools_param,
-    std::string prefix, bool simulate)
+TLotus::TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
+               TypeParamErrorRate *error_rate, size_t n_iterations,
+               const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+                   &markov_field_stattools_param,
+               std::string prefix, bool simulate)
     : _trees(trees), _markov_field(n_iterations, trees, prefix),
       _markov_field_stattools_param(markov_field_stattools_param), _collapser(trees), _gamma(gamma),
-      _error_rate(error_rate), _tmp_state_along_last_dim(*trees.back().get(), 1), _prefix(std::move(prefix)),
-      _simulate(simulate) {
+      _error_rate(error_rate), _tmp_state_along_last_dim(*trees.back().get(), 1),
+      _prefix(std::move(prefix)), _simulate(simulate) {
 	this->addPriorParameter({_gamma, _error_rate});
 	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 
@@ -42,7 +42,8 @@ void TLotus::initialize() {
 	}
 
 	// initialize storage
-	_gamma->initStorage(this, {_collapser.num_dim_to_keep()}, {std::make_shared<coretools::TNamesStrings>(tree_names)});
+	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
+	                    {std::make_shared<coretools::TNamesStrings>(tree_names)});
 
 	_error_rate->initStorage(this, {1});
 	if constexpr (UseSimpleErrorModel) {
@@ -68,9 +69,9 @@ void TLotus::load_from_file(const std::string &filename) {
 		}
 	}
 
-	// since lotus can also contain less dimensions than the trees, we need to check if the order of the headers
-	// matches the order of the trees. To do so we can do a dequing of the tree names and the headers and check if
-	// the headers are a subset of the tree names.
+	// since lotus can also contain less dimensions than the trees, we need to check if the order of
+	// the headers matches the order of the trees. To do so we can do a dequing of the tree names
+	// and the headers and check if the headers are a subset of the tree names.
 	std::deque<std::string> header_names_deque(file.header().size());
 	for (const auto &header_name : file.header()) { header_names_deque.push_back(header_name); }
 	for (const auto &tree_name : tree_names) {
@@ -78,7 +79,8 @@ void TLotus::load_from_file(const std::string &filename) {
 		if (header_names_deque.front() == tree_name) { header_names_deque.pop_front(); }
 	}
 	if (!header_names_deque.empty()) {
-		throw coretools::TUserError("Headers in file '", filename, "' should be ordered in the same way as the trees.");
+		throw coretools::TUserError("Headers in file '", filename,
+		                            "' should be ordered in the same way as the trees.");
 	}
 
 	const auto len_per_dimension_lotus = _collapser.initialize(file.header(), "LOTUS");
@@ -86,7 +88,8 @@ void TLotus::load_from_file(const std::string &filename) {
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
 
-	_occurrence_counters.resize(_collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
+	_occurrence_counters.resize(
+	    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
@@ -99,7 +102,8 @@ void TLotus::load_from_file(const std::string &filename) {
 
 			const size_t tree_index = _collapser.dim_to_keep(i);
 			if (!_trees[tree_index]->isLeaf(_trees[tree_index]->get_node_index(node_name))) {
-				throw coretools::TUserError("Node '", node_name, "' in tree '", _trees[tree_index]->get_tree_name(),
+				throw coretools::TUserError("Node '", node_name, "' in tree '",
+				                            _trees[tree_index]->get_tree_name(),
 				                            "' is not a leaf !");
 			}
 
@@ -107,7 +111,8 @@ void TLotus::load_from_file(const std::string &filename) {
 			index_in_collapsed_space[i] = ix;
 		}
 
-		size_t linear_index_in_Y_space = _L.get_linear_index_in_container_space(index_in_collapsed_space);
+		size_t linear_index_in_Y_space =
+		    _L.get_linear_index_in_container_space(index_in_collapsed_space);
 		_L.insert_one(linear_index_in_Y_space);
 	}
 	coretools::instances::logfile().endIndent();
@@ -120,39 +125,45 @@ double TLotus::calculate_log_likelihood_of_L() const {
 
 double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; };
 
-void TLotus::fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
+void TLotus::fill_tmp_state_along_last_dim(
+    const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
 	// collapse start_index_in_leaves (this is the index in Y)
 	if (_collapser.do_collapse()) {
-		_tmp_state_along_last_dim.fill_Y_along_last_dim(_collapser.collapse(start_index_clique_along_last_dim), K, _L);
+		_tmp_state_along_last_dim.fill_Y_along_last_dim(
+		    _collapser.collapse(start_index_clique_along_last_dim), K, _L);
 	} else { // no need to collapse
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
 	}
 };
 
 /// This function will be used when we update Y.
-void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
-                                   bool old_state, std::array<double, 2> &prob) const {
+void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space,
+                                   size_t index_for_tmp_state, bool old_state,
+                                   std::array<double, 2> &prob) const {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
 	// for state 1, we know that the new x will always be 1 (at least one is a one)
 	bool x_is_one_for_Y_0 = false; // Y = 0 -> x = 0 if we don't collapse
-	if (_collapser.do_collapse()) { x_is_one_for_Y_0 = _collapser.x_is_one(index_in_leaves_space, old_state); }
+	if (_collapser.do_collapse()) {
+		x_is_one_for_Y_0 = _collapser.x_is_one(index_in_leaves_space, old_state);
+	}
 
 	if (x_is_one_for_Y_0) { // Y=0 also results in x=1 (others in clique are a one)
-		return;             // x is one for both states (due to collapsing) -> likelihood doesn't matter
+		return; // x is one for both states (due to collapsing) -> likelihood doesn't matter
 	}
 
 	const auto index_in_collapsed_space = _collapser.collapse(index_in_leaves_space);
-	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous if-statement)
-	// new Y = 1 -> x will always be true
+	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous
+	// if-statement) new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
-		prob[i] = _calculate_probability_of_L_given_x(i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state),
-		                                              index_in_collapsed_space);
+		prob[i] = _calculate_probability_of_L_given_x(
+		    i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state), index_in_collapsed_space);
 	}
 };
 
 void TLotus::update_cur_LL(double cur_LL) {
 	// _curLL must be updated when Markov Field (Y) changes
-	// Markov Field keeps track of new LL while updating Y; at the very end, it calls this function to set _curLL
+	// Markov Field keeps track of new LL while updating Y; at the very end, it calls this function
+	// to set _curLL
 	_curLL = cur_LL;
 }
 
@@ -193,7 +204,8 @@ void TLotus::guessInitialValues() {
 
 const TStorageYVector &TLotus::get_Lotus() const { return _L; }
 
-double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
+double
+TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
 	double prod = 1.0;
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		const size_t leaf_index = index_in_collapsed_space[i];
@@ -203,8 +215,8 @@ double TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_co
 	return prod;
 }
 
-double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
-                                                   const std::vector<size_t> &index_in_collapsed_space) const {
+double TLotus::_calculate_probability_of_L_given_x(
+    bool x, bool L, const std::vector<size_t> &index_in_collapsed_space) const {
 	if constexpr (UseSimpleErrorModel) {
 		if (x && L) { return 1 - _epsilon; }
 		if (x) { return _epsilon; }
@@ -218,7 +230,8 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 	}
 }
 
-double TLotus::_calculate_probability_of_L_given_x(bool x, bool L, size_t linear_index_in_collapsed_space) const {
+double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
+                                                   size_t linear_index_in_collapsed_space) const {
 	auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
 	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 };
@@ -232,8 +245,10 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
 	bool state_of_L;
 
 	for (size_t i = 0; i < _markov_field.get_Y_vector().total_size_of_container_space(); ++i) {
-		std::tie(state_of_Y, index_in_TStorage_Y_vector) = _get_state_of_Y(i, index_in_TStorage_Y_vector);
-		std::tie(state_of_L, index_in_TStorage_L_vector) = _get_state_of_L(i, index_in_TStorage_L_vector);
+		std::tie(state_of_Y, index_in_TStorage_Y_vector) =
+		    _get_state_of_Y(i, index_in_TStorage_Y_vector);
+		std::tie(state_of_L, index_in_TStorage_L_vector) =
+		    _get_state_of_L(i, index_in_TStorage_L_vector);
 
 		sum_log.add(_calculate_probability_of_L_given_x(state_of_Y, state_of_L, i));
 	}
@@ -245,9 +260,11 @@ std::pair<bool, size_t> TLotus::_get_state_of_Y(size_t i, size_t index_in_TStora
 		return {false, index_in_TStorage_Y_vector};
 	} // make sure we don't overshoot
 
-	auto index_in_Y = _markov_field.get_Y(index_in_TStorage_Y_vector).get_linear_index_in_container_space();
+	auto index_in_Y =
+	    _markov_field.get_Y(index_in_TStorage_Y_vector).get_linear_index_in_container_space();
 	if (i == index_in_Y) {
-		return {_markov_field.get_Y(index_in_TStorage_Y_vector).is_one(), index_in_TStorage_Y_vector + 1};
+		return {_markov_field.get_Y(index_in_TStorage_Y_vector).is_one(),
+		        index_in_TStorage_Y_vector + 1};
 	}
 	assert(i < index_in_Y);
 	return {false, index_in_TStorage_Y_vector};
@@ -269,7 +286,7 @@ double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
 	size_t previous_index_in_L_space = 0;
 	for (size_t i = 0; i < length_L; ++i) { // loop over all 1's in L
 		const auto linear_index_in_L_space = _L[i].get_linear_index_in_container_space();
-		auto multi_dim_index_in_L_space    = _L.get_multi_dimensional_index(linear_index_in_L_space);
+		auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_L_space);
 
 		// loop over all 0's in L that occured before that 1.
 		for (size_t j = previous_index_in_L_space; j <= linear_index_in_L_space; ++j) {
@@ -296,15 +313,15 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
 
-	// 2025.06.16 after discussion of last week with Dan, we should be able to also simuate and provide the number of
-	// papers prior to the simulation.
+	// 2025.06.16 after discussion of last week with Dan, we should be able to also simuate and
+	// provide the number of papers prior to the simulation.
 	if constexpr (!UseSimpleErrorModel) {
 		// initialize the error rate
 		const auto error_rate = coretools::instances::parameters().get<double>("error_rate", 0.001);
 		_error_rate->set(error_rate);
 
-		// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the gamma is never
-		// initilized. That is why we need to do it here.
+		// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the
+		// gamma is never initilized. That is why we need to do it here.
 		_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
 		                    {std::make_shared<coretools::TNamesStrings>(tree_names_to_keep)});
 		const auto gamma = coretools::instances::parameters().get<double>("gamma", 1.5);
@@ -327,9 +344,9 @@ void TLotus::_simulateUnderPrior(Storage *) {
 		if (_collapser.do_collapse()) {
 			x = _collapser.x_is_one(multi_dim_index_in_L_space);
 		} else {
-			// When we don't collapse, this means that the dimensions of Y are equal to the dimensions of Lotus.
-			// Since we do simulations, speed in not that important. We could simply run a binary search for each
-			// i in Y.
+			// When we don't collapse, this means that the dimensions of Y are equal to the
+			// dimensions of Lotus. Since we do simulations, speed in not that important. We could
+			// simply run a binary search for each i in Y.
 			auto result = _markov_field.get_Y_vector().binary_search(i);
 			if (result.first) {
 				x = _markov_field.get_Y_vector().is_one(result.second);
@@ -342,13 +359,15 @@ void TLotus::_simulateUnderPrior(Storage *) {
 		coretools::Probability p(proba);
 		bool draw = coretools::instances::randomGenerator().pickOneOfTwo(p);
 		if (draw) {
-			// for each draw we need to get the node name of the leaf in the correct tree and write it a file
+			// for each draw we need to get the node name of the leaf in the correct tree and write
+			// it a file
 			std::vector<std::string> line(_collapser.num_dim_to_keep());
 			for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
-				const size_t tree_index         = _collapser.dim_to_keep(j);
-				const size_t leaf_index         = multi_dim_index_in_L_space[j];
-				const size_t node_index_in_tree = _trees[tree_index]->get_node_index_from_leaf_index(leaf_index);
-				line[j]                         = _trees[tree_index]->get_node_id(node_index_in_tree);
+				const size_t tree_index = _collapser.dim_to_keep(j);
+				const size_t leaf_index = multi_dim_index_in_L_space[j];
+				const size_t node_index_in_tree =
+				    _trees[tree_index]->get_node_index_from_leaf_index(leaf_index);
+				line[j] = _trees[tree_index]->get_node_id(node_index_in_tree);
 			}
 			node_names.push_back(line);
 		}

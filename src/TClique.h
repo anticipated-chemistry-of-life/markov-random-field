@@ -21,8 +21,8 @@
 class TTree;
 
 /**
- * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of the rate matrix for
- * each bin.
+ * @brief Class to store the matrix exponential of the scaling matrix and the matrix exponential of
+ * the rate matrix for each bin.
  */
 class TMatrix {
 private:
@@ -41,8 +41,8 @@ public:
 	 */
 	[[nodiscard]] arma::mat get_matrix() const { return _mat; }
 
-	/** @brief Perform matrix multiplication of two matrices. Since the matrix rows have to sum to 1, the second
-	 * value of the row can easily be calculted.
+	/** @brief Perform matrix multiplication of two matrices. Since the matrix rows have to sum to
+	 * 1, the second value of the row can easily be calculted.
 	 * @param First
 	 * @param Second
 	 */
@@ -76,7 +76,9 @@ public:
 
 		std::cout << "---------------" << std::endl;
 		for (size_t i = 0; i < rows; i++) {
-			for (size_t j = 0; j < cols; j++) { std::cout << std::setprecision(20) << _mat(i, j) << " "; }
+			for (size_t j = 0; j < cols; j++) {
+				std::cout << std::setprecision(20) << _mat(i, j) << " ";
+			}
 			std::cout << std::endl;
 		}
 		std::cout << "---------------" << std::endl;
@@ -93,9 +95,10 @@ private:
 
 	static double _delta;
 
-	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix
-	 * exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is
-	 * mathematically equevalent to calculating the matrix exponential for each bin.
+	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each
+	 * bin, the matrix exponential of the scaling matrix is calculated once and then multiplied with
+	 * the previous matrix. This is mathematically equevalent to calculating the matrix exponential
+	 * for each bin.
 	 */
 	void _fill_matrices() {
 		// calculate matrix exponential for first bin
@@ -108,7 +111,9 @@ private:
 
 		_matrices[0] = P_0;
 		// do recursion
-		for (size_t k = 1; k < _matrices.size(); ++k) { _matrices[k].set_from_product(_matrices[k - 1], matrix_alpha); }
+		for (size_t k = 1; k < _matrices.size(); ++k) {
+			_matrices[k].set_from_product(_matrices[k - 1], matrix_alpha);
+		}
 	}
 
 	void _fill_matrices_with_stationary_distribution(double alpha) {
@@ -151,8 +156,8 @@ public:
 		// if nu > 25.0 then we use the stationary distribution for all the matrices.
 		// This value was obtained by this script :
 		// https://github.com/anticipated-chemistry-of-life/RMF-manuscript/blob/34ac59ccf4b6e70135dd22d13a8604d690965725/R-scripts/when_to_use_stationary_for_P.R
-		// Above this threshold the difference between the matrix exponential and the stationary distribution is below
-		// 1e-10
+		// Above this threshold the difference between the matrix exponential and the stationary
+		// distribution is below 1e-10
 		if (nu.get() > 25.0) {
 			_lambda_c[0] = 1 - alpha;
 			_lambda_c[1] = 1 - alpha;
@@ -181,10 +186,11 @@ public:
 	}
 };
 
-/** Class representing a clique in our model. A clique is defined as having a set of nodes that are all leaves in
- * all dimensions except one. Each clique has a set of matrices, the change rate parameters, and the start index of the
- * nodes in the tree. The start index, the variable dimension, and the number of nodes are needed to get the correct
- * indices in our multidimensional space Y and Z.
+/** Class representing a clique in our model. A clique is defined as having a set of nodes that are
+ * all leaves in all dimensions except one. Each clique has a set of matrices, the change rate
+ * parameters, and the start index of the nodes in the tree. The start index, the variable
+ * dimension, and the number of nodes are needed to get the correct indices in our multidimensional
+ * space Y and Z.
  */
 class TClique {
 private:
@@ -204,7 +210,8 @@ private:
 	TypeCounter1 _counter_leaves_state_1 = 0;
 
 	/// @brief Calculates the log probability of the root given the stationary distribution
-	static void _calculate_log_prob_root(double stationary_0, std::array<coretools::TSumLogProbability, 2> &sum_log);
+	static void _calculate_log_prob_root(double stationary_0,
+	                                     std::array<coretools::TSumLogProbability, 2> &sum_log);
 
 	template<typename ContainerStates> // can either be TSheet or TCurrentStates
 	inline bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
@@ -216,17 +223,20 @@ private:
 		}
 	}
 
-	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state, size_t index_in_tree, bool new_state,
-	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert, const TTree *tree) const;
+	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state,
+	                           size_t index_in_tree, bool new_state,
+	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
+	                           const TTree *tree) const;
 
 	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
 	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log, const TypeParamBinBranches *binned_branch_lengths,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log,
+	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid that Z is stuck in a
-	/// state and cannot change.
+	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
+	/// that Z is stuck in a state and cannot change.
 	/// @param node_index The index of the internal node we want to set
 	/// @param current_state The current state of the clique.
 	/// @param Z the Z vector of that tree (i.e that clique)
@@ -234,15 +244,16 @@ private:
 	/// @param binned_branch_lengths the vector of branch length
 	/// @param leaves_and_internal_nodes_without_roots_indices Same as the variable name
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
-	                   const TypeParamBinBranches *binned_branch_lengths,
+	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z,
+	                   const TTree *tree, const TypeParamBinBranches *binned_branch_lengths,
 	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
 	                   std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
 public:
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes, size_t increment);
+	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes,
+	        size_t increment);
 	~TClique() = default;
 
 	/// @brief Initialize the matrices for the clique.
@@ -268,7 +279,8 @@ public:
 	/// @brief Sets the "try Matrix" to the given values
 	void update_lambda(double alpha, double nu) { _try_matrices.set_lambda(alpha, nu); }
 
-	/// @brief If the "try matrix" is accepted, then we change our "current matrix" to the "try matrix"
+	/// @brief If the "try matrix" is accepted, then we change our "current matrix" to the "try
+	/// matrix"
 	void accept_update_mu() { _cur_matrices = _try_matrices; }
 
 	/// @brief Returns the matrices for the clique.
@@ -279,17 +291,19 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ> update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
-	                                TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
-	                                const TypeParamBinBranches *binned_branch_lengths,
-	                                const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
-
 	std::vector<TStorageZ>
-	initialize_Z_from_children(TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
-	                           const TypeParamBinBranches *binned_branch_lengths,
-	                           const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+	update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
+	         TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
+	         const TypeParamBinBranches *binned_branch_lengths,
+	         const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z, const TTree &tree);
+	std::vector<TStorageZ> initialize_Z_from_children(
+	    TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+	    const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+
+	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z,
+	                                   const TTree &tree);
 
 	/// @brief Return the number of nodes in the clique
 	/// @return Return the number of nodes in the clique
@@ -304,15 +318,17 @@ public:
 	}
 
 	/// @brief Calculates the log probability of a node to its parent.
-	template<typename ContainerStates, bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
-	void calculate_log_prob_parent_to_node(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
-	                                       const TTree *tree, size_t leaf_index_in_tree_of_last_dim,
-	                                       const ContainerStates &states,
-	                                       std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+	template<typename ContainerStates,
+	         bool UseTry = false> // ContainerStates can either be TSheet or TCurrentStates
+	void calculate_log_prob_parent_to_node(
+	    size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length, const TTree *tree,
+	    size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const size_t parent_index_in_tree = _get_parent_index(index_in_tree, tree);
 		const auto &matrix_for_bin        = get_matrix<UseTry>(binned_branch_length);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			const bool state_of_parent = _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
+			const bool state_of_parent =
+			    _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(matrix_for_bin(state_of_parent, i));
 		}
 	}

@@ -32,9 +32,10 @@ public:
 
 	void initialize(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
 		constexpr uint16_t max_value = std::numeric_limits<uint16_t>::max();
-		_thinning_factor             = std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
-		_total_counts                = n_iterations / _thinning_factor;
-		_dimensions_Y_space          = dimensions_Y_space;
+		_thinning_factor =
+		    std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
+		_total_counts       = n_iterations / _thinning_factor;
+		_dimensions_Y_space = dimensions_Y_space;
 	}
 
 	/// We want to check if element at position index_in_TStorageYVector is one.
@@ -43,8 +44,9 @@ public:
 	/// @return true if the element is one, false otherwise.
 	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageYVector) const {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageYVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size(), ".");
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageYVector,
+			    "' is out of range. The length of the vector is : ", _vec.size(), ".");
 		}
 		return _vec[index_in_TStorageYVector].is_one();
 	};
@@ -54,15 +56,17 @@ public:
 	 */
 	void set_to_one(size_t index_in_TStorageYVector) {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageYVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageYVector,
+			    "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageYVector].set_state(true);
 	}
 	void set_to_zero(size_t index_in_TStorageYVector) {
 		if (index_in_TStorageYVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageYVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageYVector,
+			    "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageYVector].set_state(false);
 	}
@@ -106,7 +110,9 @@ public:
 	auto begin() const { return _vec.begin(); }
 	auto end() const { return _vec.end(); }
 	const std::vector<TStorageY> &get_vector() const { return _vec; }
-	const TStorageY &operator[](size_t index_in_TStorageYVector) const { return _vec[index_in_TStorageYVector]; }
+	const TStorageY &operator[](size_t index_in_TStorageYVector) const {
+		return _vec[index_in_TStorageYVector];
+	}
 
 	void reset_counts() {
 #pragma omp parallel for num_threads(NUMBER_OF_THREADS)
@@ -116,22 +122,26 @@ public:
 	/// Remove all the elements that have the state to zero.
 	/// @return void
 	void remove_zeros() {
-		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageY &elem) { return !elem.is_one(); }),
+		_vec.erase(std::remove_if(_vec.begin(), _vec.end(),
+		                          [](const TStorageY &elem) { return !elem.is_one(); }),
 		           _vec.end());
 	}
 
 	/// Given a multi-dimensional index, we want to get its linear index.
 	/// @param multi_dim_index the multi-dimensional index
 	/// @return the linear index
-	uint64_t get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
+	uint64_t
+	get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
 	}
-	uint64_t get_linear_index_in_container_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
+	uint64_t get_linear_index_in_container_space(
+	    const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
 	}
 
 	/// Given a linear index, we want to get the multi-dimensional index.
-	[[nodiscard]] std::vector<size_t> get_multi_dimensional_index(uint64_t linear_index_in_Y_space) const {
+	[[nodiscard]] std::vector<size_t>
+	get_multi_dimensional_index(uint64_t linear_index_in_Y_space) const {
 		const auto tmp = static_cast<size_t>(linear_index_in_Y_space);
 		return coretools::getSubscripts(tmp, _dimensions_Y_space);
 	}
@@ -167,14 +177,18 @@ public:
 		return {true, index};
 	};
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multidim_index_in_Y_space) const {
+	[[nodiscard]] std::pair<bool, size_t>
+	binary_search(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return binary_search(get_linear_index_in_Y_space(multidim_index_in_Y_space));
 	}
 
-	void insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
+	void
+	insert_in_Y(const std::vector<std::vector<TStorageY>> &linear_indices_in_Y_space_to_insert) {
 		// Step 1: Compute total size to insert
 		size_t size_to_insert = 0;
-		for (const auto &vec : linear_indices_in_Y_space_to_insert) { size_to_insert += vec.size(); }
+		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
+			size_to_insert += vec.size();
+		}
 		if (size_to_insert == 0) { return; }
 
 		const size_t old_size = this->size();

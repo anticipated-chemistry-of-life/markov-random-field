@@ -32,13 +32,15 @@ private:
 
 	// binned branch lengths
 	PriorOnBinnedBranches _prior_on_binned_branch_lengths{};
-	std::vector<std::unique_ptr<stattools::TParameter<SpecBinnedBranches, TTree>>> _binned_branch_lengths;
+	std::vector<std::unique_ptr<stattools::TParameter<SpecBinnedBranches, TTree>>>
+	    _binned_branch_lengths;
 
 	// trees
 	std::vector<std::unique_ptr<TTree>> _trees;
 
 	// Markov field parameters (only needed for stattools)
-	std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>> _markov_field_stattools_param;
+	std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	    _markov_field_stattools_param;
 
 	// gamma
 	PriorOnGamma _prior_on_gamma{};
@@ -81,7 +83,9 @@ public:
 //--------------------------------------
 class TTask_infer : public coretools::TTask {
 public:
-	TTask_infer() : coretools::TTask("Inferring metabolite presence in all the species there are on this planet!!") {};
+	TTask_infer()
+	    : coretools::TTask(
+	          "Inferring metabolite presence in all the species there are on this planet!!") {};
 
 	void run() override {
 		TCore core;
@@ -92,7 +96,8 @@ public:
 class TTask_simulate : public coretools::TTask {
 public:
 	TTask_simulate()
-	    : coretools::TTask("Simulating metabolite presence in all the species there are on this planet!!") {};
+	    : coretools::TTask(
+	          "Simulating metabolite presence in all the species there are on this planet!!") {};
 
 	void run() override {
 		TCore core;

@@ -13,7 +13,8 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	using namespace coretools::instances;
 	// all dimensions that are not present in header will be collapsed
 	if (dimension_names_to_keep.size() > _trees.size()) {
-		throw coretools::TUserError(data_name, " can not have more dimensions than there are trees (",
+		throw coretools::TUserError(data_name,
+		                            " can not have more dimensions than there are trees (",
 		                            dimension_names_to_keep.size(), " vs ", _trees.size(), ")");
 	}
 
@@ -24,7 +25,8 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 			if (_trees[j]->get_tree_name() == tree_name) {
 				// already found before -> duplicated!
 				if (found) {
-					throw coretools::TUserError("Duplicate column name '", tree_name, "' in ", data_name, " file!");
+					throw coretools::TUserError("Duplicate column name '", tree_name, "' in ",
+					                            data_name, " file!");
 				}
 				// else: remember this dimension -> we will not collapse it
 				_dimensions_to_keep.push_back(j);
@@ -33,20 +35,24 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 			}
 		}
 		if (!found) {
-			throw coretools::TUserError("Could not find tree with name '", tree_name, "' in trees (required by ",
-			                            data_name, ").");
+			throw coretools::TUserError("Could not find tree with name '", tree_name,
+			                            "' in trees (required by ", data_name, ").");
 		}
 	}
 
-	if (_dimensions_to_keep.empty()) { throw coretools::TUserError("No dimensions in ", data_name, " file are kept!"); }
+	if (_dimensions_to_keep.empty()) {
+		throw coretools::TUserError("No dimensions in ", data_name, " file are kept!");
+	}
 	if (_dimensions_to_keep.back() != _trees.size() - 1) {
-		throw coretools::TUserError("Last dimension of trees and ", data_name, " must be identical (",
-		                            _dimensions_to_keep.back(), " vs ", _trees.size() - 1, ")!");
+		throw coretools::TUserError("Last dimension of trees and ", data_name,
+		                            " must be identical (", _dimensions_to_keep.back(), " vs ",
+		                            _trees.size() - 1, ")!");
 	}
 
 	// find dimensions to collapse
 	for (size_t i = 0; i < _trees.size(); ++i) {
-		if (std::find(_dimensions_to_keep.begin(), _dimensions_to_keep.end(), i) == _dimensions_to_keep.end()) {
+		if (std::find(_dimensions_to_keep.begin(), _dimensions_to_keep.end(), i) ==
+		    _dimensions_to_keep.end()) {
 			// not found in keep -> collapse
 			_dimensions_to_collapse.emplace_back(i);
 		}
@@ -54,13 +60,17 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 
 	// report to logfile
 	logfile().startIndent("Will keep the following dimensions for ", data_name, ":");
-	for (const auto i : _dimensions_to_keep) { logfile().list(_trees[i]->get_tree_name(), " [", i, "]"); }
+	for (const auto i : _dimensions_to_keep) {
+		logfile().list(_trees[i]->get_tree_name(), " [", i, "]");
+	}
 	logfile().endIndent();
 	if (_dimensions_to_collapse.empty()) {
 		logfile().list("Will not collapse any dimensions for ", data_name, ".");
 	} else {
 		logfile().startIndent("Will collapse the following dimensions for ", data_name, ":");
-		for (const auto i : _dimensions_to_collapse) { logfile().list(_trees[i]->get_tree_name(), " [", i, "]"); }
+		for (const auto i : _dimensions_to_collapse) {
+			logfile().list(_trees[i]->get_tree_name(), " [", i, "]");
+		}
 		logfile().endIndent();
 	}
 

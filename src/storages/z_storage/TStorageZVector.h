@@ -38,24 +38,27 @@ public:
 	}
 	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageZVector) const {
 		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageZVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageZVector,
+			    "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		return _vec[index_in_TStorageZVector].is_one();
 	};
 
 	void set_to_one(size_t index_in_TStorageZVector) {
 		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageZVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageZVector,
+			    "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageZVector].set_state(true);
 	}
 
 	void set_to_zero(size_t index_in_TStorageZVector) {
 		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError("Index '", index_in_TStorageZVector,
-			                            "' is out of range. The length of the vector is : ", _vec.size());
+			throw coretools::TUserError(
+			    "Index '", index_in_TStorageZVector,
+			    "' is out of range. The length of the vector is : ", _vec.size());
 		}
 		_vec[index_in_TStorageZVector].set_state(false);
 	}
@@ -85,7 +88,8 @@ public:
 	}
 
 	void remove_zeros() {
-		_vec.erase(std::remove_if(_vec.begin(), _vec.end(), [](const TStorageZ &storage) { return !storage.is_one(); }),
+		_vec.erase(std::remove_if(_vec.begin(), _vec.end(),
+		                          [](const TStorageZ &storage) { return !storage.is_one(); }),
 		           _vec.end());
 	}
 	size_t size() const { return _vec.size(); }
@@ -93,13 +97,17 @@ public:
 	auto cbegin() const { return _vec.cbegin(); }
 	auto cend() const { return _vec.cend(); }
 	auto end() const { return _vec.end(); }
-	TStorageZ operator[](size_t index_in_TStorageZVector) const { return _vec[index_in_TStorageZVector]; }
+	TStorageZ operator[](size_t index_in_TStorageZVector) const {
+		return _vec[index_in_TStorageZVector];
+	}
 
-	[[nodiscard]] uint64_t get_linear_index_in_Z_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
+	[[nodiscard]] uint64_t
+	get_linear_index_in_Z_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
 	}
 
-	uint64_t get_linear_index_in_container_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
+	uint64_t get_linear_index_in_container_space(
+	    const std::vector<size_t> &multidim_index_in_Z_space) const {
 		return get_linear_index_in_Z_space(multidim_index_in_Z_space);
 	}
 
@@ -123,14 +131,16 @@ public:
 		return {true, index};
 	};
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(const std::vector<size_t> &multidim_index_in_Z_space) const {
+	[[nodiscard]] std::pair<bool, size_t>
+	binary_search(const std::vector<size_t> &multidim_index_in_Z_space) const {
 		return binary_search(get_linear_index_in_Z_space(multidim_index_in_Z_space));
 	}
 
-	void insert_in_Z(const std::vector<std::vector<TStorageZ>> &linear_indices_in_Z_space_to_insert) {
-		const auto size_to_insert =
-		    std::accumulate(linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end(), 0,
-		                    [](size_t sum, const std::vector<TStorageZ> &i) { return sum + i.size(); });
+	void
+	insert_in_Z(const std::vector<std::vector<TStorageZ>> &linear_indices_in_Z_space_to_insert) {
+		const auto size_to_insert = std::accumulate(
+		    linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end(),
+		    0, [](size_t sum, const std::vector<TStorageZ> &i) { return sum + i.size(); });
 
 		const size_t old_size = this->size();
 		this->_vec.reserve(old_size + size_to_insert);

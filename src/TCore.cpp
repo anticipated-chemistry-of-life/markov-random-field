@@ -16,55 +16,60 @@ using namespace coretools::instances;
 // TModel
 //--------------------------------------
 
-void TModel::_create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
-                          const std::string &prefix) {
+void TModel::_create_tree(size_t dimension, const std::string &filename,
+                          const std::string &tree_name, const std::string &prefix) {
 
 	// create mean log nu
 	stattools::TRuntimeConfigParam config_mean_log_nu;
 	config_mean_log_nu.set_name(tree_name + "_mean_log_nu");
-	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(&_prior_on_mean_log_nu,
-	                                                                                            config_mean_log_nu));
+	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(
+	    &_prior_on_mean_log_nu, config_mean_log_nu));
 
 	// create var log nu
 	stattools::TRuntimeConfigParam config_var_log_nu;
 	config_var_log_nu.set_name(tree_name + "_var_log_nu");
-	_var_log_nu.push_back(
-	    std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(&_prior_on_var_log_nu, config_var_log_nu));
+	_var_log_nu.push_back(std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(
+	    &_prior_on_var_log_nu, config_var_log_nu));
 
 	// create prior on log nu
-	_prior_on_log_nu.push_back(std::make_unique<PriorOnLogNu>(_mean_log_nu.back().get(), _var_log_nu.back().get()));
+	_prior_on_log_nu.push_back(
+	    std::make_unique<PriorOnLogNu>(_mean_log_nu.back().get(), _var_log_nu.back().get()));
 
 	// create log nu
 	stattools::TRuntimeConfigParam config_log_nu;
 	config_log_nu.set_name(tree_name + "_log_nu");
 	config_log_nu.excludeFromDAGUpdates(true); // never update
-	_log_nu.push_back(
-	    std::make_unique<stattools::TParameter<SpecLogNu, TTree>>(_prior_on_log_nu.back().get(), config_log_nu));
+	_log_nu.push_back(std::make_unique<stattools::TParameter<SpecLogNu, TTree>>(
+	    _prior_on_log_nu.back().get(), config_log_nu));
 
 	// create alpha
 	stattools::TRuntimeConfigParam config_alpha;
 	config_alpha.set_name(tree_name + "_alpha");
 	config_alpha.excludeFromDAGUpdates(true); // never update
-	_alpha.push_back(std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(&_prior_on_alpha, config_alpha));
+	_alpha.push_back(
+	    std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(&_prior_on_alpha, config_alpha));
 
 	// create branch lengths
 	stattools::TRuntimeConfigParam config_branch_lengths;
 	config_branch_lengths.set_name(tree_name + "_branch_lengths");
 	config_branch_lengths.excludeFromDAGUpdates(true); // never update
 	config_branch_lengths.setPrefix(prefix + "_" + tree_name);
-	_binned_branch_lengths.push_back(std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
-	    &_prior_on_binned_branch_lengths, config_branch_lengths));
+	_binned_branch_lengths.push_back(
+	    std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
+	        &_prior_on_binned_branch_lengths, config_branch_lengths));
 
 	// create tree
 	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _alpha.back().get(),
-	                                            _log_nu.back().get(), _binned_branch_lengths.back().get()));
+	                                            _log_nu.back().get(),
+	                                            _binned_branch_lengths.back().get()));
 
 	// create markov field (only for stattools purposes such that a valid DAG can be built)
 	stattools::TRuntimeConfigParam config_markov_field;
 	config_markov_field.set_name(tree_name + "_MRF");
 	config_markov_field.excludeFromDAGUpdates(true); // never update
 	_markov_field_stattools_param.emplace_back(
-	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(_trees.back().get(), config_markov_field));
+	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(_trees.back().get(),
+	                                                                     config_markov_field));
 }
 
 void TModel::_create_trees(const std::string &prefix) {
@@ -73,7 +78,9 @@ void TModel::_create_trees(const std::string &prefix) {
 	std::string filename_tree_species   = parameters().get("tree_species");
 	std::string filename_tree_molecules = parameters().get("tree_molecules");
 	std::vector<std::string> filenames_tree_others;
-	if (parameters().exists("tree_others")) { parameters().fill("tree_others", filenames_tree_others); }
+	if (parameters().exists("tree_others")) {
+		parameters().fill("tree_others", filenames_tree_others);
+	}
 
 	size_t num_trees = 2 + filenames_tree_others.size();
 	_trees.reserve(num_trees);
@@ -85,9 +92,9 @@ void TModel::_create_trees(const std::string &prefix) {
 	for (size_t i = 1; i < num_trees - 1; ++i) {
 		std::string name = coretools::str::split(filenames_tree_others[i - 1], ':');
 		if (name.empty()) {
-			throw coretools::TUserError(
-			    "Argument 'tree_others': Please provide a name for each other tree, separated by a : from the "
-			    "filename (e.g. myTreeName:pathToFile)");
+			throw coretools::TUserError("Argument 'tree_others': Please provide a name for each "
+			                            "other tree, separated by a : from the "
+			                            "filename (e.g. myTreeName:pathToFile)");
 		}
 		_create_tree(i, filenames_tree_others[i - 1], name, prefix);
 	}
@@ -102,13 +109,14 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	_create_trees(prefix);
 
 	// create lotus
-	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations, _markov_field_stattools_param,
-	                                  prefix, simulate);
+	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations,
+	                                  _markov_field_stattools_param, prefix, simulate);
 	_error_rate.getConfig().setPriorParameters("10.5");
 	for (auto &it : _var_log_nu) { it->getConfig().setPriorParameters("1.0"); }
 
 	// create (fake) observation for stattools
-	_obs = std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
+	_obs =
+	    std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
 
 	// define function that is called when updating
 	_fun_update_mrf = &TLotus::update_markov_field;
@@ -120,15 +128,18 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 //--------------------------------------
 
 TCore::TCore() {
-	NUMBER_OF_THREADS              = coretools::getNumThreads();
-	SIMULATION_NO_Z_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Z_initilisation");
-	SIMULATION_NO_Y_INITIALIZATION = coretools::instances::parameters().exists("simulation_no_Y_initilisation");
-	WRITE_Y                        = coretools::instances::parameters().exists("write_Y");
-	WRITE_Y_TRACE                  = coretools::instances::parameters().exists("write_Y_trace");
-	WRITE_Z                        = coretools::instances::parameters().exists("write_Z");
-	WRITE_Z_TRACE                  = coretools::instances::parameters().exists("write_Z_trace");
-	WRITE_JOINT_LOG_PROB_DENSITY   = coretools::instances::parameters().exists("write_joint_log_prob_density");
-	WRITE_BRANCH_LENGTHS           = coretools::instances::parameters().exists("write_branch_lengths");
+	NUMBER_OF_THREADS = coretools::getNumThreads();
+	SIMULATION_NO_Z_INITIALIZATION =
+	    coretools::instances::parameters().exists("simulation_no_Z_initilisation");
+	SIMULATION_NO_Y_INITIALIZATION =
+	    coretools::instances::parameters().exists("simulation_no_Y_initilisation");
+	WRITE_Y       = coretools::instances::parameters().exists("write_Y");
+	WRITE_Y_TRACE = coretools::instances::parameters().exists("write_Y_trace");
+	WRITE_Z       = coretools::instances::parameters().exists("write_Z");
+	WRITE_Z_TRACE = coretools::instances::parameters().exists("write_Z_trace");
+	WRITE_JOINT_LOG_PROB_DENSITY =
+	    coretools::instances::parameters().exists("write_joint_log_prob_density");
+	WRITE_BRANCH_LENGTHS = coretools::instances::parameters().exists("write_branch_lengths");
 }
 
 void TCore::infer() {

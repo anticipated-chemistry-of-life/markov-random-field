@@ -18,8 +18,9 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 	auto begin_it = std::holds_alternative<size_t>(lower_interval)
 	                    ? vec.begin() + std::get<size_t>(lower_interval)
 	                    : std::get<typename T::const_iterator>(lower_interval);
-	auto end_it = std::holds_alternative<size_t>(upper_interval) ? vec.begin() + std::get<size_t>(upper_interval)
-	                                                             : std::get<typename T::const_iterator>(upper_interval);
+	auto end_it   = std::holds_alternative<size_t>(upper_interval)
+	                    ? vec.begin() + std::get<size_t>(upper_interval)
+	                    : std::get<typename T::const_iterator>(upper_interval);
 
 	if (end_it > vec.end()) { end_it = vec.end(); }
 
@@ -40,7 +41,8 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 	}
 
 	// if we found the coordinate we return the index and true
-	return {true, distance, it->get_linear_index_in_container_space(), (unsigned long)distance == vec.size() - 1};
+	return {true, distance, it->get_linear_index_in_container_space(),
+	        (unsigned long)distance == vec.size() - 1};
 };
 
 struct CurrentStateResult {
@@ -54,12 +56,13 @@ CurrentStateResult fill_current_state_easy(const Container &container,
                                            const std::vector<size_t> &start_index_in_leaves_space,
                                            size_t n_nodes_in_clique_of_container) {
 
-	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us to increment the
-	// index in the Y vector by 1 and get the next element in the Y vector.
+	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us
+	// to increment the index in the Y vector by 1 and get the next element in the Y vector.
 	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
-	size_t start_linear_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
+	size_t start_linear_index =
+	    container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
 	auto [found, index_in_TStorage, linear_index_in_container_space, is_last_element] =
 	    binary_search(container, start_linear_index, container.begin(), start_linear_index + 1);
@@ -67,9 +70,12 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 	if (found) {
 		current_state[0]       = container.is_one(index_in_TStorage);
 		exists_in_container[0] = true;
-		if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
+		if (is_last_element) {
+			return {current_state, exists_in_container, index_in_TStorageVector};
+		}
 		index_in_TStorage += 1;
-		linear_index_in_container_space = container[index_in_TStorage].get_linear_index_in_container_space();
+		linear_index_in_container_space =
+		    container[index_in_TStorage].get_linear_index_in_container_space();
 	}
 	if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
 
@@ -86,10 +92,12 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 			if (index_in_TStorage == container.size()) {
 				return {current_state, exists_in_container, index_in_TStorageVector};
 			}
-			linear_index_in_container_space = container[index_in_TStorage].get_linear_index_in_container_space();
+			linear_index_in_container_space =
+			    container[index_in_TStorage].get_linear_index_in_container_space();
 		} else {
 			throw coretools::TUserError(
-			    "The linear index can't be bigger than the upper bound ! That means that there are more elements in "
+			    "The linear index can't be bigger than the upper bound ! That means that there are "
+			    "more elements in "
 			    "the container than in the total possible combinations of container !");
 		}
 	}
@@ -97,13 +105,15 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 }
 
 template<typename Container>
-CurrentStateResult fill_current_state_hard(const Container &container, size_t n_nodes_in_clique_of_container,
-                                           const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                                           size_t total_size_of_container) {
+CurrentStateResult fill_current_state_hard(const Container &container,
+                                           size_t n_nodes_in_clique_of_container,
+                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           size_t increment, size_t total_size_of_container) {
 	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
-	auto linear_start_index = container.get_linear_index_in_container_space(start_index_in_leaves_space);
+	auto linear_start_index =
+	    container.get_linear_index_in_container_space(start_index_in_leaves_space);
 
 	auto [found, index_in_TStorage, linear_index_in_container_space, is_last_element] =
 	    binary_search(container, linear_start_index, container.begin(), linear_start_index + 1);
@@ -113,11 +123,12 @@ CurrentStateResult fill_current_state_hard(const Container &container, size_t n_
 		exists_in_container[0] = true;
 	}
 
-	const double p                      = (double)container.size() / (double)total_size_of_container;
-	const double increment_p            = (double)increment * p;
+	const double p           = (double)container.size() / (double)total_size_of_container;
+	const double increment_p = (double)increment * p;
 	const double two_standard_deviation = 2 * std::sqrt(increment_p * (1 - p));
-	const auto jump_right               = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
-	const size_t jump_left = static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
+	const auto jump_right = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
+	const size_t jump_left =
+	    static_cast<size_t>(std::max(0.0, std::floor(increment_p - two_standard_deviation)));
 
 	for (size_t i = 1; i < n_nodes_in_clique_of_container; ++i) {
 		auto linear_index_in_container_space_of_i = linear_start_index + i * increment;
@@ -126,17 +137,21 @@ CurrentStateResult fill_current_state_hard(const Container &container, size_t n_
 			index_in_TStorageVector[i] = index_in_TStorage;
 			continue;
 		}
-		if (is_last_element) { return {current_state, exists_in_container, index_in_TStorageVector}; }
+		if (is_last_element) {
+			return {current_state, exists_in_container, index_in_TStorageVector};
+		}
 
 		// calculate the upper bound
 		auto upper_bound = index_in_TStorage + jump_right;
 		if (upper_bound >= container.size()) { upper_bound = container.size() - 1; }
-		auto upper_linear_index_in_container_space = container[upper_bound].get_linear_index_in_container_space();
+		auto upper_linear_index_in_container_space =
+		    container[upper_bound].get_linear_index_in_container_space();
 
 		// calculate the lower bound
 		auto lower_bound = index_in_TStorage + jump_left;
 		if (lower_bound >= container.size()) { lower_bound = container.size() - 1; }
-		auto lower_linear_index_in_container_space = container[lower_bound].get_linear_index_in_container_space();
+		auto lower_linear_index_in_container_space =
+		    container[lower_bound].get_linear_index_in_container_space();
 
 		if (linear_index_in_container_space_of_i == upper_linear_index_in_container_space) {
 			index_in_TStorage               = upper_bound;
@@ -158,14 +173,17 @@ CurrentStateResult fill_current_state_hard(const Container &container, size_t n_
 		if (linear_index_in_container_space_of_i > upper_linear_index_in_container_space) {
 
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
-			    binary_search(container, linear_index_in_container_space_of_i, upper_bound, container.end());
+			    binary_search(container, linear_index_in_container_space_of_i, upper_bound,
+			                  container.end());
 		} else if (linear_index_in_container_space_of_i > lower_linear_index_in_container_space &&
 		           linear_index_in_container_space_of_i < upper_linear_index_in_container_space) {
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
-			    binary_search(container, linear_index_in_container_space_of_i, lower_bound, upper_bound);
+			    binary_search(container, linear_index_in_container_space_of_i, lower_bound,
+			                  upper_bound);
 		} else {
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
-			    binary_search(container, linear_index_in_container_space_of_i, index_in_TStorage, lower_bound);
+			    binary_search(container, linear_index_in_container_space_of_i, index_in_TStorage,
+			                  lower_bound);
 		}
 		index_in_TStorageVector[i] = index_in_TStorage;
 		if (found) {
@@ -178,24 +196,29 @@ CurrentStateResult fill_current_state_hard(const Container &container, size_t n_
 }
 
 template<bool AlongLastDim, typename Container>
-CurrentStateResult fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
-                                      const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                                      size_t total_size_of_container) {
+CurrentStateResult fill_current_state(const Container &container,
+                                      size_t n_nodes_in_clique_of_container,
+                                      const std::vector<size_t> &start_index_in_leaves_space,
+                                      size_t increment, size_t total_size_of_container) {
 	if constexpr (AlongLastDim) {
-		return fill_current_state_easy(container, start_index_in_leaves_space, n_nodes_in_clique_of_container);
+		return fill_current_state_easy(container, start_index_in_leaves_space,
+		                               n_nodes_in_clique_of_container);
 	}
-	return fill_current_state_hard(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
-	                               total_size_of_container);
+	return fill_current_state_hard(container, n_nodes_in_clique_of_container,
+	                               start_index_in_leaves_space, increment, total_size_of_container);
 }
 
 template<typename Container>
-CurrentStateResult fill_current_state(const Container &container, size_t n_nodes_in_clique_of_container,
-                                      const std::vector<size_t> &start_index_in_leaves_space, size_t increment,
-                                      size_t total_size_of_container) {
+CurrentStateResult fill_current_state(const Container &container,
+                                      size_t n_nodes_in_clique_of_container,
+                                      const std::vector<size_t> &start_index_in_leaves_space,
+                                      size_t increment, size_t total_size_of_container) {
 	if (increment == 1) {
-		return fill_current_state<true>(container, n_nodes_in_clique_of_container, start_index_in_leaves_space,
-		                                increment, total_size_of_container);
+		return fill_current_state<true>(container, n_nodes_in_clique_of_container,
+		                                start_index_in_leaves_space, increment,
+		                                total_size_of_container);
 	}
-	return fill_current_state<false>(container, n_nodes_in_clique_of_container, start_index_in_leaves_space, increment,
+	return fill_current_state<false>(container, n_nodes_in_clique_of_container,
+	                                 start_index_in_leaves_space, increment,
 	                                 total_size_of_container);
 }

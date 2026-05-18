@@ -19,9 +19,12 @@ private:
 	std::vector<size_t> _dimensions_to_collapse;
 
 	template<bool ModifyCounter>
-	bool _x_is_one_in_clique(size_t dim_along_which_clique_runs, const std::vector<size_t> &index_in_leaves) const {
+	bool _x_is_one_in_clique(size_t dim_along_which_clique_runs,
+	                         const std::vector<size_t> &index_in_leaves) const {
 		// count the number of leaves with state = 1 in current clique (corresponds to old_state)
-		const auto c = _trees[dim_along_which_clique_runs]->get_clique(index_in_leaves).get_counter_leaves_state_1();
+		const auto c = _trees[dim_along_which_clique_runs]
+		                   ->get_clique(index_in_leaves)
+		                   .get_counter_leaves_state_1();
 
 		// new_state is always zero once we get here
 		// 0 and 0 -> c does not change
@@ -46,7 +49,8 @@ private:
 		}
 
 		// define sub-space of dimensions to get the starting positions of all cliques to consider
-		// the last dimension to collapse is used as a clique -> no need to consider that one -> take size() - 1
+		// the last dimension to collapse is used as a clique -> no need to consider that one ->
+		// take size() - 1
 		std::vector<size_t> dimensions_clique_starts(_dimensions_to_collapse.size() - 1);
 		for (size_t i = 0; i < _dimensions_to_collapse.size() - 1; ++i) {
 			const size_t tree_index     = _dimensions_to_collapse[i];
@@ -62,7 +66,9 @@ private:
 				index_in_leaves[tree_index] = ix[j];
 			}
 			// if at least one clique has a one: x is one
-			if (_x_is_one_in_clique<ModifyCounter>(dim_along_which_clique_runs, index_in_leaves)) { return true; }
+			if (_x_is_one_in_clique<ModifyCounter>(dim_along_which_clique_runs, index_in_leaves)) {
+				return true;
+			}
 		}
 
 		// we checked all the cliques -> never a one -> return false
@@ -73,7 +79,8 @@ public:
 	explicit TCollapser(const std::vector<std::unique_ptr<TTree>> &trees);
 	~TCollapser() = default;
 
-	std::vector<size_t> initialize(const std::vector<std::string> &dimension_names_to_keep, std::string_view data_name);
+	std::vector<size_t> initialize(const std::vector<std::string> &dimension_names_to_keep,
+	                               std::string_view data_name);
 
 	// getters
 	bool x_is_one(const std::vector<size_t> &index_in_leaves, bool old_state) const;

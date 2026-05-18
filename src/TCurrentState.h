@@ -40,10 +40,10 @@ public:
 	            const TStorageYVector &Y);
 	void fill_Z(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageZVector &Z);
-	void fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	                           const TStorageYVector &Y);
-	void fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	                           const TStorageZVector &Z);
+	void fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+	                           size_t num_nodes_to_parse, const TStorageYVector &Y);
+	void fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+	                           size_t num_nodes_to_parse, const TStorageZVector &Z);
 
 	bool get(size_t index_in_tree) const;
 	bool get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const;
@@ -57,7 +57,8 @@ public:
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
 	bool exists_in_TStorageVector(size_t index_in_tree) const;
 
-	std::tuple<bool, size_t, size_t> get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
+	std::tuple<bool, size_t, size_t>
+	get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -66,7 +67,8 @@ public:
 
 class TSheet {
 private:
-	// dimension along which sheet runs (can be any except last dimension, as this one is covered by K)
+	// dimension along which sheet runs (can be any except last dimension, as this one is covered by
+	// K)
 	size_t _dim_ix;
 	// tree of dimension corresponding to _dim_ix
 	const TTree &_tree;
@@ -83,13 +85,15 @@ public:
 	TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim);
 	~TSheet() = default;
 
-	void fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K, const TStorageYVector &Y);
+	void fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K,
+	          const TStorageYVector &Y);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
-	std::tuple<bool, size_t, size_t> get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
-	                                                                    size_t leaf_index_in_tree_of_last_dim) const;
+	std::tuple<bool, size_t, size_t>
+	get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
+	                                   size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H

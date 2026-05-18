@@ -5,8 +5,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	this->_tree_name = tree_name;
 	if (file.numCols() != 3) {
-		throw coretools::TUserError("File '", filename, "' is expected to have 3 columns, but has ", file.numCols(),
-		                            " !");
+		throw coretools::TUserError("File '", filename, "' is expected to have 3 columns, but has ",
+		                            file.numCols(), " !");
 	}
 
 	std::vector<double> branch_lengths;
@@ -20,12 +20,13 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		std::string child  = std::string(file.get(0));
 		std::string parent = std::string(file.get(1));
 		if (child == parent) {
-			throw coretools::TUserError("Node '", child, "' can not be parent of itself ! Got ", child,
-			                            "for the child and ", parent, " for the parent.");
+			throw coretools::TUserError("Node '", child, "' can not be parent of itself ! Got ",
+			                            child, "for the child and ", parent, " for the parent.");
 		}
 		auto branch_length = file.get<double>(2);
 		if (branch_length <= 0.0) {
-			throw coretools::TUserError("You can't have a negative branch length or equal to 0.0 !");
+			throw coretools::TUserError(
+			    "You can't have a negative branch length or equal to 0.0 !");
 		}
 
 		if (!in_tree(child) && !in_tree(parent)) {
@@ -57,7 +58,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 				// if the child was not a root and the parent was not in the tree
 				// we throw an error because the child already has a parent
 				throw coretools::TUserError(
-				    "Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+				    "Node: '", child,
+				    "' has already a parent in the tree. Adding an other parent is not allowed !");
 			}
 			_nodes[child_index].set_is_root(false);
 			branch_lengths[child_index] = branch_length;
@@ -75,7 +77,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 				// if the child was not a root and the parent was already in the tree
 				// we throw an error because the child already has a parent
 				throw coretools::TUserError(
-				    "Node: '", child, "' has already a parent in the tree. Adding an other parent is not allowed !");
+				    "Node: '", child,
+				    "' has already a parent in the tree. Adding an other parent is not allowed !");
 
 			} else {
 				// if the child was a root and the parent was already in the tree
@@ -109,7 +112,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 				_rootIndices[it - _nodes.begin()] = _roots.size();
 				_roots.push_back(it - _nodes.begin());
 			} else if (it->isInternalNode()) {
-				_internalIndicesWithoutRoots[it - _nodes.begin()] = _internal_nodes_without_roots.size();
+				_internalIndicesWithoutRoots[it - _nodes.begin()] =
+				    _internal_nodes_without_roots.size();
 				_internal_nodes_without_roots.push_back(it - _nodes.begin());
 
 				this->_leaves_and_internal_nodes_without_roots_indices[it - _nodes.begin()] =
@@ -123,7 +127,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	_bin_branch_lengths_from_tree(branch_lengths);
 
 	coretools::instances::logfile().done();
-	coretools::instances::logfile().conclude("Read ", _nodes.size(), " nodes of which ", _roots.size(),
-	                                         " are roots and ", _leaves.size(), " are leaves and ",
-	                                         _internal_nodes_without_roots.size(), " are internal nodes.");
+	coretools::instances::logfile().conclude(
+	    "Read ", _nodes.size(), " nodes of which ", _roots.size(), " are roots and ",
+	    _leaves.size(), " are leaves and ", _internal_nodes_without_roots.size(),
+	    " are internal nodes.");
 }
