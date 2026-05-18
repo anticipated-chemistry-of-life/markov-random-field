@@ -58,8 +58,8 @@ private:
 	void _fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space);
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
-	bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
-	                           const std::vector<size_t> &previous_ix) const;
+	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
+	                                         const std::vector<size_t> &previous_ix) const;
 	int _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
 	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
 	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
@@ -120,6 +120,7 @@ private:
 
 		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 			std::vector<size_t> Y_trace_header;
+			Y_trace_header.reserve(_Y.total_size_of_container_space());
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
 			if constexpr (IsSimulation) {
 				_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
@@ -198,6 +199,7 @@ private:
 		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
 			for (const auto &tree : _trees) {
 				std::vector<size_t> Z_trace_header;
+				Z_trace_header.reserve(tree->get_Z().total_size_of_container_space());
 				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
 					Z_trace_header.push_back(i);
 				}

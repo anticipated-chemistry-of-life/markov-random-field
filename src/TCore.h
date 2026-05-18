@@ -72,8 +72,8 @@ private:
 public:
 	TCore();
 	~TCore() = default;
-	static void infer();
-	static void simulate();
+	void infer();
+	void simulate();
 };
 
 //--------------------------------------

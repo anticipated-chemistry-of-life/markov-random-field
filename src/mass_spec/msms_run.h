@@ -17,18 +17,20 @@ private:
 
 public:
 	TMassSpecRun() = default;
-	size_t capacity() const { return _features.capacity(); }
+	[[nodiscard]] size_t capacity() const { return _features.capacity(); }
 	void reserve(size_t n) { _features.reserve(n); }
-	bool empty() const { return _features.empty(); }
+	[[nodiscard]] bool empty() const { return _features.empty(); }
 	void add_empty_feature() { _features.push_back(); }
 
-	coretools::TConstView<TFeatureLikelihood> get_likelihoods_for_feature(size_t i) const { return _features.get(i); }
-	size_t size() const { return _features.size(); }
-	auto begin() const { return _features.begin(); };
-	auto end() const { return _features.end(); }
+	[[nodiscard]] coretools::TConstView<TFeatureLikelihood> get_likelihoods_for_feature(size_t i) const {
+		return _features.get(i);
+	}
+	[[nodiscard]] size_t size() const { return _features.size(); }
+	[[nodiscard]] auto begin() const { return _features.begin(); };
+	[[nodiscard]] auto end() const { return _features.end(); }
 	auto begin() { return _features.begin(); }
 	auto end() { return _features.end(); }
-	BinarySearchResult is_molecule_in_feature(size_t feature_idx, uint32_t molecule_index) const {
+	[[nodiscard]] BinarySearchResult is_molecule_in_feature(size_t feature_idx, uint32_t molecule_index) const {
 		const auto &likelihoods = _features.get(feature_idx);
 		return is_molecule_in_feature(likelihoods, molecule_index);
 	}

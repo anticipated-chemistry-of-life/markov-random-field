@@ -30,12 +30,14 @@ private:
 
 public:
 	TMSMSData() = default;
-	const std::array<double, 256> &get_binned_likelihoods() const { return _binned_likelihoods; }
-	double get_likelihood_from_binned_value(uint8_t binned_value) const { return _binned_likelihoods[binned_value]; }
-	bool empty() const { return _msms_data.empty(); }
+	[[nodiscard]] const std::array<double, 256> &get_binned_likelihoods() const { return _binned_likelihoods; }
+	[[nodiscard]] double get_likelihood_from_binned_value(uint8_t binned_value) const {
+		return _binned_likelihoods[binned_value];
+	}
+	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 	/// Note : This function assumes that the species were sorted to have first the ones with data
 	/// and then the ones without data i.e. the indices of the NestedVector must not contain any repeated indices.
-	bool species_has_msms_data(size_t species_idx) const { return species_idx < _msms_data.size(); }
+	[[nodiscard]] bool species_has_msms_data(size_t species_idx) const { return species_idx < _msms_data.size(); }
 	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const {
 		sum_log.add(get_likelihood_from_binned_value(binned_value));
 	}

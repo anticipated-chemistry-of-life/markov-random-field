@@ -84,7 +84,8 @@ private:
 		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
 	}
 	void _set_initial_branch_lengths(bool is_simulation);
-	std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths, bool exclude_root) const;
+	[[nodiscard]] std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths,
+	                                                      bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths();
 	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
@@ -97,14 +98,15 @@ private:
 	                   size_t node_index_in_tree);
 
 	// updating branch lengths
-	stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
+	[[nodiscard]] stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
 	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
 	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
 	void _add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
-	double _calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length, const TClique &clique,
-	                                                 const TCurrentState &current_state) const;
+	[[nodiscard]] double _calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
+	                                                               const TClique &clique,
+	                                                               const TCurrentState &current_state) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -199,14 +201,14 @@ public:
 	 * @param Id: the index of the node wihtin the tree
 	 * @return a reference to the Node with the given id
 	 */
-	const TNode &get_node(size_t index) const;
-	bool isLeaf(size_t index) const;
+	[[nodiscard]] const TNode &get_node(size_t index) const;
+	[[nodiscard]] bool isLeaf(size_t index) const;
 
 	/** Get the index of a node by its id
 	 * @param Id: the id of the node
 	 * @return the index of the node with the given id
 	 */
-	size_t get_node_index(const std::string &Id) const;
+	[[nodiscard]] size_t get_node_index(const std::string &Id) const;
 
 	/** Gives the number of roots within the tree
 	 * @return the number of roots
@@ -221,21 +223,21 @@ public:
 
 	/** @return the number of leaves in the tree
 	 */
-	size_t get_number_of_leaves() const { return _leaves.size(); }
-	size_t get_number_of_nodes() const { return _nodes.size(); }
-	size_t get_number_of_internal_nodes() const { return _internal_nodes.size(); }
-	size_t get_number_of_roots() const { return _roots.size(); }
+	[[nodiscard]] size_t get_number_of_leaves() const { return _leaves.size(); }
+	[[nodiscard]] size_t get_number_of_nodes() const { return _nodes.size(); }
+	[[nodiscard]] size_t get_number_of_internal_nodes() const { return _internal_nodes.size(); }
+	[[nodiscard]] size_t get_number_of_roots() const { return _roots.size(); }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
 	 * tree). If the node is not a leaf, the function will return -1.
 	 */
-	size_t get_index_within_leaves(size_t node_index) const { return _leafIndices[node_index]; }
-	size_t get_index_within_leaves(const std::string &node_name) const {
+	[[nodiscard]] size_t get_index_within_leaves(size_t node_index) const { return _leafIndices[node_index]; }
+	[[nodiscard]] size_t get_index_within_leaves(const std::string &node_name) const {
 		return _leafIndices[get_node_index(node_name)];
 	}
-	size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
-	size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
+	[[nodiscard]] size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
+	[[nodiscard]] size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
 		return _internal_nodes[internal_index];
 	}
 
@@ -243,42 +245,48 @@ public:
 	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
 	 * in the tree). If the node is not an internal node, the function will return -1.
 	 */
-	size_t get_index_within_internal_nodes(size_t node_index) const { return _internalIndices[node_index]; }
+	[[nodiscard]] size_t get_index_within_internal_nodes(size_t node_index) const {
+		return _internalIndices[node_index];
+	}
 
 	/** @return The root nodes of the tree
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
-	const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
-	const std::vector<size_t> &get_internal_indicies() const { return _internalIndices; }
-	const std::vector<size_t> &get_internal_nodes_without_roots() const { return _internal_nodes_without_roots; }
+	[[nodiscard]] const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
+	[[nodiscard]] const std::vector<size_t> &get_internal_indicies() const { return _internalIndices; }
+	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_without_roots() const {
+		return _internal_nodes_without_roots;
+	}
 
 	/** Checks whether a node is in the tree
 	 * @param node_id: the id of the node
 	 * @return true if the node is in the tree, false otherwise
 	 */
-	bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
+	[[nodiscard]] bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
 
-	std::vector<size_t> get_all_binned_branch_lengths_from_tree() const { return _binned_branch_lengths_from_tree; }
+	[[nodiscard]] std::vector<size_t> get_all_binned_branch_lengths_from_tree() const {
+		return _binned_branch_lengths_from_tree;
+	}
 
 	// stattools stuff
 	[[nodiscard]] std::string name() const override;
 	void initialize() override;
-	double getSumLogPriorDensity(const Storage &) const override;
+	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 	void guessInitialValues() override;
-	double getDensity(const Storage &, size_t) const override;
-	double getLogDensityRatio(const UpdatedStorage &, size_t) const override;
+	[[nodiscard]] double getDensity(const Storage &, size_t) const override;
+	[[nodiscard]] double getLogDensityRatio(const UpdatedStorage &, size_t) const override;
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	double get_delta() const { return _delta; }
-	size_t get_number_of_bins() const { return _number_of_bins; }
+	[[nodiscard]] double get_delta() const { return _delta; }
+	[[nodiscard]] size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
-	const TClique &get_clique(const std::vector<size_t> &index_in_leaves_space) const;
+	[[nodiscard]] const TClique &get_clique(const std::vector<size_t> &index_in_leaves_space) const;
 	TClique &get_clique(const std::vector<size_t> &index_in_leaves_space);
-	const TStorageZVector &get_Z() const;
+	[[nodiscard]] const TStorageZVector &get_Z() const;
 	TStorageZVector &get_Z();
 
-	std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
+	[[nodiscard]] std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYVector &Y) {
@@ -318,11 +326,11 @@ public:
 		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
 	}
 
-	TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
+	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
 		return _binned_branch_lengths->value(_leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
 	}
 
-	const std::string &get_tree_name() const { return _tree_name; }
+	[[nodiscard]] const std::string &get_tree_name() const { return _tree_name; }
 
 	void simulate_Z(size_t tree_index);
 
@@ -330,6 +338,7 @@ public:
 	void write_Z_to_file(const std::string &filename, std::vector<std::unique_ptr<TTree>> &trees,
 	                     size_t dimension_number_of_tree) const {
 		std::vector<std::string> header;
+		header.reserve(trees.size());
 		for (const auto &tree : trees) { header.push_back(tree->get_tree_name()); }
 		header.emplace_back("position");
 		header.emplace_back("Z_state");
@@ -389,7 +398,7 @@ public:
 		}
 	}
 
-	double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
+	[[nodiscard]] double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
 
 	void initialize_Z_from_children(const TStorageYVector &Y) {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
@@ -408,7 +417,7 @@ public:
 		_Z.insert_in_Z(indices_to_insert);
 	};
 
-	std::vector<double> get_paper_counts() const {
+	[[nodiscard]] std::vector<double> get_paper_counts() const {
 		std::string parameter_name = get_tree_name() + "_paper_counts";
 		if (!coretools::instances::parameters().exists(parameter_name)) {
 			throw coretools::TUserError("Parameter '", parameter_name, "' not found. Please provide it.");

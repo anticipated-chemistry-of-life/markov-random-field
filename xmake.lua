@@ -1,5 +1,5 @@
 set_project("acol")
-set_version("1.0.0")
+set_version("0.1")
 
 add_rules("mode.debug", "mode.release")
 

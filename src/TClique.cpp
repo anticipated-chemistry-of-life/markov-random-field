@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <unordered_set>
 #include <vector>
-double TMatrices::_Delta;
+double TMatrices::_delta;
 
 TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension, size_t n_nodes,
                  size_t increment) {

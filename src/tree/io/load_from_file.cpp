@@ -1,4 +1,4 @@
-#include "tree/TTree.h"
+#include "../TTree.h"
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");

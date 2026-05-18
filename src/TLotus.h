@@ -65,15 +65,16 @@ private:
 	bool _simulate = false;
 
 	// private functions
-	double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
-	double _calculate_probability_of_L_given_x(bool x, bool L,
-	                                           const std::vector<size_t> &index_in_collapsed_space) const;
-	double _calculate_probability_of_L_given_x(bool x, bool L, size_t linear_index_in_collapsed_space) const;
-	double _calculate_log_likelihood_of_L_no_collapsing() const;
-	double _calculate_log_likelihood_of_L_do_collapse() const;
+	[[nodiscard]] double _calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
+	[[nodiscard]] double _calculate_probability_of_L_given_x(bool x, bool L,
+	                                                         const std::vector<size_t> &index_in_collapsed_space) const;
+	[[nodiscard]] double _calculate_probability_of_L_given_x(bool x, bool L,
+	                                                         size_t linear_index_in_collapsed_space) const;
+	[[nodiscard]] double _calculate_log_likelihood_of_L_no_collapsing() const;
+	[[nodiscard]] double _calculate_log_likelihood_of_L_do_collapse() const;
 	void _simulateUnderPrior(Storage *) override;
-	std::pair<bool, size_t> _get_state_of_Y(size_t i, size_t index_in_TStorage_Y_vector) const;
-	std::pair<bool, size_t> _get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const;
+	[[nodiscard]] std::pair<bool, size_t> _get_state_of_Y(size_t i, size_t index_in_TStorage_Y_vector) const;
+	[[nodiscard]] std::pair<bool, size_t> _get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const;
 
 public:
 	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma, TypeParamErrorRate *error_rate,
@@ -91,8 +92,8 @@ public:
 	void burninHasFinished() override;
 	void MCMCHasFinished() override;
 
-	double calculate_log_likelihood_of_L() const;
-	double getSumLogPriorDensity(const Storage &) const override;
+	[[nodiscard]] double calculate_log_likelihood_of_L() const;
+	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 
 	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim, size_t K);
 	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
@@ -105,8 +106,8 @@ public:
 	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
 	void updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted);
 
-	const TStorageYVector &get_Lotus() const;
+	[[nodiscard]] const TStorageYVector &get_Lotus() const;
 
 	static std::string get_filename_lotus() { return coretools::instances::parameters().get("lotus"); }
-	const TCurrentState &get_tmp_state_along_last_dim() const { return _tmp_state_along_last_dim; }
+	[[nodiscard]] const TCurrentState &get_tmp_state_along_last_dim() const { return _tmp_state_along_last_dim; }
 };

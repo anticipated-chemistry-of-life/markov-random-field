@@ -159,31 +159,19 @@ CurrentStateResult fill_current_state_hard(const Container &container, size_t n_
 
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
 			    binary_search(container, linear_index_in_container_space_of_i, upper_bound, container.end());
-			index_in_TStorageVector[i] = index_in_TStorage;
-			if (found) {
-				current_state[i]       = container[index_in_TStorage].is_one();
-				exists_in_container[i] = true;
-				continue;
-			}
 		} else if (linear_index_in_container_space_of_i > lower_linear_index_in_container_space &&
 		           linear_index_in_container_space_of_i < upper_linear_index_in_container_space) {
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
 			    binary_search(container, linear_index_in_container_space_of_i, lower_bound, upper_bound);
-			index_in_TStorageVector[i] = index_in_TStorage;
-			if (found) {
-				current_state[i]       = container[index_in_TStorage].is_one();
-				exists_in_container[i] = true;
-				continue;
-			}
 		} else {
 			std::tie(found, index_in_TStorage, linear_index_in_container_space, is_last_element) =
 			    binary_search(container, linear_index_in_container_space_of_i, index_in_TStorage, lower_bound);
-			index_in_TStorageVector[i] = index_in_TStorage;
-			if (found) {
-				current_state[i]       = container[index_in_TStorage].is_one();
-				exists_in_container[i] = true;
-				continue;
-			}
+		}
+		index_in_TStorageVector[i] = index_in_TStorage;
+		if (found) {
+			current_state[i]       = container[index_in_TStorage].is_one();
+			exists_in_container[i] = true;
+			continue;
 		}
 	}
 	return {current_state, exists_in_container, index_in_TStorageVector};

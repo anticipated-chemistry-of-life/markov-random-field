@@ -91,7 +91,7 @@ private:
 	std::vector<TMatrix> _matrices;
 	arma::mat _lambda_c = arma::zeros(2, 2);
 
-	static double _Delta;
+	static double _delta;
 
 	/** @brief Set the matrices for each bin. Instead of calculating the matrix exponential for each bin, the matrix
 	 * exponential of the scaling matrix is calculated once and then multiplied with the previous matrix. This is
@@ -100,11 +100,11 @@ private:
 	void _fill_matrices() {
 		// calculate matrix exponential for first bin
 		TMatrix P_0;
-		P_0.set_from_matrix_exponential(_lambda_c * _Delta / 2.0);
+		P_0.set_from_matrix_exponential(_lambda_c * _delta / 2.0);
 
 		// calculate matrix exponential of scaling matrix
 		TMatrix matrix_alpha;
-		matrix_alpha.set_from_matrix_exponential(_lambda_c * _Delta);
+		matrix_alpha.set_from_matrix_exponential(_lambda_c * _delta);
 
 		_matrices[0] = P_0;
 		// do recursion
@@ -129,7 +129,7 @@ public:
 	 */
 	void resize(size_t NumBins, double Delta) {
 		_matrices.resize(NumBins);
-		_Delta = Delta;
+		_delta = Delta;
 	}
 
 	/** @brief Get the number of matrices.
@@ -140,7 +140,7 @@ public:
 	/** @brief Get the vector of matrices.
 	 * @return Vector of matrices.
 	 */
-	const std::vector<TMatrix> &get_matrices() const { return _matrices; }
+	[[nodiscard]] const std::vector<TMatrix> &get_matrices() const { return _matrices; }
 	const TMatrix &operator[](size_t i) const { return _matrices[i]; }
 
 	/** @brief Set the matrix lambda for the clique given the two rate parameters.
@@ -293,12 +293,12 @@ public:
 
 	/// @brief Return the number of nodes in the clique
 	/// @return Return the number of nodes in the clique
-	size_t get_number_of_nodes() const { return _n_nodes; }
+	[[nodiscard]] size_t get_number_of_nodes() const { return _n_nodes; }
 
 	/// @brief Gets the matrix at the corresponding bin
 	/// @param bin_length: a size_t the is the index where to get the matrix
 	/// @return A reference to the asked matrix
-	template<bool UseTry> const TMatrix &get_matrix(size_t bin_length) const {
+	template<bool UseTry> [[nodiscard]] const TMatrix &get_matrix(size_t bin_length) const {
 		if constexpr (UseTry) { return _try_matrices[bin_length]; }
 		return _cur_matrices[bin_length];
 	}
@@ -320,13 +320,15 @@ public:
 	/// Updates the counter of the clique. This is used by the collapser.
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
-	size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
+	[[nodiscard]] size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
 
 	/// @return Returns the jump size of the clique
-	size_t get_increment() const { return _increment; }
+	[[nodiscard]] size_t get_increment() const { return _increment; }
 
 	/// @return Returns the start index in the leaf space of that specific clique
-	const std::vector<size_t> &get_start_index_in_leaf_space() const { return _start_index_in_leaves_space; }
+	[[nodiscard]] const std::vector<size_t> &get_start_index_in_leaf_space() const {
+		return _start_index_in_leaves_space;
+	}
 
 	template<bool UseTryMatrix>
 	double calculate_prob_to_parent(size_t index_in_tree, const TTree *tree,
@@ -346,31 +348,5 @@ public:
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
 bool sample(double log_prob_0, double log_prob_1);
-inline size_t getLinearIndexSkippingDim(const std::vector<size_t> &index, size_t skip_dim,
-                                        const std::vector<size_t> &dims) {
-	// check if size matches and if coordinates are within dimensions
-	assert(index.size() == dims.size());
-	assert(([dims = std::as_const(dims), &index = std::as_const(index)]() constexpr {
-		for (size_t i = 0; i < dims.size(); i++) {
-			if (index[i] >= dims[i]) { return false; }
-		}
-		return true;
-	})());
-
-	size_t linear_index;
-	if (skip_dim == index.size() - 1) {
-		linear_index = 0;
-	} else {
-		linear_index = index.back();
-	}
-	size_t prod = 1;
-
-	for (size_t i = dims.size() - 1; i > 0; i--) {
-		prod *= dims[i];
-		if (i - 1 == skip_dim) { continue; };
-		linear_index += prod * index[i - 1];
-	}
-	return linear_index;
-}
 
 #endif // ACOL_TBRANCHLENGTHS_H
