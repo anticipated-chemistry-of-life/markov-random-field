@@ -26,6 +26,12 @@ add_requires("gtest", { optional = true, system = false })
 -- =========================================================
 
 target("coretools")
+on_config(function(target)
+    import("devel.git")
+    local git_version = git.lastcommit() or "N/A"
+    git_version = git_version:gsub("%s+", "")
+    target:add("defines", 'GITVERSION="' .. git_version .. '"')
+end)
 set_kind("static")
 add_files("coretools/core/**.cpp")
 add_headerfiles("coretools/core/**.h")
