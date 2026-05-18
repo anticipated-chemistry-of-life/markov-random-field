@@ -302,7 +302,7 @@ public:
 	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	TCurrentState create_current_state(const TStorageYVector &Y, TStorageZVector &Z,
+	TCurrentState create_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
 	                                   const TTree &tree);
 
 	/// @brief Return the number of nodes in the clique
