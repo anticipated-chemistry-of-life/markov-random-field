@@ -14,13 +14,6 @@ struct BinarySearchResult {
 class TMassSpecRun {
 private:
 	coretools::TNestedVector<TFeatureLikelihood> _features;
-	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule likelihoods that are
-	/// associated to it. The vector will be sorted before being added to guarantee the order and be able to do binary
-	/// search.
-	void _add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
-		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
-		_features.push_back(feature_likelihoods);
-	}
 
 public:
 	TMassSpecRun() = default;
@@ -52,5 +45,13 @@ public:
 	static double get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
 	                                               uint8_t binned_value) {
 		return binned_likelihoods[binned_value];
+	}
+
+	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule likelihoods that are
+	/// associated to it. The vector will be sorted before being added to guarantee the order and be able to do binary
+	/// search.
+	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
+		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
+		_features.push_back(feature_likelihoods);
 	}
 };

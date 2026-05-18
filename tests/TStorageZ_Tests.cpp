@@ -2,7 +2,7 @@
 // Created by VISANI Marco on 17.10.2024.
 //
 
-#include "TStorageZ.h"
+#include "storages/z_storage/TStorageZ.h"
 #include "gtest/gtest.h"
 
 TEST(TStorageZ_Tests, test_constructor) {

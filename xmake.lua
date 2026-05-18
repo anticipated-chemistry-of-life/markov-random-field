@@ -15,9 +15,9 @@ add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
 -- =========================================================
 
 option("lotus")
-set_default(false)
-set_showmenu(true)
-set_description("Use Lotus error model")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Use Lotus error model")
 option_end()
 
 add_requires("openmp", { system = false })
@@ -30,88 +30,89 @@ add_requires("gtest", { optional = true, system = false })
 -- =========================================================
 
 target("coretools")
-set_kind("static")
-add_files("coretools/core/**.cpp")
-add_headerfiles("coretools/core/**.h")
+    set_kind("static")
+    add_files("coretools/core/**.cpp")
+    add_headerfiles("coretools/core/**.h")
 
-add_includedirs(
-    "coretools/core/",
-    { public = true }
-)
-add_packages(
-    "fmt",
-    "zlib",
-    "armadillo",
-    "fast_float",
-    "openmp",
-    { public = true, system = false }
-)
-add_cxxflags("-Wall", "-Wextra")
+    add_includedirs(
+        "coretools/core/",
+        { public = true }
+    )
+    add_packages(
+        "fmt",
+        "zlib",
+        "armadillo",
+        "fast_float",
+        "openmp",
+        { public = true, system = false }
+    )
+    add_cxxflags("-Wall", "-Wextra")
 
 -- =========================================================
 -- stattools
 -- =========================================================
 
 target("stattools")
-set_kind("static")
-
-add_files("stattools/core/**.cpp")
-add_headerfiles("stattools/core/**.h")
-
-add_includedirs(
-    "stattools/core",
-    { public = true }
-)
-
-add_deps("coretools")
-
-add_cxxflags("-Wall", "-Wextra")
+    set_kind("static")
+    
+    add_files("stattools/core/**.cpp")
+    add_headerfiles("stattools/core/**.h")
+    
+    add_includedirs(
+        "stattools/core",
+        { public = true }
+    )
+    
+    add_deps("coretools")
+    
+    add_cxxflags("-Wall", "-Wextra")
 
 -- =========================================================
 -- Main executable
 -- =========================================================
 
 target("acol")
-set_kind("binary")
-add_packages("openmp")
-add_files("main.cpp")
-add_files("src/**.cpp")
-add_includedirs("src")
-add_deps("coretools", "stattools")
-add_defines("DEVTOOLS", "DEV_LOCATION")
-if has_config("lotus") then
-    add_defines("USE_LOTUS")
-end
-add_cxxflags("-Wall", "-Wextra")
-after_load(function(target)
-    local pkg = target:pkg("openmp")
-    if pkg then
-        local linkdirs = pkg:get("linkdirs")
-        if linkdirs then
-            for _, linkdir in ipairs(linkdirs) do
-                target:add("rpathdirs", linkdir)
+    set_kind("binary")
+    add_packages("openmp")
+    add_files("main.cpp")
+    add_files("src/**.cpp")
+    add_includedirs("src")
+    add_deps("coretools", "stattools")
+    add_defines("DEVTOOLS", "DEV_LOCATION")
+    if has_config("lotus") then
+        add_defines("USE_LOTUS")
+    end
+    add_cxxflags("-Wall", "-Wextra")
+    after_load(function(target)
+        local pkg = target:pkg("openmp")
+        if pkg then
+            local linkdirs = pkg:get("linkdirs")
+            if linkdirs then
+                for _, linkdir in ipairs(linkdirs) do
+                    target:add("rpathdirs", linkdir)
+                end
             end
         end
-    end
-end)
+    end)
 
 -- =========================================================
 -- Unit tests
 -- =========================================================
 
 target("acol_unitTests")
-set_kind("binary")
-set_default(false)
-
-add_files("src/**.cpp")
-add_files("tests/**.cpp")
-
-add_includedirs("src", "tests")
-
-add_packages("gtest")
-
-add_deps("coretools", "stattools")
-
-add_defines("CHECK_INTERVALS")
-
-add_cxxflags("-Wall", "-Wextra")
+    set_kind("binary")
+    set_default(false)
+    
+    add_files("src/**.cpp")
+    add_files("tests/**.cpp")
+    
+    add_includedirs("src", "tests")
+    
+    add_packages("gtest_main", "openmp", "gtest")
+    add_links("gtest_main", "gtest") 
+    
+    add_deps("coretools", "stattools")
+    
+    add_defines("CHECK_INTERVALS")
+    
+    add_cxxflags("-Wall", "-Wextra")

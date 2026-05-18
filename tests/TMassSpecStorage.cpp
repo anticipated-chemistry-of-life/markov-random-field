@@ -1,58 +1,47 @@
-#include "TMassSpecStorage.h"
+#include "mass_spec/feature_likelihood.h"
+#include "mass_spec/msms_run.h"
 #include "gtest/gtest.h"
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_1) {
-	TFeatureLikelihood storage;
-	storage.set_molecule_index(16777215);
+	TFeatureLikelihood storage(16777215, 125);
 	EXPECT_EQ(storage.get_molecule_index(), 16777215);
 }
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_2) {
-	TFeatureLikelihood storage;
-	storage.set_molecule_index(0);
+	TFeatureLikelihood storage(0, 200);
 	EXPECT_EQ(storage.get_molecule_index(), 0);
 }
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_3) {
-	TFeatureLikelihood storage;
-	storage.set_molecule_index(1);
+	TFeatureLikelihood storage(1, 200);
 	EXPECT_EQ(storage.get_molecule_index(), 1);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_1) {
-	TFeatureLikelihood storage;
-	storage.set_binned_likelihood(255);
+	TFeatureLikelihood storage(0, 255);
 	EXPECT_EQ(storage.get_binned_likelihood(), 255);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_2) {
-	TFeatureLikelihood storage;
-	storage.set_binned_likelihood(0);
+	TFeatureLikelihood storage(0, 0);
 	EXPECT_EQ(storage.get_binned_likelihood(), 0);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_3) {
-	TFeatureLikelihood storage;
-	storage.set_binned_likelihood(128);
+	TFeatureLikelihood storage(0, 128);
 	EXPECT_EQ(storage.get_binned_likelihood(), 128);
 }
 
 TEST(TFeatureLikelihood_Tests, combined) {
-	TFeatureLikelihood storage;
-	storage.set_binned_likelihood(128);
-	storage.set_molecule_index(16777215);
+	TFeatureLikelihood storage(16777215, 128);
 	EXPECT_EQ(storage.get_binned_likelihood(), 128);
 	EXPECT_EQ(storage.get_molecule_index(), 16777215);
 }
 
 TEST(TFeatureLikelihood_Tests, nested_vector) {
-	TFeatureLikelihood fl_1;
-	fl_1.set_binned_likelihood(128);
-	fl_1.set_molecule_index(16777215);
+	TFeatureLikelihood fl_1(16777215, 128);
 
-	TFeatureLikelihood fl_2;
-	fl_2.set_binned_likelihood(120);
-	fl_2.set_molecule_index(245);
+	TFeatureLikelihood fl_2(245, 120);
 
 	std::vector<TFeatureLikelihood> vec_1 = {fl_1};
 	std::vector<TFeatureLikelihood> vec_2 = {fl_1, fl_2};
