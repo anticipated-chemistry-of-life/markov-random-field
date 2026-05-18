@@ -5,9 +5,9 @@
 
 build/
 cmake-build-debug/
-#coretools/
+coretools_cmake/
 genometools/
-#stattools/
+stattools_cmake/
 
 # TNode artifact files
 node_modules/
