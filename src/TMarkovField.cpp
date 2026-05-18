@@ -17,7 +17,8 @@
 #include <string>
 #include <vector>
 
-TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix)
+TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
+                           std::string _prefix)
     : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(*_trees.back().get(), 1) {
 	using namespace coretools::instances;
 
@@ -30,7 +31,8 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	_fix_Z = !parameters().get("Z.update", true);
 	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
 
-	// number of outer loops = the number of times to repeat K such that all leaves of the last dimension are parsed
+	// number of outer loops = the number of times to repeat K such that all leaves of the last
+	// dimension are parsed
 	_num_outer_loops = std::ceil((double)_trees.back()->get_number_of_leaves() / (double)_K);
 
 	// set number of leaves per dimension (set the last dimension to one)
@@ -41,7 +43,9 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 
 	// create sheets: one per dimension except the last dimension
 	_sheets.reserve(_trees.size() - 1);
-	for (size_t i = 0; i < _trees.size() - 1; ++i) { _sheets.emplace_back(i, *_trees[i].get(), *_trees.back().get()); }
+	for (size_t i = 0; i < _trees.size() - 1; ++i) {
+		_sheets.emplace_back(i, *_trees[i].get(), *_trees.back().get());
+	}
 
 	// initialize Y
 	auto num_leaves_per_dim   = _num_leaves_per_dim_except_last;
@@ -53,7 +57,8 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	}
 }
 
-bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
+bool TMarkovField::_need_to_update_sheet(size_t sheet_ix,
+                                         const std::vector<size_t> &start_index_in_leaves_space,
                                          const std::vector<size_t> &previous_ix) const {
 	for (size_t j = 0; j < _sheets.size(); ++j) { // loop over all sheets
 		if (j == sheet_ix) { continue; }          // ignore current sheet
@@ -62,7 +67,8 @@ bool TMarkovField::_need_to_update_sheet(size_t sheet_ix, const std::vector<size
 	return false;
 }
 
-void TMarkovField::_update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
+void TMarkovField::_update_sheets(bool first,
+                                  const std::vector<size_t> &start_index_in_leaves_space,
                                   const std::vector<size_t> &previous_ix, size_t K_cur_sheet) {
 	for (size_t j = 0; j < _sheets.size(); ++j) {
 		if (first || _need_to_update_sheet(j, start_index_in_leaves_space, previous_ix)) {
@@ -75,34 +81,39 @@ void TMarkovField::_update_sheets(bool first, const std::vector<size_t> &start_i
 void TMarkovField::_fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space) {
 	start_index_in_leaves_space.back() = 0; // set last dimension to zero
 	// fill all Y along last dimension
-	_clique_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, _trees.back()->get_number_of_leaves(), _Y);
+	_clique_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space,
+	                                       _trees.back()->get_number_of_leaves(), _Y);
 	// fill all Z along last dimension
-	_clique_last_dim.fill_Z_along_last_dim(start_index_in_leaves_space, _trees.back()->get_number_of_internal_nodes(),
+	_clique_last_dim.fill_Z_along_last_dim(start_index_in_leaves_space,
+	                                       _trees.back()->get_number_of_internal_nodes(),
 	                                       _trees.back()->get_Z());
 }
 
-void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
-                                             std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+void TMarkovField::_calculate_log_prob_field(
+    const std::vector<size_t> &index_in_leaves_space,
+    std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	for (size_t dim = 0; dim < _trees.size(); ++dim) {
 		// get relevant clique
 		const auto &clique = _trees[dim]->get_clique(index_in_leaves_space);
 
 		// translate index in leaves to the index in tree
-		const size_t index_in_tree = _trees[dim]->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
+		const size_t index_in_tree =
+		    _trees[dim]->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
 
 		// get leaf index in tree of last dimension
 		const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
 		// calculate P(parent | node = 0) and P(parent | node = 1)
-		// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
+		// Note: leaves can never be roots -> they always have a parent (no need to bother with
+		// stationary)
 		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
 			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree), _trees[dim].get(),
-			    leaf_index_in_tree_of_last_dim, _clique_last_dim, sum_log);
+			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
+			    _trees[dim].get(), leaf_index_in_tree_of_last_dim, _clique_last_dim, sum_log);
 		} else { // use sheet
 			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree), _trees[dim].get(),
-			    leaf_index_in_tree_of_last_dim, _sheets[dim], sum_log);
+			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
+			    _trees[dim].get(), leaf_index_in_tree_of_last_dim, _sheets[dim], sum_log);
 		}
 	}
 }
@@ -110,14 +121,17 @@ void TMarkovField::_calculate_log_prob_field(const std::vector<size_t> &index_in
 void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
                                              const std::vector<size_t> &index_in_leaves_space) {
 	// update counter of leaves with value 1 for all dimensions except the last one
-	// reason: we parallelize over the last dimension -> can not update the counter there, as this would result in race
-	// condition
+	// reason: we parallelize over the last dimension -> can not update the counter there, as this
+	// would result in race condition
 	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
-		_trees[dim]->get_clique(index_in_leaves_space).update_counter_leaves_state_1(new_state, old_state);
+		_trees[dim]
+		    ->get_clique(index_in_leaves_space)
+		    .update_counter_leaves_state_1(new_state, old_state);
 	}
 }
 
-void TMarkovField::_update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL) {
+void TMarkovField::_update_cur_LL_lotus(TLotus &lotus,
+                                        std::vector<coretools::TSumLogProbability> &new_LL) {
 	double sum_new_LL = 0.0;
 	for (auto &i : new_LL) {
 		// loop over all LL (stored per thread) and sum
@@ -131,8 +145,8 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
 	// get current state, exists and index in TStorageYVector
-	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable with respect to indices
-	// of where TStorageYVector is a one
+	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable
+	// with respect to indices of where TStorageYVector is a one
 	const auto [cur_state, exists_in_TStorageYVector, index_in_TStorageYVector] =
 	    _clique_last_dim.get_state_exist_ix_TStorageYVector(leaf_index_in_tree_of_last_dim);
 
@@ -142,7 +156,8 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 		if (exists_in_TStorageYVector) {
 			_Y.set_to_one(index_in_TStorageYVector);
 		} else { // does not yet exist -> remember linear index in Y to insert later
-			const size_t linear_index_in_Y_space = _Y.get_linear_index_in_Y_space(index_in_leaves_space);
+			const size_t linear_index_in_Y_space =
+			    _Y.get_linear_index_in_Y_space(index_in_leaves_space);
 			linear_indices_in_Y_space_to_insert.emplace_back(linear_index_in_Y_space);
 		}
 	}
@@ -166,7 +181,8 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 void TMarkovField::_read_Y_from_file(const std::string &filename) {
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 	if (file.numCols() != 5) {
-		throw coretools::TUserError("Simulated Y is expected to have 5 columns, but has ", file.numCols(), " !");
+		throw coretools::TUserError("Simulated Y is expected to have 5 columns, but has ",
+		                            file.numCols(), " !");
 	}
 
 	// read each line of the file
@@ -206,23 +222,24 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 }
 
-void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
-                                  size_t leaf_index_last_dim, std::array<double, 2> &prob, TLotus &lotus) {
+void TMarkovField::_calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space,
+                                  size_t index_for_tmp_state, size_t leaf_index_last_dim,
+                                  std::array<double, 2> &prob, const TLotus &lotus) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
 	lotus.calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state, cur_state, prob);
 }
 
-void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
-                                     TLotus &lotus) {
+void TMarkovField::_prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space,
+                                     size_t K_cur_sheet, TLotus &lotus) {
 	lotus.fill_tmp_state_along_last_dim(start_index_in_leaves_space, K_cur_sheet);
 }
 
 void TMarkovField::simulate(TLotus &lotus) {
 	// For simulation we always draw from the prior. (top-down)
 	// 1. Draw branch len -> draw mus
-	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes based on the state of
-	// the parent. At the end also draw the state of the leaves. For each tree we know which leaves and which internal
-	// node are 0 or 1.
+	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes
+	// based on the state of the parent. At the end also draw the state of the leaves. For each tree
+	// we know which leaves and which internal node are 0 or 1.
 	// 2. draw Z since its unique per tree
 	// 3. Draw Y (this function)
 	// 4. Draw Lotus.
@@ -249,7 +266,8 @@ void TMarkovField::simulate(TLotus &lotus) {
 		                         "\t");
 	}
 
-	std::string report = "Running an MCMC chain of " + coretools::str::toString(max_iteration) + " iterations";
+	std::string report =
+	    "Running an MCMC chain of " + coretools::str::toString(max_iteration) + " iterations";
 	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 
@@ -274,33 +292,39 @@ void TMarkovField::simulate(TLotus &lotus) {
 	if (WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 			const auto &tree = _trees[tree_idx];
-			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", _trees, tree_idx);
+			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt",
+			                            _trees, tree_idx);
 		}
 	}
 }
 
 void TMarkovField::_simulate_Y() {
-	// to sample Y we need to know the state of the parent for each leaf that is represented in a Y entry.
-	// We are going to iterate over all possible Y and sample givent the product of probabilities of the child given the
-	// parent.
-	// set number of leaves per dimension (set the last dimension to one)
+	// to sample Y we need to know the state of the parent for each leaf that is represented in a Y
+	// entry. We are going to iterate over all possible Y and sample givent the product of
+	// probabilities of the child given the parent. set number of leaves per dimension (set the last
+	// dimension to one)
 	if (SIMULATION_NO_Y_INITIALIZATION) { return; }
-	for (size_t linear_index_in_leaves_space = 0; linear_index_in_leaves_space < _Y.total_size_of_container_space();
+	for (size_t linear_index_in_leaves_space = 0;
+	     linear_index_in_leaves_space < _Y.total_size_of_container_space();
 	     ++linear_index_in_leaves_space) {
-		std::vector<size_t> multidim_index_in_Y = _Y.get_multi_dimensional_index(linear_index_in_leaves_space);
+		std::vector<size_t> multidim_index_in_Y =
+		    _Y.get_multi_dimensional_index(linear_index_in_leaves_space);
 		std::array<coretools::TSumLogProbability, 2> sum_log;
 		for (size_t dim = 0; dim < _trees.size(); ++dim) {
 			// get relevant clique
 			const auto &clique = _trees[dim]->get_clique(multidim_index_in_Y);
-			TCurrentState current_state(*_trees[dim].get(), clique.get_increment(), _trees[dim]->get_number_of_leaves(),
+			TCurrentState current_state(*_trees[dim].get(), clique.get_increment(),
+			                            _trees[dim]->get_number_of_leaves(),
 			                            _trees[dim]->get_number_of_internal_nodes());
 			// translate index in leaves to the index in tree
-			const size_t index_in_tree = _trees[dim]->get_node_index_from_leaf_index(multidim_index_in_Y[dim]);
+			const size_t index_in_tree =
+			    _trees[dim]->get_node_index_from_leaf_index(multidim_index_in_Y[dim]);
 			// calculate P(parent | node = 0) and P(parent | node = 1)
-			// Note: leaves can never be roots -> they always have a parent (no need to bother with stationary)
-			clique.calculate_log_prob_parent_to_node(index_in_tree,
-			                                         _trees[dim]->get_binned_branch_length(index_in_tree),
-			                                         _trees[dim].get(), 0, current_state, sum_log);
+			// Note: leaves can never be roots -> they always have a parent (no need to bother with
+			// stationary)
+			clique.calculate_log_prob_parent_to_node(
+			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
+			    _trees[dim].get(), 0, current_state, sum_log);
 		}
 		bool y_state = sample(sum_log);
 		if (y_state) {
@@ -325,7 +349,9 @@ void TMarkovField::MCMCHasFinished() {
 }
 
 const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
-const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const { return _Y[index_in_TStorageYVector]; }
+const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const {
+	return _Y[index_in_TStorageYVector];
+}
 size_t TMarkovField::size_Y() const { return _Y.size(); }
 
 double TMarkovField::_calculate_complete_joint_density() {

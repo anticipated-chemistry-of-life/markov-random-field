@@ -58,18 +58,22 @@ private:
 	void _fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space);
 	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
-	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix, const std::vector<size_t> &start_index_in_leaves_space,
+	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix,
+	                                         const std::vector<size_t> &start_index_in_leaves_space,
 	                                         const std::vector<size_t> &previous_ix) const;
 	int _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
 	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
-	void _update_counter_1_cliques(bool new_state, bool old_state, const std::vector<size_t> &index_in_leaves_space);
+	void _update_counter_1_cliques(bool new_state, bool old_state,
+	                               const std::vector<size_t> &index_in_leaves_space);
 
 	void _simulate_Y();
-	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space, size_t index_for_tmp_state,
-	                    size_t leaf_index_last_dim, std::array<double, 2> &prob, TLotus &lotus);
-	static void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space, size_t K_cur_sheet,
-	                              TLotus &lotus);
-	static void _update_cur_LL_lotus(TLotus &lotus, std::vector<coretools::TSumLogProbability> &new_LL);
+	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space,
+	                    size_t index_for_tmp_state, size_t leaf_index_last_dim,
+	                    std::array<double, 2> &prob, const TLotus &lotus);
+	static void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space,
+	                              size_t K_cur_sheet, TLotus &lotus);
+	static void _update_cur_LL_lotus(TLotus &lotus,
+	                                 std::vector<coretools::TSumLogProbability> &new_LL);
 	double _calculate_complete_joint_density();
 	void _reset_log_joint_density() {
 		_complete_log_density.clear();
@@ -77,22 +81,24 @@ private:
 	}
 
 	template<bool IsSimulation, bool initYFromLotus>
-	std::pair<int, double> _update_Y(std::vector<size_t> index_in_leaves_space, size_t leaf_index_last_dim,
-	                                 size_t index_for_tmp_state,
-	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert, TLotus &lotus) {
-		index_in_leaves_space.back() = leaf_index_last_dim;
+	std::pair<int, double> _update_Y(const std::vector<size_t> &index_in_leaves_space,
+	                                 size_t leaf_index_last_dim, size_t index_for_tmp_state,
+	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
+	                                 const TLotus &lotus) {
+		auto index_copy   = index_in_leaves_space;
+		index_copy.back() = leaf_index_last_dim;
 
 		// prepare log probabilities for the two possible states
 		std::array<coretools::TSumLogProbability, 2> sum_log;
 
 		// calculate probabilities in Markov random field
-		if constexpr (!initYFromLotus) { _calculate_log_prob_field(index_in_leaves_space, sum_log); }
+		if constexpr (!initYFromLotus) { _calculate_log_prob_field(index_copy, sum_log); }
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
 		std::array<double, 2> prob_lotus{}; //{1e-20, 1e-20};
 		if constexpr (!IsSimulation) {
-			_calc_lotus_LL(index_in_leaves_space, index_for_tmp_state, leaf_index_last_dim, prob_lotus, lotus);
+			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus, lotus);
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
 		}
 
@@ -103,7 +109,7 @@ private:
 
 		// update Y accordingly
 		int diff_counter_1_in_last_dim =
-		    _set_new_Y(new_state, index_in_leaves_space, linear_indices_in_Y_space_to_insert);
+		    _set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
 		double prob_new_state = prob_lotus[new_state];
 
 		if (new_state) {
@@ -115,13 +121,16 @@ private:
 		return {diff_counter_1_in_last_dim, prob_new_state};
 	}
 
-	template<bool IsSimulation, bool initYFromLotus> void _update_all_Y(TLotus &lotus, size_t iteration) {
+	template<bool IsSimulation, bool initYFromLotus>
+	void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
 
 		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 			std::vector<size_t> Y_trace_header;
 			Y_trace_header.reserve(_Y.total_size_of_container_space());
-			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
+			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
+				Y_trace_header.push_back(i);
+			}
 			if constexpr (IsSimulation) {
 				_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
 			} else {
@@ -132,8 +141,9 @@ private:
 		if (_fix_Y) {
 			// keep the two ifs separate because if Y is not empty, then we just return
 			if (_Y.empty()) {
-				throw coretools::TUserError("Y is currently empty and fixed. Was Y read from a file ? "
-				                            "(--set_Y)");
+				throw coretools::TUserError(
+				    "Y is currently empty and fixed. Was Y read from a file ? "
+				    "(--set_Y)");
 			}
 			return;
 		}
@@ -148,12 +158,14 @@ private:
 			size_t num_inner_loops = coretools::containerProduct(_num_leaves_per_dim_except_last);
 			std::vector<size_t> previous_ix;
 			for (size_t i = 0; i < num_inner_loops; ++i) {
-				// get multi-dimensional index from linear coordinate and set the start of the last dimension
-				auto start_index_in_leaves_space   = coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
+				// get multi-dimensional index from linear coordinate and set the start of the last
+				// dimension
+				auto start_index_in_leaves_space =
+				    coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
 				start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
 				// calculate size of current sheet (make sure not to overshoot)
-				const size_t K_cur_sheet =
-				    std::min(_K, _trees.back()->get_number_of_leaves() - start_ix_in_leaves_last_dim);
+				const size_t K_cur_sheet = std::min(_K, _trees.back()->get_number_of_leaves() -
+				                                            start_ix_in_leaves_last_dim);
 				// update sheet(s), if necessary
 				_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
 
@@ -161,22 +173,27 @@ private:
 				_fill_clique_along_last_dim(start_index_in_leaves_space);
 				_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
 
-				// now loop along all leaves of the last dimension for updating (only K leaves for which we have
-				// everything)
+				// now loop along all leaves of the last dimension for updating (only K leaves for
+				// which we have everything)
 				const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
 				int diff_counter_1_in_last_dim         = 0;
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) reduction(+ : diff_counter_1_in_last_dim)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)                                            \
+    reduction(+ : diff_counter_1_in_last_dim) default(none)                                        \
+    shared(new_LL, lotus, start_index_in_leaves_space, start_ix_in_leaves_last_dim,                \
+               end_ix_in_leaves_last_dim, linear_indices_in_Y_space_to_insert)
 				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
 					auto [diff, prob_new_state] = _update_Y<IsSimulation, initYFromLotus>(
 					    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
 					    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
 					diff_counter_1_in_last_dim += diff;
-					if constexpr (!IsSimulation) { new_LL[omp_get_thread_num()].add(prob_new_state); }
+					if constexpr (!IsSimulation) {
+						new_LL[omp_get_thread_num()].add(prob_new_state);
+					}
 				}
 
 				// insert new 1-valued indices into Y
-				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't use them, so it's
-				// ok
+				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't
+				// use them, so it's ok
 				_trees.back()
 				    ->get_clique(start_index_in_leaves_space)
 				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
@@ -203,12 +220,14 @@ private:
 				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
 					Z_trace_header.push_back(i);
 				}
-				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.txt", Z_trace_header,
-				                            "\t");
+				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.txt",
+				                            Z_trace_header, "\t");
 			}
 		}
 
-		for (auto &_tree : _trees) { _tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y); }
+		for (auto &_tree : _trees) {
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y);
+		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_Z_TRACE) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
@@ -239,7 +258,8 @@ private:
 				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
-					size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+					size_t node_idx =
+					    _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
 					node_names.push_back(_trees[idx]->get_node_id(node_idx));
 				};
 				fraction = _Y.get_fraction_of_ones(i);
@@ -247,14 +267,16 @@ private:
 			}
 		} else {
 			for (size_t i = 0; i < _Y.size(); ++i) {
-				const auto linear_index_in_y        = _Y[i].get_linear_index_in_Y_space();
-				const auto state                    = _Y[i].is_one();
-				line                                = {linear_index_in_y, state};
-				fraction                            = _Y.get_fraction_of_ones(linear_index_in_y);
-				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
+				const auto linear_index_in_y = _Y[i].get_linear_index_in_Y_space();
+				const auto state             = _Y[i].is_one();
+				line                         = {linear_index_in_y, state};
+				fraction                     = _Y.get_fraction_of_ones(linear_index_in_y);
+				std::vector<size_t> leaf_index_of_Y =
+				    _Y.get_multi_dimensional_index(linear_index_in_y);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
-					size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+					size_t node_idx =
+					    _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
 					node_names.push_back(_trees[idx]->get_node_id(node_idx));
 				};
 				file.writeln(line, node_names, fraction);
@@ -263,7 +285,8 @@ private:
 	};
 
 public:
-	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees, std::string _prefix);
+	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
+	             std::string _prefix);
 	~TMarkovField() = default;
 
 	// updates

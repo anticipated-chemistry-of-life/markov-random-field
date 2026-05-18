@@ -6,7 +6,6 @@
 #include "TClique.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
-#include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
@@ -132,7 +131,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 		// we sample the roots
 		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
-		double proba_root = clique.get_stationary_probability(true, _alpha_c->value(c));
+		double proba_root = TClique::get_stationary_probability(true, _alpha_c->value(c));
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS

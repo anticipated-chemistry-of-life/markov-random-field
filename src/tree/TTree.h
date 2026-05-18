@@ -104,21 +104,23 @@ private:
 	void _add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
-	[[nodiscard]] double _calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-	                                                               const TClique &clique,
-	                                                               const TCurrentState &current_state) const;
+	[[nodiscard]] double
+	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
+	                                          const TClique &clique,
+	                                          const TCurrentState &current_state) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
 	template<bool UseTryMatrix>
-	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique, bool state_of_node,
-	                                         coretools::TSumLogProbability &LL, const TCurrentState &current_state,
+	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
+	                                         bool state_of_node, coretools::TSumLogProbability &LL,
+	                                         const TCurrentState &current_state,
 	                                         size_t branch_len_bin, double alpha) {
 		if (_nodes[index_in_tree].isRoot()) {
 			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
 		} else {
-			double prob =
-			    clique.calculate_prob_to_parent<UseTryMatrix>(index_in_tree, this, branch_len_bin, current_state);
+			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
+			    index_in_tree, this, branch_len_bin, current_state);
 			LL.add(prob);
 		}
 	}
@@ -129,7 +131,8 @@ private:
 		param->propose(coretools::TRange(c));
 
 		// calculate LL for old mu
-		// No need to change Lambda (rate matrix), just go over entire tree and calculate probabilities
+		// No need to change Lambda (rate matrix), just go over entire tree and calculate
+		// probabilities
 		double old_value;
 		double new_value;
 		if constexpr (IsAlpha) {
@@ -150,21 +153,24 @@ private:
 
 		const auto &clique = _cliques[c];
 		for (size_t i = 0; i < _nodes.size(); ++i) {
-			bool state_of_node = current_state.get(i);
-			// Note: need to take oldValue because we update _binned_branch_length before starting the loop!!!
-			const auto branch_len_bin =
-			    _binned_branch_lengths->oldValue(_leaves_and_internal_nodes_without_roots_indices[i]);
+			bool state_of_node        = current_state.get(i);
+			// Note: need to take oldValue because we update _binned_branch_length before starting
+			// the loop!!!
+			const auto branch_len_bin = _binned_branch_lengths->oldValue(
+			    _leaves_and_internal_nodes_without_roots_indices[i]);
 
 			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old, current_state,
-				                                           branch_len_bin, old_value);
-				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new, current_state,
-				                                          branch_len_bin, new_value);
+				_compute_LL_old_and_new_nu_or_alpha<false>(
+				    i, clique, state_of_node, LL_old, current_state, branch_len_bin, old_value);
+				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new,
+				                                          current_state, branch_len_bin, new_value);
 			} else {
-				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old, current_state,
-				                                           branch_len_bin, _alpha_c->value(c));
-				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new, current_state,
-				                                          branch_len_bin, _alpha_c->value(c));
+				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old,
+				                                           current_state, branch_len_bin,
+				                                           _alpha_c->value(c));
+				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new,
+				                                          current_state, branch_len_bin,
+				                                          _alpha_c->value(c));
 			}
 		}
 
@@ -185,8 +191,9 @@ private:
 	                                   const stattools::TPairIndexSampler &pairs);
 
 public:
-	TTree(size_t dimension, const std::string &filename, const std::string &tree_name, TypeParamAlpha *Alpha,
-	      TypeParamLogNu *LogNu, TypeParamBinBranches *Binned_Branch_Lenghts);
+	TTree(size_t dimension, const std::string &filename, const std::string &tree_name,
+	      TypeParamAlpha *Alpha, TypeParamLogNu *LogNu,
+	      TypeParamBinBranches *Binned_Branch_Lenghts);
 	~TTree() override;
 
 	[[nodiscard]] size_t size() const { return _nodes.size(); };
@@ -216,8 +223,8 @@ public:
 	[[nodiscard]] size_t number_of_roots() const { return _roots.size(); }
 
 	/** Method to get all the leaves of the tree.
-	 * @return Returns a vector of length equal to the number of leaves in the tree. Each element of the vector is the
-	 * index of the leaf node within the tree.
+	 * @return Returns a vector of length equal to the number of leaves in the tree. Each element of
+	 * the vector is the index of the leaf node within the tree.
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_leaf_nodes() const { return _leaves; }
 
@@ -229,21 +236,26 @@ public:
 	[[nodiscard]] size_t get_number_of_roots() const { return _roots.size(); }
 
 	/** @param node_index: the index of the node within the tree
-	 * @return The index of the node within the leaves vector (which is smaller than the total number of nodes in the
-	 * tree). If the node is not a leaf, the function will return -1.
+	 * @return The index of the node within the leaves vector (which is smaller than the total
+	 * number of nodes in the tree). If the node is not a leaf, the function will return -1.
 	 */
-	[[nodiscard]] size_t get_index_within_leaves(size_t node_index) const { return _leafIndices[node_index]; }
+	[[nodiscard]] size_t get_index_within_leaves(size_t node_index) const {
+		return _leafIndices[node_index];
+	}
 	[[nodiscard]] size_t get_index_within_leaves(const std::string &node_name) const {
 		return _leafIndices[get_node_index(node_name)];
 	}
-	[[nodiscard]] size_t get_node_index_from_leaf_index(size_t leaf_index) const { return _leaves[leaf_index]; }
+	[[nodiscard]] size_t get_node_index_from_leaf_index(size_t leaf_index) const {
+		return _leaves[leaf_index];
+	}
 	[[nodiscard]] size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
 		return _internal_nodes[internal_index];
 	}
 
 	/** @param node_index: the index of the node within the tree
-	 * @return The index of the node within the internal nodes vector (which is smaller than the total number of nodes
-	 * in the tree). If the node is not an internal node, the function will return -1.
+	 * @return The index of the node within the internal nodes vector (which is smaller than the
+	 * total number of nodes in the tree). If the node is not an internal node, the function will
+	 * return -1.
 	 */
 	[[nodiscard]] size_t get_index_within_internal_nodes(size_t node_index) const {
 		return _internalIndices[node_index];
@@ -253,7 +265,9 @@ public:
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 	[[nodiscard]] const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
-	[[nodiscard]] const std::vector<size_t> &get_internal_indicies() const { return _internalIndices; }
+	[[nodiscard]] const std::vector<size_t> &get_internal_indicies() const {
+		return _internalIndices;
+	}
 	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_without_roots() const {
 		return _internal_nodes_without_roots;
 	}
@@ -262,7 +276,9 @@ public:
 	 * @param node_id: the id of the node
 	 * @return true if the node is in the tree, false otherwise
 	 */
-	[[nodiscard]] bool in_tree(const std::string &node_id) const { return _node_map.find(node_id) != _node_map.end(); };
+	[[nodiscard]] bool in_tree(const std::string &node_id) const {
+		return _node_map.find(node_id) != _node_map.end();
+	};
 
 	[[nodiscard]] std::vector<size_t> get_all_binned_branch_lengths_from_tree() const {
 		return _binned_branch_lengths_from_tree;
@@ -300,15 +316,16 @@ public:
 		// propose new branch lengths
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static) default(none)             \
+    shared(pairs, log_sum_b, Y, indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			// fill the current state for this clique
 			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
 			if constexpr (!FixZ) {
-				indices_to_insert[i] =
-				    _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this, _alpha_c->value(i),
-				                         _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+				indices_to_insert[i] = _cliques[i].update_Z(
+				    _joint_log_prob_density, current_state, _Z, this, _alpha_c->value(i),
+				    _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
 			}
 
 			// update nu and alpha
@@ -327,7 +344,8 @@ public:
 	}
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
-		return _binned_branch_lengths->value(_leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
+		return _binned_branch_lengths->value(
+		    _leaves_and_internal_nodes_without_roots_indices[index_in_tree]);
 	}
 
 	[[nodiscard]] const std::string &get_tree_name() const { return _tree_name; }
@@ -357,10 +375,12 @@ public:
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
-						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(multidim_index[idx]);
+						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(
+						    multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					} else {
-						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						size_t node_idx =
+						    trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					};
 				};
@@ -373,14 +393,17 @@ public:
 				const auto linear_index_in_Z_space = _Z[i].get_linear_index_in_Z_space();
 				const auto state                   = _Z[i].is_one();
 				line                               = {linear_index_in_Z_space, state};
-				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
+				std::vector<size_t> multidim_index =
+				    _Z.get_multi_dimensional_index(linear_index_in_Z_space);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
-						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(multidim_index[idx]);
+						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(
+						    multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					} else {
-						size_t node_idx = trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
+						size_t node_idx =
+						    trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
 						node_names.push_back(trees[idx]->get_node_id(node_idx));
 					};
 				};
@@ -390,7 +413,8 @@ public:
 
 		if (WRITE_BRANCH_LENGTHS) {
 			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
-			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() + "_branch_length_grid.txt",
+			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() +
+			                                           "_branch_length_grid.txt",
 			                                       header_branch_len, "\t");
 			for (size_t i = 0; i < _grid_branch_lengths.size(); ++i) {
 				branch_len_file.writeln(i, _grid_branch_lengths[i]);
@@ -398,7 +422,9 @@ public:
 		}
 	}
 
-	[[nodiscard]] double get_complete_joint_density() const { return coretools::containerSum(_joint_log_prob_density); }
+	[[nodiscard]] double get_complete_joint_density() const {
+		return coretools::containerSum(_joint_log_prob_density);
+	}
 
 	void initialize_Z_from_children(const TStorageYVector &Y) {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
@@ -411,7 +437,8 @@ public:
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
-			    current_state, _Z, this, _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+			    current_state, _Z, this, _binned_branch_lengths,
+			    _leaves_and_internal_nodes_without_roots_indices);
 		}
 
 		_Z.insert_in_Z(indices_to_insert);
@@ -420,14 +447,16 @@ public:
 	[[nodiscard]] std::vector<double> get_paper_counts() const {
 		std::string parameter_name = get_tree_name() + "_paper_counts";
 		if (!coretools::instances::parameters().exists(parameter_name)) {
-			throw coretools::TUserError("Parameter '", parameter_name, "' not found. Please provide it.");
+			throw coretools::TUserError("Parameter '", parameter_name,
+			                            "' not found. Please provide it.");
 		}
 
 		const auto filename = coretools::instances::parameters().get<std::string>(parameter_name);
 		coretools::TInputFile file(filename, coretools::FileType::Header);
 
 		if (file.numCols() != 2) {
-			throw coretools::TUserError("File '", filename, "' is expected to have 2 columns, but has ", file.numCols(),
+			throw coretools::TUserError("File '", filename,
+			                            "' is expected to have 2 columns, but has ", file.numCols(),
 			                            " !");
 		}
 
@@ -445,8 +474,8 @@ public:
 
 			if (leaf_index >= paper_counts.size()) {
 				throw coretools::TUserError("Leaf index ", leaf_index,
-				                            " is out of bounds for paper counts vector of size ", paper_counts.size(),
-				                            ".");
+				                            " is out of bounds for paper counts vector of size ",
+				                            paper_counts.size(), ".");
 			}
 
 			paper_counts[leaf_index] = std::sqrt(count);
