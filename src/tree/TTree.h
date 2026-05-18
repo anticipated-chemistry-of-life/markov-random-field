@@ -13,6 +13,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
+#include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/y_storage/TStorageYVector.h"
 #include "storages/z_storage/TStorageZVector.h"
@@ -310,17 +311,20 @@ public:
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
-		auto pairs = _build_pairs_branch_lengths();
-		std::vector<coretools::TSumLogProbability> log_sum_b(pairs.length());
+		auto pairs         = _build_pairs_branch_lengths();
+		const auto n_pairs = pairs.length();
+		std::vector<std::vector<coretools::TSumLogProbability>> log_sum_per_thread(
+		    NUMBER_OF_THREADS, std::vector<coretools::TSumLogProbability>(n_pairs));
 
 		// propose new branch lengths
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static) default(none)             \
-    shared(pairs, log_sum_b, Y, indices_to_insert)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none)                              \
+    shared(pairs, log_sum_per_thread, Y, indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
+			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
-			auto current_state = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state  = _cliques[i].create_current_state(Y, _Z, *this);
 			// update Z
 			if constexpr (!FixZ) {
 				indices_to_insert[i] = _cliques[i].update_Z(
@@ -334,13 +338,22 @@ public:
 				_update_nu_or_alpha<false>(current_state, i, _log_nu_c);
 
 				// add to likelihood ratio for branch length
-				_add_to_LL_branch_lengths(i, current_state, log_sum_b, pairs);
+				_add_to_LL_branch_lengths(i, current_state, log_sum_local, pairs);
 			}
 		}
-		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 
 		// update branch lengths
-		if constexpr (!IsSimulation) { _evalute_update_branch_length(log_sum_b, pairs); }
+		if constexpr (!IsSimulation) {
+			auto &log_sum_b = log_sum_per_thread[0];
+			for (size_t t = 1; t < NUMBER_OF_THREADS; ++t) {
+				for (size_t p = 0; p < n_pairs; ++p) {
+					log_sum_b[p] = log_sum_b[p] + log_sum_per_thread[t][p];
+				}
+			}
+			_evalute_update_branch_length(log_sum_b, pairs);
+		}
+
+		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 	}
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
@@ -433,7 +446,7 @@ public:
 		// Each clique is independent of each other so we should be able to parallelize this
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) schedule(static)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(

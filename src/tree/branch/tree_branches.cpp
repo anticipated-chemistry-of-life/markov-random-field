@@ -103,11 +103,8 @@ void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_sta
 		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, current_state);
 		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, current_state);
 
-#pragma omp critical
-		{
-			log_sum[p].add(ratio_p1);
-			log_sum[p].add(ratio_p2);
-		}
+		log_sum[p].add(ratio_p1);
+		log_sum[p].add(ratio_p2);
 	}
 }
 
