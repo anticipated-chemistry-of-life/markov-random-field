@@ -191,6 +191,19 @@ private:
 	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
 	                                   const stattools::TPairIndexSampler &pairs);
 
+	/// @brief Helper function to reduce the parallelized log_sum into a log_sum
+	static std::vector<coretools::TSumLogProbability> _reduce_log_sum_per_thread(
+	    std::vector<std::vector<coretools::TSumLogProbability>> &log_sum_per_thread,
+	    size_t n_pairs) {
+		auto &log_sum_b = log_sum_per_thread[0];
+		for (size_t t = 1; t < NUMBER_OF_THREADS; ++t) {
+			for (size_t p = 0; p < n_pairs; ++p) {
+				log_sum_b[p] = log_sum_b[p] + log_sum_per_thread[t][p];
+			}
+		}
+		return log_sum_b;
+	};
+
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name,
 	      TypeParamAlpha *Alpha, TypeParamLogNu *LogNu,
@@ -344,12 +357,7 @@ public:
 
 		// update branch lengths
 		if constexpr (!IsSimulation) {
-			auto &log_sum_b = log_sum_per_thread[0];
-			for (size_t t = 1; t < NUMBER_OF_THREADS; ++t) {
-				for (size_t p = 0; p < n_pairs; ++p) {
-					log_sum_b[p] = log_sum_b[p] + log_sum_per_thread[t][p];
-				}
-			}
+			auto log_sum_b = TTree::_reduce_log_sum_per_thread(log_sum_per_thread, n_pairs);
 			_evalute_update_branch_length(log_sum_b, pairs);
 		}
 
