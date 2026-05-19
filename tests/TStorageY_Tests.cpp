@@ -61,7 +61,8 @@ TEST(YStorage_Tests, set_coordinate_zero) {
 
 TEST(YStorage_Tests, set_coordinate_max) {
 	TStorageY y;
-	const uint64_t max = std::pow(2, 47) - 1; // because we have set to 47 bits the maximal number of coordinates
+	const uint64_t max =
+	    std::pow(2, 47) - 1; // because we have set to 47 bits the maximal number of coordinates
 	y.set_linear_index_in_Y_space(max);
 	EXPECT_EQ(y.get_linear_index_in_Y_space(), max);
 }
