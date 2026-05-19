@@ -4,6 +4,7 @@
 #include "TLotus.h"
 #include "TMarkovField.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Main/TTask.h"
 #include "tree/TTree.h"
 #include <memory>
@@ -89,6 +90,10 @@ public:
 
 	void run() override {
 		TCore core;
+		if (coretools::instances::parameters().exists("help")) {
+			ProgramOptions::printHelp();
+			return;
+		}
 		core.infer();
 	};
 };
@@ -101,6 +106,10 @@ public:
 
 	void run() override {
 		TCore core;
+		if (coretools::instances::parameters().exists("help")) {
+			ProgramOptions::printHelp();
+			return;
+		}
 		core.simulate();
 	};
 };

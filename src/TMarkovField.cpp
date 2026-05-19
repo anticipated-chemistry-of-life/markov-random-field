@@ -7,6 +7,7 @@
 #include "TCurrentState.h"
 #include "TLotus.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
@@ -23,12 +24,12 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	using namespace coretools::instances;
 
 	// read K (sheet size for updating Y)
-	_K = parameters().get("K", 100000);
+	_K = ProgramOptions::SHEET_SIZE_K;
 
 	// read: fix Y or Z?
-	_fix_Y = !parameters().get("Y.update", true);
+	_fix_Y = ProgramOptions::FIX_Y;
 	if (_fix_Y) { logfile().list("Will fix Y during the MCMC."); }
-	_fix_Z = !parameters().get("Z.update", true);
+	_fix_Z = ProgramOptions::FIX_Z;
 	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
 
 	// number of outer loops = the number of times to repeat K such that all leaves of the last
@@ -194,7 +195,8 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 }
 
 void TMarkovField::update(TLotus &lotus, size_t iteration) {
-	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0 && !_joint_density_file.isOpen()) {
+	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0 &&
+	    !_joint_density_file.isOpen()) {
 		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
 		                         {
 		                             "joint_density",
@@ -216,7 +218,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 	_Y.add_to_counter(iteration);
 	// calculate joint density
-	if (WRITE_JOINT_LOG_PROB_DENSITY && iteration % _Y.get_thinning_factor() == 0) {
+	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration % _Y.get_thinning_factor() == 0) {
 		auto sum_log_field = _calculate_complete_joint_density();
 		_joint_density_file.writeln(sum_log_field);
 	}
@@ -258,7 +260,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 	size_t max_iteration = get_num_iterations_simulation();
 
 	// create the Markov field density file
-	if (WRITE_JOINT_LOG_PROB_DENSITY) {
+	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) {
 		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
 		                         {
 		                             "joint_density",
@@ -281,15 +283,16 @@ void TMarkovField::simulate(TLotus &lotus) {
 		_Y.add_to_counter(iteration);
 
 		// calculate joint density
-		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_JOINT_LOG_PROB_DENSITY) {
+		if (iteration % _Y.get_thinning_factor() == 0 &&
+		    ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) {
 			auto sum_log_field = _calculate_complete_joint_density();
 			_joint_density_file.writeln(sum_log_field);
 		}
 		prog.next();
 	}
 	prog.done();
-	if (WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
-	if (WRITE_Z) {
+	if (ProgramOptions::WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
+	if (ProgramOptions::WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 			const auto &tree = _trees[tree_idx];
 			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt",
@@ -303,7 +306,7 @@ void TMarkovField::_simulate_Y() {
 	// entry. We are going to iterate over all possible Y and sample givent the product of
 	// probabilities of the child given the parent. set number of leaves per dimension (set the last
 	// dimension to one)
-	if (SIMULATION_NO_Y_INITIALIZATION) { return; }
+	if (ProgramOptions::SIMULATION_NO_Y_INITIALIZATION) { return; }
 	for (size_t linear_index_in_leaves_space = 0;
 	     linear_index_in_leaves_space < _Y.total_size_of_container_space();
 	     ++linear_index_in_leaves_space) {

@@ -7,7 +7,9 @@
 
 #include "TCore.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Main/TError.h"
+#include "coretools/devtools.h"
 #include "stattools/MCMC/TMCMC.h"
 
 using namespace coretools::instances;
@@ -127,20 +129,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 // TCore
 //--------------------------------------
 
-TCore::TCore() {
-	NUMBER_OF_THREADS = coretools::getNumThreads();
-	SIMULATION_NO_Z_INITIALIZATION =
-	    coretools::instances::parameters().exists("simulation_no_Z_initilisation");
-	SIMULATION_NO_Y_INITIALIZATION =
-	    coretools::instances::parameters().exists("simulation_no_Y_initilisation");
-	WRITE_Y       = coretools::instances::parameters().exists("write_Y");
-	WRITE_Y_TRACE = coretools::instances::parameters().exists("write_Y_trace");
-	WRITE_Z       = coretools::instances::parameters().exists("write_Z");
-	WRITE_Z_TRACE = coretools::instances::parameters().exists("write_Z_trace");
-	WRITE_JOINT_LOG_PROB_DENSITY =
-	    coretools::instances::parameters().exists("write_joint_log_prob_density");
-	WRITE_BRANCH_LENGTHS = coretools::instances::parameters().exists("write_branch_lengths");
-}
+TCore::TCore() { ProgramOptions::parse(); }
 
 void TCore::infer() {
 	// read filename of lotus
@@ -153,7 +142,7 @@ void TCore::infer() {
 		logfile().list("Writing output to prefix '", prefix, "' (argument 'out').");
 	} else {
 		prefix = coretools::str::readBeforeLast(filename_lotus, ".");
-		logfile().list("Writing output to default prefix '", prefix, "' (use 'out' to change).");
+		logfile().list("Writing output to default prefix '", prefix, "' (use '--out' to change).");
 	}
 
 	// create MCMC object and get number of iterations that will be run

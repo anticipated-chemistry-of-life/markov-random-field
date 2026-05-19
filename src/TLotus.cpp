@@ -3,6 +3,7 @@
 //
 #include "TLotus.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Storage/TNames.h"
 #include "coretools/Types/probability.h"
@@ -47,7 +48,7 @@ void TLotus::initialize() {
 
 	_error_rate->initStorage(this, {1});
 	if constexpr (UseSimpleErrorModel) {
-		_epsilon = coretools::instances::parameters().get<double>("epsilon", 0.0001);
+		_epsilon = ProgramOptions::EPSILON;
 		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
 	}
 	for (auto &it : _markov_field_stattools_param) { it->initStorage(this, {0}); }
@@ -324,7 +325,7 @@ void TLotus::_simulateUnderPrior(Storage *) {
 		// gamma is never initilized. That is why we need to do it here.
 		_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
 		                    {std::make_shared<coretools::TNamesStrings>(tree_names_to_keep)});
-		const auto gamma = coretools::instances::parameters().get<double>("gamma", 1.5);
+		const auto gamma = ProgramOptions::GAMMA;
 		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, gamma); }
 
 		_occurrence_counters.resize(

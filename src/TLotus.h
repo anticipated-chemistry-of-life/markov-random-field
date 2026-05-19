@@ -4,6 +4,7 @@
 #include "TCurrentState.h"
 #include "TMarkovField.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Main/TParameters.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/Priors/TPriorBase.h"
@@ -117,9 +118,7 @@ public:
 
 	[[nodiscard]] const TStorageYVector &get_Lotus() const;
 
-	static std::string get_filename_lotus() {
-		return coretools::instances::parameters().get("lotus");
-	}
+	static std::string get_filename_lotus() { return ProgramOptions::LOTUS_FILENAME; }
 	[[nodiscard]] const TCurrentState &get_tmp_state_along_last_dim() const {
 		return _tmp_state_along_last_dim;
 	}

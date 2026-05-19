@@ -1,8 +1,9 @@
 #include "../TTree.h"
+#include "cli.h"
 
 void TTree::_initialize_grid_branch_lengths() {
 	// read a, b and K from command-line
-	_number_of_bins = coretools::instances::parameters().get("n_bins", 100);
+	_number_of_bins = ProgramOptions::BRANCH_LENGTHS_BINS;
 
 	const size_t max_type =
 	    std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();

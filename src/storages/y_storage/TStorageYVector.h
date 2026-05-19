@@ -4,8 +4,9 @@
 
 #ifndef TSTORAGEYVECTOR_H
 #define TSTORAGEYVECTOR_H
+
 #include "TStorageY.h"
-#include "Types.h"
+#include "cli.h"
 #include "coretools/algorithms.h"
 #include <algorithm>
 #include <cstddef>
@@ -93,7 +94,8 @@ public:
 
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none) schedule(static)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    schedule(static)
 			for (auto &elem : _vec) { elem.update_counter(); }
 		}
 	}
@@ -115,7 +117,8 @@ public:
 	}
 
 	void reset_counts() {
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none) schedule(static)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    schedule(static)
 		for (auto &elem : _vec) { elem.reset_counter(); }
 	}
 

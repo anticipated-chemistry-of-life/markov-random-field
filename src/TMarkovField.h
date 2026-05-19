@@ -9,8 +9,10 @@
 #include "TCurrentState.h"
 
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include "coretools/devtools.h"
 #include "omp.h"
 #include "tree/TTree.h"
 #include <cstddef>
@@ -77,7 +79,7 @@ private:
 	double _calculate_complete_joint_density();
 	void _reset_log_joint_density() {
 		_complete_log_density.clear();
-		_complete_log_density.resize(NUMBER_OF_THREADS);
+		_complete_log_density.resize(ProgramOptions::NUMBER_OF_THREADS);
 	}
 
 	template<bool IsSimulation, bool initYFromLotus>
@@ -125,7 +127,7 @@ private:
 	void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
 
-		if (iteration == 0 && WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
+		if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 			std::vector<size_t> Y_trace_header;
 			Y_trace_header.reserve(_Y.total_size_of_container_space());
 			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
@@ -149,8 +151,9 @@ private:
 		}
 
 		// loop over sheets in last dimension
-		std::vector<coretools::TSumLogProbability> new_LL(NUMBER_OF_THREADS);
-		std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(NUMBER_OF_THREADS);
+		std::vector<coretools::TSumLogProbability> new_LL(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(
+		    ProgramOptions::NUMBER_OF_THREADS);
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
@@ -177,7 +180,7 @@ private:
 				// which we have everything)
 				const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
 				int diff_counter_1_in_last_dim         = 0;
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS)                                            \
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     reduction(+ : diff_counter_1_in_last_dim) default(none)                                        \
     shared(new_LL, lotus, start_index_in_leaves_space, start_ix_in_leaves_last_dim,                \
                end_ix_in_leaves_last_dim, linear_indices_in_Y_space_to_insert)
@@ -205,7 +208,8 @@ private:
 		_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
 		// at the very end: sum the LL of all threads and store it in TLotus
 		if constexpr (!IsSimulation) { _update_cur_LL_lotus(lotus, new_LL); }
-		if (WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {
+		if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) &&
+		    !_fix_Y) {
 			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 		}
 	}
@@ -213,7 +217,7 @@ private:
 	void _read_Y_from_file(const std::string &filename);
 
 	template<bool IsSimulation, bool FixZ> void _update_all_Z(size_t iteration) {
-		if (iteration == 0 && WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
+		if (iteration == 0 && ProgramOptions::WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
 			for (const auto &tree : _trees) {
 				std::vector<size_t> Z_trace_header;
 				Z_trace_header.reserve(tree->get_Z().total_size_of_container_space());
@@ -229,7 +233,7 @@ private:
 			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y);
 		}
 		if (_fix_Z) { return; }
-		if (iteration % _Y.get_thinning_factor() == 0 && WRITE_Z_TRACE) {
+		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];
 				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());

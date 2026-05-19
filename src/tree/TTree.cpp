@@ -4,6 +4,7 @@
 
 #include "TTree.h"
 #include "TClique.h"
+#include "cli.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
@@ -144,7 +145,7 @@ void TTree::simulate_Z(size_t tree_index) {
 		                            get_number_of_internal_nodes());
 
 		// we sample the roots
-		if (SIMULATION_NO_Z_INITIALIZATION) { continue; }
+		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
 		double proba_root = TClique::get_stationary_probability(true, _alpha_c->value(c));
 		coretools::Probability p(proba_root);
 

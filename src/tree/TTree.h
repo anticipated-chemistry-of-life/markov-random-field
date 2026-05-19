@@ -7,6 +7,7 @@
 
 #include "TClique.h"
 #include "Types.h"
+#include "cli.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
@@ -82,7 +83,7 @@ private:
 	// private functions
 	void _reset_joint_log_prob_density() {
 		_joint_log_prob_density.clear();
-		_joint_log_prob_density.resize(NUMBER_OF_THREADS);
+		_joint_log_prob_density.resize(ProgramOptions::NUMBER_OF_THREADS);
 	}
 	void _set_initial_branch_lengths(bool is_simulation);
 	[[nodiscard]] std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths,
@@ -196,7 +197,7 @@ private:
 	    std::vector<std::vector<coretools::TSumLogProbability>> &log_sum_per_thread,
 	    size_t n_pairs) {
 		auto &log_sum_b = log_sum_per_thread[0];
-		for (size_t t = 1; t < NUMBER_OF_THREADS; ++t) {
+		for (size_t t = 1; t < ProgramOptions::NUMBER_OF_THREADS; ++t) {
 			for (size_t p = 0; p < n_pairs; ++p) {
 				log_sum_b[p] = log_sum_b[p] + log_sum_per_thread[t][p];
 			}
@@ -327,12 +328,12 @@ public:
 		auto pairs         = _build_pairs_branch_lengths();
 		const auto n_pairs = pairs.length();
 		std::vector<std::vector<coretools::TSumLogProbability>> log_sum_per_thread(
-		    NUMBER_OF_THREADS, std::vector<coretools::TSumLogProbability>(n_pairs));
+		    ProgramOptions::NUMBER_OF_THREADS, std::vector<coretools::TSumLogProbability>(n_pairs));
 
 		// propose new branch lengths
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none)                              \
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
     shared(pairs, log_sum_per_thread, Y, indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
@@ -432,7 +433,7 @@ public:
 			}
 		}
 
-		if (WRITE_BRANCH_LENGTHS) {
+		if (ProgramOptions::WRITE_BRANCH_LENGTHS) {
 			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
 			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() +
 			                                           "_branch_length_grid.txt",
@@ -454,7 +455,8 @@ public:
 		// Each clique is independent of each other so we should be able to parallelize this
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none) shared(indices_to_insert, Y)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(

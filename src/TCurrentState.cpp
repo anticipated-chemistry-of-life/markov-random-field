@@ -3,6 +3,7 @@
 //
 
 #include "TCurrentState.h"
+#include "cli.h"
 #include "tree/TTree.h"
 
 //-----------------------------------
@@ -133,7 +134,7 @@ void TSheet::fill(const std::vector<size_t> &start_index_in_leaves_space, size_t
 	// start index and how many Y need to be parsed
 	_start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back();
 
-#pragma omp parallel for num_threads(NUMBER_OF_THREADS) default(none)                              \
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
     shared(start_index_in_leaves_space, Y, K)
 	for (size_t i = 0; i < _tree.get_number_of_nodes();
 	     ++i) { // loop over all nodes along current dimension
