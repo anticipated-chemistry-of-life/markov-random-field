@@ -51,11 +51,6 @@ TEST(TFeatureLikelihood_Tests, nested_vector) {
 
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(0).size(), 1);
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).size(), 2);
-	for (const auto &fl : nested_vector) {
-		for (const auto &f : fl) {
-			std::cout << f.get_molecule_index() << " " << f.get_binned_likelihood() << std::endl;
-		}
-	};
 
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).at(0).get_binned_likelihood(), 120);
 }

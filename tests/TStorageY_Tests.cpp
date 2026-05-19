@@ -1,6 +1,9 @@
 #include "storages/y_storage/TStorageY.h"
+#include "storages/y_storage/TStorageYVector.h"
 #include "gtest/gtest.h"
 #include <cmath>
+#include <stdexcept>
+#include <vector>
 
 TEST(YStorage_Tests, flip_state) {
 	TStorageY y;
@@ -130,4 +133,29 @@ TEST(YStorage_Tests, reset_counter) {
 	y.set_counter(1458);
 	y.reset_counter();
 	EXPECT_EQ(y.get_counter(), 0);
+}
+
+TEST(YStorageVector_Tests, add_data) {
+	TStorageYVector Y(1000, {2, 3});
+	const auto &dimensions = Y.total_size_of_container_space();
+	EXPECT_EQ(dimensions, 6);
+	EXPECT_ANY_THROW(Y.insert_one(7));
+	Y.insert_one(5);
+	auto binary_vec          = Y.get_full_Y_binary_vector();
+	std::vector<int> compare = {0, 0, 0, 0, 0, 1};
+	EXPECT_EQ(binary_vec, compare);
+
+	Y.set_to_zero(0);
+	binary_vec = Y.get_full_Y_binary_vector();
+	compare    = {0, 0, 0, 0, 0, 0};
+	EXPECT_EQ(binary_vec, compare);
+
+	auto multi_dim_index                     = Y.get_multi_dimensional_index(5);
+	std::vector<size_t> multi_dim_index_true = {1, 2};
+	EXPECT_EQ(multi_dim_index, multi_dim_index_true);
+	EXPECT_EQ(Y.size(), 1);
+	EXPECT_EQ(Y[0].get_linear_index_in_container_space(), 5);
+	EXPECT_EQ(Y.get_thinning_factor(), 1);
+	TStorageY x;
+	EXPECT_THROW(x = Y.at(7), std::out_of_range);
 }

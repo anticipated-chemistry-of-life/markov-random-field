@@ -7,6 +7,7 @@
 
 #include "TStorageY.h"
 #include "cli.h"
+#include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
 #include <algorithm>
 #include <cstddef>
@@ -73,6 +74,14 @@ public:
 	}
 
 	void insert_one(uint64_t linear_index_in_Y_space) {
+		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
+			throw coretools::TDevError(
+			    "You are trying to insert a value at an linear index bigger than the total "
+			    "size of the container. ",
+			    "The index is: ", linear_index_in_Y_space,
+			    " and the total size of the container is : ",
+			    this->total_size_of_container_space());
+		}
 		auto [found, index] = binary_search(linear_index_in_Y_space);
 		if (found) {
 			_vec[index].set_state(true);
@@ -108,12 +117,15 @@ public:
 
 	size_t get_total_counts() const { return _total_counts; }
 
-	size_t size() const { return _vec.size(); }
-	auto begin() const { return _vec.begin(); }
-	auto end() const { return _vec.end(); }
-	const std::vector<TStorageY> &get_vector() const { return _vec; }
+	[[nodiscard]] size_t size() const { return _vec.size(); }
+	[[nodiscard]] auto begin() const { return _vec.begin(); }
+	[[nodiscard]] auto end() const { return _vec.end(); }
+	[[nodiscard]] const std::vector<TStorageY> &get_vector() const { return _vec; }
 	const TStorageY &operator[](size_t index_in_TStorageYVector) const {
 		return _vec[index_in_TStorageYVector];
+	}
+	[[nodiscard]] const TStorageY &at(size_t index_in_TStorageYVector) const {
+		return _vec.at(index_in_TStorageYVector);
 	}
 
 	void reset_counts() {
