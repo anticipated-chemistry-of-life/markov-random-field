@@ -11,7 +11,7 @@
 
 class TCollapser {
 private:
-	// trees
+	/// Trees
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// dimensions
