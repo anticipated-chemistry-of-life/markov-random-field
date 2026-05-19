@@ -180,7 +180,7 @@ private:
 				// which we have everything)
 				const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
 				int diff_counter_1_in_last_dim         = 0;
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) schedule(static)           \
     reduction(+ : diff_counter_1_in_last_dim) default(none)                                        \
     shared(new_LL, lotus, start_index_in_leaves_space, start_ix_in_leaves_last_dim,                \
                end_ix_in_leaves_last_dim, linear_indices_in_Y_space_to_insert)

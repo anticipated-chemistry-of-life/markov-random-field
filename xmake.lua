@@ -83,7 +83,11 @@ add_includedirs("src")
 add_deps("coretools", "stattools")
 add_defines("DEVTOOLS", "DEV_LOCATION")
 add_options("lotus")
-add_cxxflags("-Wall", "-Wextra")
+add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
+    "-Wreturn-local-addr",
+    "-Warray-bounds",
+    "-Wnull-dereference"
+)
 after_load(function(target)
     local pkg = target:pkg("openmp")
     if pkg then

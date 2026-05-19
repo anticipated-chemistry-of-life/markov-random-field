@@ -20,6 +20,7 @@
 #include "storages/z_storage/TStorageZVector.h"
 #include "tree/node.h"
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -117,12 +118,12 @@ private:
 	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
 	                                         bool state_of_node, coretools::TSumLogProbability &LL,
 	                                         const TCurrentState &current_state,
-	                                         size_t branch_len_bin, double alpha) {
+	                                         std::optional<size_t> branch_len_bin, double alpha) {
 		if (_nodes[index_in_tree].isRoot()) {
 			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
 		} else {
 			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
-			    index_in_tree, this, branch_len_bin, current_state);
+			    index_in_tree, this, branch_len_bin.value(), current_state);
 			LL.add(prob);
 		}
 	}
@@ -154,12 +155,18 @@ private:
 		}
 
 		const auto &clique = _cliques[c];
+		std::optional<size_t> branch_len_bin;
 		for (size_t i = 0; i < _nodes.size(); ++i) {
-			bool state_of_node        = current_state.get(i);
+			bool state_of_node = current_state.get(i);
 			// Note: need to take oldValue because we update _binned_branch_length before starting
 			// the loop!!!
-			const auto branch_len_bin = _binned_branch_lengths->oldValue(
-			    _leaves_and_internal_nodes_without_roots_indices[i]);
+
+			if (!_nodes[i].isRoot()) {
+				branch_len_bin = _binned_branch_lengths->oldValue(
+				    _leaves_and_internal_nodes_without_roots_indices[i]);
+			} else {
+				branch_len_bin = std::nullopt;
+			}
 
 			if constexpr (IsAlpha) {
 				_compute_LL_old_and_new_nu_or_alpha<false>(
