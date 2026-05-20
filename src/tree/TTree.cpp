@@ -39,7 +39,7 @@ const TNode &TTree::get_node(const std::string &Id) const {
 }
 
 const TNode &TTree::get_node(size_t index) const { return _nodes[index]; }
-bool TTree::isLeaf(size_t index) const { return _nodes[index].isLeaf(); }
+bool TTree::isLeaf(size_t index) const { return _nodes.at(index).isLeaf(); }
 
 size_t TTree::get_node_index(const std::string &Id) const {
 	auto it = _node_map.find(Id);

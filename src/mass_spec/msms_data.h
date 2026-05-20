@@ -30,7 +30,6 @@ class TMSMSData {
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
 	std::array<double, 256> _binned_likelihoods{};
-	// const std::vector<std::unique_ptr<TTree>> &_trees;
 	const std::unique_ptr<TTree> &_species_tree;
 	const std::unique_ptr<TTree> &_molecules_tree;
 	void _add_mass_spec_run_for_species(const std::vector<TMassSpecRun> &runs) {
@@ -38,7 +37,9 @@ private:
 	}
 
 public:
-	TMSMSData() = default;
+	TMSMSData(const std::unique_ptr<TTree> &species_tree,
+	          const std::unique_ptr<TTree> &molecules_tree);
+	~TMSMSData() = default;
 	[[nodiscard]] const std::array<double, 256> &get_binned_likelihoods() const {
 		return _binned_likelihoods;
 	}
@@ -46,12 +47,7 @@ public:
 		return _binned_likelihoods[binned_value];
 	}
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
-	/// Note : This function assumes that the species were sorted to have first the ones with data
-	/// and then the ones without data i.e. the indices of the NestedVector must not contain any
-	/// repeated indices.
-	[[nodiscard]] bool species_has_msms_data(size_t species_idx) const {
-		return species_idx < _msms_data.size();
-	}
+
 	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const {
 		sum_log.add(get_likelihood_from_binned_value(binned_value));
 	}
@@ -71,4 +67,8 @@ public:
 		size_t species_idx = _species_tree->get_index_within_leaves(species_name);
 		return this->get_ms_data_for_species(species_idx);
 	};
+
+	[[nodiscard]] size_t get_molecule_index_within_leaves(const std::string &molecule_name) const {
+		return _molecules_tree->get_index_within_leaves(molecule_name);
+	}
 };

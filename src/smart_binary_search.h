@@ -35,14 +35,13 @@ binary_search(const T &vec, size_t linear_index_in_container_space,
 	// else our coordinate is in the range of the coordinates in the vector
 	// meaning that if we haven't found it, we will insert it at that position
 	// to keep the vector sorted
-	auto distance = std::distance(vec.begin(), it);
+	size_t distance = std::distance(vec.begin(), it);
 	if (it->get_linear_index_in_container_space() != linear_index_in_container_space) {
 		return {false, distance, it->get_linear_index_in_container_space(), false};
 	}
 
 	// if we found the coordinate we return the index and true
-	return {true, distance, it->get_linear_index_in_container_space(),
-	        (unsigned long)distance == vec.size() - 1};
+	return {true, distance, it->get_linear_index_in_container_space(), distance == vec.size() - 1};
 };
 
 struct CurrentStateResult {
@@ -123,8 +122,9 @@ CurrentStateResult fill_current_state_hard(const Container &container,
 		exists_in_container[0] = true;
 	}
 
-	const double p           = (double)container.size() / (double)total_size_of_container;
-	const double increment_p = (double)increment * p;
+	const double p =
+	    static_cast<double>(container.size()) / static_cast<double>(total_size_of_container);
+	const double increment_p            = static_cast<double>(increment) * p;
 	const double two_standard_deviation = 2 * std::sqrt(increment_p * (1 - p));
 	const auto jump_right = static_cast<size_t>(std::ceil(increment_p + two_standard_deviation));
 	const size_t jump_left =

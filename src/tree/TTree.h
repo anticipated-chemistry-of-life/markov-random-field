@@ -96,6 +96,9 @@ private:
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	/// @brief Load tree from file
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
+	void _add_parent(const std::string &parent_id, std::vector<double> &branch_lengths);
+	void _add_child(const std::string &child_id, size_t parent_index, bool is_root,
+	                std::vector<double> &branch_lengths, double branch_length_of_child);
 	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
 	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
 	                   size_t node_index_in_tree);
@@ -115,11 +118,12 @@ private:
 	void _simulateUnderPrior(Storage *) override;
 
 	template<bool UseTryMatrix>
-	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
-	                                         bool state_of_node, coretools::TSumLogProbability &LL,
+	void _compute_LL_old_and_new_nu_or_alpha(const TNode &node, size_t index_in_tree,
+	                                         const TClique &clique, bool state_of_node,
+	                                         coretools::TSumLogProbability &LL,
 	                                         const TCurrentState &current_state,
 	                                         std::optional<size_t> branch_len_bin, double alpha) {
-		if (_nodes[index_in_tree].isRoot()) {
+		if (node.isRoot()) {
 			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
 		} else {
 			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
@@ -157,11 +161,12 @@ private:
 		const auto &clique = _cliques[c];
 		std::optional<size_t> branch_len_bin;
 		for (size_t i = 0; i < _nodes.size(); ++i) {
+			const auto &node   = _nodes[i];
 			bool state_of_node = current_state.get(i);
-			// Note: need to take oldValue because we update _binned_branch_length before starting
-			// the loop!!!
 
-			if (!_nodes[i].isRoot()) {
+			// Note: need to take oldValue because we update _binned_branch_length before
+			// starting the loop!!!
+			if (!node.isRoot()) {
 				branch_len_bin = _binned_branch_lengths->oldValue(
 				    _leaves_and_internal_nodes_without_roots_indices[i]);
 			} else {
@@ -169,15 +174,16 @@ private:
 			}
 
 			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_nu_or_alpha<false>(
-				    i, clique, state_of_node, LL_old, current_state, branch_len_bin, old_value);
-				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new,
+				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
+				                                           current_state, branch_len_bin,
+				                                           old_value);
+				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
 				                                          current_state, branch_len_bin, new_value);
 			} else {
-				_compute_LL_old_and_new_nu_or_alpha<false>(i, clique, state_of_node, LL_old,
+				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
 				                                           current_state, branch_len_bin,
 				                                           _alpha_c->value(c));
-				_compute_LL_old_and_new_nu_or_alpha<true>(i, clique, state_of_node, LL_new,
+				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
 				                                          current_state, branch_len_bin,
 				                                          _alpha_c->value(c));
 			}
@@ -245,8 +251,8 @@ public:
 	[[nodiscard]] size_t number_of_roots() const { return _roots.size(); }
 
 	/** Method to get all the leaves of the tree.
-	 * @return Returns a vector of length equal to the number of leaves in the tree. Each element of
-	 * the vector is the index of the leaf node within the tree.
+	 * @return Returns a vector of length equal to the number of leaves in the tree. Each
+	 * element of the vector is the index of the leaf node within the tree.
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_leaf_nodes() const { return _leaves; }
 
@@ -276,8 +282,8 @@ public:
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node within the internal nodes vector (which is smaller than the
-	 * total number of nodes in the tree). If the node is not an internal node, the function will
-	 * return -1.
+	 * total number of nodes in the tree). If the node is not an internal node, the function
+	 * will return -1.
 	 */
 	[[nodiscard]] size_t get_index_within_internal_nodes(size_t node_index) const {
 		return _internalIndices[node_index];
@@ -341,7 +347,7 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    shared(pairs, log_sum_per_thread, Y, indices_to_insert)
+    schedule(static) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
@@ -462,8 +468,8 @@ public:
 		// Each clique is independent of each other so we should be able to parallelize this
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    shared(indices_to_insert, Y)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
+    schedule(static) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
