@@ -30,15 +30,14 @@ class TMSMSData {
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
 	std::array<double, 256> _binned_likelihoods{};
-	const std::unique_ptr<TTree> &_species_tree;
-	const std::unique_ptr<TTree> &_molecules_tree;
+	TTree *_molecules_tree = nullptr;
+	TTree *_species_tree   = nullptr;
 	void _add_mass_spec_run_for_species(const std::vector<TMassSpecRun> &runs) {
 		_msms_data.push_back(runs);
 	}
 
 public:
-	TMSMSData(const std::unique_ptr<TTree> &species_tree,
-	          const std::unique_ptr<TTree> &molecules_tree);
+	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees);
 	~TMSMSData() = default;
 	[[nodiscard]] const std::array<double, 256> &get_binned_likelihoods() const {
 		return _binned_likelihoods;
