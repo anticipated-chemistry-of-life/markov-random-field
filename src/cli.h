@@ -25,7 +25,7 @@ public:
 
 	static inline size_t BRANCH_LENGTHS_BINS = 100;
 
-	static inline size_t SHEET_SIZE_K = (size_t)(1e7);
+	static inline size_t SHEET_SIZE_K = static_cast<size_t>(1e7);
 
 	static inline bool FIX_Y = false;
 
@@ -57,7 +57,7 @@ public:
 
 		EPSILON = params.get<double>("epsilon", 0.0001);
 
-		BRANCH_LENGTHS_BINS = params.get("n_bins", 100);
+		BRANCH_LENGTHS_BINS = params.get<size_t>("n_bins", 100);
 
 		SHEET_SIZE_K = params.get("K", size_t(1e7));
 
