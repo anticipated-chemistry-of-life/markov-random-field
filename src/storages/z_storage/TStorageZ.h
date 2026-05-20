@@ -12,7 +12,8 @@ private:
 	int32_t _value = 0;
 
 public:
-	TStorageZ() = default;
+	TStorageZ()  = default;
+	~TStorageZ() = default;
 	explicit TStorageZ(const int32_t linear_index_in_Z_space) {
 		set_linear_index_in_Z_space(linear_index_in_Z_space);
 		set_state(true);

@@ -29,6 +29,7 @@ public:
 	using value_type     = uint32_t;
 	using const_iterator = typename std::vector<TStorageZ>::const_iterator;
 	TStorageZVector()    = default;
+	~TStorageZVector()   = default;
 	explicit TStorageZVector(const std::vector<size_t> &dimensions_in_Z_space) {
 		initialize_dimensions(dimensions_in_Z_space);
 	}
