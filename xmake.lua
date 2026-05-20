@@ -86,7 +86,10 @@ add_options("lotus")
 add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
     "-Wreturn-local-addr",
     "-Warray-bounds",
-    "-Wnull-dereference"
+    "-Wnull-dereference",
+    "-Wdouble-promotion",
+    "-Wformat=2",
+    "-Wundef"
 )
 after_load(function(target)
     local pkg = target:pkg("openmp")

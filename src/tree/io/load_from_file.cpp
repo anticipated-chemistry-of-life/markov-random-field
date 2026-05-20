@@ -1,4 +1,19 @@
 #include "../TTree.h"
+#include <vector>
+
+void TTree::_add_child(const std::string &child_id, size_t parent_index, bool is_root,
+                       std::vector<double> &branch_lengths, double branch_length_of_child) {
+	_nodes.emplace_back(child_id, parent_index, is_root);
+	branch_lengths.push_back(branch_length_of_child);
+	_node_map[child_id] = _nodes.size() - 1;
+	_nodes[parent_index].addChild_index_in_tree(_nodes.size() - 1);
+}
+
+void TTree::_add_parent(const std::string &parent_id, std::vector<double> &branch_lengths) {
+	_nodes.emplace_back(parent_id, -1, true);
+	branch_lengths.push_back(0.0);
+	_node_map[parent_id] = _nodes.size() - 1;
+}
 
 void TTree::_load_from_file(const std::string &filename, const std::string &tree_name) {
 	coretools::instances::logfile().listFlush("Reading tree from file '", filename, "' ...");
@@ -31,23 +46,16 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 
 		if (!in_tree(child) && !in_tree(parent)) {
 			// we add the parent
-			_nodes.emplace_back(parent, -1, true);
-			branch_lengths.push_back(0.0);
-			_node_map[parent] = _nodes.size() - 1;
+			this->_add_parent(parent, branch_lengths);
 
 			// since we just added the parent, we know that it is at the last element of the vector
 			size_t parent_index = _nodes.size() - 1;
-			_nodes.emplace_back(child, parent_index, false);
-			branch_lengths.push_back(branch_length);
-			_node_map[child] = _nodes.size() - 1;
-			_nodes[parent_index].addChild_index_in_tree(_nodes.size() - 1);
+			this->_add_child(child, parent_index, false, branch_lengths, branch_length);
 		} else if (!in_tree(child) && in_tree(parent)) {
 			size_t parent_index = get_node_index(parent);
 			// we add the child node to the tree
-			_nodes.emplace_back(child, parent_index, false);
-			branch_lengths.push_back(branch_length);
-			_node_map[child] = _nodes.size() - 1;
-			_nodes[parent_index].addChild_index_in_tree(_nodes.size() - 1);
+			this->_add_child(child, parent_index, false, branch_lengths, branch_length);
+
 		} else if (in_tree(child) && !in_tree(parent)) {
 			// if the child node was in the tree but not the parent
 			// that means that the child was a root and is now becoming
@@ -64,9 +72,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			_nodes[child_index].set_is_root(false);
 			branch_lengths[child_index] = branch_length;
 			_nodes[child_index].set_parent_index_in_tree(_nodes.size());
-			_nodes.emplace_back(parent, -1, true);
-			branch_lengths.push_back(0.0);
-			_node_map[parent] = _nodes.size() - 1;
+			this->_add_parent(parent, branch_lengths);
 			_nodes[_nodes.size() - 1].addChild_index_in_tree(child_index);
 		} else {
 			size_t child_index  = get_node_index(child);
