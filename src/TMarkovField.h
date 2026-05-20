@@ -248,45 +248,52 @@ private:
 		for (const auto &tree : _trees) { header.push_back(tree->get_tree_name()); }
 		header.emplace_back("fraction_of_one");
 
-		std::array<size_t, 2> line{};
 		coretools::TOutputFile file(filename, header, "\t");
-		double fraction;
 		if constexpr (WriteFullY) {
-			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
-				auto [found, position] = _Y.binary_search(i);
-				if (found) {
-					line = {i, _Y.is_one(position)};
-				} else {
-					line = {i, 0};
-				}
-				std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
-				std::vector<std::string> node_names;
-				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
-					size_t node_idx =
-					    _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
-					node_names.push_back(_trees[idx]->get_node_id(node_idx));
-				};
-				fraction = _Y.get_fraction_of_ones(i);
-				file.writeln(line, node_names, fraction);
-			}
+			this->_write_full_Y(file);
 		} else {
-			for (size_t i = 0; i < _Y.size(); ++i) {
-				const auto linear_index_in_y = _Y[i].get_linear_index_in_Y_space();
-				const auto state             = _Y[i].is_one();
-				line                         = {linear_index_in_y, state};
-				fraction                     = _Y.get_fraction_of_ones(linear_index_in_y);
-				std::vector<size_t> leaf_index_of_Y =
-				    _Y.get_multi_dimensional_index(linear_index_in_y);
-				std::vector<std::string> node_names;
-				for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
-					size_t node_idx =
-					    _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
-					node_names.push_back(_trees[idx]->get_node_id(node_idx));
-				};
-				file.writeln(line, node_names, fraction);
-			}
+			this->_write_only_values_in_Y_vector(file);
 		}
-	};
+	}
+
+	void _write_full_Y(coretools::TOutputFile &file) const {
+		std::array<size_t, 2> line{};
+		double fraction;
+		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
+			auto [found, position] = _Y.binary_search(i);
+			if (found) {
+				line = {i, _Y.is_one(position)};
+			} else {
+				line = {i, 0};
+			}
+			std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
+			std::vector<std::string> node_names;
+			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
+				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+				node_names.push_back(_trees[idx]->get_node_id(node_idx));
+			};
+			fraction = _Y.get_fraction_of_ones(i);
+			file.writeln(line, node_names, fraction);
+		}
+	}
+
+	void _write_only_values_in_Y_vector(coretools::TOutputFile &file) const {
+		std::array<size_t, 2> line{};
+		double fraction;
+		for (size_t i = 0; i < _Y.size(); ++i) {
+			const auto linear_index_in_y        = _Y[i].get_linear_index_in_Y_space();
+			const auto state                    = _Y[i].is_one();
+			line                                = {linear_index_in_y, state};
+			fraction                            = _Y.get_fraction_of_ones(linear_index_in_y);
+			std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
+			std::vector<std::string> node_names;
+			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
+				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
+				node_names.push_back(_trees[idx]->get_node_id(node_idx));
+			};
+			file.writeln(line, node_names, fraction);
+		}
+	}
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
