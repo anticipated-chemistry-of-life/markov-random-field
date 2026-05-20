@@ -205,15 +205,19 @@ void TLotus::guessInitialValues() {
 
 const TStorageYVector &TLotus::get_Lotus() const { return _L; }
 
+/// Calculate the research effort. This is the function defined in the SNSF grant but with the
+/// square root of the paper counts.
 double
 TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
-	double prod = 1.0;
+	double exponent = 0.0;
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		const size_t leaf_index = index_in_collapsed_space[i];
 		const auto counts       = _occurrence_counters[i][leaf_index];
-		prod *= 1.0 - exp(-(double)_gamma->value(i) * counts);
+		exponent += (double)_gamma->value(i) * counts;
 	}
-	return prod;
+	exponent                     = -1.0 * exponent;
+	const double research_effort = 1 - std::exp(exponent);
+	return research_effort;
 }
 
 double TLotus::_calculate_probability_of_L_given_x(
