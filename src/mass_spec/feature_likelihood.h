@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coretools/Main/TError.h"
-
 #include <cstdint>
 
 /// Class that stores the likelihood of a feature for a defined molecule
@@ -17,9 +16,9 @@ private:
 	static constexpr uint32_t _molecule_index_mask = (_one << 24) - 1;
 	void _set_molecule_index(const uint32_t linear_index) {
 		if (linear_index > _molecule_index_mask) {
-			throw coretools::TUserError("Molecule index '", linear_index,
-			                            "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask,
-			                            ".");
+			throw coretools::TUserError(
+			    "Molecule index '", linear_index,
+			    "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask, ".");
 		}
 		_value = (_value & ~_molecule_index_mask) | (linear_index & _molecule_index_mask);
 	}
@@ -35,9 +34,13 @@ public:
 	}
 	[[nodiscard]] uint32_t get_molecule_index() const { return _value & _molecule_index_mask; };
 
-	[[nodiscard]] uint32_t get_binned_likelihood() const { return (_value & _likelihood_mask) >> 24; }
+	[[nodiscard]] uint32_t get_binned_likelihood() const {
+		return (_value & _likelihood_mask) >> 24;
+	}
 
-	bool operator<(const TFeatureLikelihood &right) const { return get_molecule_index() < right.get_molecule_index(); }
+	bool operator<(const TFeatureLikelihood &right) const {
+		return get_molecule_index() < right.get_molecule_index();
+	}
 	bool operator<(const uint32_t right) const { return get_molecule_index() < right; }
 	bool operator!=(const uint32_t right) const { return get_molecule_index() != right; }
 	bool operator==(const uint32_t right) const { return get_molecule_index() == right; }
