@@ -26,7 +26,8 @@ private:
 	static constexpr uint64_t _linear_index_mask = (1ULL << 47) - 1;
 
 public:
-	TStorageY() = default;
+	TStorageY()  = default;
+	~TStorageY() = default;
 	explicit TStorageY(const uint64_t linear_index_in_Y_space) {
 		// if we construct a TStorageY, that means that by default we will set the state to 1
 		// with linear index linear_index_in_Y_space
