@@ -10,6 +10,7 @@
 #include "stattools/ParametersObservations/THash.h"
 #include "stattools/ParametersObservations/TObservation.h"
 #include "stattools/ParametersObservations/spec.h"
+#include "stattools/Priors/TPriorBeta.h"
 #include "stattools/Priors/TPriorExponential.h"
 #include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorUniform.h"
@@ -26,7 +27,7 @@ constexpr static bool UseSimpleErrorModel = true;
 
 // Parameter types
 using TypeGamma               = coretools::Positive;
-using TypeErrorRate           = coretools::Positive;
+using TypeErrorRate           = coretools::ZeroOneOpen;
 using TypeAlpha               = coretools::Probability;
 using TypeLogNu               = coretools::Unbounded;
 using TypeNu                  = coretools::StrictlyPositive;
@@ -39,7 +40,7 @@ using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
 // Epsilon
-using PriorOnErrorRate = stattools::prior::TExponentialFixed<TypeErrorRate>;
+using PriorOnErrorRate = stattools::prior::TBetaFixed<TypeErrorRate>;
 using SpecErrorRate = stattools::ParamSpec<TypeErrorRate, stattools::name("epsilon"),
                                            PriorOnErrorRate, stattools::EnforceUniqueHash<false>>;
 
