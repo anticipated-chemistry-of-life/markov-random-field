@@ -335,6 +335,9 @@ public:
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYVector &Y) {
 		_reset_joint_log_prob_density();
+		const auto density = static_cast<double>(_Z.size()) /
+		                     static_cast<double>(_Z.total_size_of_container_space());
+		OUT(density);
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
@@ -347,7 +350,7 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(static) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
+    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
@@ -469,7 +472,7 @@ public:
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(static) default(none) shared(indices_to_insert, Y)
+    schedule(dynamic) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
