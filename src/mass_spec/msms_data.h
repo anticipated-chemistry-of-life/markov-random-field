@@ -3,12 +3,14 @@
 #include "./msms_run.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Containers/TView.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 /// Class TRun that stores 2 vectors :
 /// - vector of 32 bit with value uin8t which is the binned likelihood and molecule index
@@ -29,38 +31,34 @@
 class TMSMSData {
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
-	std::array<double, 256> _binned_likelihoods{};
-	TTree *_molecules_tree = nullptr;
-	TTree *_species_tree   = nullptr;
-	void _add_mass_spec_run_for_species(const std::vector<TMassSpecRun> &runs) {
+	TTree *_molecules_tree;
+	TTree *_species_tree;
+
+private:
+	void _add_mass_spec_runs_for_species(const std::vector<TMassSpecRun> &runs) {
 		_msms_data.push_back(runs);
 	}
 
 public:
 	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees);
 	~TMSMSData() = default;
-	[[nodiscard]] const std::array<double, 256> &get_binned_likelihoods() const {
-		return _binned_likelihoods;
-	}
-	[[nodiscard]] double get_likelihood_from_binned_value(uint8_t binned_value) const {
-		return _binned_likelihoods[binned_value];
-	}
+
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const {
-		sum_log.add(get_likelihood_from_binned_value(binned_value));
-	}
+	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const;
 	void add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
-	                   uint8_t binned_value) const {
-		sum_log[0].add(1.0 - get_likelihood_from_binned_value(binned_value));
-		sum_log[1].add(get_likelihood_from_binned_value(binned_value));
-	}
+	                   uint8_t binned_value) const;
 
 	[[nodiscard]] coretools::TConstView<TMassSpecRun>
 	get_ms_data_for_species(size_t species_idx) const {
 		// with bound check
 		return _msms_data.at(species_idx);
 	};
+	[[nodiscard]] size_t number_of_ms_runs_for_species(size_t species_idx) const {
+		// with bound check
+		return _msms_data.at(species_idx).size();
+	};
+
 	[[nodiscard]] coretools::TConstView<TMassSpecRun>
 	get_ms_data_for_species(const std::string &species_name) const {
 		size_t species_idx = _species_tree->get_index_within_leaves(species_name);

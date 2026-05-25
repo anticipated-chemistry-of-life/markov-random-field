@@ -26,7 +26,7 @@ public:
 
 	[[nodiscard]] coretools::TConstView<TFeatureLikelihood>
 	get_likelihoods_for_feature(size_t i) const {
-		return _features.get(i);
+		return _features.at(i);
 	}
 	[[nodiscard]] size_t size() const { return _features.size(); }
 	[[nodiscard]] auto begin() const { return _features.begin(); };
@@ -35,7 +35,7 @@ public:
 	auto end() { return _features.end(); }
 	[[nodiscard]] BinarySearchResult is_molecule_in_feature(size_t feature_idx,
 	                                                        uint32_t molecule_index) const {
-		const auto &likelihoods = _features.get(feature_idx);
+		const auto &likelihoods = _features.at(feature_idx);
 		return is_molecule_in_feature(likelihoods, molecule_index);
 	}
 

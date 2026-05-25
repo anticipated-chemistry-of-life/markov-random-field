@@ -1,6 +1,8 @@
 #include "mass_spec/feature_likelihood.h"
 #include "mass_spec/msms_run.h"
 #include "gtest/gtest.h"
+#include <stdexcept>
+#include <vector>
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_1) {
 	TFeatureLikelihood storage(16777215, 125);
@@ -53,4 +55,11 @@ TEST(TFeatureLikelihood_Tests, nested_vector) {
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).size(), 2);
 
 	EXPECT_EQ(nested_vector.get_likelihoods_for_feature(1).at(0).get_binned_likelihood(), 120);
+
+	coretools::TNestedVector<TMassSpecRun> msms_data;
+	msms_data.push_back({nested_vector});
+	msms_data.push_back({nested_vector, nested_vector, nested_vector});
+	EXPECT_EQ(msms_data.at(0).size(), 1);
+	EXPECT_EQ(msms_data.at(1).size(), 3);
+	EXPECT_THROW(msms_data.at(2), std::out_of_range);
 }

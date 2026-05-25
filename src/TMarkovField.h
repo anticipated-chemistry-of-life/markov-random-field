@@ -127,6 +127,10 @@ private:
 	void _update_all_Y(TLotus &lotus, size_t iteration) {
 		_reset_log_joint_density();
 
+		const auto density = static_cast<double>(_Y.size()) /
+		                     static_cast<double>(_Y.total_size_of_container_space());
+		OUT(density);
+
 		if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 			std::vector<size_t> Y_trace_header;
 			Y_trace_header.reserve(_Y.total_size_of_container_space());
