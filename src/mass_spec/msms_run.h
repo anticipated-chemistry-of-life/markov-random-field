@@ -5,6 +5,9 @@
 /// likelihoods.
 #include "./feature_likelihood.h"
 #include "coretools/Containers/TNestedVector.h"
+#include "coretools/Main/TError.h"
+#include "coretools/Math/TSumLog.h"
+#include <array>
 #include <optional>
 
 struct BinarySearchResult {
@@ -53,6 +56,25 @@ public:
 	get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
 	                                 uint8_t binned_value) {
 		return binned_likelihoods[binned_value];
+	}
+
+	// Treats features as independent (approximation: features within a run share molecules).
+	void
+	add_log_likelihood_for_molecule(uint32_t molecule_idx,
+	                                const std::array<double, 256> &log_lik_absent,
+	                                const std::array<double, 256> &log_lik_present,
+	                                std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		for (size_t f = 0; f < _features.size(); ++f) {
+			auto result = is_molecule_in_feature(f, molecule_idx);
+			if (result.found) {
+				const auto bin = static_cast<uint8_t>(result.binned_likelihood.value());
+				throw coretools::TDevError(
+				    "We still don't know of to add the probability for the same molecule that "
+				    "appears in two features of the same MSMS run.");
+				// sum_log[0].add(log_lik_absent[bin]);
+				// sum_log[1].add(log_lik_present[bin]);
+			}
+		}
 	}
 
 	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule

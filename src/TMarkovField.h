@@ -13,9 +13,11 @@
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/devtools.h"
+#include "mass_spec/msms_data.h"
 #include "omp.h"
 #include "tree/TTree.h"
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,9 @@ private:
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
+
+	// mass spectrometry data and the dimension indices of molecules/species within _trees
+	std::optional<TMSMSData> _ms_data;
 
 	// complete joint density of the markov random field
 	std::vector<double> _complete_log_density;
@@ -104,7 +109,10 @@ private:
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
 		}
 
-		// calculate log likelihood (virtual mass spec)...
+		// calculate log likelihood mass spec data
+		if constexpr (!IsSimulation) {
+			if (_ms_data.has_value()) { _ms_data->add_log_likelihood(index_copy, sum_log); }
+		}
 
 		// sample state
 		bool new_state = sample(sum_log);

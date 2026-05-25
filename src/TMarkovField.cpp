@@ -23,6 +23,9 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
     : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(*_trees.back().get(), 1) {
 	using namespace coretools::instances;
 
+	// find molecule and species dimensions; construct mass spec data if both trees are present
+	// _ms_data.emplace(_trees); // TODO: once we have data, we can remove this
+
 	// read K (sheet size for updating Y)
 	_K = ProgramOptions::SHEET_SIZE_K;
 
