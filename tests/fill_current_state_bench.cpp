@@ -46,8 +46,7 @@ struct BenchResult {
 };
 
 // Run fn() reps times, preceded by a short warm-up, and return µs/call.
-template<typename Fn>
-BenchResult timed(Fn &&fn, size_t reps = 300) {
+template<typename Fn> BenchResult timed(Fn &&fn, size_t reps = 300) {
 	for (size_t i = 0; i < 5; ++i) { fn(); } // warm-up
 	auto t0 = Clock::now();
 	for (size_t i = 0; i < reps; ++i) { fn(); }
@@ -57,8 +56,8 @@ BenchResult timed(Fn &&fn, size_t reps = 300) {
 }
 
 void report(const std::string &label, const BenchResult &r) {
-	std::cout << "    " << std::left << std::setw(45) << label << std::fixed
-	          << std::setprecision(2) << r.us_per_call << " µs/call  (" << r.reps << " reps)\n";
+	std::cout << "    " << std::left << std::setw(45) << label << std::fixed << std::setprecision(2)
+	          << r.us_per_call << " µs/call  (" << r.reps << " reps)\n";
 }
 
 } // namespace
@@ -82,10 +81,10 @@ TEST(Benchmark_FillCurrentState, easy_path) {
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_nodes=" << dim1 << "\n\n";
 
-	for (double density : {0.01, 0.05, 0.10, 0.30, 0.50}) {
-		auto Y = make_Y({dim0, dim1}, density);
+	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
+		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
-		auto r = timed([&] {
+		auto r      = timed([&] {
 			auto res = fill_current_state<true>(Y, dim1, start, /*increment=*/1, total);
 			sink += static_cast<size_t>(res.current_state[0]); // prevent dead-code elimination
 		});
@@ -112,10 +111,10 @@ TEST(Benchmark_FillCurrentState, hard_path) {
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_nodes=" << dim0 << "\n\n";
 
-	for (double density : {0.01, 0.05, 0.10, 0.30, 0.50}) {
-		auto Y = make_Y({dim0, dim1}, density);
+	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
+		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
-		auto r = timed([&] {
+		auto r      = timed([&] {
 			auto res = fill_current_state<false>(Y, dim0, start, increment, total);
 			sink += static_cast<size_t>(res.current_state[0]);
 		});
@@ -135,8 +134,9 @@ TEST(Benchmark_FillCurrentState, hard_path) {
 // Naming:
 //   baseline  – current fill_current_state_hard (density probe + binary search in window)
 //   opt1      – no density estimation; binary_search from current idx to end  (O(log N) / query)
-//   linear    – no density estimation; linear scan from current idx           (O(increment·p) / query)
-//   opt3      – same density probe as baseline; linear scan *inside* the window (replaces inner bs)
+//   linear    – no density estimation; linear scan from current idx           (O(increment·p) /
+//   query) opt3      – same density probe as baseline; linear scan *inside* the window (replaces
+//   inner bs)
 
 namespace {
 
@@ -151,50 +151,27 @@ CurrentStateResult hard_opt1_lower_bound(const Container &container, size_t n_no
 	std::vector<size_t> idx_vec(n_nodes, container.size());
 	const size_t N = container.size();
 
-	const auto lin_start = container.get_linear_index_in_container_space(start_index);
-	auto [found, idx, lin, last] =
-	    binary_search(container, lin_start, size_t{0}, lin_start + 1);
-	idx_vec[0] = idx;
-	if (found) { state[0] = container[idx].is_one(); exists[0] = true; }
+	const auto lin_start         = container.get_linear_index_in_container_space(start_index);
+	auto [found, idx, lin, last] = binary_search(container, lin_start, size_t{0}, lin_start + 1);
+	idx_vec[0]                   = idx;
+	if (found) {
+		state[0]  = container[idx].is_one();
+		exists[0] = true;
+	}
 
 	for (size_t i = 1; i < n_nodes; ++i) {
 		if (last) return {state, exists, idx_vec};
 		const auto target = lin_start + i * increment;
-		if (target < lin) { idx_vec[i] = idx; continue; }
+		if (target < lin) {
+			idx_vec[i] = idx;
+			continue;
+		}
 		std::tie(found, idx, lin, last) = binary_search(container, target, idx, N);
-		idx_vec[i] = idx;
-		if (found) { state[i] = container[idx].is_one(); exists[i] = true; }
-	}
-	return {state, exists, idx_vec};
-}
-
-// Linear scan variant: after the initial position, scan forward element-by-element.
-// Costs O(increment * density) per query on average — wins for sparse data.
-template<typename Container>
-CurrentStateResult hard_linear_scan(const Container &container, size_t n_nodes,
-                                    const std::vector<size_t> &start_index, size_t increment,
-                                    size_t /*total_size*/) {
-	std::vector<int> state(n_nodes, false);
-	std::vector<int> exists(n_nodes, false);
-	std::vector<size_t> idx_vec(n_nodes, container.size());
-	const size_t N = container.size();
-
-	const auto lin_start = container.get_linear_index_in_container_space(start_index);
-	auto [found, idx, lin, last] =
-	    binary_search(container, lin_start, size_t{0}, lin_start + 1);
-	idx_vec[0] = idx;
-	if (found) { state[0] = container[idx].is_one(); exists[0] = true; }
-
-	for (size_t i = 1; i < n_nodes; ++i) {
-		if (idx >= N) return {state, exists, idx_vec};
-		const auto target = lin_start + i * increment;
-		if (target < lin) { idx_vec[i] = idx; continue; }
-		while (idx < N && container[idx].get_linear_index_in_container_space() < target) { ++idx; }
-		if (idx >= N) return {state, exists, idx_vec};
-		lin       = container[idx].get_linear_index_in_container_space();
-		last      = (idx == N - 1);
-		idx_vec[i] = idx;
-		if (lin == target) { state[i] = container[idx].is_one(); exists[i] = true; }
+		idx_vec[i]                      = idx;
+		if (found) {
+			state[i]  = container[idx].is_one();
+			exists[i] = true;
+		}
 	}
 	return {state, exists, idx_vec};
 }
@@ -211,11 +188,13 @@ CurrentStateResult hard_opt3_linear_window(const Container &container, size_t n_
 	std::vector<size_t> idx_vec(n_nodes, container.size());
 	const size_t N = container.size();
 
-	const auto lin_start = container.get_linear_index_in_container_space(start_index);
-	auto [found, idx, lin, last] =
-	    binary_search(container, lin_start, size_t{0}, lin_start + 1);
-	idx_vec[0] = idx;
-	if (found) { state[0] = container[idx].is_one(); exists[0] = true; }
+	const auto lin_start         = container.get_linear_index_in_container_space(start_index);
+	auto [found, idx, lin, last] = binary_search(container, lin_start, size_t{0}, lin_start + 1);
+	idx_vec[0]                   = idx;
+	if (found) {
+		state[0]  = container[idx].is_one();
+		exists[0] = true;
+	}
 
 	const double p   = static_cast<double>(N) / static_cast<double>(total_size);
 	const double ip  = static_cast<double>(increment) * p;
@@ -225,24 +204,37 @@ CurrentStateResult hard_opt3_linear_window(const Container &container, size_t n_
 
 	for (size_t i = 1; i < n_nodes; ++i) {
 		const auto target = lin_start + i * increment;
-		if (target < lin) { idx_vec[i] = idx; continue; }
+		if (target < lin) {
+			idx_vec[i] = idx;
+			continue;
+		}
 		if (last) return {state, exists, idx_vec};
 
-		auto ub       = idx + jr; if (ub >= N) ub = N - 1;
-		auto lb       = idx + jl; if (lb >= N) lb = N - 1;
+		auto ub = idx + jr;
+		if (ub >= N) ub = N - 1;
+		auto lb = idx + jl;
+		if (lb >= N) lb = N - 1;
 		const auto ub_lin = container[ub].get_linear_index_in_container_space();
 		const auto lb_lin = container[lb].get_linear_index_in_container_space();
 
 		// exact hits at the two probe positions (same as baseline)
 		if (target == ub_lin) {
-			idx = ub; lin = ub_lin; last = (idx == N - 1);
-			state[i] = container[idx].is_one(); exists[i] = true;
-			idx_vec[i] = idx; continue;
+			idx        = ub;
+			lin        = ub_lin;
+			last       = (idx == N - 1);
+			state[i]   = container[idx].is_one();
+			exists[i]  = true;
+			idx_vec[i] = idx;
+			continue;
 		}
 		if (target == lb_lin) {
-			idx = lb; lin = lb_lin; last = (idx == N - 1);
-			state[i] = container[idx].is_one(); exists[i] = true;
-			idx_vec[i] = idx; continue;
+			idx        = lb;
+			lin        = lb_lin;
+			last       = (idx == N - 1);
+			state[i]   = container[idx].is_one();
+			exists[i]  = true;
+			idx_vec[i] = idx;
+			continue;
 		}
 
 		if (target > ub_lin) {
@@ -251,16 +243,23 @@ CurrentStateResult hard_opt3_linear_window(const Container &container, size_t n_
 		} else if (target > lb_lin /* && target < ub_lin */) {
 			// inside window: linear scan [lb, ub) instead of binary search
 			size_t pos = lb;
-			while (pos < ub && container[pos].get_linear_index_in_container_space() < target) { ++pos; }
+			while (pos < ub && container[pos].get_linear_index_in_container_space() < target) {
+				++pos;
+			}
 			const auto pos_lin = container[pos].get_linear_index_in_container_space();
-			found = (pos_lin == target);
-			idx   = pos; lin = pos_lin; last = (pos == N - 1);
+			found              = (pos_lin == target);
+			idx                = pos;
+			lin                = pos_lin;
+			last               = (pos == N - 1);
 		} else {
 			// below window: binary search [idx, lb) (same as baseline)
 			std::tie(found, idx, lin, last) = binary_search(container, target, idx, lb);
 		}
 		idx_vec[i] = idx;
-		if (found) { state[i] = container[idx].is_one(); exists[i] = true; }
+		if (found) {
+			state[i]  = container[idx].is_one();
+			exists[i] = true;
+		}
 	}
 	return {state, exists, idx_vec};
 }
@@ -268,8 +267,7 @@ CurrentStateResult hard_opt3_linear_window(const Container &container, size_t n_
 // Assert that two results agree on the semantically meaningful fields.
 void assert_equal(const CurrentStateResult &ref, const CurrentStateResult &got,
                   const std::string &name) {
-	ASSERT_EQ(ref.current_state, got.current_state)
-	    << name << ": current_state mismatch";
+	ASSERT_EQ(ref.current_state, got.current_state) << name << ": current_state mismatch";
 	ASSERT_EQ(ref.exists_in_container, got.exists_in_container)
 	    << name << ": exists_in_container mismatch";
 	ASSERT_EQ(ref.index_in_TStorageVector, got.index_in_TStorageVector)
@@ -286,37 +284,33 @@ void assert_equal(const CurrentStateResult &ref, const CurrentStateResult &got,
 // First verifies correctness (all variants must match the baseline), then
 // measures µs/call at several densities so trade-offs are visible.
 TEST(Benchmark_FillCurrentState, hard_path_variants) {
-	constexpr size_t dim0      = 1000;
-	constexpr size_t dim1      = 1000;
-	constexpr size_t total     = dim0 * dim1;
-	constexpr size_t increment = dim1;
-	constexpr size_t n_nodes   = dim0;
+	constexpr size_t dim0           = 1000;
+	constexpr size_t dim1           = 1000;
+	constexpr size_t total          = dim0 * dim1;
+	constexpr size_t increment      = dim1;
+	constexpr size_t n_nodes        = dim0;
 	const std::vector<size_t> start = {0, 0};
 
 	std::cout << "\n=== fill_current_state_hard: variant comparison ===\n";
 	std::cout << "    container: " << dim0 << "×" << dim1 << " = " << total
 	          << "  n_nodes=" << n_nodes << "  increment=" << increment << "\n\n";
-	std::cout << "    " << std::left
-	          << std::setw(8)  << "density"
-	          << std::setw(10) << "stored"
-	          << std::setw(14) << "baseline"
-	          << std::setw(14) << "opt1_lb"
-	          << std::setw(14) << "linear"
-	          << std::setw(14) << "opt3_win"
+	std::cout << "    " << std::left << std::setw(8) << "density" << std::setw(10) << "stored"
+	          << std::setw(14) << "baseline" << std::setw(14) << "opt1_lb" << std::setw(14)
+	          << "linear" << std::setw(14) << "opt3_win"
 	          << "\n";
 	std::cout << "    " << std::string(74, '-') << "\n";
 
-	for (double density : {0.01, 0.05, 0.10, 0.30, 0.50}) {
+	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y = make_Y({dim0, dim1}, density);
 
 		// --- correctness check (run once, asserts fire on mismatch) ---
 		const auto ref  = fill_current_state<false>(Y, n_nodes, start, increment, total);
-		const auto v1   = hard_opt1_lower_bound (Y, n_nodes, start, increment, total);
-		const auto vlin = hard_linear_scan      (Y, n_nodes, start, increment, total);
+		const auto v1   = hard_opt1_lower_bound(Y, n_nodes, start, increment, total);
+		const auto vlin = hard_linear_scan(Y, n_nodes, start, increment, total);
 		const auto v3   = hard_opt3_linear_window(Y, n_nodes, start, increment, total);
-		assert_equal(ref, v1,   "opt1_lower_bound");
+		assert_equal(ref, v1, "opt1_lower_bound");
 		assert_equal(ref, vlin, "linear_scan");
-		assert_equal(ref, v3,   "opt3_linear_window");
+		assert_equal(ref, v3, "opt3_linear_window");
 
 		// --- timing ---
 		size_t sink = 0;
@@ -328,7 +322,7 @@ TEST(Benchmark_FillCurrentState, hard_path_variants) {
 			auto r = hard_opt1_lower_bound(Y, n_nodes, start, increment, total);
 			sink += static_cast<size_t>(r.current_state[0]);
 		});
-		auto t_lin = timed([&] {
+		auto t_lin  = timed([&] {
 			auto r = hard_linear_scan(Y, n_nodes, start, increment, total);
 			sink += static_cast<size_t>(r.current_state[0]);
 		});
@@ -344,14 +338,11 @@ TEST(Benchmark_FillCurrentState, hard_path_variants) {
 			return s.str();
 		};
 
-		std::cout << "    " << std::left << std::fixed << std::setprecision(2)
-		          << std::setw(8)  << density
-		          << std::setw(10) << Y.size()
-		          << std::setw(14) << fmt(t_base.us_per_call)
-		          << std::setw(14) << fmt(t_opt1.us_per_call)
-		          << std::setw(14) << fmt(t_lin.us_per_call)
-		          << std::setw(14) << fmt(t_opt3.us_per_call)
-		          << "\n";
+		std::cout << "    " << std::left << std::fixed << std::setprecision(4) << std::setw(8)
+		          << density << std::setw(10) << Y.size() << std::setw(14)
+		          << fmt(t_base.us_per_call) << std::setw(14) << fmt(t_opt1.us_per_call)
+		          << std::setw(14) << fmt(t_lin.us_per_call) << std::setw(14)
+		          << fmt(t_opt3.us_per_call) << "\n";
 	}
 }
 
@@ -371,7 +362,7 @@ TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
 	          << "ratio (hard/easy)\n";
 	std::cout << "    " << std::string(70, '-') << "\n";
 
-	for (double density : {0.01, 0.05, 0.10, 0.30, 0.50}) {
+	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y = make_Y({dim0, dim1}, density);
 
 		size_t sink = 0;
@@ -379,7 +370,7 @@ TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
 			auto res = fill_current_state<true>(Y, dim1, start, 1, total);
 			sink += static_cast<size_t>(res.current_state[0]);
 		});
-		auto hard = timed([&] {
+		auto hard   = timed([&] {
 			auto res = fill_current_state<false>(Y, dim0, start, increment, total);
 			sink += static_cast<size_t>(res.current_state[0]);
 		});
