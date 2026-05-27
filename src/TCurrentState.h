@@ -17,13 +17,13 @@
 class TCurrentState {
 private:
 	// current state of Y
-	std::vector<int> _current_state_Y;
-	std::vector<int> _exists_in_Y;
+	std::vector<uint8_t> _current_state_Y;
+	std::vector<uint8_t> _exists_in_Y;
 	std::vector<size_t> _index_in_TStorageYVector;
 
 	// current state of Z
-	std::vector<int> _current_state_Z;
-	std::vector<int> _exists_in_Z;
+	std::vector<uint8_t> _current_state_Z;
+	std::vector<uint8_t> _exists_in_Z;
 	std::vector<size_t> _index_in_TStorageZVector;
 
 	// increment and tree
@@ -57,8 +57,7 @@ public:
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
 	bool exists_in_TStorageVector(size_t index_in_tree) const;
 
-	std::tuple<bool, size_t, size_t>
-	get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
+	std::tuple<bool, bool, size_t> get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -91,7 +90,7 @@ public:
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
-	std::tuple<bool, size_t, size_t>
+	std::tuple<bool, bool, size_t>
 	get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
 	                                   size_t leaf_index_in_tree_of_last_dim) const;
 };

@@ -29,8 +29,8 @@ inline std::tuple<bool, size_t, size_t, bool> binary_search(const Container &vec
 }
 
 struct CurrentStateResult {
-	std::vector<int> current_state;
-	std::vector<int> exists_in_container;
+	std::vector<uint8_t> current_state;
+	std::vector<uint8_t> exists_in_container;
 	std::vector<size_t> index_in_TStorageVector;
 };
 
@@ -41,8 +41,8 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us
 	// to increment the index in the Y vector by 1 and get the next element in the Y vector.
-	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
-	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
+	std::vector<uint8_t> current_state(n_nodes_in_clique_of_container, false);
+	std::vector<uint8_t> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
 	size_t start_linear_index =
 	    container.get_linear_index_in_container_space(start_index_in_leaves_space);
@@ -111,8 +111,8 @@ fill_current_state_hard_with_linear_window(const Container &container,
                                            size_t n_nodes_in_clique_of_container,
                                            const std::vector<size_t> &start_index_in_leaves_space,
                                            size_t increment, size_t total_size_of_container) {
-	std::vector<int> current_state(n_nodes_in_clique_of_container, false);
-	std::vector<int> exists_in_container(n_nodes_in_clique_of_container, false);
+	std::vector<uint8_t> current_state(n_nodes_in_clique_of_container, false);
+	std::vector<uint8_t> exists_in_container(n_nodes_in_clique_of_container, false);
 	std::vector<size_t> index_in_TStorageVector(n_nodes_in_clique_of_container, container.size());
 	auto linear_start_index =
 	    container.get_linear_index_in_container_space(start_index_in_leaves_space);
@@ -211,8 +211,8 @@ template<typename Container>
 CurrentStateResult hard_linear_scan(const Container &container, size_t n_nodes,
                                     const std::vector<size_t> &start_index, size_t increment,
                                     size_t /*total_size*/) {
-	std::vector<int> state(n_nodes, false);
-	std::vector<int> exists(n_nodes, false);
+	std::vector<uint8_t> state(n_nodes, false);
+	std::vector<uint8_t> exists(n_nodes, false);
 	std::vector<size_t> idx_vec(n_nodes, container.size());
 	const size_t N = container.size();
 

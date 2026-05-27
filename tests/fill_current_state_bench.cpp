@@ -146,8 +146,8 @@ template<typename Container>
 CurrentStateResult hard_opt1_lower_bound(const Container &container, size_t n_nodes,
                                          const std::vector<size_t> &start_index, size_t increment,
                                          size_t /*total_size*/) {
-	std::vector<int> state(n_nodes, false);
-	std::vector<int> exists(n_nodes, false);
+	std::vector<uint8_t> state(n_nodes, false);
+	std::vector<uint8_t> exists(n_nodes, false);
 	std::vector<size_t> idx_vec(n_nodes, container.size());
 	const size_t N = container.size();
 
@@ -183,8 +183,8 @@ template<typename Container>
 CurrentStateResult hard_opt3_linear_window(const Container &container, size_t n_nodes,
                                            const std::vector<size_t> &start_index, size_t increment,
                                            size_t total_size) {
-	std::vector<int> state(n_nodes, false);
-	std::vector<int> exists(n_nodes, false);
+	std::vector<uint8_t> state(n_nodes, false);
+	std::vector<uint8_t> exists(n_nodes, false);
 	std::vector<size_t> idx_vec(n_nodes, container.size());
 	const size_t N = container.size();
 

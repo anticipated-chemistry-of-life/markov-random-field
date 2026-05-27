@@ -107,7 +107,7 @@ bool TCurrentState::exists_in_TStorageVector(size_t index_in_tree) const {
 	return _exists_in_Z[_tree.get_index_within_internal_nodes(index_in_tree)];
 }
 
-std::tuple<bool, size_t, size_t>
+std::tuple<bool, bool, size_t>
 TCurrentState::get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const {
 	const bool state  = _current_state_Y[index_in_leaves];
 	const bool exists = _exists_in_Y[index_in_leaves];
@@ -180,7 +180,7 @@ void TSheet::set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_
 	_cur_states[node_index_in_tree_of_dim].set_Y(ix, value);
 }
 
-std::tuple<bool, size_t, size_t>
+std::tuple<bool, bool, size_t>
 TSheet::get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
                                            size_t leaf_index_in_tree_of_last_dim) const {
 	// calculate index in Y: leaf index in last dimension, relative to start index
