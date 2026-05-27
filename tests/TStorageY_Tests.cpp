@@ -1,7 +1,6 @@
 #include "storages/y_storage/TStorageY.h"
 #include "storages/y_storage/TStorageYVector.h"
 #include "gtest/gtest.h"
-#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -64,10 +63,16 @@ TEST(YStorage_Tests, set_coordinate_zero) {
 
 TEST(YStorage_Tests, set_coordinate_max) {
 	TStorageY y;
-	const uint64_t max =
-	    std::pow(2, 47) - 1; // because we have set to 47 bits the maximal number of coordinates
-	y.set_linear_index_in_Y_space(max);
-	EXPECT_EQ(y.get_linear_index_in_Y_space(), max);
+	y.set_linear_index_in_Y_space(MAX_LINEAR_INDEX_IN_Y_SPACE);
+	EXPECT_EQ(y.get_linear_index_in_Y_space(), MAX_LINEAR_INDEX_IN_Y_SPACE);
+}
+
+TEST(YStorage_Tests, constructor_at_max_index_no_throw) {
+	EXPECT_NO_THROW(TStorageY{MAX_LINEAR_INDEX_IN_Y_SPACE});
+}
+
+TEST(YStorage_Tests, constructor_exceeds_max_index_throws) {
+	EXPECT_ANY_THROW(TStorageY{MAX_LINEAR_INDEX_IN_Y_SPACE + 1});
 }
 
 TEST(YStorage_Tests, update_counter) {
@@ -133,6 +138,77 @@ TEST(YStorage_Tests, reset_counter) {
 	y.set_counter(1458);
 	y.reset_counter();
 	EXPECT_EQ(y.get_counter(), 0);
+}
+
+TEST(YStorageVector_Tests, remove_zeros_removes_zero_state_elements) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_one(1);
+	Y.insert_one(3);
+	Y.insert_zero(2);
+	EXPECT_EQ(Y.size(), 3);
+	Y.remove_zeros();
+	EXPECT_EQ(Y.size(), 2);
+	EXPECT_EQ(Y[0].get_linear_index_in_container_space(), 1);
+	EXPECT_EQ(Y[1].get_linear_index_in_container_space(), 3);
+}
+
+TEST(YStorageVector_Tests, remove_zeros_all_zeros_empties_vector) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_zero(0);
+	Y.insert_zero(2);
+	Y.insert_zero(4);
+	EXPECT_EQ(Y.size(), 3);
+	Y.remove_zeros();
+	EXPECT_EQ(Y.size(), 0);
+}
+
+TEST(YStorageVector_Tests, remove_zeros_all_ones_unchanged) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_one(0);
+	Y.insert_one(2);
+	Y.insert_one(4);
+	EXPECT_EQ(Y.size(), 3);
+	Y.remove_zeros();
+	EXPECT_EQ(Y.size(), 3);
+}
+
+TEST(YStorageVector_Tests, remove_zeros_set_to_zero_then_remove) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_one(1);
+	Y.insert_one(2);
+	Y.insert_one(3);
+	Y.set_to_zero(1); // sets element at vector position 1 (linear index 2) to zero
+	Y.remove_zeros();
+	EXPECT_EQ(Y.size(), 2);
+	EXPECT_EQ(Y[0].get_linear_index_in_container_space(), 1);
+	EXPECT_EQ(Y[1].get_linear_index_in_container_space(), 3);
+}
+
+TEST(YStorageVector_Tests, reset_counts_sets_all_counters_to_zero) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_one(0);
+	Y.insert_one(2);
+	Y.insert_one(4);
+	Y.add_to_counter(0);
+	Y.add_to_counter(0);
+	Y.add_to_counter(0);
+	EXPECT_EQ(Y[0].get_counter(), 3);
+	EXPECT_EQ(Y[1].get_counter(), 3);
+	EXPECT_EQ(Y[2].get_counter(), 3);
+	Y.reset_counts();
+	EXPECT_EQ(Y[0].get_counter(), 0);
+	EXPECT_EQ(Y[1].get_counter(), 0);
+	EXPECT_EQ(Y[2].get_counter(), 0);
+}
+
+TEST(YStorageVector_Tests, reset_counts_does_not_affect_states) {
+	TStorageYVector Y(1000, {5});
+	Y.insert_one(1);
+	Y.insert_one(3);
+	Y.add_to_counter(0);
+	Y.reset_counts();
+	EXPECT_EQ(Y[0].is_one(), true);
+	EXPECT_EQ(Y[1].is_one(), true);
 }
 
 TEST(YStorageVector_Tests, add_data) {

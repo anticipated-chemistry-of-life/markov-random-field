@@ -5,6 +5,7 @@
 #ifndef TSTORAGEY_H
 #define TSTORAGEY_H
 
+#include "coretools/Main/TError.h"
 #include <cstdint>
 /** TStorage Y is the class to store a single value Y of the Random Markov Field
  * We store in a single 64 bits integer (8 bytes) the following information:
@@ -12,6 +13,9 @@
  * - the 17th (position 16 ) is the current state of the element (0 or 1)
  * - the rest is the linear index in the Y space.
  */
+
+static constexpr uint64_t MAX_LINEAR_INDEX_IN_Y_SPACE = (1ULL << 47) - 1;
+
 class TStorageY {
 private:
 	/** The value where we are going to store the state (0/1), the linear index and the counter. */
@@ -31,6 +35,10 @@ public:
 	explicit TStorageY(const uint64_t linear_index_in_Y_space) {
 		// if we construct a TStorageY, that means that by default we will set the state to 1
 		// with linear index linear_index_in_Y_space
+		if (linear_index_in_Y_space > MAX_LINEAR_INDEX_IN_Y_SPACE) {
+			throw coretools::TDevError(
+			    "linear_index_in_Z_space exceeds maximal index for TStorageY");
+		}
 		set_linear_index_in_Y_space(linear_index_in_Y_space);
 		set_state(true);
 	}

@@ -22,6 +22,23 @@ private:
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
 	std::vector<size_t> _dimensions_Y_space;
+	void _insert(uint64_t linear_index_in_Y_space, bool state) {
+		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
+			throw coretools::TDevError(
+			    "You are trying to insert a value at an linear index bigger than the total "
+			    "size of the container. ",
+			    "The index is: ", linear_index_in_Y_space,
+			    " and the total size of the container is : ",
+			    this->total_size_of_container_space());
+		}
+		auto [found, index] = binary_search(linear_index_in_Y_space);
+		if (found) {
+			_vec[index].set_state(state);
+		} else {
+			_vec.insert(_vec.begin() + index, TStorageY(linear_index_in_Y_space));
+			_vec[index].set_state(state);
+		}
+	};
 
 public:
 	using value_type     = uint64_t;
@@ -73,33 +90,10 @@ public:
 		_vec[index_in_TStorageYVector].set_state(false);
 	}
 
-	void insert_one(uint64_t linear_index_in_Y_space) {
-		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
-			throw coretools::TDevError(
-			    "You are trying to insert a value at an linear index bigger than the total "
-			    "size of the container. ",
-			    "The index is: ", linear_index_in_Y_space,
-			    " and the total size of the container is : ",
-			    this->total_size_of_container_space());
-		}
-		auto [found, index] = binary_search(linear_index_in_Y_space);
-		if (found) {
-			_vec[index].set_state(true);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageY(linear_index_in_Y_space));
-		}
-	}
+	void insert_one(uint64_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, true); }
 
 	/// Does the same as set_to_one but sets the element to zero
-	void insert_zero(uint64_t linear_index_in_Y_space) {
-		auto [found, index] = binary_search(linear_index_in_Y_space);
-		if (found) {
-			_vec[index].set_state(false);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageY(linear_index_in_Y_space));
-			_vec[index].set_state(false);
-		}
-	}
+	void insert_zero(uint64_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, false); }
 
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {

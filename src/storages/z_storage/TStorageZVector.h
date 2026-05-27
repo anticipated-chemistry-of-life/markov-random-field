@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <numeric>
 #include <vector>
-
 /// There is one TStorageZVector per dimension `d`. The dimensions in Z space correspond
 /// to the number of leaves in each dimension except for dimension `d` where the
 /// dimension is given by the number of internal nodes.
@@ -24,6 +23,20 @@ class TStorageZVector {
 private:
 	std::vector<size_t> _dimensions_in_Z_space;
 	std::vector<TStorageZ> _vec;
+	void _insert(uint32_t linear_index_in_Z_space, bool state) {
+		if (linear_index_in_Z_space > INT32_MAX) {
+			throw coretools::TDevError("linear_index_in_Z_space exceeds INT32_MAX");
+		}
+
+		auto [found, index] = binary_search(linear_index_in_Z_space);
+		if (found) {
+			_vec[index].set_state(state);
+		} else {
+			_vec.insert(_vec.begin() + index,
+			            TStorageZ(static_cast<int32_t>(linear_index_in_Z_space)));
+			_vec[index].set_state(state);
+		}
+	}
 
 public:
 	using value_type     = uint32_t;
@@ -64,29 +77,14 @@ public:
 		_vec[index_in_TStorageZVector].set_state(false);
 	}
 
-	void insert_one(uint32_t linear_index_in_Z_space) {
-		auto [found, index] = binary_search(linear_index_in_Z_space);
-		if (found) {
-			_vec[index].set_state(true);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
-		}
-	}
+	void insert_one(uint32_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }
 
 	void insert_one(const std::vector<size_t> &multi_dim_index_in_Z_space) {
 		size_t linear_index_in_Z_space = get_linear_index_in_Z_space(multi_dim_index_in_Z_space);
 		insert_one(linear_index_in_Z_space);
 	}
 
-	void insert_zero(uint32_t linear_index_in_Z_space) {
-		auto [found, index] = binary_search(linear_index_in_Z_space);
-		if (found) {
-			_vec[index].set_state(false);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
-			_vec[index].set_state(false);
-		}
-	}
+	void insert_zero(uint32_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, false); }
 
 	void remove_zeros() {
 		_vec.erase(std::remove_if(_vec.begin(), _vec.end(),
