@@ -34,7 +34,7 @@ private:
 	// data
 	TStorageYVector _L;
 
-	/// The occurences is the square root of the paper counts
+	/// The occurences is the log(count + 1) of the paper counts
 	std::vector<std::vector<double>> _occurrence_counters;
 
 	// Markov field

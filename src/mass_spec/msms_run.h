@@ -7,6 +7,7 @@
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/devtools.h"
 #include <array>
 #include <optional>
 
@@ -64,10 +65,18 @@ public:
 	                                const std::array<double, 256> &log_lik_absent,
 	                                const std::array<double, 256> &log_lik_present,
 	                                std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		const auto zero = sum_log[0].getSum();
+		const auto one  = sum_log[1].getSum();
+		OUT(zero, one);
+		throw coretools::TDevError(
+		    "We still don't know of to add the probability for the same molecule that "
+		    "appears in two features of the same MSMS run. Here are the variables of the function "
+		    ": ",
+		    log_lik_absent, log_lik_present);
 		for (size_t f = 0; f < _features.size(); ++f) {
 			auto result = is_molecule_in_feature(f, molecule_idx);
 			if (result.found) {
-				const auto bin = static_cast<uint8_t>(result.binned_likelihood.value());
+				// const auto bin = static_cast<uint8_t>(result.binned_likelihood.value());
 				throw coretools::TDevError(
 				    "We still don't know of to add the probability for the same molecule that "
 				    "appears in two features of the same MSMS run.");

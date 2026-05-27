@@ -66,18 +66,22 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 void TTree::initialize() {
 	// stattools initialization function
 	_alpha_c->initStorage(this, {_cliques.size()},
-	                      {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	                      {std::make_shared<coretools::TNamesStrings>(_clique_names)});
 
 	// now we initialize the mu_c_1
 	_log_nu_c->initStorage(this, {_cliques.size()},
-	                       {std::make_shared<coretools::TNamesIndices>(_cliques.size())});
+	                       {std::make_shared<coretools::TNamesStrings>(_clique_names)});
 	_nu_c.resize(_cliques.size());
 	for (size_t c = 0; c < _cliques.size(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
 
 	// number of branches = number of leaves + number of internal nodes without roots
+	std::vector<std::string> branch_names;
+	branch_names.reserve(_leaves_and_internal_nodes_without_roots.size());
+	for (size_t node_idx : _leaves_and_internal_nodes_without_roots) {
+		branch_names.push_back(get_node_id(node_idx));
+	}
 	_binned_branch_lengths->initStorage(this, {get_number_of_nodes() - get_number_of_roots()},
-	                                    {std::make_shared<coretools::TNamesIndices>(
-	                                        get_number_of_nodes() - get_number_of_roots())});
+	                                    {std::make_shared<coretools::TNamesStrings>(branch_names)});
 }
 
 void TTree::guessInitialValues() {

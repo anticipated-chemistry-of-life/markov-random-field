@@ -21,9 +21,9 @@ void TMSMSData::add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t bi
 	sum_log.add(_log_lik_present[binned_value]);
 }
 
-void TMSMSData::add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
-                              uint8_t binned_value) const {
-	// sum_log[0].add(_log_lik_absent[binned_value]);
-	// sum_log[1].add(_log_lik_present[binned_value]);
-	throw coretools::TDevError("We still don't know how to add this.");
-}
+// void TMSMSData::add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
+//                               uint8_t binned_value) const {
+// 	// sum_log[0].add(_log_lik_absent[binned_value]);
+// 	// sum_log[1].add(_log_lik_present[binned_value]);
+// 	throw coretools::TDevError("We still don't know how to add this.");
+// }

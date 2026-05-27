@@ -67,6 +67,7 @@ private:
 	// cliques
 	std::vector<TClique> _cliques;
 	std::vector<size_t> _dimension_cliques;
+	std::vector<std::string> _clique_names;
 
 	// Nus
 	TypeParamLogNu *_log_nu_c = nullptr;
@@ -517,7 +518,7 @@ public:
 				                            paper_counts.size(), ".");
 			}
 
-			paper_counts[leaf_index] = std::sqrt(count);
+			paper_counts[leaf_index] = std::log(count + 1);
 		}
 
 		return paper_counts;
