@@ -88,24 +88,6 @@ CurrentStateResult fill_current_state_easy(const Container &container,
 }
 
 template<typename Container>
-CurrentStateResult fill_current_state_hard(const Container &container,
-                                           size_t n_nodes_in_clique_of_container,
-                                           const std::vector<size_t> &start_index_in_leaves_space,
-                                           size_t increment, size_t total_size_of_container) {
-	const auto density =
-	    static_cast<double>(container.size()) / static_cast<double>(total_size_of_container);
-
-	if (density <= 0.001) {
-		return hard_linear_scan(container, n_nodes_in_clique_of_container,
-		                        start_index_in_leaves_space, increment, total_size_of_container);
-	} else {
-		return fill_current_state_hard_with_linear_window(container, n_nodes_in_clique_of_container,
-		                                                  start_index_in_leaves_space, increment,
-		                                                  total_size_of_container);
-	}
-}
-
-template<typename Container>
 CurrentStateResult
 fill_current_state_hard_with_linear_window(const Container &container,
                                            size_t n_nodes_in_clique_of_container,
@@ -242,6 +224,24 @@ CurrentStateResult hard_linear_scan(const Container &container, size_t n_nodes,
 		}
 	}
 	return {state, exists, idx_vec};
+}
+
+template<typename Container>
+CurrentStateResult fill_current_state_hard(const Container &container,
+                                           size_t n_nodes_in_clique_of_container,
+                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           size_t increment, size_t total_size_of_container) {
+	const auto density =
+	    static_cast<double>(container.size()) / static_cast<double>(total_size_of_container);
+
+	if (density <= 0.001) {
+		return hard_linear_scan(container, n_nodes_in_clique_of_container,
+		                        start_index_in_leaves_space, increment, total_size_of_container);
+	} else {
+		return fill_current_state_hard_with_linear_window(container, n_nodes_in_clique_of_container,
+		                                                  start_index_in_leaves_space, increment,
+		                                                  total_size_of_container);
+	}
 }
 
 template<bool AlongLastDim, typename Container>
