@@ -3,6 +3,7 @@
 #include "TCollapser.h"
 #include "TCurrentState.h"
 #include "TMarkovField.h"
+#include "ntfy/TNtfyNotifier.h"
 #include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TParameters.h"
@@ -67,6 +68,9 @@ private:
 	// simulate or infer?
 	bool _simulate = false;
 
+	// notifications
+	TNtfyNotifier _notifier;
+
 	// private functions
 	[[nodiscard]] double
 	_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
@@ -98,6 +102,7 @@ public:
 	void guessInitialValues() override;
 
 	void burninHasFinished() override;
+	void burninRoundHasFinished(size_t round) override;
 	void MCMCHasFinished() override;
 
 	[[nodiscard]] double calculate_log_likelihood_of_L() const;

@@ -52,6 +52,18 @@ void TLotus::initialize() {
 		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
 	}
 	for (auto &it : _markov_field_stattools_param) { it->initStorage(this, {0}); }
+
+	if (!_simulate) {
+		std::vector<size_t> leaf_counts;
+		leaf_counts.reserve(_collapser.num_dim_to_keep());
+		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+			leaf_counts.push_back(_trees[_collapser.dim_to_keep(i)]->get_number_of_leaves());
+		}
+		const auto n_iter   = coretools::instances::parameters().get<size_t>("iterations", 100000);
+		const auto n_burnin = coretools::instances::parameters().get<size_t>("numBurnin", 10);
+		const auto n_burnin_iter = coretools::instances::parameters().get<size_t>("burnin", 1000);
+		_notifier.notify_start(tree_names, leaf_counts, n_iter, n_burnin, n_burnin_iter);
+	}
 }
 
 void TLotus::load_from_file(const std::string &filename) {
@@ -388,6 +400,41 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	for (const auto &line : node_names) { file.writeln(line); }
 };
 
-void TLotus::burninHasFinished() { _markov_field.burninHasFinished(); }
+void TLotus::burninHasFinished() {
+	_markov_field.burninHasFinished();
+
+	std::vector<std::string> dim_names;
+	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
+	dim_names.reserve(_collapser.num_dim_to_keep());
+	gamma_stats.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
+		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
+	}
+	const TNtfyNotifier::ParamStats epsilon_stats =
+	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
+	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
+	                                                    _error_rate->sd(0)};
+	_notifier.notify_burnin_finished(dim_names, gamma_stats, epsilon_stats);
+}
+
+void TLotus::burninRoundHasFinished(size_t round) {
+	_markov_field.burninRoundHasFinished(round);
+	const auto total_rounds = coretools::instances::parameters().get<size_t>("numBurnin", 10);
+
+	std::vector<std::string> dim_names;
+	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
+	dim_names.reserve(_collapser.num_dim_to_keep());
+	gamma_stats.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
+		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
+	}
+	const TNtfyNotifier::ParamStats epsilon_stats =
+	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
+	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
+	                                                    _error_rate->sd(0)};
+	_notifier.notify_burnin_round(round, total_rounds, dim_names, gamma_stats, epsilon_stats);
+}
 
 void TLotus::MCMCHasFinished() { _markov_field.MCMCHasFinished(); }

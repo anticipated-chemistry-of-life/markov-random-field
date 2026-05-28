@@ -325,6 +325,7 @@ public:
 
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();
+	void burninRoundHasFinished(size_t round);
 	void MCMCHasFinished();
 
 	static size_t get_num_iterations_simulation() {

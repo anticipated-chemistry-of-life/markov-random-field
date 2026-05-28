@@ -20,7 +20,7 @@ inline std::tuple<bool, size_t, size_t, bool> binary_search(const Container &vec
 
 	if (it == vec.end()) { return {false, vec.size(), vec.size(), true}; }
 
-	const size_t pos = static_cast<size_t>(it - vec.begin());
+	const auto pos = static_cast<size_t>(it - vec.begin());
 	if (it->get_linear_index_in_container_space() != target) {
 		return {false, pos, static_cast<size_t>(it->get_linear_index_in_container_space()), false};
 	}

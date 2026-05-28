@@ -20,6 +20,9 @@ option("lotus", { default = true, defines = "USE_LOTUS", description = "Whether 
 add_requires("openmp", { system = false })
 add_requires("zlib", "armadillo", "fmt", "fast_float", { system = false })
 add_requires("gtest", { optional = true, system = false })
+add_requires("nlohmann_json", { system = false })
+add_requires("stduuid", { system = false })
+add_requires("openssl", { system = false })
 
 
 -- =========================================================
@@ -76,11 +79,12 @@ add_cxxflags("-Wall", "-Wextra")
 
 target("acol")
 set_kind("binary")
-add_packages("openmp")
+add_packages("openmp", "nlohmann_json", "stduuid", "openssl")
 add_files("main.cpp")
 add_files("src/**.cpp")
 add_includedirs("src")
 add_deps("coretools", "stattools")
+add_frameworks("CoreFoundation", "Security")
 add_defines("DEVTOOLS", "DEV_LOCATION")
 add_options("lotus")
 add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
