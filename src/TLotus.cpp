@@ -436,4 +436,20 @@ void TLotus::burninRoundHasFinished(size_t round) {
 	_notifier.notify_burnin_round(round, total_rounds, dim_names, gamma_stats, epsilon_stats);
 }
 
-void TLotus::MCMCHasFinished() { _markov_field.MCMCHasFinished(); }
+void TLotus::MCMCHasFinished() {
+	_markov_field.MCMCHasFinished();
+
+	std::vector<std::string> dim_names;
+	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
+	dim_names.reserve(_collapser.num_dim_to_keep());
+	gamma_stats.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
+		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
+	}
+	const TNtfyNotifier::ParamStats epsilon_stats =
+	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
+	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
+	                                                    _error_rate->sd(0)};
+	_notifier.notify_mcmc_finished(dim_names, gamma_stats, epsilon_stats);
+}

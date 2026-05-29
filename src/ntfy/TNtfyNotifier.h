@@ -33,4 +33,8 @@ public:
 	void notify_burnin_finished(const std::vector<std::string> &dim_names,
 	                            const std::vector<ParamStats> &gamma_stats,
 	                            const ParamStats &epsilon_stats) const;
+
+	void notify_mcmc_finished(const std::vector<std::string> &dim_names,
+	                          const std::vector<ParamStats> &gamma_stats,
+	                          const ParamStats &epsilon_stats) const;
 };

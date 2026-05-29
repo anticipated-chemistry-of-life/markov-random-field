@@ -88,3 +88,17 @@ void TNtfyNotifier::notify_burnin_finished(const std::vector<std::string> &dim_n
 	    << " sd=" << epsilon_stats.sd;
 	_send("Burnin finished", msg.str(), 2, "white_check_mark");
 }
+
+void TNtfyNotifier::notify_mcmc_finished(const std::vector<std::string> &dim_names,
+                                         const std::vector<ParamStats> &gamma_stats,
+                                         const ParamStats &epsilon_stats) const {
+	std::ostringstream msg;
+	msg << std::setprecision(6);
+	for (size_t i = 0; i < dim_names.size(); ++i) {
+		msg << "gamma_" << dim_names[i] << ": mean=" << gamma_stats[i].mean
+		    << " var=" << gamma_stats[i].var << " sd=" << gamma_stats[i].sd << "\n";
+	}
+	msg << "epsilon: mean=" << epsilon_stats.mean << " var=" << epsilon_stats.var
+	    << " sd=" << epsilon_stats.sd;
+	_send("MCMC finished", msg.str(), 4, "tada");
+}
