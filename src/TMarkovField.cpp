@@ -349,11 +349,6 @@ void TMarkovField::burninHasFinished() {
 	_Y.remove_zeros();
 }
 
-void TMarkovField::burninRoundHasFinished(size_t /* round */) {
-	_Y.reset_counts();
-	_Y.remove_zeros();
-}
-
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
 	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");

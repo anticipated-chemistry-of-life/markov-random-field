@@ -336,9 +336,6 @@ public:
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYVector &Y) {
 		_reset_joint_log_prob_density();
-		const auto density = static_cast<double>(_Z.size()) /
-		                     static_cast<double>(_Z.total_size_of_container_space());
-		OUT(density);
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update

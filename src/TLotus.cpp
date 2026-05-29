@@ -419,7 +419,6 @@ void TLotus::burninHasFinished() {
 }
 
 void TLotus::burninRoundHasFinished(size_t round) {
-	_markov_field.burninRoundHasFinished(round);
 	const auto total_rounds = coretools::instances::parameters().get<size_t>("numBurnin", 10);
 
 	std::vector<std::string> dim_names;
