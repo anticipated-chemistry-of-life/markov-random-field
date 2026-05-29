@@ -84,7 +84,9 @@ add_files("main.cpp")
 add_files("src/**.cpp")
 add_includedirs("src")
 add_deps("coretools", "stattools")
-add_frameworks("CoreFoundation", "Security")
+if is_plat("macosx") then
+    add_frameworks("CoreFoundation", "Security")
+end
 add_defines("DEVTOOLS", "DEV_LOCATION")
 add_options("lotus")
 add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
