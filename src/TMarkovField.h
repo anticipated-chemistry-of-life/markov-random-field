@@ -103,7 +103,7 @@ private:
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// calculate log likelihood (lotus)
-		std::array<double, 2> prob_lotus{}; //{1e-20, 1e-20};
+		std::array<double, 2> prob_lotus{};
 		if constexpr (!IsSimulation) {
 			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus, lotus);
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }

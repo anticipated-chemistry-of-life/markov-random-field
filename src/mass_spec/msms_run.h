@@ -76,12 +76,9 @@ public:
 		for (size_t f = 0; f < _features.size(); ++f) {
 			auto result = is_molecule_in_feature(f, molecule_idx);
 			if (result.found) {
-				// const auto bin = static_cast<uint8_t>(result.binned_likelihood.value());
 				throw coretools::TDevError(
 				    "We still don't know of to add the probability for the same molecule that "
 				    "appears in two features of the same MSMS run.");
-				// sum_log[0].add(log_lik_absent[bin]);
-				// sum_log[1].add(log_lik_present[bin]);
 			}
 		}
 	}

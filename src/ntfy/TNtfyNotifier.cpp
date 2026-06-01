@@ -1,7 +1,6 @@
 #include "TNtfyNotifier.h"
 #include "coretools/Main/TLog.h"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "./httplib.h"
 #include <nlohmann/json.hpp>
 #include <uuid.h>

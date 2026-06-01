@@ -122,7 +122,10 @@ add_files("tests/**.cpp")
 
 add_includedirs("src", "tests")
 
-add_packages("gtest_main", "openmp", "gtest")
+add_packages("gtest_main", "openmp", "gtest", "nlohmann_json", "stduuid", "openssl")
+if is_plat("macosx") then
+    add_frameworks("CoreFoundation", "Security")
+end
 add_links("gtest_main", "gtest")
 
 add_deps("coretools", "stattools")

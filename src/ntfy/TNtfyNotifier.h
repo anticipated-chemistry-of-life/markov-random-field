@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#define CPPHTTPLIB_OPENSSL_SUPPORT
 
 class TNtfyNotifier {
 private:
@@ -16,8 +17,8 @@ public:
 	[[nodiscard]] std::string get_topic_url() const;
 
 	void notify_start(const std::vector<std::string> &tree_names,
-	                  const std::vector<size_t> &leaf_counts, size_t n_iterations,
-	                  size_t n_burnin, size_t n_burnin_iters) const;
+	                  const std::vector<size_t> &leaf_counts, size_t n_iterations, size_t n_burnin,
+	                  size_t n_burnin_iters) const;
 
 	struct ParamStats {
 		double mean;
