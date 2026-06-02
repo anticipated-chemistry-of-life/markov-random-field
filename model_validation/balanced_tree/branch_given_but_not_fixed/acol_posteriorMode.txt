@@ -1,1 +1,0 @@
-name	posterior_mode
