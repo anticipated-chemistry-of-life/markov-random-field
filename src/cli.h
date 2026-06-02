@@ -64,7 +64,7 @@ public:
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
 
-		LOTUS_FILENAME = params.get("lotus");
+		LOTUS_FILENAME = params.get("lotus", "lotus.tsv");
 
 		GAMMA = params.get<double>("gamma", 1.5);
 	}

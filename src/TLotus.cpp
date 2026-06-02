@@ -367,8 +367,8 @@ void TLotus::_simulateUnderPrior(Storage *) {
 				x = false;
 			}
 		}
-		double proba = _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
-		OUT(proba);
+		const double proba =
+		    _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
 		coretools::Probability p(proba);
 		bool draw = coretools::instances::randomGenerator().pickOneOfTwo(p);
 		if (draw) {
