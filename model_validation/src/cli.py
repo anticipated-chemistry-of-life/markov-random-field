@@ -1,130 +1,73 @@
-import argparse
+import click
+
+from .tree import TreeType
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="A simple data generator to test our model."
-    )
+TREE_TYPE_CHOICES = click.Choice([t.value for t in TreeType])
 
-    # species tree
-    parser.add_argument(
-        "--species_tree_type",
-        type=str,
-        choices=["grass", "star", "balanced"],
-        help="The type of the species tree",
-        required=True,
-    )
-    parser.add_argument(
-        "--number_of_species",
-        type=int,
-        help="The number of species in the species tree",
-        required=True,
-    )
 
-    parser.add_argument(
-        "--species_tree_name",
-        type=str,
-        help="The name of the species tree",
-        default="species",
-    )
+def common_tree_options(prefix: str, default_name: str):
+    """Return a decorator that adds all CLI options for one tree dimension."""
 
-    parser.add_argument(
-        "--species_branch_length",
-        type=int,
-        help="The branch length of the species tree",
-        default=10,
-    )
-    parser.add_argument(
-        "--species_mean_log_nu",
-        type=float,
-        help="The mean log nu of the species tree",
-        default=0.0,
-    )
-    parser.add_argument(
-        "--species_var_log_nu",
-        type=float,
-        help="The variance of log nu of the species tree",
-        default=0.2,
-    )
+    def decorator(f):
+        opts = [
+            click.option(
+                f"--{prefix}_tree_type",
+                type=TREE_TYPE_CHOICES,
+                required=True,
+                help=f"Tree topology for the {prefix} dimension.",
+            ),
+            click.option(
+                f"--number_of_{prefix}",
+                type=int,
+                required=True,
+                help=f"Number of nodes in the {prefix} tree.",
+            ),
+            click.option(
+                f"--{prefix}_tree_name",
+                type=str,
+                default=default_name,
+                show_default=True,
+                help=f"Name used as tree-node prefix for {prefix}.",
+            ),
+            click.option(
+                f"--{prefix}_branch_length",
+                type=int,
+                default=10,
+                show_default=True,
+                help=f"Binned branch length for the {prefix} tree.",
+            ),
+            click.option(
+                f"--{prefix}_mean_log_nu",
+                type=float,
+                default=0.0,
+                show_default=True,
+                help=f"Mean of log-nu for the {prefix} tree.",
+            ),
+            click.option(
+                f"--{prefix}_var_log_nu",
+                type=float,
+                default=0.2,
+                show_default=True,
+                help=f"Variance of log-nu for the {prefix} tree.",
+            ),
+            click.option(
+                f"--{prefix}_log_nu",
+                type=float,
+                default=0.5,
+                show_default=True,
+                help=f"Initial log-nu value for the {prefix} tree.",
+            ),
+            click.option(
+                f"--{prefix}_alpha",
+                type=float,
+                default=0.5,
+                show_default=True,
+                help=f"Alpha (Ising coupling strength) for the {prefix} tree.",
+            ),
+        ]
+        for opt in reversed(opts):
+            f = opt(f)
+        return f
 
-    parser.add_argument(
-        "--species_log_nu",
-        type=float,
-        help="The log nu of the species tree",
-        default=0.5,
-    )
-    parser.add_argument(
-        "--species_alpha",
-        type=float,
-        help="The alpha of the species tree",
-        default=0.5,
-    )
-
-    # now for the molcules tree
-    parser.add_argument(
-        "--molecules_tree_name",
-        type=str,
-        help="The name of the molecules tree",
-        default="molecules",
-    )
-    parser.add_argument(
-        "--molecules_tree_type",
-        type=str,
-        choices=["grass", "star", "balanced"],
-        help="The type of the molecules tree",
-        required=True,
-    )
-    parser.add_argument(
-        "--number_of_molecules",
-        type=int,
-        help="The number of molecules in the molecules tree",
-        required=True,
-    )
-
-    parser.add_argument(
-        "--molecules_branch_length",
-        type=int,
-        help="The branch length of the molecules tree",
-        default=10,
-    )
-
-    parser.add_argument(
-        "--molecules_mean_log_nu",
-        type=float,
-        help="The mean log nu of the molecules tree",
-        default=0.0,
-    )
-
-    parser.add_argument(
-        "--molecules_var_log_nu",
-        type=float,
-        help="The variance of log nu of the molecules tree",
-        default=0.2,
-    )
-
-    parser.add_argument(
-        "--molecules_log_nu",
-        type=float,
-        help="The log nu of the molecules tree",
-        default=0.5,
-    )
-    parser.add_argument(
-        "--molecules_alpha",
-        type=float,
-        help="The alpha of the molecules tree",
-        default=0.5,
-    )
-
-    parser.add_argument(
-        "--out",
-        type=str,
-        help="The directory where the output files will be saved",
-    )
-
-    args = parser.parse_args()
-
-    # Set default for `out` if not provided
-    if args.out is None:
-        args.out = f"s_{args.species_tree_type}_{args.number_of_species}_m_{args.molecules_tree_type}_{args.number_of_molecules}"
-
-    return args
+    return decorator

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "click>=8.1",
     "jupyterlab>=4.3.6",
     "matplotlib>=3.10.1",
     "networkx>=3.4.2",
