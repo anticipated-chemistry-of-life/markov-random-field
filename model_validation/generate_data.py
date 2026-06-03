@@ -42,8 +42,6 @@ cd "$SCRIPT_DIR"
     --write_Y \\
     --write_Z \\
     --write_joint_log_prob_density \\
-    --write_Y_trace \\
-    --write_Z_trace \\
     --fixedSeed 12345
 """
 
@@ -73,8 +71,6 @@ mkdir -p test_out
     --numThreads 1 \\
     --writeTrace \\
     --writeBurnin \\
-    --write_Y_trace \\
-    --write_Z_trace \\
     --molecules_branch_lengths acol_molecules_simulated.txt \\
     --molecules_branch_lengths.update false \\
     --molecules_log_nu acol_input_simulated.txt \\

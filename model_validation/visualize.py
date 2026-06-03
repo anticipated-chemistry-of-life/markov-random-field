@@ -7,6 +7,16 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dictances import (
+    bhattacharyya,
+    bhattacharyya_coefficient,
+    jensen_shannon,
+    kullback_leibler,
+)
+from dictances import cosine as cosine_dist
+from dictances import mae as dict_mae
+from dictances import mse as dict_mse
+from dictances import pearson as dict_pearson
 
 
 def _load_tsv(path: pathlib.Path) -> pd.DataFrame | None:
@@ -15,8 +25,10 @@ def _load_tsv(path: pathlib.Path) -> pd.DataFrame | None:
     return None
 
 
+DIM_COLORS = {"species": "#2196F3", "molecules": "#FF9800", "other": "#9E9E9E"}
+
+
 def _param_type(name: str) -> str:
-    """Classify a parameter name into a broad category."""
     if re.match(r"^gamma_", name):
         return "gamma"
     if name == "epsilon":
@@ -34,34 +46,57 @@ def _param_type(name: str) -> str:
     return "other"
 
 
+def _tree_dim(name: str) -> str:
+    """Return which tree dimension a parameter belongs to."""
+    if name.startswith("species_") or name == "gamma_species":
+        return "species"
+    if name.startswith("molecules_") or name == "gamma_molecules":
+        return "molecules"
+    return "other"
+
+
 def _scatter_true_vs_inferred(
     ax: plt.Axes,
+    names: list[str],
     true_vals: np.ndarray,
     inferred_means: np.ndarray,
     inferred_sds: np.ndarray,
     title: str,
     n_max_points: int = 500,
 ) -> None:
-    """Scatter plot: true value on x, inferred posterior mean on y, ±2 SD error bars."""
+    """Scatter: true value on x, inferred posterior mean ± 2 SD on y, colored by dimension."""
+    dims = np.array([_tree_dim(n) for n in names])
+
     if len(true_vals) > n_max_points:
         rng = np.random.default_rng(0)
         idx = rng.choice(len(true_vals), n_max_points, replace=False)
-        true_vals, inferred_means, inferred_sds = (
+        true_vals, inferred_means, inferred_sds, dims = (
             true_vals[idx],
             inferred_means[idx],
             inferred_sds[idx],
+            dims[idx],
         )
 
-    ax.errorbar(
-        true_vals,
-        inferred_means,
-        yerr=2 * inferred_sds,
-        fmt="o",
-        markersize=3,
-        alpha=0.5,
-        linewidth=0.5,
-        capsize=2,
-    )
+    plotted_dims: set[str] = set()
+    for dim, color in DIM_COLORS.items():
+        mask = dims == dim
+        if not mask.any():
+            continue
+        label = dim if dim not in plotted_dims else None
+        ax.errorbar(
+            true_vals[mask],
+            inferred_means[mask],
+            yerr=2 * inferred_sds[mask],
+            fmt="o",
+            color=color,
+            markersize=4,
+            alpha=0.6,
+            linewidth=0.5,
+            capsize=2,
+            label=label,
+        )
+        plotted_dims.add(dim)
+
     lo = min(true_vals.min(), inferred_means.min())
     hi = max(true_vals.max(), inferred_means.max())
     margin = (hi - lo) * 0.05 or 0.1
@@ -69,25 +104,47 @@ def _scatter_true_vs_inferred(
     ax.plot(diag, diag, "k--", linewidth=1, label="y = x")
     ax.set_xlabel("True value")
     ax.set_ylabel("Inferred posterior mean")
-    ax.set_title(title)
+    ax.set_title(f"{title} (n={len(true_vals)})")
     ax.legend(fontsize=8)
 
 
-def _bar_inferred_only(
-    ax: plt.Axes,
-    names: list[str],
-    inferred_means: np.ndarray,
-    inferred_sds: np.ndarray,
-    title: str,
-) -> None:
-    """Bar chart for scalar parameters that have no matching true value."""
-    x = np.arange(len(names))
-    ax.bar(x, inferred_means, color="steelblue", alpha=0.7)
-    ax.errorbar(x, inferred_means, yerr=2 * inferred_sds, fmt="none", color="black", capsize=4)
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=15, ha="right")
-    ax.set_ylabel("Posterior mean ± 2 SD")
-    ax.set_title(title)
+def _load_y_file(path: pathlib.Path) -> dict[int, float] | None:
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, sep="\t")
+    return dict(zip(df["position"], df["fraction_of_one"].astype(float)))
+
+
+def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
+    true_dict = {k: v + 1e-20 for k, v in true_dict.items()}
+    pred_dict = {k: v + 1e-20 for k, v in pred_dict.items()}
+    return {
+        "MAE": dict_mae(true_dict, pred_dict),
+        "MSE": dict_mse(true_dict, pred_dict),
+        "Pearson r": dict_pearson(true_dict, pred_dict),
+        "Cosine similarity.": 1.0 - cosine_dist(true_dict, pred_dict),
+        "KL divergence": kullback_leibler(true_dict, pred_dict),
+        "Jensen-Shannon divergence": jensen_shannon(true_dict, pred_dict),
+        "Bhattacharyya coefficient": bhattacharyya_coefficient(true_dict, pred_dict),
+        "Bhattacharyya distance": bhattacharyya(true_dict, pred_dict),
+    }
+
+
+def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
+    ax.axis("off")
+    lines = [f"{'Metric':<20}{'Value':>12}", "-" * 33]
+    for k, v in metrics.items():
+        lines.append(f"{k:<20}{v:>12.4f}")
+    ax.text(
+        0.05,
+        0.95,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        verticalalignment="top",
+        fontfamily="monospace",
+        fontsize=10,
+    )
+    ax.set_title("Y distribution distances (dictances)")
 
 
 @click.command()
@@ -108,79 +165,70 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
     out_dir = pathlib.Path(out) if out else base / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- load data ---
+    # --- load inferred values ---
     inferred_df = _load_tsv(base / "test_out" / "acol_meanVar.txt")
     if inferred_df is None:
         raise click.ClickException(
-            f"No inference output found at {base / 'test_out' / 'acol_meanVar.txt'}.\n"
-            "Run the inference first."
+            f"No inference output at {base / 'test_out' / 'acol_meanVar.txt'}. "
+            "Run inference first."
         )
     inferred_df.columns = pd.Index(["name", "post_mean", "post_var"])
     inferred_df["post_sd"] = np.sqrt(inferred_df["post_var"].clip(lower=0))
 
-    # Collect true values from multiple sources (simulated output takes priority)
-    true_df = _load_tsv(base / "acol_input_simulated.txt")
-    for extra in ["acol_simulated.txt", "acol_molecules_simulated.txt", "acol_species_simulated.txt"]:
-        extra_df = _load_tsv(base / extra)
-        if extra_df is not None and true_df is not None:
-            true_df = pd.concat([true_df, extra_df]).drop_duplicates("name", keep="last")
-        elif extra_df is not None:
-            true_df = extra_df
+    # --- load true values: acol_simulated.txt is primary, input file is fallback ---
+    true_df = _load_tsv(base / "acol_simulated.txt")
+    fallback_df = _load_tsv(base / "acol_input_simulated.txt")
+    if true_df is None and fallback_df is None:
+        raise click.ClickException("No true-value file found. Run simulation first.")
+    if true_df is None:
+        true_df = fallback_df
+    elif fallback_df is not None:
+        # merge: simulated takes priority, input fills in anything missing
+        true_df = pd.concat([fallback_df, true_df]).drop_duplicates("name", keep="last")
 
-    if true_df is not None:
-        true_df.columns = pd.Index(["name", "true_value"])
-        true_df["true_value"] = pd.to_numeric(true_df["true_value"], errors="coerce")
+    true_df.columns = pd.Index(["name", "true_value"])
+    true_df["true_value"] = pd.to_numeric(true_df["true_value"], errors="coerce")
 
-    # Tag each inferred parameter with its type
-    inferred_df["ptype"] = inferred_df["name"].apply(_param_type)
+    # --- merge and classify ---
+    merged = inferred_df.merge(true_df, on="name", how="inner")
+    merged["ptype"] = merged["name"].apply(_param_type)
 
-    # --- build matched and unmatched sets ---
-    if true_df is not None:
-        merged = inferred_df.merge(true_df, on="name", how="left")
-    else:
-        merged = inferred_df.copy()
-        merged["true_value"] = float("nan")
+    plot_order = [
+        "gamma",
+        "epsilon",
+        "alpha",
+        "log_nu",
+        "mean_log_nu",
+        "var_log_nu",
+        "branch_lengths",
+    ]
+    types_present = [pt for pt in plot_order if (merged["ptype"] == pt).any()]
 
-    matched = merged.dropna(subset=["true_value"])
-    unmatched_scalars = merged[merged["true_value"].isna() & merged["ptype"].isin(["gamma", "epsilon"])]
-
-    # --- plot matched parameters by type ---
-    comparable_types = [pt for pt in ["alpha", "log_nu", "branch_lengths", "mean_log_nu", "var_log_nu"]
-                        if (matched["ptype"] == pt).any()]
-
-    n_plots = len(comparable_types) + (1 if not unmatched_scalars.empty else 0)
-    if n_plots == 0:
-        click.echo("Nothing to plot: no parameters with known true values found.")
+    if not types_present:
+        click.echo(
+            "Nothing to plot: no parameters matched between inference and simulation output."
+        )
         return
 
-    ncols = min(3, n_plots)
-    nrows = (n_plots + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows), squeeze=False)
+    ncols = min(3, len(types_present))
+    nrows = (len(types_present) + ncols - 1) // ncols
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(6 * ncols, 5 * nrows), squeeze=False
+    )
     axes_flat = axes.flatten()
 
-    ax_idx = 0
-    for ptype in comparable_types:
-        subset = matched[matched["ptype"] == ptype]
+    for ax_idx, ptype in enumerate(types_present):
+        subset = merged[merged["ptype"] == ptype]
         _scatter_true_vs_inferred(
             axes_flat[ax_idx],
+            subset["name"].tolist(),
             subset["true_value"].to_numpy(dtype=float),
             subset["post_mean"].to_numpy(dtype=float),
             subset["post_sd"].to_numpy(dtype=float),
             title=ptype.replace("_", " ").title(),
         )
-        ax_idx += 1
 
-    if not unmatched_scalars.empty:
-        _bar_inferred_only(
-            axes_flat[ax_idx],
-            unmatched_scalars["name"].tolist(),
-            unmatched_scalars["post_mean"].to_numpy(dtype=float),
-            unmatched_scalars["post_sd"].to_numpy(dtype=float),
-            title="Inferred scalars (gamma / epsilon)",
-        )
-        ax_idx += 1
-
-    for ax in axes_flat[ax_idx:]:
+    for ax in axes_flat[len(types_present) :]:
         ax.set_visible(False)
 
     fig.suptitle(f"Inference results — {base.name}", fontsize=13, y=1.01)
@@ -193,6 +241,25 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
     if show:
         plt.show()
     plt.close(fig)
+
+    # --- Y distribution comparison ---
+    sim_y = _load_y_file(base / "acol_simulated_Y.txt")
+    post_y = _load_y_file(base / "test_out" / "acol_Y_posterior.txt")
+    if sim_y is not None and post_y is not None:
+        y_metrics = _compute_y_metrics(sim_y, post_y)
+        fig_y, ax_y = plt.subplots(figsize=(5, 3))
+        _plot_y_metrics(ax_y, y_metrics)
+        fig_y.tight_layout()
+        out_file_y = out_dir / "y_distribution_distances.pdf"
+        fig_y.savefig(out_file_y, bbox_inches="tight")
+        click.echo(f"Saved: {out_file_y}")
+        if show:
+            plt.show()
+        plt.close(fig_y)
+    else:
+        click.echo(
+            "Skipping Y comparison: missing acol_simulated_Y.txt or acol_Y_posterior.txt."
+        )
 
 
 if __name__ == "__main__":

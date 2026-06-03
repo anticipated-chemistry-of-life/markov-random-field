@@ -33,7 +33,7 @@ public:
 
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
-	static inline double GAMMA = 1.5;
+	static inline double GAMMA = 5.0;
 
 	static void parse() {
 
