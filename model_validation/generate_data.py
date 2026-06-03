@@ -38,7 +38,7 @@ cd "$SCRIPT_DIR"
     --molecules_mean_log_nu acol_input_simulated.txt \\
     --molecules_log_nu acol_input_simulated.txt \\
     --molecules_alpha acol_input_simulated.txt \\
-    --numThreads 1 \\
+    --numThreads all \\
     --write_Y \\
     --write_Z \\
     --write_joint_log_prob_density \\
@@ -68,24 +68,11 @@ mkdir -p test_out
     --species_paper_counts {species_tree_name}_papers.txt \\
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
     --iterations 3000 \\
-    --numThreads 1 \\
+    --numThreads all \\
     --writeTrace \\
     --writeBurnin \\
-    --molecules_branch_lengths acol_molecules_simulated.txt \\
     --molecules_branch_lengths.update false \\
-    --molecules_log_nu acol_input_simulated.txt \\
-    --molecules_mean_log_nu acol_input_simulated.txt \\
-    --molecules_var_log_nu acol_input_simulated.txt \\
-    --molecules_alpha acol_input_simulated.txt \\
-    --species_branch_lengths acol_species_simulated.txt \\
-    --species_var_log_nu acol_input_simulated.txt \\
-    --species_mean_log_nu acol_input_simulated.txt \\
-    --species_log_nu acol_input_simulated.txt \\
-    --species_alpha acol_input_simulated.txt \\
-    --molecules_var_log_nu.update false \\
-    --molecules_mean_log_nu.update false \\
-    --molecules_log_nu.update false \\
-    --molecules_alpha.update false
+    --species_branch_lengths.update false
 """
 
 

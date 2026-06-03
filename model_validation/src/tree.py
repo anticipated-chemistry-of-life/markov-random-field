@@ -111,7 +111,9 @@ class Tree:
             raise ValueError("Graph has not been generated yet.")
         return self._graph
 
-    def _compute_node_ordering(self) -> tuple[list[str], set[str], list[str], list[str]]:
+    def _compute_node_ordering(
+        self,
+    ) -> tuple[list[str], set[str], list[str], list[str]]:
         """Simulate C++ node-order when reading the tree file.
 
         Returns (all_nodes_ordered, roots_set, leaf_names, non_root_node_names).
@@ -161,14 +163,13 @@ class Tree:
             raise ValueError("Graph has not been generated yet.")
 
         if isinstance(self._graph, nx.DiGraph):
-            is_leaf = (
-                lambda node: self._graph.in_degree(node) == 1
-                and self._graph.out_degree(node) == 0
+            is_leaf = lambda node: (
+                self._graph.in_degree(node) == 1 and self._graph.out_degree(node) == 0
             )
         else:
             is_leaf = lambda node: self._graph.degree(node) == 1
 
         nodes = [n for n in self._graph.nodes() if is_leaf(n)]
-        papers = [np.random.poisson(2) for _ in nodes]
+        papers = [np.random.poisson(4) for _ in nodes]
         df = pd.DataFrame({self.tree_name: nodes, "number_of_papers": papers})
         return df[df["number_of_papers"] > 0].reset_index(drop=True)
