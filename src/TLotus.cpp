@@ -14,6 +14,7 @@
 #include <deque>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 TLotus::TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
                TypeParamErrorRate *error_rate, size_t n_iterations,
@@ -207,8 +208,10 @@ void TLotus::updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepte
 }
 
 void TLotus::guessInitialValues() {
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, 0.001); }
-	_error_rate->set(0.0001);
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		_gamma->set(i, ProgramOptions::GAMMA);
+	}
+	_error_rate->set(ProgramOptions::EPSILON);
 
 	// initialize _curLL
 	_curLL = calculate_log_likelihood_of_L();
@@ -245,7 +248,7 @@ double TLotus::_calculate_probability_of_L_given_x(
 
 double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
                                                    size_t linear_index_in_collapsed_space) const {
-	auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
+	const auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
 	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 };
 
@@ -330,7 +333,8 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	// provide the number of papers prior to the simulation.
 	if constexpr (!UseSimpleErrorModel) {
 		// initialize the error rate
-		const auto error_rate = coretools::instances::parameters().get<double>("error_rate", 0.001);
+		const auto error_rate =
+		    coretools::instances::parameters().get<double>("error_rate", ProgramOptions::EPSILON);
 		_error_rate->set(error_rate);
 
 		// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the

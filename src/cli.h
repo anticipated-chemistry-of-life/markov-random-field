@@ -21,7 +21,7 @@ public:
 
 	static inline bool WRITE_BRANCH_LENGTHS = false;
 
-	static inline double EPSILON = 0.0001;
+	static inline double EPSILON = 0.001;
 
 	static inline size_t BRANCH_LENGTHS_BINS = 100;
 
@@ -55,18 +55,18 @@ public:
 
 		WRITE_BRANCH_LENGTHS = params.exists("write_branch_lengths");
 
-		EPSILON = params.get<double>("epsilon", 0.0001);
+		EPSILON = params.get<double>("epsilon", EPSILON);
 
-		BRANCH_LENGTHS_BINS = params.get<size_t>("n_bins", 100);
+		BRANCH_LENGTHS_BINS = params.get<size_t>("n_bins", BRANCH_LENGTHS_BINS);
 
-		SHEET_SIZE_K = params.get("K", size_t(1e7));
+		SHEET_SIZE_K = params.get("K", SHEET_SIZE_K);
 
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
 
 		LOTUS_FILENAME = params.get("lotus", "lotus.tsv");
 
-		GAMMA = params.get<double>("gamma", 1.5);
+		GAMMA = params.get<double>("gamma", GAMMA);
 	}
 
 	static void printHelp() {
