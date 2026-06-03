@@ -67,7 +67,7 @@ mkdir -p test_out
     --lotus acol_simulated_lotus.tsv \\
     --species_paper_counts {species_tree_name}_papers.txt \\
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
-    --iterations 1000 \\
+    --iterations 3000 \\
     --numThreads 1 \\
     --writeTrace \\
     --writeBurnin \\

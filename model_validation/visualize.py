@@ -7,12 +7,6 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from dictances import (
-    bhattacharyya,
-    bhattacharyya_coefficient,
-    jensen_shannon,
-    kullback_leibler,
-)
 from dictances import cosine as cosine_dist
 from dictances import mae as dict_mae
 from dictances import mse as dict_mse
@@ -116,25 +110,19 @@ def _load_y_file(path: pathlib.Path) -> dict[int, float] | None:
 
 
 def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
-    true_dict = {k: v + 1e-20 for k, v in true_dict.items()}
-    pred_dict = {k: v + 1e-20 for k, v in pred_dict.items()}
     return {
         "MAE": dict_mae(true_dict, pred_dict),
         "MSE": dict_mse(true_dict, pred_dict),
         "Pearson r": dict_pearson(true_dict, pred_dict),
-        "Cosine similarity.": 1.0 - cosine_dist(true_dict, pred_dict),
-        "KL divergence": kullback_leibler(true_dict, pred_dict),
-        "Jensen-Shannon divergence": jensen_shannon(true_dict, pred_dict),
-        "Bhattacharyya coefficient": bhattacharyya_coefficient(true_dict, pred_dict),
-        "Bhattacharyya distance": bhattacharyya(true_dict, pred_dict),
+        "Cosine similarity": 1.0 - cosine_dist(true_dict, pred_dict),
     }
 
 
 def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
     ax.axis("off")
-    lines = [f"{'Metric':<20}{'Value':>12}", "-" * 33]
+    lines = [f"{'Metric':<30}{'Value':>12}", "-" * 43]
     for k, v in metrics.items():
-        lines.append(f"{k:<20}{v:>12.4f}")
+        lines.append(f"{k:<30}{v:>12.4f}")
     ax.text(
         0.05,
         0.95,
@@ -145,6 +133,32 @@ def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
         fontsize=10,
     )
     ax.set_title("Y distribution distances (dictances)")
+
+
+def _scatter_y(
+    ax: plt.Axes,
+    true_dict: dict[int, float],
+    pred_dict: dict[int, float],
+    n_max_points: int = 30000,
+) -> None:
+    all_keys = list(set(true_dict))
+    true_vec = np.array([true_dict.get(k, 0.0) for k in all_keys])
+    pred_vec = np.array([pred_dict.get(k, 0.0) for k in all_keys])
+
+    if len(true_vec) > n_max_points:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(len(true_vec), n_max_points, replace=False)
+        true_vec, pred_vec = true_vec[idx], pred_vec[idx]
+
+    ax.scatter(true_vec, pred_vec, alpha=0.3, s=6, color="#4CAF50")
+    lo = min(true_vec.min(), pred_vec.min())
+    hi = max(true_vec.max(), pred_vec.max())
+    margin = (hi - lo) * 0.05 or 0.1
+    diag = np.array([lo - margin, hi + margin])
+    ax.plot(diag, diag, "k--", linewidth=1)
+    ax.set_xlabel("True fraction_of_one")
+    ax.set_ylabel("Predicted fraction_of_one")
+    ax.set_title(f"Y probabilities (n={len(true_vec)})")
 
 
 @click.command()
@@ -247,8 +261,10 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
     post_y = _load_y_file(base / "test_out" / "acol_Y_posterior.txt")
     if sim_y is not None and post_y is not None:
         y_metrics = _compute_y_metrics(sim_y, post_y)
-        fig_y, ax_y = plt.subplots(figsize=(5, 3))
-        _plot_y_metrics(ax_y, y_metrics)
+        fig_y, (ax_scatter, ax_metrics) = plt.subplots(1, 2, figsize=(12, 5))
+        _scatter_y(ax_scatter, sim_y, post_y)
+        _plot_y_metrics(ax_metrics, y_metrics)
+        fig_y.suptitle(f"Y comparison — {base.name}", fontsize=13)
         fig_y.tight_layout()
         out_file_y = out_dir / "y_distribution_distances.pdf"
         fig_y.savefig(out_file_y, bbox_inches="tight")
