@@ -225,10 +225,11 @@ public:
 		return Y_as_vector;
 	}
 
-	bool empty() const { return _vec.empty(); }
-	bool is_sorted() const { return std::is_sorted(_vec.begin(), _vec.end()); }
-	size_t get_thinning_factor() const { return _thinning_factor; }
-	size_t number_of_ones() const {
+	[[nodiscard]] bool empty() const { return _vec.empty(); }
+	[[nodiscard]] bool is_sorted() const { return std::is_sorted(_vec.begin(), _vec.end()); }
+	[[nodiscard]] size_t number_of_dimensions() const { return _dimensions_Y_space.size(); }
+	[[nodiscard]] size_t get_thinning_factor() const { return _thinning_factor; }
+	[[nodiscard]] size_t number_of_ones() const {
 		return std::count_if(_vec.begin(), _vec.end(),
 		                     [](const TStorageY &y) { return y.is_one(); });
 	}
