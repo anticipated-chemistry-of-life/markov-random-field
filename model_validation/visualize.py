@@ -109,6 +109,14 @@ def _load_y_file(path: pathlib.Path) -> dict[int, float] | None:
     return dict(zip(df["position"], df["fraction_of_one"].astype(float)))
 
 
+def _load_y_state(path: pathlib.Path) -> dict[int, int] | None:
+    """True binary Y per position (the simulated latent state)."""
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, sep="\t")
+    return dict(zip(df["position"], df["Y_state"].astype(int)))
+
+
 def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
     return {
         "MAE": dict_mae(true_dict, pred_dict),
@@ -135,30 +143,48 @@ def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
     ax.set_title("Y distribution distances (dictances)")
 
 
-def _scatter_y(
+def _logistic_y(
     ax: plt.Axes,
-    true_dict: dict[int, float],
-    pred_dict: dict[int, float],
+    true_state: dict[int, int],
+    pred_prob: dict[int, float],
     n_max_points: int = 30000,
+    n_bins: int = 10,
 ) -> None:
-    all_keys = list(set(true_dict))
-    true_vec = np.array([true_dict.get(k, 0.0) for k in all_keys])
-    pred_vec = np.array([pred_dict.get(k, 0.0) for k in all_keys])
+    """Logistic-regression-style plot: predicted P(Y=1) vs true binary Y.
 
-    if len(true_vec) > n_max_points:
-        rng = np.random.default_rng(0)
-        idx = rng.choice(len(true_vec), n_max_points, replace=False)
-        true_vec, pred_vec = true_vec[idx], pred_vec[idx]
+    Raw points sit at y=0/1 (jittered for visibility); the binned empirical
+    P(Y=1) overlays a calibration curve that should track the diagonal.
+    """
+    keys = list(true_state)
+    y_true = np.array([true_state[k] for k in keys], dtype=float)
+    x_pred = np.array([pred_prob.get(k, 0.0) for k in keys], dtype=float)
 
-    ax.scatter(true_vec, pred_vec, alpha=0.3, s=6, color="#4CAF50")
-    lo = min(true_vec.min(), pred_vec.min())
-    hi = max(true_vec.max(), pred_vec.max())
-    margin = (hi - lo) * 0.05 or 0.1
-    diag = np.array([lo - margin, hi + margin])
-    ax.plot(diag, diag, "k--", linewidth=1)
-    ax.set_xlabel("True fraction_of_one")
-    ax.set_ylabel("Predicted fraction_of_one")
-    ax.set_title(f"Y probabilities (n={len(true_vec)})")
+    rng = np.random.default_rng(0)
+    if len(keys) > n_max_points:
+        idx = rng.choice(len(keys), n_max_points, replace=False)
+        x_pred, y_true = x_pred[idx], y_true[idx]
+
+    jitter = rng.uniform(-0.03, 0.03, size=len(y_true))
+    ax.scatter(x_pred, y_true + jitter, alpha=0.2, s=6, color="#4CAF50", label="data")
+
+    # binned empirical P(Y=1): mean true Y within each predicted-probability bin
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    which = np.clip(np.digitize(x_pred, edges) - 1, 0, n_bins - 1)
+    centers, means = [], []
+    for b in range(n_bins):
+        m = which == b
+        if m.any():
+            centers.append(x_pred[m].mean())
+            means.append(y_true[m].mean())
+    ax.plot(centers, means, "o-", color="#1565C0", lw=2, ms=5, label="binned empirical P(Y=1)")
+
+    ax.plot([0, 1], [0, 1], "k--", lw=1, label="perfect calibration")
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.12, 1.12)
+    ax.set_xlabel("Predicted P(Y=1)")
+    ax.set_ylabel("True Y (acol_simulated_Y.txt)")
+    ax.set_title(f"Y calibration (n={len(y_true)})")
+    ax.legend(fontsize=8, loc="center right")
 
 
 @click.command()
@@ -258,11 +284,12 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
 
     # --- Y distribution comparison ---
     sim_y = _load_y_file(base / "acol_simulated_Y.txt")
+    sim_state = _load_y_state(base / "acol_simulated_Y.txt")
     post_y = _load_y_file(base / "test_out" / "acol_Y_posterior.txt")
-    if sim_y is not None and post_y is not None:
+    if sim_y is not None and sim_state is not None and post_y is not None:
         y_metrics = _compute_y_metrics(sim_y, post_y)
         fig_y, (ax_scatter, ax_metrics) = plt.subplots(1, 2, figsize=(12, 5))
-        _scatter_y(ax_scatter, sim_y, post_y)
+        _logistic_y(ax_scatter, sim_state, post_y)
         _plot_y_metrics(ax_metrics, y_metrics)
         fig_y.suptitle(f"Y comparison — {base.name}", fontsize=13)
         fig_y.tight_layout()
