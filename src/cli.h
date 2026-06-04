@@ -3,6 +3,7 @@
 #include "coretools/Main/TParameters.h"
 #include <cstddef>
 #include <iostream>
+#include <string_view>
 
 class ProgramOptions {
 public:
@@ -34,6 +35,14 @@ public:
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
 	static inline double GAMMA = 5.0;
+
+	static inline std::string_view FIXED_PRIOR_ON_EPSILON = "0.3,5.0";
+
+	static inline std::string_view FIXED_PRIOR_ON_GAMMA = "2.0,4.6";
+
+	static inline std::string_view FIXED_PRIOR_ON_MEAN_LOG_NU = "0.0,2.0";
+
+	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0";
 
 	static void parse() {
 

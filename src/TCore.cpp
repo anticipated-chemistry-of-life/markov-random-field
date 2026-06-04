@@ -113,8 +113,14 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create lotus
 	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations,
 	                                  _markov_field_stattools_param, prefix, simulate);
-	_error_rate.getConfig().setPriorParameters("0.3,5.0");
-	for (auto &it : _var_log_nu) { it->getConfig().setPriorParameters("1.0"); }
+	_error_rate.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_EPSILON);
+	_gamma.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_GAMMA);
+	for (auto &it : _mean_log_nu) {
+		it->getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_MEAN_LOG_NU);
+	}
+	for (auto &it : _var_log_nu) {
+		it->getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_VAR_LOG_NU);
+	}
 
 	// create (fake) observation for stattools
 	_obs =

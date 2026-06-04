@@ -12,6 +12,7 @@
 #include "stattools/ParametersObservations/spec.h"
 #include "stattools/Priors/TPriorBeta.h"
 #include "stattools/Priors/TPriorExponential.h"
+#include "stattools/Priors/TPriorGamma.h"
 #include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>
@@ -26,7 +27,7 @@ constexpr static bool UseSimpleErrorModel = true;
 #endif
 
 // Parameter types
-using TypeGamma               = coretools::Positive;
+using TypeGamma               = coretools::StrictlyPositive;
 using TypeErrorRate           = coretools::ZeroOneOpen;
 using TypeAlpha               = coretools::Probability;
 using TypeLogNu               = coretools::Unbounded;
@@ -36,7 +37,14 @@ using TypeVarLogNu            = coretools::StrictlyPositive;
 using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
 
 // Gamma
-using PriorOnGamma = stattools::prior::TUniformFixed<TypeGamma>;
+// Weakly-informative Gamma(shape=alpha, rate=beta) prior on the detection rate.
+// Counts enter as log(paper_count+1) (median c̄≈1.61), so gamma*=ln2/c̄≈0.43 gives
+// detection 1-exp(-gamma·c̄)=0.5 at the median. Gamma(2, 4.6) -> mean=alpha/beta≈0.43,
+// mode=(alpha-1)/beta≈0.22, with negligible mass on the saturation corner (gamma≫1)
+// that lets the field collapse against detection. Hyperparameters set via
+// --gamma.priorParameters "<alpha>,<beta>".
+// TODO : verify this Claude bullshit
+using PriorOnGamma = stattools::prior::TGammaFixed<TypeGamma>;
 using SpecGamma    = stattools::ParamSpec<TypeGamma, stattools::name("gamma"), PriorOnGamma>;
 
 // Epsilon
@@ -50,7 +58,14 @@ using SpecAlpha    = stattools::ParamSpec<TypeAlpha, stattools::name("alpha"), P
                                           stattools::EnforceUniqueHash<false>>;
 
 // Mean Nu
-using PriorOnMeanLogNu = stattools::prior::TUniformFixed<TypeMeanLogNu>;
+// Weakly-informative Normal(mean, var) prior on mean_log_nu. Branch lengths are
+// normalized to mean 1 and the likelihood depends on the product nu·t, so nu≈O(1)
+// (mean_log_nu≈0) is the natural scale: the field is neither frozen (nu→0, constant
+// cliques) nor maximally noisy. var=3 (sd≈1.73) keeps it weak while excluding the
+// nu→0 collapse (mean_log_nu≈-9) at ~5 sd. Hyperparameters set via
+// --<tree>_mean_log_nu.priorParameters "<mean>,<var>".
+// TODO : verify this Claude bullshit
+using PriorOnMeanLogNu = stattools::prior::TNormalFixed<TypeMeanLogNu>;
 using SpecMeanLogNu = stattools::ParamSpec<TypeMeanLogNu, stattools::name("mean_log_nu"),
                                            PriorOnMeanLogNu, stattools::EnforceUniqueHash<false>>;
 

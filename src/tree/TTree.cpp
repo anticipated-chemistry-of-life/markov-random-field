@@ -85,7 +85,6 @@ void TTree::initialize() {
 }
 
 void TTree::guessInitialValues() {
-	// TODO: initialize mu's
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		_log_nu_c->set(c, 0.0);
 		_alpha_c->set(c, coretools::Probability(0.5));
