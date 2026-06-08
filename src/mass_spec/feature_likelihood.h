@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coretools/Main/TError.h"
+#include <cstddef>
 #include <cstdint>
 
 /// Class that stores the likelihood of a feature for a defined molecule
@@ -15,7 +16,8 @@ private:
 	/// This also defines the maximum number of molecules that can be stored
 	static constexpr uint32_t _molecule_index_mask = (_one << 24) - 1;
 	void _set_molecule_index(const uint32_t linear_index) {
-		if (linear_index > _molecule_index_mask) {
+		if (linear_index > _molecule_index_mask - 1) { // _molecule_index_mask - 1 because we need
+			                                           // to keep a spot for the unknown molecule
 			throw coretools::TUserError(
 			    "Molecule index '", linear_index,
 			    "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask, ".");
@@ -44,4 +46,5 @@ public:
 	bool operator<(const uint32_t right) const { return get_molecule_index() < right; }
 	bool operator!=(const uint32_t right) const { return get_molecule_index() != right; }
 	bool operator==(const uint32_t right) const { return get_molecule_index() == right; }
+	static uint32_t get_unknown_molecule_index() { return _molecule_index_mask; }
 };

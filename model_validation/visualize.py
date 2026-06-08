@@ -121,7 +121,7 @@ def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
     return {
         "MAE": dict_mae(true_dict, pred_dict),
         "MSE": dict_mse(true_dict, pred_dict),
-        "Pearson r": dict_pearson(true_dict, pred_dict),
+        "Pearson r (distance)": dict_pearson(true_dict, pred_dict),
         "Cosine similarity": 1.0 - cosine_dist(true_dict, pred_dict),
     }
 
@@ -176,7 +176,15 @@ def _logistic_y(
         if m.any():
             centers.append(x_pred[m].mean())
             means.append(y_true[m].mean())
-    ax.plot(centers, means, "o-", color="#1565C0", lw=2, ms=5, label="binned empirical P(Y=1)")
+    ax.plot(
+        centers,
+        means,
+        "o-",
+        color="#1565C0",
+        lw=2,
+        ms=5,
+        label="binned empirical P(Y=1)",
+    )
 
     ax.plot([0, 1], [0, 1], "k--", lw=1, label="perfect calibration")
     ax.set_xlim(-0.02, 1.02)

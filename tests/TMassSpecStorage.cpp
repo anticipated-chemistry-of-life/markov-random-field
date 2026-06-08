@@ -5,23 +5,27 @@
 #include <vector>
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_1) {
-	TFeatureLikelihood storage(16777215, 125);
-	EXPECT_EQ(storage.get_molecule_index(), 16777215);
+	TFeatureLikelihood storage(16777214, 125);
+	EXPECT_EQ(storage.get_molecule_index(), 16777214);
+	EXPECT_EQ(storage.get_binned_likelihood(), 125);
 }
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_2) {
 	TFeatureLikelihood storage(0, 200);
 	EXPECT_EQ(storage.get_molecule_index(), 0);
+	EXPECT_EQ(storage.get_binned_likelihood(), 200);
 }
 
 TEST(TFeatureLikelihood_Tests, set_linear_index_3) {
 	TFeatureLikelihood storage(1, 200);
 	EXPECT_EQ(storage.get_molecule_index(), 1);
+	EXPECT_EQ(storage.get_binned_likelihood(), 200);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_1) {
 	TFeatureLikelihood storage(0, 255);
 	EXPECT_EQ(storage.get_binned_likelihood(), 255);
+	EXPECT_EQ(storage.get_molecule_index(), 0);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_2) {
@@ -32,16 +36,17 @@ TEST(TFeatureLikelihood_Tests, set_binned_likelihood_2) {
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_3) {
 	TFeatureLikelihood storage(0, 128);
 	EXPECT_EQ(storage.get_binned_likelihood(), 128);
+	EXPECT_EQ(storage.get_molecule_index(), 0);
 }
 
 TEST(TFeatureLikelihood_Tests, combined) {
-	TFeatureLikelihood storage(16777215, 128);
+	TFeatureLikelihood storage(16777214, 128);
 	EXPECT_EQ(storage.get_binned_likelihood(), 128);
-	EXPECT_EQ(storage.get_molecule_index(), 16777215);
+	EXPECT_EQ(storage.get_molecule_index(), 16777214);
 }
 
 TEST(TFeatureLikelihood_Tests, nested_vector) {
-	TFeatureLikelihood fl_1(16777215, 128);
+	TFeatureLikelihood fl_1(16777214, 128);
 
 	TFeatureLikelihood fl_2(245, 120);
 
