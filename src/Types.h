@@ -35,6 +35,7 @@ using TypeNu                  = coretools::StrictlyPositive;
 using TypeMeanLogNu           = coretools::Unbounded;
 using TypeVarLogNu            = coretools::StrictlyPositive;
 using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
+using TypeFilterProbability   = coretools::Probability;
 
 // Gamma
 // Weakly-informative Gamma(shape=alpha, rate=beta) prior on the detection rate.
@@ -85,6 +86,12 @@ using SpecBinnedBranches =
     stattools::ParamSpec<TypeBinnedBranchLengths, stattools::name("bin_branch"),
                          PriorOnBinnedBranches, stattools::EnforceUniqueHash<false>>;
 
+// Probability to pass mass spec filter
+using PriorOnMassSpecFilter = stattools::prior::TUniformFixed<TypeFilterProbability>;
+using SpecMassSpecFilter =
+    stattools::ParamSpec<TypeFilterProbability, stattools::name("filter_proba"),
+                         PriorOnMassSpecFilter, stattools::EnforceUniqueHash<false>>;
+
 // Markov Field (only needed for stattools purposes)
 using TypeMarkovField = coretools::Boolean;
 constexpr static size_t NumDimMarkovField =
@@ -101,6 +108,14 @@ constexpr static size_t NumDimLotus = 2;
 using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
 using SpecLotus =
     stattools::TObservation<TypeLotus, stattools::name("lotus_obs"), NumDimLotus, TLotus>;
+
+// Observations: Mass Spec
+class TMSMSData;
+using TypeMSData                     = coretools::Boolean;
+constexpr static size_t NumDimMSData = 1;
+using StorageMSData = coretools::TMultiDimensionalStorage<TypeMSData, NumDimMSData>;
+using SpecMSData =
+    stattools::TObservation<TypeMSData, stattools::name("msdata_obs"), NumDimMSData, TMSMSData>;
 
 // Type for calculating the number of 1's per clique
 using TypeCounter1 = uint32_t;

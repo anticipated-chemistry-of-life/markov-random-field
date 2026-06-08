@@ -8,8 +8,13 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
+#include <Security/cssmconfig.h>
+#include <arm_neon.h>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <vector>
 
 struct BinarySearchResult {
 	bool found{};
@@ -20,6 +25,18 @@ struct BinarySearchResult {
 class TMassSpecRun {
 private:
 	coretools::TNestedVector<TFeatureLikelihood> _features;
+
+	/// Each feature also needs a probability for the unknown molecules. In case a feature has as
+	/// true molecule one that is in the unknown set, the probability of that molecule is used.
+	/// This vector should be of size "number of features" in the MSMS run.
+	std::vector<uint8_t> _probabilities_of_unkowns;
+
+	/// The current assignment of molecules to features. The vector should be of size "number of
+	/// molecules" in the current MSMS run.
+	std::vector<TFeatureLikelihood> _current_assignments;
+
+	std::vector<double> _proba_to_pass_filter;
+	double _proba_of_contamination = 0.5;
 
 public:
 	TMassSpecRun() = default;
@@ -33,6 +50,7 @@ public:
 		return _features.at(i);
 	}
 	[[nodiscard]] size_t size() const { return _features.size(); }
+	[[nodiscard]] size_t number_of_features() const { return this->size(); }
 	[[nodiscard]] auto begin() const { return _features.begin(); };
 	[[nodiscard]] auto end() const { return _features.end(); }
 	auto begin() { return _features.begin(); }
@@ -89,5 +107,22 @@ public:
 	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
 		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
 		_features.push_back(feature_likelihoods);
+	}
+
+	[[nodiscard]] bool feature_has_unknown_molecule_assigned(size_t feature_idx) const {
+		return _current_assignments.at(feature_idx).get_molecule_index() >=
+		       TFeatureLikelihood::get_unknown_molecule_index();
+	}
+
+	[[nodiscard]] double
+	calculate_probabiliy_from_y_to_assignment(bool y, bool ms,
+	                                          const std::vector<size_t> &index_in_y_space,
+	                                          size_t dimension_of_molecule) const {
+		const size_t molecule_index = index_in_y_space[dimension_of_molecule];
+
+		if (y & ms) { return _proba_to_pass_filter[molecule_index]; }
+		if (y & !ms) { return 1.0 - _proba_to_pass_filter[molecule_index]; }
+		if (!y & ms) { return _proba_of_contamination; }
+		return 1.0 - _proba_of_contamination;
 	}
 };
