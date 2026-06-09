@@ -114,11 +114,18 @@ public:
 		       TFeatureLikelihood::get_unknown_molecule_index();
 	}
 
+	/// Calculates the probability if a molecule is assigned to a feature based on the
+	/// observed MS/MS data and the model's probability estimates.
+	/// If the current state in Y for a molecule-species pair is 1 it will check if the
+	/// molecule is assigned to the feature and return the corresponding probability.
+	///
+	/// This value will then be multiplied by the likelihood of the molecule being present
+	/// in the feature to get the final probability.
 	[[nodiscard]] double
 	calculate_probabiliy_from_y_to_assignment(bool y, bool ms,
 	                                          const std::vector<size_t> &index_in_y_space,
-	                                          size_t dimension_of_molecule) const {
-		const size_t molecule_index = index_in_y_space[dimension_of_molecule];
+	                                          size_t index_of_molecule_dimension) const {
+		const size_t molecule_index = index_in_y_space[index_of_molecule_dimension];
 
 		if (y & ms) { return _proba_to_pass_filter[molecule_index]; }
 		if (y & !ms) { return 1.0 - _proba_to_pass_filter[molecule_index]; }

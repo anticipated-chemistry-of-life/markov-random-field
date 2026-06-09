@@ -23,7 +23,7 @@ add_requires("gtest", { optional = true, system = false })
 add_requires("nlohmann_json", { system = false })
 add_requires("stduuid", { system = false })
 add_requires("openssl", { system = true })
-
+add_requires("fmt", { system = false })
 
 -- =========================================================
 -- coretools

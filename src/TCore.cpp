@@ -88,7 +88,7 @@ void TModel::_create_trees(const std::string &prefix) {
 	_trees.reserve(num_trees);
 
 	// first tree: molecules
-	_create_tree(0, filename_tree_molecules, "molecules", prefix);
+	_create_tree(0, filename_tree_species, "species", prefix);
 
 	// middle trees: all others (e.g. tissues)
 	for (size_t i = 1; i < num_trees - 1; ++i) {
@@ -101,7 +101,7 @@ void TModel::_create_trees(const std::string &prefix) {
 		_create_tree(i, filenames_tree_others[i - 1], name, prefix);
 	}
 	// last tree: species
-	_create_tree(num_trees - 1, filename_tree_species, "species", prefix);
+	_create_tree(num_trees - 1, filename_tree_molecules, "molecules", prefix);
 
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
