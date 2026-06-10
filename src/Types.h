@@ -27,15 +27,16 @@ constexpr static bool UseSimpleErrorModel = true;
 #endif
 
 // Parameter types
-using TypeGamma               = coretools::StrictlyPositive;
-using TypeErrorRate           = coretools::ZeroOneOpen;
-using TypeAlpha               = coretools::Probability;
-using TypeLogNu               = coretools::Unbounded;
-using TypeNu                  = coretools::StrictlyPositive;
-using TypeMeanLogNu           = coretools::Unbounded;
-using TypeVarLogNu            = coretools::StrictlyPositive;
-using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
-using TypeFilterProbability   = coretools::Probability;
+using TypeGamma                    = coretools::StrictlyPositive;
+using TypeErrorRate                = coretools::ZeroOneOpen;
+using TypeAlpha                    = coretools::Probability;
+using TypeLogNu                    = coretools::Unbounded;
+using TypeNu                       = coretools::StrictlyPositive;
+using TypeMeanLogNu                = coretools::Unbounded;
+using TypeVarLogNu                 = coretools::StrictlyPositive;
+using TypeBinnedBranchLengths      = coretools::UnsignedInt8WithMax<0>;
+using TypeFilterProbability        = coretools::Probability;
+using TypeContaminationProbability = coretools::ZeroOneOpen;
 
 // Gamma
 // Weakly-informative Gamma(shape=alpha, rate=beta) prior on the detection rate.
@@ -91,6 +92,12 @@ using PriorOnMassSpecFilter = stattools::prior::TUniformFixed<TypeFilterProbabil
 using SpecMassSpecFilter =
     stattools::ParamSpec<TypeFilterProbability, stattools::name("filter_proba"),
                          PriorOnMassSpecFilter, stattools::EnforceUniqueHash<false>>;
+
+// Contamination probability in MassSpec : Y = 0 and MSData = 1
+using PriorOnContaminationProba = stattools::prior::TBetaFixed<TypeContaminationProbability>;
+using SpecContaminationProba =
+    stattools::ParamSpec<TypeContaminationProbability, stattools::name("contamination_proba"),
+                         PriorOnContaminationProba, stattools::EnforceUniqueHash<false>>;
 
 // Markov Field (only needed for stattools purposes)
 using TypeMarkovField = coretools::Boolean;

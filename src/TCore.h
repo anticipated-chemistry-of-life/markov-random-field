@@ -6,6 +6,7 @@
 #include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TTask.h"
+#include "stattools/ParametersObservations/TParameter.h"
 #include "tree/TTree.h"
 #include <memory>
 
@@ -54,6 +55,22 @@ private:
 	// observation
 	std::unique_ptr<TLotus> _lotus;
 	std::unique_ptr<SpecLotus> _obs; // "fake" observation, only needed for stattools
+
+#ifdef USE_MS_DATA
+	// Mass spec stuff
+	// The probability to pass a filter
+	PriorOnMassSpecFilter _prior_on_mass_spec_filter{};
+	stattools::TParameter<SpecMassSpecFilter, TMSMSData> _mass_spec_filters{
+	    &_prior_on_mass_spec_filter};
+
+	// Mass spec contamination parameters
+	PriorOnContaminationProba _prior_contamination_proba{};
+	stattools::TParameter<SpecContaminationProba, TMSMSData> _contamination_proba{
+	    &_prior_contamination_proba};
+
+	std::unique_ptr<TMSMSData> _msms_data;
+	std::unique_ptr<SpecMSData> _msdata_obs; // "fake" observation, only needed for stattools
+#endif
 
 	// functions that are called when updating
 	void (TLotus::*_fun_update_mrf)(size_t);

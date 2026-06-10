@@ -16,6 +16,8 @@ add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
 -- =========================================================
 
 option("lotus", { default = true, defines = "USE_LOTUS", description = "Whether to use simple error model or lotus." })
+option("msdata",
+    { default = false, defines = "USE_MS_DATA", description = "Whether to use and run inference on MS data." })
 
 add_requires("openmp", { system = false })
 add_requires("zlib", "armadillo", "fmt", "fast_float", { system = false })
@@ -89,6 +91,7 @@ if is_plat("macosx") then
 end
 add_defines("DEVTOOLS", "DEV_LOCATION")
 add_options("lotus")
+add_options("msdata")
 add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
     "-Wreturn-local-addr",
     "-Warray-bounds",

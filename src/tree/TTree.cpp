@@ -86,8 +86,8 @@ void TTree::initialize() {
 
 void TTree::guessInitialValues() {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
-		_log_nu_c->set(c, 0.0);
-		_alpha_c->set(c, coretools::Probability(0.5));
+		_log_nu_c->set(c, ProgramOptions::LOG_NU_C);
+		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
 		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
 	}

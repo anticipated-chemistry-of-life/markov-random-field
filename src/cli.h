@@ -36,6 +36,14 @@ public:
 
 	static inline double GAMMA = 5.0;
 
+	static inline double ALPHA = 0.5;
+
+	static inline double LOG_NU_C = 0.0;
+
+	static inline double PROBA_TO_PASS_MS_FILTER = 0.5;
+
+	static inline double PROBA_OF_MS_CONTAMINATION = 0.001;
+
 	static inline std::string_view FIXED_PRIOR_ON_EPSILON = "0.3,5.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_GAMMA = "2.0,4.6";
@@ -43,6 +51,8 @@ public:
 	static inline std::string_view FIXED_PRIOR_ON_MEAN_LOG_NU = "0.0,2.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0";
+
+	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
 	static void parse() {
 
@@ -73,9 +83,13 @@ public:
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
 
-		LOTUS_FILENAME = params.get("lotus", "lotus.tsv");
+		LOTUS_FILENAME = params.get("lotus", LOTUS_FILENAME);
 
 		GAMMA = params.get<double>("gamma", GAMMA);
+
+		ALPHA = params.get<double>("alpha", ALPHA);
+
+		LOG_NU_C = params.get<double>("log_nu_c", LOG_NU_C);
 	}
 
 	static void printHelp() {

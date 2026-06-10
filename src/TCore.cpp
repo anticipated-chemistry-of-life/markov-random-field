@@ -9,8 +9,8 @@
 #include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TError.h"
-#include "coretools/devtools.h"
 #include "stattools/MCMC/TMCMC.h"
+#include <memory>
 
 using namespace coretools::instances;
 
@@ -113,6 +113,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create lotus
 	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations,
 	                                  _markov_field_stattools_param, prefix, simulate);
+
 	_error_rate.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_EPSILON);
 	_gamma.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_GAMMA);
 	for (auto &it : _mean_log_nu) {
@@ -125,6 +126,16 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
 	// create (fake) observation for stattools
 	_obs =
 	    std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
+
+#ifdef USE_MS_DATA
+	_msms_data = std::make_unique<TMSMSData>(_trees, _markov_field_stattools_param,
+	                                         &_mass_spec_filters, &_contamination_proba);
+	// mass spec parameters now
+	_contamination_proba.getConfig().setPriorParameters(
+	    ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA);
+	_msdata_obs = std::make_unique<SpecMSData>(_msms_data.get(), StorageMSData(),
+	                                           stattools::TRuntimeConfigObs());
+#endif
 
 	// define function that is called when updating
 	_fun_update_mrf = &TLotus::update_markov_field;

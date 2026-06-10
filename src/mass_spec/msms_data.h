@@ -1,15 +1,17 @@
 #pragma once
 
-#include "./msms_run.h"
+#include "Types.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Containers/TView.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
+#include "mass_spec/msms_run.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 /// Class TRun that stores 2 vectors :
 /// - vector of 32 bit with value uin8t which is the binned likelihood and molecule index
@@ -27,7 +29,17 @@
 /// to have first the species WITH mass spec data, then the species without mass spec data. This
 /// will avoid have the indices being repeated and store a size_t for each species even it has no
 /// data.
-class TMSMSData {
+class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<TypeMSData, NumDimMSData> {
+public:
+	// some type aliases, for better readability
+	using BoxType = TMSMSData;
+	using Base    = stattools::prior::TBaseLikelihoodPrior<TypeMSData, NumDimMSData>;
+	using typename Base::Storage;
+	using typename Base::UpdatedStorage;
+
+	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, BoxType>;
+	using TypeParamContamination  = stattools::TParameter<SpecContaminationProba, BoxType>;
+
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
 	TTree *_molecules_tree = nullptr;
@@ -40,6 +52,17 @@ private:
 	std::array<double, 256> _log_lik_absent{}; // TODO: maybe remove and just add 1-p(score| x=1) ?
 	std::array<double, 256> _log_lik_present{};
 
+	TypeParamContamination *_contamination_probability = nullptr;
+	TypeParamMassSpecFilter *_proba_to_pass_filter     = nullptr;
+	double _oldLL;
+	double _curLL;
+
+	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
+	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	    &_markov_field_stattools_param;
+
+	// Private functions
+private:
 	void _add_mass_spec_runs_for_species(const std::vector<TMassSpecRun> &runs) {
 		_msms_data.push_back(runs);
 	}
@@ -50,8 +73,20 @@ private:
 	}
 
 public:
-	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees);
-	~TMSMSData() = default;
+	explicit TMSMSData(
+	    const std::vector<std::unique_ptr<TTree>> &trees,
+	    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	        &markov_field_stattools_param,
+	    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba);
+	~TMSMSData() override = default;
+
+	[[nodiscard]] std::string name() const override { return "msmsdata"; }
+	void _simulateUnderPrior(Storage *) override {
+		throw coretools::TDevError("TMSMSData: simulation under prior is not implemented.");
+	}
+
+	void initialize() override;
+	void guessInitialValues() override;
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
@@ -99,4 +134,22 @@ public:
 		this->_check_trees_exist();
 		return _molecules_tree->get_index_within_leaves(molecule_name);
 	}
+
+	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/,
+	                                      const Storage &) {
+		throw coretools::TDevError("Function not implemented yet");
+	};
+	double calculateLLRatio(TypeParamMassSpecFilter *, size_t /*Index*/, const Storage &) {
+		throw coretools::TDevError("Function not implemented yet");
+	};
+	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {
+		if (!Accepted) {
+			_curLL = _oldLL; // reset
+		}
+	};
+	void updateTempVals(TypeParamMassSpecFilter *, size_t /*Index*/, bool Accepted) {
+		if (!Accepted) {
+			_curLL = _oldLL; // reset
+		}
+	};
 };

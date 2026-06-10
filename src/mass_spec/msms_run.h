@@ -4,12 +4,12 @@
 /// molecule dimension. So for each feature, we have a list of molecule indices and binned
 /// likelihoods.
 #include "./feature_likelihood.h"
+#include "Types.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include <Security/cssmconfig.h>
-#include <arm_neon.h>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -35,8 +35,8 @@ private:
 	/// molecules" in the current MSMS run.
 	std::vector<TFeatureLikelihood> _current_assignments;
 
-	std::vector<double> _proba_to_pass_filter;
-	double _proba_of_contamination = 0.5;
+	const stattools::TParameter<SpecContaminationProba, TMSMSData> *_proba_of_contamination;
+	const stattools::TParameter<SpecMassSpecFilter, TMSMSData> *_proba_to_pass_filter;
 
 public:
 	TMassSpecRun() = default;
@@ -124,12 +124,5 @@ public:
 	[[nodiscard]] double
 	calculate_probabiliy_from_y_to_assignment(bool y, bool ms,
 	                                          const std::vector<size_t> &index_in_y_space,
-	                                          size_t index_of_molecule_dimension) const {
-		const size_t molecule_index = index_in_y_space[index_of_molecule_dimension];
-
-		if (y & ms) { return _proba_to_pass_filter[molecule_index]; }
-		if (y & !ms) { return 1.0 - _proba_to_pass_filter[molecule_index]; }
-		if (!y & ms) { return _proba_of_contamination; }
-		return 1.0 - _proba_of_contamination;
-	}
+	                                          size_t index_of_molecule_dimension) const;
 };
