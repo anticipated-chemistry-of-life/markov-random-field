@@ -22,6 +22,7 @@ private:
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
 	std::vector<size_t> _dimensions_Y_space;
+
 	void _insert(uint64_t linear_index_in_Y_space, bool state) {
 		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
 			throw coretools::TDevError(

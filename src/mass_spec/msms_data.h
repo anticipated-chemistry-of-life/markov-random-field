@@ -80,11 +80,11 @@ public:
 	    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba);
 	~TMSMSData() override = default;
 
+	// stattools overrides
 	[[nodiscard]] std::string name() const override { return "msmsdata"; }
 	void _simulateUnderPrior(Storage *) override {
 		throw coretools::TDevError("TMSMSData: simulation under prior is not implemented.");
 	}
-
 	void initialize() override;
 	void guessInitialValues() override;
 
@@ -137,9 +137,14 @@ public:
 
 	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/,
 	                                      const Storage &) {
+		_curLL = 0.0;
+		_oldLL = 0.0;
 		throw coretools::TDevError("Function not implemented yet");
 	};
 	double calculateLLRatio(TypeParamMassSpecFilter *, size_t /*Index*/, const Storage &) {
+		_curLL = 0.0;
+		_oldLL = 0.0;
+
 		throw coretools::TDevError("Function not implemented yet");
 	};
 	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {

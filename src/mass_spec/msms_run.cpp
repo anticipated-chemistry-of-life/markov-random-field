@@ -1,5 +1,5 @@
 #include "msms_run.h"
-#include "msms_data.h" // must be kepts else TMSData is incomplete
+#include "msms_data.h" // must be kept else TMSData is incomplete
 
 double
 TMassSpecRun::calculate_probabiliy_from_y_to_assignment(bool y, bool ms,
