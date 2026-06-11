@@ -62,7 +62,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			// a child of the new parent which will be added to the tree
 			size_t child_index = get_node_index(child);
 
-			if (!_nodes[child_index].isRoot()) {
+			if (!_nodes[child_index].is_root()) {
 				// if the child was not a root and the parent was not in the tree
 				// we throw an error because the child already has a parent
 				throw coretools::TUserError(
@@ -79,7 +79,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			size_t parent_index = get_node_index(parent);
 			auto node           = _nodes[child_index];
 			auto node_parent    = _nodes[parent_index];
-			if (!node.isRoot()) {
+			if (!node.is_root()) {
 				// if the child was not a root and the parent was already in the tree
 				// we throw an error because the child already has a parent
 				throw coretools::TUserError(
@@ -104,7 +104,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 	this->_internalIndicesWithoutRoots.resize(_nodes.size(), -1);
 	this->_leaves_and_internal_nodes_without_roots_indices.resize(_nodes.size(), -1);
 	for (auto it = _nodes.begin(); it != _nodes.end(); ++it) {
-		if (it->isLeaf()) {
+		if (it->is_leaf()) {
 			this->_leafIndices[it - _nodes.begin()] = _leaves.size();
 			this->_leaves.push_back(it - _nodes.begin());
 
@@ -114,10 +114,10 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		} else {
 			this->_internalIndices[it - _nodes.begin()] = _internal_nodes.size();
 			this->_internal_nodes.push_back(it - _nodes.begin());
-			if (it->isRoot()) {
+			if (it->is_root()) {
 				_rootIndices[it - _nodes.begin()] = _roots.size();
 				_roots.push_back(it - _nodes.begin());
-			} else if (it->isInternalNode()) {
+			} else if (it->is_internal_node()) {
 				_internalIndicesWithoutRoots[it - _nodes.begin()] =
 				    _internal_nodes_without_roots.size();
 				_internal_nodes_without_roots.push_back(it - _nodes.begin());

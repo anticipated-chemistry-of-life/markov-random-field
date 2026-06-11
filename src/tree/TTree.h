@@ -124,7 +124,7 @@ private:
 	                                         coretools::TSumLogProbability &LL,
 	                                         const TCurrentState &current_state,
 	                                         std::optional<size_t> branch_len_bin, double alpha) {
-		if (node.isRoot()) {
+		if (node.is_root()) {
 			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
 		} else {
 			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
@@ -167,7 +167,7 @@ private:
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
-			if (!node.isRoot()) {
+			if (!node.is_root()) {
 				branch_len_bin = _binned_branch_lengths->oldValue(
 				    _leaves_and_internal_nodes_without_roots_indices[i]);
 			} else {

@@ -163,7 +163,7 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 
 	size_t sum_index_branches = 0;
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
-		if (exclude_root && _nodes[i].isRoot()) { continue; }
+		if (exclude_root && _nodes[i].is_root()) { continue; }
 		// find bin
 		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(),
 		                           branch_lengths[i]);

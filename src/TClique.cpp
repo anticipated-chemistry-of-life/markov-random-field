@@ -43,7 +43,7 @@ std::vector<TStorageZ> TClique::update_Z(
 		// prepare log probabilities for the two possible states
 		std::array<coretools::TSumLogProbability, 2> sum_log;
 		const auto &node = tree->get_node(index_in_tree);
-		if (node.isRoot()) { // calculate stationary
+		if (node.is_root()) { // calculate stationary
 			_calculate_log_prob_root(stationary_0, sum_log);
 		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
 			// note: for compatibility with update of Y, we need to pass
@@ -212,6 +212,6 @@ bool sample(double log_prob_0, double log_prob_1) {
 
 size_t TClique::_get_parent_index(size_t index_in_tree, const TTree *tree) {
 	const auto &node                  = tree->get_node(index_in_tree);
-	const size_t parent_index_in_tree = node.parentIndex_in_tree();
+	const size_t parent_index_in_tree = node.parent_index_in_tree();
 	return parent_index_in_tree;
 }

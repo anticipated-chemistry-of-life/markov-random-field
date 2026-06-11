@@ -1,0 +1,29 @@
+{
+    "diagnostics.globals": [
+        "add_requires",
+        "option",
+        "set_policy",
+        "add_rules",
+        "set_version",
+        "set_project",
+        "set_languages",
+        "target",
+        "on_config",
+        "set_kind",
+        "add_headerfiles",
+        "add_files",
+        "add_includedirs",
+        "add_packages",
+        "add_cxxflags",
+        "import",
+        "add_deps",
+        "is_plat",
+        "add_frameworks",
+        "add_defines",
+        "add_options",
+        "after_load",
+        "set_default",
+        "add_links",
+        "git"
+    ]
+}

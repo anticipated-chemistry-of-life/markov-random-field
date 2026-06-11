@@ -45,7 +45,7 @@ class ParameterGenerator:
         if binned_branch_length is not None:
             values = [int(binned_branch_length)] * n
         else:
-            values = np.random.randint(5, 100, size=n).tolist()
+            values = np.random.randint(0, 20, size=n).tolist()
         self._binned_branch_lengths = pd.DataFrame(
             {
                 "name": [
@@ -57,7 +57,9 @@ class ParameterGenerator:
         )
 
     def _generate_mean_log_nu_params(self, mean_log_nu: float | None) -> None:
-        value = mean_log_nu if mean_log_nu is not None else float(np.random.normal(0, 0.5))
+        value = (
+            mean_log_nu if mean_log_nu is not None else float(np.random.normal(0, 0.5))
+        )
         self._mean_log_nu = pd.DataFrame(
             {
                 "name": [f"{self._this_tree.tree_name}_mean_log_nu"],
@@ -66,7 +68,11 @@ class ParameterGenerator:
         )
 
     def _generate_var_log_nu_params(self, var_log_nu: float | None) -> None:
-        value = var_log_nu if var_log_nu is not None else float(np.random.uniform(0.05, 0.5))
+        value = (
+            var_log_nu
+            if var_log_nu is not None
+            else float(np.random.uniform(0.05, 0.5))
+        )
         self._var_log_nu = pd.DataFrame(
             {
                 "name": [f"{self._this_tree.tree_name}_var_log_nu"],
