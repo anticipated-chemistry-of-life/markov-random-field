@@ -1,6 +1,8 @@
 #include "./msms_data.h"
+#include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TError.h"
+#include <cstddef>
 
 void TMSMSData::initialize() {
 	// build molecule leaf names in leaf-index order
@@ -13,7 +15,8 @@ void TMSMSData::initialize() {
 	}
 
 	_proba_to_pass_filter->initStorage(
-	    this, {n}, {std::make_shared<coretools::TNamesStrings>(molecule_names)});
+	    this, {n * _number_of_filters},
+	    {std::make_shared<coretools::TNamesStrings>(molecule_names)});
 
 	// scalar — default 1-slot names are correct
 	_contamination_probability->initStorage(this, {1});
@@ -33,11 +36,12 @@ void TMSMSData::guessInitialValues() {
 }
 
 TMSMSData::TMSMSData(
-    const std::vector<std::unique_ptr<TTree>> &trees,
+    const std::vector<std::unique_ptr<TTree>> &trees, size_t number_of_filters,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
         &markov_field_stattools_param,
     TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba)
-    : _markov_field_stattools_param(markov_field_stattools_param) {
+    : _number_of_filters(number_of_filters),
+      _markov_field_stattools_param(markov_field_stattools_param) {
 	for (size_t d = 0; d < trees.size(); ++d) {
 		const auto &tree = trees[d];
 		if (tree->get_tree_name() == "species") {
@@ -49,7 +53,13 @@ TMSMSData::TMSMSData(
 		}
 	}
 	this->_check_trees_exist();
-
+	const size_t number_of_molecules = _molecules_tree->get_number_of_leaves();
+	if (number_of_molecules >= MAX_NUMBER_OF_MOLECULES - 1) {
+		throw coretools::TUserError("Number of molecules exceeds the maximum allowed (" +
+		                            std::to_string(MAX_NUMBER_OF_MOLECULES) + ")");
+	}
+	// once the trees are checked we can initialize the MSMS data
+	_dimensions_for_filters = {_number_of_filters, number_of_molecules};
 	_msms_data.resize(_species_tree->get_number_of_leaves());
 
 	_proba_to_pass_filter      = filter_proba;

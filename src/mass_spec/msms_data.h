@@ -5,6 +5,7 @@
 #include "coretools/Containers/TView.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/algorithms.h"
 #include "mass_spec/msms_run.h"
 #include "tree/TTree.h"
 #include <array>
@@ -46,6 +47,8 @@ private:
 	TTree *_species_tree   = nullptr;
 	size_t _molecule_dim   = 0;
 	size_t _species_dim    = 0;
+	std::array<size_t, 2> _dimensions_for_filters;
+	size_t _number_of_filters;
 
 	// log P(observation | molecule absent/present), indexed by binned_value (0-255).
 	// Initialized to 0.0 (= log(1), no contribution) until populated from file.
@@ -72,9 +75,19 @@ private:
 		}
 	}
 
+	[[nodiscard]] size_t _get_linear_index_filter_molecule_pair(
+	    const std::array<size_t, 2> &filter_molecule_pair_index) const {
+		return coretools::getLinearIndex(filter_molecule_pair_index, _dimensions_for_filters);
+	}
+
+	[[nodiscard]] std::array<size_t, 2>
+	_get_filter_molecule_paire_multidimensional_index_(size_t filter_molecule_pair_index) const {
+		return coretools::getSubscriptsAsArray(filter_molecule_pair_index, _dimensions_for_filters);
+	}
+
 public:
 	explicit TMSMSData(
-	    const std::vector<std::unique_ptr<TTree>> &trees,
+	    const std::vector<std::unique_ptr<TTree>> &trees, size_t number_of_filters,
 	    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	        &markov_field_stattools_param,
 	    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba);
@@ -148,11 +161,6 @@ public:
 		throw coretools::TDevError("Function not implemented yet");
 	};
 	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {
-		if (!Accepted) {
-			_curLL = _oldLL; // reset
-		}
-	};
-	void updateTempVals(TypeParamMassSpecFilter *, size_t /*Index*/, bool Accepted) {
 		if (!Accepted) {
 			_curLL = _oldLL; // reset
 		}
