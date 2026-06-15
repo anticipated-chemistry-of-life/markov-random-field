@@ -22,16 +22,12 @@ void TModel::_create_tree(size_t dimension, const std::string &filename,
                           const std::string &tree_name, const std::string &prefix) {
 
 	// create mean log nu
-	stattools::TRuntimeConfigParam config_mean_log_nu;
-	config_mean_log_nu.set_name(tree_name + "_mean_log_nu");
 	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(
-	    &_prior_on_mean_log_nu, config_mean_log_nu));
+	    tree_name + "_mean_log_nu", &_prior_on_mean_log_nu, stattools::TParameterDefinition{}));
 
 	// create var log nu
-	stattools::TRuntimeConfigParam config_var_log_nu;
-	config_var_log_nu.set_name(tree_name + "_var_log_nu");
 	_var_log_nu.push_back(std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(
-	    &_prior_on_var_log_nu, config_var_log_nu));
+	    tree_name + "_var_log_nu", &_prior_on_var_log_nu, stattools::TParameterDefinition{}));
 
 	// create prior on log nu
 	_prior_on_log_nu.push_back(
@@ -106,7 +102,16 @@ void TModel::_create_trees(const std::string &prefix) {
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
 
-TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate) {
+TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
+    : _gamma("gamma", &_prior_on_gamma, {prefix, ProgramOptions::FIXED_PRIOR_ON_GAMMA}),
+      _error_rate("epsilon", &_prior_on_error_rate, {prefix, ProgramOptions::FIXED_PRIOR_ON_EPSILON})
+#ifdef USE_MS_DATA
+      ,
+      _mass_spec_filters("filter_proba", &_prior_on_mass_spec_filter, {prefix}),
+      _contamination_proba("contamination_proba", &_prior_contamination_proba,
+                           {prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
+#endif
+{
 	// create trees (including mu_0, mu_1 and binned branch lengths)
 	_create_trees(prefix);
 
@@ -181,5 +186,5 @@ void TCore::simulate() {
 	TModel model(n_iterations, prefix, true);
 
 	// simulate
-	stattools::TSimulator::simulate(prefix);
+	stattools::TSimulator::simulate();
 }

@@ -69,7 +69,6 @@ mkdir -p test_out
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
     --iterations 3000 \\
     --numThreads all \\
-    --writeTrace \\
     --writeBurnin \\
     --molecules_branch_lengths.update false \\
     --species_branch_lengths.update false

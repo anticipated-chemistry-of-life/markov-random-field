@@ -58,7 +58,7 @@ def _scatter_true_vs_inferred(
     title: str,
     n_max_points: int = 500,
 ) -> None:
-    """Scatter: true value on x, inferred posterior mean ± 2 SD on y, colored by dimension."""
+    """Scatter: inferred posterior mean ± 2 SD on x, true value on y, colored by dimension."""
     dims = np.array([_tree_dim(n) for n in names])
 
     if len(true_vals) > n_max_points:
@@ -78,8 +78,8 @@ def _scatter_true_vs_inferred(
             continue
         label = dim if dim not in plotted_dims else None
         ax.errorbar(
-            true_vals[mask],
             inferred_means[mask],
+            true_vals[mask],
             yerr=2 * inferred_sds[mask],
             fmt="o",
             color=color,
@@ -96,8 +96,8 @@ def _scatter_true_vs_inferred(
     margin = (hi - lo) * 0.05 or 0.1
     diag = np.array([lo - margin, hi + margin])
     ax.plot(diag, diag, "k--", linewidth=1, label="y = x")
-    ax.set_xlabel("True value")
-    ax.set_ylabel("Inferred posterior mean")
+    ax.set_xlabel("Inferred posterior mean")
+    ax.set_ylabel("True value")
     ax.set_title(f"{title} (n={len(true_vals)})")
     ax.legend(fontsize=8)
 
