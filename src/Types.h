@@ -125,6 +125,6 @@ using SpecMSData =
     stattools::TObservation<TypeMSData, stattools::name("msdata_obs"), NumDimMSData, TMSMSData>;
 
 // Type for calculating the number of 1's per clique
-using TypeCounter1 = uint32_t;
-
+using TypeCounter1                                = uint32_t;
+static constexpr uint32_t MAX_NUMBER_OF_MOLECULES = (1 << 24) - 1;
 #endif // ACOL_TYPES_H

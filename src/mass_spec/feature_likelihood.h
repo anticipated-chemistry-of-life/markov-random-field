@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Types.h"
 #include "coretools/Main/TError.h"
 #include <cstddef>
 #include <cstdint>
@@ -11,10 +12,10 @@ private:
 
 	/// A mask for the 255 binned likelihoods
 	static constexpr uint32_t _one                 = 1;
-	static constexpr uint32_t _likelihood_mask     = ~((_one << 24) - 1);
+	static constexpr uint32_t _likelihood_mask     = ~(MAX_NUMBER_OF_MOLECULES);
 	/// The remaining bits for the linear index
 	/// This also defines the maximum number of molecules that can be stored
-	static constexpr uint32_t _molecule_index_mask = (_one << 24) - 1;
+	static constexpr uint32_t _molecule_index_mask = MAX_NUMBER_OF_MOLECULES;
 	void _set_molecule_index(const uint32_t linear_index) {
 		if (linear_index > _molecule_index_mask - 1) { // _molecule_index_mask - 1 because we need
 			                                           // to keep a spot for the unknown molecule
