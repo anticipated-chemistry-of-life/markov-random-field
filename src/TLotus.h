@@ -15,11 +15,11 @@
 #include <utility>
 #include <vector>
 
-class TLotus : public stattools::prior::TBaseLikelihoodPrior<TypeLotus, NumDimLotus> {
+class TLotus : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus, NumDimLotus> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TLotus;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<TypeLotus, NumDimLotus>;
+	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus, NumDimLotus>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
@@ -70,6 +70,14 @@ private:
 	// notifications
 	TNtfyNotifier _notifier;
 
+	// counts how many burnin rounds have finished (oneBurninHasFinished no longer
+	// receives the round number from stattools)
+	size_t _burnin_round = 0;
+
+	// monotonic counter of markov field updates (the update function registered via
+	// addFuncToUpdate is no longer passed the iteration number by stattools)
+	size_t _mrf_update_iteration = 0;
+
 	// private functions
 	[[nodiscard]] double
 	_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
@@ -101,7 +109,7 @@ public:
 	void guessInitialValues() override;
 
 	void burninHasFinished() override;
-	void burninRoundHasFinished(size_t round) override;
+	void oneBurninHasFinished() override;
 	void MCMCHasFinished() override;
 
 	[[nodiscard]] double calculate_log_likelihood_of_L() const;
@@ -114,9 +122,9 @@ public:
 	                           std::array<double, 2> &prob) const;
 	void update_cur_LL(double cur_LL);
 
-	void update_markov_field(size_t iteration);
-	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &);
-	double calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/, const Storage &);
+	void update_markov_field();
+	[[nodiscard]] double calculateLLRatio(TypeParamGamma *, size_t /*Index*/);
+	double calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/);
 	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
 	void updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted);
 

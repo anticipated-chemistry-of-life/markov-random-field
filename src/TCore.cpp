@@ -23,38 +23,36 @@ void TModel::_create_tree(size_t dimension, const std::string &filename,
 
 	// create mean log nu
 	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(
-	    tree_name + "_mean_log_nu", &_prior_on_mean_log_nu, stattools::TParameterDefinition{}));
+	    tree_name + "_mean_log_nu", &_prior_on_mean_log_nu,
+	    stattools::TParameterDefinition{prefix, ProgramOptions::FIXED_PRIOR_ON_MEAN_LOG_NU}));
 
 	// create var log nu
 	_var_log_nu.push_back(std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(
-	    tree_name + "_var_log_nu", &_prior_on_var_log_nu, stattools::TParameterDefinition{}));
+	    tree_name + "_var_log_nu", &_prior_on_var_log_nu,
+	    stattools::TParameterDefinition{prefix, ProgramOptions::FIXED_PRIOR_ON_VAR_LOG_NU}));
 
 	// create prior on log nu
 	_prior_on_log_nu.push_back(
 	    std::make_unique<PriorOnLogNu>(_mean_log_nu.back().get(), _var_log_nu.back().get()));
 
 	// create log nu
-	stattools::TRuntimeConfigParam config_log_nu;
-	config_log_nu.set_name(tree_name + "_log_nu");
-	config_log_nu.excludeFromDAGUpdates(true); // never update
+	stattools::TParameterDefinition def_log_nu(prefix);
+	def_log_nu.excludeFromDAGUpdates(true); // never update
 	_log_nu.push_back(std::make_unique<stattools::TParameter<SpecLogNu, TTree>>(
-	    _prior_on_log_nu.back().get(), config_log_nu));
+	    tree_name + "_log_nu", _prior_on_log_nu.back().get(), def_log_nu));
 
 	// create alpha
-	stattools::TRuntimeConfigParam config_alpha;
-	config_alpha.set_name(tree_name + "_alpha");
-	config_alpha.excludeFromDAGUpdates(true); // never update
-	_alpha.push_back(
-	    std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(&_prior_on_alpha, config_alpha));
+	stattools::TParameterDefinition def_alpha(prefix);
+	def_alpha.excludeFromDAGUpdates(true); // never update
+	_alpha.push_back(std::make_unique<stattools::TParameter<SpecAlpha, TTree>>(
+	    tree_name + "_alpha", &_prior_on_alpha, def_alpha));
 
 	// create branch lengths
-	stattools::TRuntimeConfigParam config_branch_lengths;
-	config_branch_lengths.set_name(tree_name + "_branch_lengths");
-	config_branch_lengths.excludeFromDAGUpdates(true); // never update
-	config_branch_lengths.setPrefix(prefix + "_" + tree_name);
+	stattools::TParameterDefinition def_branch_lengths(prefix + "_" + tree_name);
+	def_branch_lengths.excludeFromDAGUpdates(true); // never update
 	_binned_branch_lengths.push_back(
 	    std::make_unique<stattools::TParameter<SpecBinnedBranches, TTree>>(
-	        &_prior_on_binned_branch_lengths, config_branch_lengths));
+	        tree_name + "_branch_lengths", &_prior_on_binned_branch_lengths, def_branch_lengths));
 
 	// create tree
 	_trees.emplace_back(std::make_unique<TTree>(dimension, filename, tree_name, _alpha.back().get(),
@@ -62,12 +60,11 @@ void TModel::_create_tree(size_t dimension, const std::string &filename,
 	                                            _binned_branch_lengths.back().get()));
 
 	// create markov field (only for stattools purposes such that a valid DAG can be built)
-	stattools::TRuntimeConfigParam config_markov_field;
-	config_markov_field.set_name(tree_name + "_MRF");
-	config_markov_field.excludeFromDAGUpdates(true); // never update
+	stattools::TParameterDefinition def_markov_field;
+	def_markov_field.excludeFromDAGUpdates(true); // never update
 	_markov_field_stattools_param.emplace_back(
-	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(_trees.back().get(),
-	                                                                     config_markov_field));
+	    std::make_unique<stattools::TParameter<SpecMarkovField, TLotus>>(
+	        tree_name + "_MRF", _trees.back().get(), def_markov_field));
 }
 
 void TModel::_create_trees(const std::string &prefix) {
@@ -119,27 +116,19 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 	_lotus = std::make_unique<TLotus>(_trees, &_gamma, &_error_rate, n_iterations,
 	                                  _markov_field_stattools_param, prefix, simulate);
 
-	_error_rate.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_EPSILON);
-	_gamma.getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_GAMMA);
-	for (auto &it : _mean_log_nu) {
-		it->getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_MEAN_LOG_NU);
-	}
-	for (auto &it : _var_log_nu) {
-		it->getConfig().setPriorParameters(ProgramOptions::FIXED_PRIOR_ON_VAR_LOG_NU);
-	}
+	// note: fixed prior parameters are now passed through the TParameterDefinition at
+	// construction time, because TNodeTyped's constructor immediately forwards them to the
+	// prior via setFixedPriorParameters(). Setting them afterwards would be too late.
 
 	// create (fake) observation for stattools
-	_obs =
-	    std::make_unique<SpecLotus>(_lotus.get(), StorageLotus(), stattools::TRuntimeConfigObs());
+	_obs = std::make_unique<SpecLotus>("lotus_obs", _lotus.get(), StorageLotus(),
+	                                   stattools::TObservationDefinition{});
 
 #ifdef USE_MS_DATA
 	_msms_data = std::make_unique<TMSMSData>(_trees, _markov_field_stattools_param,
 	                                         &_mass_spec_filters, &_contamination_proba);
-	// mass spec parameters now
-	_contamination_proba.getConfig().setPriorParameters(
-	    ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA);
-	_msdata_obs = std::make_unique<SpecMSData>(_msms_data.get(), StorageMSData(),
-	                                           stattools::TRuntimeConfigObs());
+	_msdata_obs = std::make_unique<SpecMSData>("msdata_obs", _msms_data.get(), StorageMSData(),
+	                                           stattools::TObservationDefinition{});
 #endif
 
 	// define function that is called when updating
@@ -169,7 +158,7 @@ void TCore::infer() {
 
 	// create MCMC object and get number of iterations that will be run
 	stattools::TMCMC mcmc;
-	size_t n_iterations = mcmc.get_num_iterations();
+	size_t n_iterations = ProgramOptions::NUM_ITERATIONS;
 
 	// build model
 	TModel model(n_iterations, prefix, false);

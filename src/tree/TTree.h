@@ -25,11 +25,13 @@
 #include <vector>
 
 /// Note: All indices are within the tree itself
-class TTree : public stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField> {
+class TTree
+    : public stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField, NumDimMarkovField> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TTree;
-	using Base    = stattools::prior::TStochasticBase<TypeMarkovField, NumDimMarkovField>;
+	using Base =
+	    stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField, NumDimMarkovField>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 

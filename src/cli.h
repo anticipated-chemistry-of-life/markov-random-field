@@ -54,6 +54,8 @@ public:
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
+	static inline size_t NUM_ITERATIONS = 10000;
+
 	static void parse() {
 
 		auto &params = coretools::instances::parameters();
@@ -90,6 +92,8 @@ public:
 		ALPHA = params.get<double>("alpha", ALPHA);
 
 		LOG_NU_C = params.get<double>("log_nu_c", LOG_NU_C);
+
+		NUM_ITERATIONS = params.get<size_t>("iterations", NUM_ITERATIONS);
 	}
 
 	static void printHelp() {

@@ -179,15 +179,15 @@ void TLotus::update_cur_LL(double cur_LL) {
 	_curLL = cur_LL;
 }
 
-void TLotus::update_markov_field(size_t iteration) { _markov_field.update(*this, iteration); }
+void TLotus::update_markov_field() { _markov_field.update(*this, _mrf_update_iteration++); }
 
-[[nodiscard]] double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/, const Storage &) {
+[[nodiscard]] double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/) {
 	_oldLL = _curLL;                          // store current likelihood
 	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
 	return _curLL - _oldLL;
 }
 
-double TLotus::calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/, const Storage &) {
+double TLotus::calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/) {
 	_oldLL = _curLL;                          // store current likelihood
 	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
 	return _curLL - _oldLL;
@@ -420,7 +420,8 @@ void TLotus::burninHasFinished() {
 	_notifier.notify_burnin_finished(dim_names, gamma_stats, epsilon_stats);
 }
 
-void TLotus::burninRoundHasFinished(size_t round) {
+void TLotus::oneBurninHasFinished() {
+	const size_t round      = ++_burnin_round;
 	const auto total_rounds = coretools::instances::parameters().get<size_t>("numBurnin", 10);
 
 	std::vector<std::string> dim_names;

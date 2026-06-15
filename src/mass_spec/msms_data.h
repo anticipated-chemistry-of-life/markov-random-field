@@ -30,11 +30,11 @@
 /// to have first the species WITH mass spec data, then the species without mass spec data. This
 /// will avoid have the indices being repeated and store a size_t for each species even it has no
 /// data.
-class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<TypeMSData, NumDimMSData> {
+class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData, NumDimMSData> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TMSMSData;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<TypeMSData, NumDimMSData>;
+	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData, NumDimMSData>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
@@ -148,13 +148,12 @@ public:
 		return _molecules_tree->get_index_within_leaves(molecule_name);
 	}
 
-	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/,
-	                                      const Storage &) {
+	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
 		_curLL = 0.0;
 		_oldLL = 0.0;
 		throw coretools::TDevError("Function not implemented yet");
 	};
-	double calculateLLRatio(TypeParamMassSpecFilter *, size_t /*Index*/, const Storage &) {
+	double calculateLLRatio(TypeParamMassSpecFilter *, size_t /*Index*/) {
 		_curLL = 0.0;
 		_oldLL = 0.0;
 

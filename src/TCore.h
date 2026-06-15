@@ -46,11 +46,13 @@ private:
 
 	// gamma
 	PriorOnGamma _prior_on_gamma{};
-	stattools::TParameter<SpecGamma, TLotus> _gamma{&_prior_on_gamma};
+	// note: initialized in the TModel constructor so the definition can be given the global
+	// output prefix (needed to enable mean/var storage and trace files)
+	stattools::TParameter<SpecGamma, TLotus> _gamma;
 
 	// error rate
 	PriorOnErrorRate _prior_on_error_rate{};
-	stattools::TParameter<SpecErrorRate, TLotus> _error_rate{&_prior_on_error_rate};
+	stattools::TParameter<SpecErrorRate, TLotus> _error_rate;
 
 	// observation
 	std::unique_ptr<TLotus> _lotus;
@@ -60,20 +62,18 @@ private:
 	// Mass spec stuff
 	// The probability to pass a filter
 	PriorOnMassSpecFilter _prior_on_mass_spec_filter{};
-	stattools::TParameter<SpecMassSpecFilter, TMSMSData> _mass_spec_filters{
-	    &_prior_on_mass_spec_filter};
+	stattools::TParameter<SpecMassSpecFilter, TMSMSData> _mass_spec_filters;
 
 	// Mass spec contamination parameters
 	PriorOnContaminationProba _prior_contamination_proba{};
-	stattools::TParameter<SpecContaminationProba, TMSMSData> _contamination_proba{
-	    &_prior_contamination_proba};
+	stattools::TParameter<SpecContaminationProba, TMSMSData> _contamination_proba;
 
 	std::unique_ptr<TMSMSData> _msms_data;
 	std::unique_ptr<SpecMSData> _msdata_obs; // "fake" observation, only needed for stattools
 #endif
 
 	// functions that are called when updating
-	void (TLotus::*_fun_update_mrf)(size_t);
+	void (TLotus::*_fun_update_mrf)();
 
 	void _create_tree(size_t dimension, const std::string &filename, const std::string &tree_name,
 	                  const std::string &prefix);
