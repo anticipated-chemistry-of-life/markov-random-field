@@ -64,7 +64,9 @@ TEST(TFeatureLikelihood_Tests, nested_vector) {
 	coretools::TNestedVector<TMassSpecRun> msms_data;
 	msms_data.push_back({nested_vector});
 	msms_data.push_back({nested_vector, nested_vector, nested_vector});
+	msms_data.push_back({});
 	EXPECT_EQ(msms_data.at(0).size(), 1);
 	EXPECT_EQ(msms_data.at(1).size(), 3);
-	EXPECT_THROW(msms_data.at(2), std::out_of_range);
+	EXPECT_EQ(msms_data.at(2).size(), 0);
+	EXPECT_THROW(msms_data.at(3), std::out_of_range);
 }

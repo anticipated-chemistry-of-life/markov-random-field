@@ -32,11 +32,14 @@ private:
 	std::vector<uint8_t> _probabilities_of_unkowns;
 
 	/// The current assignment of molecules to features. The vector should be of size "number of
-	/// molecules" in the current MSMS run.
+	/// features" in the current MSMS run.
 	std::vector<TFeatureLikelihood> _current_assignments;
 
-	const stattools::TParameter<SpecContaminationProba, TMSMSData> *_proba_of_contamination;
-	const stattools::TParameter<SpecMassSpecFilter, TMSMSData> *_proba_to_pass_filter;
+	/// The filter index for the current MSMS run.
+	size_t _filter_index;
+
+	// const stattools::TParameter<SpecContaminationProba, TMSMSData> *_proba_of_contamination;
+	// const stattools::TParameter<SpecMassSpecFilter, TMSMSData> *_proba_to_pass_filter;
 
 public:
 	TMassSpecRun() = default;
@@ -55,6 +58,9 @@ public:
 	[[nodiscard]] auto end() const { return _features.end(); }
 	auto begin() { return _features.begin(); }
 	auto end() { return _features.end(); }
+	/// Returns the filter index for the current MSMS run.
+	[[nodiscard]] size_t filter_index() const { return _filter_index; }
+	///
 	[[nodiscard]] BinarySearchResult is_molecule_in_feature(size_t feature_idx,
 	                                                        uint32_t molecule_index) const {
 		const auto &likelihoods = _features.at(feature_idx);
@@ -121,8 +127,20 @@ public:
 	///
 	/// This value will then be multiplied by the likelihood of the molecule being present
 	/// in the feature to get the final probability.
-	[[nodiscard]] double
-	calculate_probabiliy_from_y_to_assignment(bool y, bool ms,
-	                                          const std::vector<size_t> &index_in_y_space,
-	                                          size_t index_of_molecule_dimension) const;
+	/// TMassSpecRun — pure: caller passes the filter prob (for this molecule) and contamination
+	[[nodiscard]] static double probability_of_assignment(bool y, bool ms,
+	                                                      double proba_to_pass_filter,
+	                                                      double proba_contamination) {
+		if (y && ms) { return proba_to_pass_filter; }        // present & detected -> passed filter
+		if (y && !ms) { return 1.0 - proba_to_pass_filter; } // present & not detected
+		if (!y && ms) { return proba_contamination; }        // absent  & detected -> contamination
+		return 1.0 - proba_contamination;                    // absent  & not detected
+	}
+
+	[[nodiscard]] bool is_molecule_assigned(uint32_t molecule_idx) const {
+		return std::any_of(_current_assignments.begin(), _current_assignments.end(),
+		                   [molecule_idx](const TFeatureLikelihood &a) {
+			                   return a.get_molecule_index() == molecule_idx;
+		                   });
+	}
 };

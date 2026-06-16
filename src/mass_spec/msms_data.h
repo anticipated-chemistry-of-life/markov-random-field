@@ -14,6 +14,7 @@
 #include <memory>
 #include <vector>
 
+class TMarkovField;
 /// Class TRun that stores 2 vectors :
 /// - vector of 32 bit with value uin8t which is the binned likelihood and molecule index
 /// - vector of size_t that tells where the feature starts
@@ -30,11 +31,13 @@
 /// to have first the species WITH mass spec data, then the species without mass spec data. This
 /// will avoid have the indices being repeated and store a size_t for each species even it has no
 /// data.
-class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData, NumDimMSData> {
+class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase,
+                                                                TypeMSData, NumDimMSData> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TMSMSData;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData, NumDimMSData>;
+	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData,
+	                                                       NumDimMSData>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
@@ -49,16 +52,17 @@ private:
 	size_t _species_dim    = 0;
 	std::array<size_t, 2> _dimensions_for_filters;
 	size_t _number_of_filters;
+	const TMarkovField &_markov_field;
 
 	// log P(observation | molecule absent/present), indexed by binned_value (0-255).
 	// Initialized to 0.0 (= log(1), no contribution) until populated from file.
 	std::array<double, 256> _log_lik_absent{}; // TODO: maybe remove and just add 1-p(score| x=1) ?
 	std::array<double, 256> _log_lik_present{};
 
-	TypeParamContamination *_contamination_probability = nullptr;
-	TypeParamMassSpecFilter *_proba_to_pass_filter     = nullptr;
-	double _oldLL;
-	double _curLL;
+	TypeParamContamination *_proba_contamination   = nullptr;
+	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
+	double _old_LL_contamination;
+	double _cur_LL_contamination;
 
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
 	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
@@ -81,13 +85,14 @@ private:
 	}
 
 	[[nodiscard]] std::array<size_t, 2>
-	_get_filter_molecule_paire_multidimensional_index_(size_t filter_molecule_pair_index) const {
+	_get_filter_molecule_pair_multidimensional_index_(size_t filter_molecule_pair_index) const {
 		return coretools::getSubscriptsAsArray(filter_molecule_pair_index, _dimensions_for_filters);
 	}
 
 public:
 	explicit TMSMSData(
-	    const std::vector<std::unique_ptr<TTree>> &trees, size_t number_of_filters,
+	    const std::vector<std::unique_ptr<TTree>> &trees, const TMarkovField &markov_field,
+	    size_t number_of_filters,
 	    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	        &markov_field_stattools_param,
 	    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba);
@@ -149,19 +154,15 @@ public:
 	}
 
 	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
-		_curLL = 0.0;
-		_oldLL = 0.0;
+		_cur_LL_contamination = 0.0;
+		_old_LL_contamination = 0.0;
 		throw coretools::TDevError("Function not implemented yet");
 	};
-	double calculateLLRatio(TypeParamMassSpecFilter *, size_t /*Index*/) {
-		_curLL = 0.0;
-		_oldLL = 0.0;
 
-		throw coretools::TDevError("Function not implemented yet");
-	};
+	double calculateLLRatio(TypeParamMassSpecFilter *, size_t index);
 	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {
 		if (!Accepted) {
-			_curLL = _oldLL; // reset
+			_cur_LL_contamination = _old_LL_contamination; // reset
 		}
 	};
 };

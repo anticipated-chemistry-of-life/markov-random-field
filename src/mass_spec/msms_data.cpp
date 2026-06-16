@@ -1,7 +1,10 @@
 #include "./msms_data.h"
+#include "TMarkovField.h"
 #include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TError.h"
+#include "storages/y_storage/TStorageYVector.h"
+#include <array>
 #include <cstddef>
 
 void TMSMSData::initialize() {
@@ -19,7 +22,7 @@ void TMSMSData::initialize() {
 	    {std::make_shared<coretools::TNamesStrings>(molecule_names)});
 
 	// scalar — default 1-slot names are correct
-	_contamination_probability->initStorage(this, {1});
+	_proba_contamination->initStorage(this, {1});
 }
 
 void TMSMSData::guessInitialValues() {
@@ -28,19 +31,20 @@ void TMSMSData::guessInitialValues() {
 		                           coretools::Probability(ProgramOptions::PROBA_TO_PASS_MS_FILTER));
 	}
 
-	_contamination_probability->set(ProgramOptions::PROBA_OF_MS_CONTAMINATION);
+	_proba_contamination->set(ProgramOptions::PROBA_OF_MS_CONTAMINATION);
 
 	// initialize _curLL
-	_curLL = 0.0;
-	_oldLL = _curLL;
+	_cur_LL_contamination = 0.0;
+	_old_LL_contamination = _cur_LL_contamination;
 }
 
 TMSMSData::TMSMSData(
-    const std::vector<std::unique_ptr<TTree>> &trees, size_t number_of_filters,
+    const std::vector<std::unique_ptr<TTree>> &trees, const TMarkovField &markov_field,
+    size_t number_of_filters,
     const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
         &markov_field_stattools_param,
     TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba)
-    : _number_of_filters(number_of_filters),
+    : _number_of_filters(number_of_filters), _markov_field(markov_field),
       _markov_field_stattools_param(markov_field_stattools_param) {
 	for (size_t d = 0; d < trees.size(); ++d) {
 		const auto &tree = trees[d];
@@ -62,16 +66,54 @@ TMSMSData::TMSMSData(
 	_dimensions_for_filters = {_number_of_filters, number_of_molecules};
 	_msms_data.resize(_species_tree->get_number_of_leaves());
 
-	_proba_to_pass_filter      = filter_proba;
-	_contamination_probability = contamination_proba;
+	_proba_to_pass_filter = filter_proba;
+	_proba_contamination  = contamination_proba;
 	// Register parameters with the DAG — same pattern as TLotus
-	this->addPriorParameter({_proba_to_pass_filter, _contamination_probability});
-	_oldLL = 0.0;
-	_curLL = 0.0;
+	this->addPriorParameter({_proba_to_pass_filter, _proba_contamination});
+	_old_LL_contamination = 0.0;
+	_cur_LL_contamination = 0.0;
 }
 
 void TMSMSData::add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const {
 	sum_log.add(_log_lik_present[binned_value]);
+}
+
+double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
+	const auto multidim       = _get_filter_molecule_pair_multidimensional_index_(index);
+	const size_t filter_index = multidim[0];
+	const size_t molecule_idx = multidim[1];
+
+	const double new_p = (double)_proba_to_pass_filter->value(index);
+	const double old_p = (double)_proba_to_pass_filter->oldValue(index);
+	const double cont  = (double)_proba_contamination->value();
+
+	// Position 0 should be old, position 1 should be new
+	std::array<coretools::TSumLogProbability, 2> log_lik;
+	const TStorageYVector &y_storage = _markov_field.get_Y_vector();
+	bool y;
+	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
+	     ++species_idx) {
+		const auto linear_index =
+		    y_storage.get_linear_index_in_Y_space({species_idx, molecule_idx});
+		const auto [found, index] = y_storage.binary_search(linear_index);
+		if (found) {
+			y = y_storage[index].is_one();
+		} else {
+			y = false;
+		}
+		// filter only enters the likelihood when the molecule is present
+		if (!y) { continue; }
+		for (const auto &run : get_ms_data_for_species(species_idx)) {
+			if (run.size() == 0) { continue; }
+			if (run.filter_index() != filter_index) { continue; }        // not this extraction
+			const bool ms      = run.is_molecule_assigned(molecule_idx); // hook (2)
+			const double p_new = TMassSpecRun::probability_of_assignment(y, ms, new_p, cont);
+			log_lik[1].add(p_new);
+			const double p_old = TMassSpecRun::probability_of_assignment(y, ms, old_p, cont);
+			log_lik[0].add(p_old);
+		}
+	}
+	return log_lik[1].getSum() - log_lik[0].getSum();
 }
 
 // void TMSMSData::add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
