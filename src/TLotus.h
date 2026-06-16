@@ -5,10 +5,11 @@
 #include "TMarkovField.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/Priors/TPriorBase.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <string>
@@ -34,7 +35,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
-	TStorageYVector _L;
+	TStorageYMatrix _L;
 
 	/// The occurences is the log(count + 1) of the paper counts
 	std::vector<std::vector<double>> _occurrence_counters;
@@ -130,7 +131,7 @@ public:
 	void updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted);
 	void updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted);
 
-	[[nodiscard]] const TStorageYVector &get_Lotus() const;
+	[[nodiscard]] const TStorageYMatrix &get_Lotus() const;
 
 	static std::string get_filename_lotus() { return ProgramOptions::LOTUS_FILENAME; }
 	[[nodiscard]] const TCurrentState &get_tmp_state_along_last_dim() const {

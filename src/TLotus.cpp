@@ -4,6 +4,7 @@
 #include "TLotus.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Storage/TNames.h"
 #include "coretools/Types/probability.h"
@@ -131,7 +132,10 @@ void TLotus::load_from_file(const std::string &filename) {
 };
 
 double TLotus::calculate_log_likelihood_of_L() const {
-	if (_collapser.do_collapse()) { return _calculate_log_likelihood_of_L_do_collapse(); }
+	if (_collapser.do_collapse()) {
+		throw coretools::TDevError("calculate_log_likelihood_of_L: do_collapse() is true. This "
+		                           "part has not been implemented yet.");
+	}
 	return _calculate_log_likelihood_of_L_no_collapsing();
 };
 
@@ -216,7 +220,7 @@ void TLotus::guessInitialValues() {
 	_oldLL = _curLL;
 }
 
-const TStorageYVector &TLotus::get_Lotus() const { return _L; }
+const TStorageYMatrix &TLotus::get_Lotus() const { return _L; }
 
 double
 TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {

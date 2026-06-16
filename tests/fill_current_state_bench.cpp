@@ -1,6 +1,6 @@
 #include "smart_binary_search.h"
 #include "storages/y_storage/TStorageY.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"
 #include <chrono>
 #include <cstddef>
@@ -17,11 +17,11 @@
 
 namespace {
 
-// Build a TStorageYVector with Bernoulli(density) elements at each position.
+// Build a TStorageYMatrix with Bernoulli(density) elements at each position.
 // Uses insert_in_Y (single sort+merge) instead of repeated insert_one to avoid
 // the O(N²) overhead of repeated sorted insertion.
-TStorageYVector make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
-	TStorageYVector Y(/*n_iterations=*/1000, dims);
+TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
+	TStorageYMatrix Y(/*n_iterations=*/1000, dims);
 	const size_t total = Y.total_size_of_container_space();
 
 	std::mt19937_64 rng(seed);

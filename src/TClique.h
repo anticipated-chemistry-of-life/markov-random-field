@@ -9,7 +9,7 @@
 #include "Types.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZ.h"
 #include "storages/z_storage/TStorageZVector.h"
 #include <armadillo>
@@ -302,7 +302,7 @@ public:
 	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	TCurrentState create_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
+	TCurrentState create_current_state(const TStorageYMatrix &Y, const TStorageZVector &Z,
 	                                   const TTree &tree);
 
 	/// @brief Return the number of nodes in the clique

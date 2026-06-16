@@ -16,7 +16,7 @@
 #include "coretools/algorithms.h"
 #include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZVector.h"
 #include "tree/node.h"
 #include <cstddef>
@@ -25,13 +25,13 @@
 #include <vector>
 
 /// Note: All indices are within the tree itself
-class TTree
-    : public stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField, NumDimMarkovField> {
+class TTree : public stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField,
+                                                       NumDimMarkovField> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TTree;
-	using Base =
-	    stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField, NumDimMarkovField>;
+	using Base    = stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField,
+	                                                  NumDimMarkovField>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
@@ -336,7 +336,7 @@ public:
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
 	template<bool IsSimulation, bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYVector &Y) {
+	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYMatrix &Y) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
 
@@ -464,7 +464,7 @@ public:
 		return coretools::containerSum(_joint_log_prob_density);
 	}
 
-	void initialize_Z_from_children(const TStorageYVector &Y) {
+	void initialize_Z_from_children(const TStorageYMatrix &Y) {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 

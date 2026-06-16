@@ -11,7 +11,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <cstdint>
@@ -148,17 +148,17 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
                              std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
-	// get current state, exists and index in TStorageYVector
+	// get current state, exists and index in TStorageYMatrix
 	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable
-	// with respect to indices of where TStorageYVector is a one
-	const auto [cur_state, exists_in_TStorageYVector, index_in_TStorageYVector] =
-	    _clique_last_dim.get_state_exist_ix_TStorageYVector(leaf_index_in_tree_of_last_dim);
+	// with respect to indices of where TStorageYMatrix is a one
+	const auto [cur_state, exists_in_TStorageYMatrix, index_in_TStorageYMatrix] =
+	    _clique_last_dim.get_state_exist_ix_TStorageYMatrix(leaf_index_in_tree_of_last_dim);
 
 	if (cur_state && !new_state) { // 1 -> 0: set Y to zero
-		_Y.set_to_zero(index_in_TStorageYVector);
+		_Y.set_to_zero(index_in_TStorageYMatrix);
 	} else if (!cur_state && new_state) { // 0 -> 1
-		if (exists_in_TStorageYVector) {
-			_Y.set_to_one(index_in_TStorageYVector);
+		if (exists_in_TStorageYMatrix) {
+			_Y.set_to_one(index_in_TStorageYMatrix);
 		} else { // does not yet exist -> remember linear index in Y to insert later
 			const size_t linear_index_in_Y_space =
 			    _Y.get_linear_index_in_Y_space(index_in_leaves_space);
@@ -354,9 +354,9 @@ void TMarkovField::MCMCHasFinished() {
 	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
 
-const TStorageYVector &TMarkovField::get_Y_vector() const { return _Y; }
-const TStorageY &TMarkovField::get_Y(size_t index_in_TStorageYVector) const {
-	return _Y[index_in_TStorageYVector];
+const TStorageYMatrix &TMarkovField::get_Y_matrix() const { return _Y; }
+TStorageY TMarkovField::get_Y(size_t index_in_TStorageYMatrix) const {
+	return _Y[index_in_TStorageYMatrix];
 }
 size_t TMarkovField::size_Y() const { return _Y.size(); }
 

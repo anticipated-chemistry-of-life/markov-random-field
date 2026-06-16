@@ -5,7 +5,7 @@
 #include "TClique.h"
 #include "TCurrentState.h"
 #include "coretools/Math/TSumLog.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZ.h"
 #include "storages/z_storage/TStorageZVector.h"
 #include "tree/TTree.h"
@@ -22,7 +22,7 @@ TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t 
 	_increment                   = increment;
 }
 
-TCurrentState TClique::create_current_state(const TStorageYVector &Y, const TStorageZVector &Z,
+TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TStorageZVector &Z,
                                             const TTree &tree) {
 	TCurrentState current_state(tree, this->_increment, tree.get_number_of_leaves(),
 	                            tree.get_number_of_internal_nodes());

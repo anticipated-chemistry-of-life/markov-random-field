@@ -5,8 +5,9 @@
 #ifndef ACOL_TCURRENTSTATE_H
 #define ACOL_TCURRENTSTATE_H
 
+#include "constants.h"
 #include "smart_binary_search.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZVector.h"
 #include <cstddef>
 
@@ -19,7 +20,7 @@ private:
 	// current state of Y
 	std::vector<uint8_t> _current_state_Y;
 	std::vector<uint8_t> _exists_in_Y;
-	std::vector<size_t> _index_in_TStorageYVector;
+	std::vector<size_t> _index_in_TStorageYMatrix;
 
 	// current state of Z
 	std::vector<uint8_t> _current_state_Z;
@@ -34,14 +35,15 @@ public:
 	TCurrentState(const TTree &tree, size_t increment);
 	TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
-	void fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYVector &Y,
+	void fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYMatrix &Y,
 	          const TStorageZVector &Z);
 	void fill_Y(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	            const TStorageYVector &Y);
+	            const TStorageYMatrix &Y);
 	void fill_Z(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageZVector &Z);
-	void fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
-	                           size_t num_nodes_to_parse, const TStorageYVector &Y);
+	void
+	fill_Y_along_last_dim(const std::array<size_t, NUMBER_OF_TREES> &start_index_in_leaves_space,
+	                      size_t num_nodes_to_parse, const TStorageYMatrix &Y);
 	void fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TStorageZVector &Z);
 
@@ -57,7 +59,7 @@ public:
 	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
 	bool exists_in_TStorageVector(size_t index_in_tree) const;
 
-	std::tuple<bool, bool, size_t> get_state_exist_ix_TStorageYVector(size_t index_in_leaves) const;
+	std::tuple<bool, bool, size_t> get_state_exist_ix_TStorageYMatrix(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -85,13 +87,13 @@ public:
 	~TSheet() = default;
 
 	void fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K,
-	          const TStorageYVector &Y);
+	          const TStorageYMatrix &Y);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
 	std::tuple<bool, bool, size_t>
-	get_state_exist_ix_TStorageYVector(size_t node_index_in_tree_of_dim,
+	get_state_exist_ix_TStorageYMatrix(size_t node_index_in_tree_of_dim,
 	                                   size_t leaf_index_in_tree_of_last_dim) const;
 };
 

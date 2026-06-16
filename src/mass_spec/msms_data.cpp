@@ -3,7 +3,7 @@
 #include "Types.h"
 #include "cli.h"
 #include "coretools/Main/TError.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include <array>
 #include <cstddef>
 
@@ -89,7 +89,7 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 
 	// Position 0 should be old, position 1 should be new
 	std::array<coretools::TSumLogProbability, 2> log_lik;
-	const TStorageYVector &y_storage = _markov_field.get_Y_vector();
+	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
 	bool y;
 	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
 	     ++species_idx) {

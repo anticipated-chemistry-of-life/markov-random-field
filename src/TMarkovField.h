@@ -10,6 +10,7 @@
 
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/devtools.h"
@@ -31,7 +32,7 @@ class TMarkovField {
 private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
-	TStorageYVector _Y;
+	TStorageYMatrix _Y;
 	std::string _prefix;
 
 	// stuff for updating Y
@@ -315,8 +316,8 @@ public:
 	void simulate(TLotus &lotus);
 
 	// get Y
-	[[nodiscard]] const TStorageYVector &get_Y_vector() const;
-	[[nodiscard]] const TStorageY &get_Y(size_t index) const;
+	[[nodiscard]] const TStorageYMatrix &get_Y_matrix() const;
+	[[nodiscard]] TStorageY get_Y(size_t index) const;
 	[[nodiscard]] size_t size_Y() const;
 
 	// functions to perform stuff on Y after burnin / MCMC finished

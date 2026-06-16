@@ -1,5 +1,5 @@
 #include "storages/y_storage/TStorageY.h"
-#include "storages/y_storage/TStorageYVector.h"
+#include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"
 #include <stdexcept>
 #include <vector>
@@ -141,7 +141,7 @@ TEST(YStorage_Tests, reset_counter) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_removes_zero_state_elements) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.insert_zero(2);
@@ -153,7 +153,7 @@ TEST(YStorageVector_Tests, remove_zeros_removes_zero_state_elements) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_all_zeros_empties_vector) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_zero(0);
 	Y.insert_zero(2);
 	Y.insert_zero(4);
@@ -163,7 +163,7 @@ TEST(YStorageVector_Tests, remove_zeros_all_zeros_empties_vector) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_all_ones_unchanged) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -173,7 +173,7 @@ TEST(YStorageVector_Tests, remove_zeros_all_ones_unchanged) {
 }
 
 TEST(YStorageVector_Tests, remove_zeros_set_to_zero_then_remove) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_one(1);
 	Y.insert_one(2);
 	Y.insert_one(3);
@@ -185,7 +185,7 @@ TEST(YStorageVector_Tests, remove_zeros_set_to_zero_then_remove) {
 }
 
 TEST(YStorageVector_Tests, reset_counts_sets_all_counters_to_zero) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -202,7 +202,7 @@ TEST(YStorageVector_Tests, reset_counts_sets_all_counters_to_zero) {
 }
 
 TEST(YStorageVector_Tests, reset_counts_does_not_affect_states) {
-	TStorageYVector Y(1000, {5});
+	TStorageYMatrix Y(1000, {5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.add_to_counter(0);
@@ -212,7 +212,7 @@ TEST(YStorageVector_Tests, reset_counts_does_not_affect_states) {
 }
 
 TEST(YStorageVector_Tests, add_data) {
-	TStorageYVector Y(1000, {2, 3});
+	TStorageYMatrix Y(1000, {2, 3});
 	const auto &dimensions = Y.total_size_of_container_space();
 	EXPECT_EQ(dimensions, 6);
 	EXPECT_ANY_THROW(Y.insert_one(7));

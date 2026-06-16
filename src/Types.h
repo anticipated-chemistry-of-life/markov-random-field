@@ -5,8 +5,8 @@
 #ifndef ACOL_TYPES_H
 #define ACOL_TYPES_H
 
-#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/TStringHash.h"
+#include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/TObservation.h"
 #include "stattools/ParametersObservations/spec.h"
@@ -47,16 +47,19 @@ using TypeContaminationProbability = coretools::ZeroOneOpen;
 // --gamma.priorParameters "<alpha>,<beta>".
 // TODO : verify this Claude bullshit
 using PriorOnGamma = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeGamma, 1>;
-using SpecGamma = stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
+using SpecGamma =
+    stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
 
 // Epsilon
 using PriorOnErrorRate = stattools::prior::TBetaFixed<stattools::TParameterBase, TypeErrorRate, 1>;
 using SpecErrorRate =
-    stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>, PriorOnErrorRate>;
+    stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
+                         PriorOnErrorRate>;
 
 // Alpha
 using PriorOnAlpha = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeAlpha, 1>;
-using SpecAlpha    = stattools::ParamSpec<TypeAlpha, stattools::Hash<coretools::toHash("alpha")>, PriorOnAlpha>;
+using SpecAlpha =
+    stattools::ParamSpec<TypeAlpha, stattools::Hash<coretools::toHash("alpha")>, PriorOnAlpha>;
 
 // Mean Nu
 // Weakly-informative Normal(mean, var) prior on mean_log_nu. Branch lengths are
@@ -66,19 +69,24 @@ using SpecAlpha    = stattools::ParamSpec<TypeAlpha, stattools::Hash<coretools::
 // nu→0 collapse (mean_log_nu≈-9) at ~5 sd. Hyperparameters set via
 // --<tree>_mean_log_nu.priorParameters "<mean>,<var>".
 // TODO : verify this Claude bullshit
-using PriorOnMeanLogNu = stattools::prior::TNormalFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
+using PriorOnMeanLogNu =
+    stattools::prior::TNormalFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
 using SpecMeanLogNu =
-    stattools::ParamSpec<TypeMeanLogNu, stattools::Hash<coretools::toHash("mean_log_nu")>, PriorOnMeanLogNu>;
+    stattools::ParamSpec<TypeMeanLogNu, stattools::Hash<coretools::toHash("mean_log_nu")>,
+                         PriorOnMeanLogNu>;
 
 // Var Nu
-using PriorOnVarLogNu = stattools::prior::TExponentialFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
+using PriorOnVarLogNu =
+    stattools::prior::TExponentialFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
 using SpecVarLogNu =
-    stattools::ParamSpec<TypeVarLogNu, stattools::Hash<coretools::toHash("var_log_nu")>, PriorOnVarLogNu>;
+    stattools::ParamSpec<TypeVarLogNu, stattools::Hash<coretools::toHash("var_log_nu")>,
+                         PriorOnVarLogNu>;
 
 // Log Nu
-using PriorOnLogNu =
-    stattools::prior::TNormalInferred<stattools::TParameterBase, TypeLogNu, 1, SpecMeanLogNu, SpecVarLogNu>;
-using SpecLogNu = stattools::ParamSpec<TypeLogNu, stattools::Hash<coretools::toHash("log_nu")>, PriorOnLogNu>;
+using PriorOnLogNu = stattools::prior::TNormalInferred<stattools::TParameterBase, TypeLogNu, 1,
+                                                       SpecMeanLogNu, SpecVarLogNu>;
+using SpecLogNu =
+    stattools::ParamSpec<TypeLogNu, stattools::Hash<coretools::toHash("log_nu")>, PriorOnLogNu>;
 
 // binned branch lengths
 using PriorOnBinnedBranches =
@@ -98,7 +106,8 @@ using SpecMassSpecFilter =
 using PriorOnContaminationProba =
     stattools::prior::TBetaFixed<stattools::TParameterBase, TypeContaminationProbability, 1>;
 using SpecContaminationProba =
-    stattools::ParamSpec<TypeContaminationProbability, stattools::Hash<coretools::toHash("contamination_proba")>,
+    stattools::ParamSpec<TypeContaminationProbability,
+                         stattools::Hash<coretools::toHash("contamination_proba")>,
                          PriorOnContaminationProba>;
 
 // Markov Field (only needed for stattools purposes)
@@ -107,23 +116,24 @@ constexpr static size_t NumDimMarkovField =
     1; // note: only for stattools, actually not known at compile time
 using PriorOnMarkovField = TTree;
 using SpecMarkovField =
-    stattools::ParamSpec<TypeMarkovField, stattools::Hash<coretools::toHash("MRF")>, PriorOnMarkovField>;
+    stattools::ParamSpec<TypeMarkovField, stattools::Hash<coretools::toHash("MRF")>,
+                         PriorOnMarkovField>;
 
 // Observation: Lotus
 class TLotus; // forward declaration to avoid circular inclusion
 using TypeLotus                     = coretools::Boolean;
 constexpr static size_t NumDimLotus = 2;
 using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
-using SpecLotus = stattools::TObservation<TypeLotus, NumDimLotus, TLotus>;
+using SpecLotus                     = stattools::TObservation<TypeLotus, NumDimLotus, TLotus>;
 
 // Observations: Mass Spec
 class TMSMSData;
 using TypeMSData                     = coretools::Boolean;
 constexpr static size_t NumDimMSData = 1;
 using StorageMSData = coretools::TMultiDimensionalStorage<TypeMSData, NumDimMSData>;
-using SpecMSData = stattools::TObservation<TypeMSData, NumDimMSData, TMSMSData>;
+using SpecMSData    = stattools::TObservation<TypeMSData, NumDimMSData, TMSMSData>;
 
 // Type for calculating the number of 1's per clique
-using TypeCounter1                                = uint32_t;
-static constexpr uint32_t MAX_NUMBER_OF_MOLECULES = (1 << 24) - 1;
+using TypeCounter1 = uint32_t;
+
 #endif // ACOL_TYPES_H
