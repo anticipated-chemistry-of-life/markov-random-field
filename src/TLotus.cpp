@@ -274,12 +274,10 @@ std::pair<bool, size_t> TLotus::_get_state_of_Y(size_t i, size_t index_in_TStora
 		return {false, index_in_TStorage_Y_vector};
 	} // make sure we don't overshoot
 
-	auto index_in_Y =
-	    _markov_field.get_Y(index_in_TStorage_Y_vector).get_linear_index_in_container_space();
-	if (i == index_in_Y) {
-		return {_markov_field.get_Y(index_in_TStorage_Y_vector).is_one(),
-		        index_in_TStorage_Y_vector + 1};
-	}
+	const auto &y = _markov_field.get_Y(index_in_TStorage_Y_vector);
+
+	auto index_in_Y = y.get_linear_index_in_container_space();
+	if (i == index_in_Y) { return {y.is_one(), index_in_TStorage_Y_vector + 1}; }
 	assert(i < index_in_Y);
 	return {false, index_in_TStorage_Y_vector};
 }

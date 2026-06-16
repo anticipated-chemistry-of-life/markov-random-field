@@ -15,11 +15,13 @@
 #include <utility>
 #include <vector>
 
-class TLotus : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus, NumDimLotus> {
+class TLotus : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus,
+                                                             NumDimLotus> {
 public:
 	// some type aliases, for better readability
 	using BoxType = TLotus;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus, NumDimLotus>;
+	using Base =
+	    stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus, NumDimLotus>;
 	using typename Base::Storage;
 	using typename Base::UpdatedStorage;
 
@@ -134,4 +136,6 @@ public:
 	[[nodiscard]] const TCurrentState &get_tmp_state_along_last_dim() const {
 		return _tmp_state_along_last_dim;
 	}
+
+	[[nodiscard]] const TMarkovField &get_markov_field() const { return _markov_field; }
 };
