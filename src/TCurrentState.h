@@ -6,10 +6,13 @@
 #define ACOL_TCURRENTSTATE_H
 
 #include "constants.h"
-#include "smart_binary_search.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZVector.h"
 #include <cstddef>
+#include <tuple>
+#include <vector>
+
+class TTree; // forward declaration (was previously pulled in via smart_binary_search.h)
 
 //-----------------------------------
 // TCurrentState
@@ -21,12 +24,12 @@ private:
 	std::vector<uint8_t> _current_state_Y;
 	std::vector<uint8_t> _exists_in_Y;
 	// Linear index in Y space of each parsed cell (the matrix maps it to (row, col)).
-	// Note: for Z below this stays a flat index into the sorted TStorageZVector.
 	std::vector<size_t> _index_in_TStorageYMatrix;
 
 	// current state of Z
 	std::vector<uint8_t> _current_state_Z;
 	std::vector<uint8_t> _exists_in_Z;
+	// Linear index in Z space of each parsed cell (Z is now a TSparseMatrix, like Y).
 	std::vector<size_t> _index_in_TStorageZVector;
 
 	// increment and tree

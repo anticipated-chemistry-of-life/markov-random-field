@@ -6,177 +6,170 @@
 #define TSTORAGEZVECTOR_H
 #include "TStorageZ.h"
 #include "constants.h"
-#include "coretools/Main/TError.h"
+#include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
-#include <algorithm>
-#include <cassert>
 #include <cstddef>
-#include <cstdint>
-#include <numeric>
+#include <utility>
 #include <vector>
 /// There is one TStorageZVector per dimension `d`. The dimensions in Z space correspond
-/// to the number of leaves in each dimension except for dimension `d` where the
+/// to the number of leaves in each dimension except for dimension `d`, where the
 /// dimension is given by the number of internal nodes.
-/// For example dimension of interest `d` where d = 2 and number of leaves
-/// in each dimension is [2, 3, 4, 5] and the number of internal nodes in dimension `d` is 17.
-/// then the dimensions in Z space are [2, 3, 17, 5].
+/// For example, for dimension of interest `d` with number of leaves [2, 3] and 17
+/// internal nodes in dimension `d == 0`, the dimensions in Z space are [17, 3].
+///
+/// Backed by a coretools::TSparseMatrix<TStorageZ>, mirroring TStorageYMatrix: rows and
+/// columns are kept sorted, so a clique's nodes can be range-walked in O(nnz in that
+/// line) and the (row, col) position encodes the linear index in Z space.
 class TStorageZVector {
 private:
-	IndexArray _dimensions_in_Z_space;
-	std::vector<TStorageZ> _vec;
-	void _insert(uint32_t linear_index_in_Z_space, bool state) {
-		if (linear_index_in_Z_space > INT32_MAX) {
-			throw coretools::TDevError("linear_index_in_Z_space exceeds INT32_MAX");
-		}
+	IndexArray _dimensions_in_Z_space{};
+	coretools::TSparseMatrix<TStorageZ> _mat;
 
-		auto [found, index] = binary_search(linear_index_in_Z_space);
-		if (found) {
-			_vec[index].set_state(state);
-		} else {
-			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
-			_vec[index].set_state(state);
-		}
+	/// Allocation-free (row, col) of a linear index, for the hot internal paths.
+	[[nodiscard]] IndexArray _row_col(size_t linear_index_in_Z_space) const {
+		return coretools::getSubscriptsAsArray(linear_index_in_Z_space, _dimensions_in_Z_space);
+	}
+
+	void _insert(size_t linear_index_in_Z_space, bool state) {
+		const auto md = _row_col(linear_index_in_Z_space);
+		_mat.set(md[0], md[1], TStorageZ(state));
 	}
 
 public:
-	using value_type     = uint32_t;
-	using const_iterator = typename std::vector<TStorageZ>::const_iterator;
-	TStorageZVector()    = default;
-	~TStorageZVector()   = default;
+	TStorageZVector()  = default;
+	~TStorageZVector() = default;
 	explicit TStorageZVector(const IndexArray &dimensions_in_Z_space) {
 		initialize_dimensions(dimensions_in_Z_space);
 	}
 
 	void initialize_dimensions(const IndexArray &dimensions_in_Z_space) {
 		_dimensions_in_Z_space = dimensions_in_Z_space;
-	}
-	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageZVector) const {
-		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError(
-			    "Index '", index_in_TStorageZVector,
-			    "' is out of range. The length of the vector is : ", _vec.size());
-		}
-		return _vec[index_in_TStorageZVector].is_one();
-	};
-
-	void set_to_one(size_t index_in_TStorageZVector) {
-		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError(
-			    "Index '", index_in_TStorageZVector,
-			    "' is out of range. The length of the vector is : ", _vec.size());
-		}
-		_vec[index_in_TStorageZVector].set_state(true);
+		_mat.resize(dimensions_in_Z_space[0], dimensions_in_Z_space[1]);
 	}
 
-	void set_to_zero(size_t index_in_TStorageZVector) {
-		if (index_in_TStorageZVector >= _vec.size()) {
-			throw coretools::TUserError(
-			    "Index '", index_in_TStorageZVector,
-			    "' is out of range. The length of the vector is : ", _vec.size());
-		}
-		_vec[index_in_TStorageZVector].set_state(false);
+	/// Point lookup by linear index in Z space. A missing cell reads as false.
+	[[nodiscard]] inline bool is_one(size_t linear_index_in_Z_space) const {
+		const auto md = _row_col(linear_index_in_Z_space);
+		return _mat.get(md[0], md[1]).is_one();
 	}
 
-	void insert_one(uint32_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }
+	/// Set the state of the cell at `linear_index_in_Z_space` in place. If the cell does not exist
+	/// yet, TSparseMatrix::set inserts it.
+	void set_state(size_t linear_index_in_Z_space, bool state) {
+		const auto md = _row_col(linear_index_in_Z_space);
+		auto s        = _mat.get(md[0], md[1]);
+		s.set_state(state);
+		_mat.set(md[0], md[1], s);
+	}
 
+	void insert_one(size_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }
 	void insert_one(const IndexArray &multi_dim_index_in_Z_space) {
-		size_t linear_index_in_Z_space = get_linear_index_in_Z_space(multi_dim_index_in_Z_space);
-		insert_one(linear_index_in_Z_space);
+		insert_one(get_linear_index_in_Z_space(multi_dim_index_in_Z_space));
 	}
+	void insert_zero(size_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, false); }
 
-	void insert_zero(uint32_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, false); }
-
+	/// Remove all the elements whose state is zero.
 	void remove_zeros() {
-		_vec.erase(std::remove_if(_vec.begin(), _vec.end(),
-		                          [](const TStorageZ &storage) { return !storage.is_one(); }),
-		           _vec.end());
-	}
-	size_t size() const { return _vec.size(); }
-	auto begin() const { return _vec.begin(); }
-	auto cbegin() const { return _vec.cbegin(); }
-	auto cend() const { return _vec.cend(); }
-	auto end() const { return _vec.end(); }
-	TStorageZ operator[](size_t index_in_TStorageZVector) const {
-		return _vec[index_in_TStorageZVector];
+		_mat.erase_if([](const TStorageZ &elem) { return !elem.is_one(); });
 	}
 
 	[[nodiscard]] size_t
 	get_linear_index_in_Z_space(const IndexArray &multidim_index_in_Z_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
 	}
-
-	size_t get_linear_index_in_container_space(const IndexArray &multidim_index_in_Z_space) const {
+	[[nodiscard]] size_t
+	get_linear_index_in_container_space(const IndexArray &multidim_index_in_Z_space) const {
 		return get_linear_index_in_Z_space(multidim_index_in_Z_space);
 	}
 
-	[[nodiscard]] std::pair<bool, size_t> binary_search(uint32_t linear_index_in_Z_space) const {
-
-		// lower_bound return the first element that is not less than the value
-		auto it = std::lower_bound(_vec.begin(), _vec.end(), linear_index_in_Z_space);
-
-		// if our coordinate is bigger than the biggest element in the vector
-		// we say that we haven't found our element and that if we want to
-		// insert it, we should insert it at the end of the vector
-		if (it == _vec.end()) { return {false, _vec.size()}; }
-
-		// else our coordinate is in the range of the coordinates in the vector
-		// meaning that if we haven't found it, we will insert it at that position
-		// to keep the vector sorted
-		size_t index = std::distance(_vec.begin(), it);
-		if (*it != linear_index_in_Z_space) { return {false, index}; }
-
-		// if we found the coordinate we return the index and true
-		return {true, index};
-	};
-
-	[[nodiscard]] std::pair<bool, size_t>
-	binary_search(const IndexArray &multidim_index_in_Z_space) const {
-		return binary_search(get_linear_index_in_Z_space(multidim_index_in_Z_space));
+	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Z_space) const {
+		return _row_col(linear_index_in_Z_space);
 	}
 
-	void
-	insert_in_Z(const std::vector<std::vector<TStorageZ>> &linear_indices_in_Z_space_to_insert) {
-		const auto size_to_insert = std::accumulate(
-		    linear_indices_in_Z_space_to_insert.begin(), linear_indices_in_Z_space_to_insert.end(),
-		    0, [](size_t sum, const std::vector<TStorageZ> &i) { return sum + i.size(); });
-
-		const size_t old_size = this->size();
-		this->_vec.reserve(old_size + size_to_insert);
-
-		for (const auto &vec : linear_indices_in_Z_space_to_insert) {
-			this->_vec.insert(_vec.end(), vec.begin(), vec.end());
-		}
-
-		std::sort(_vec.begin() + old_size, _vec.end());
-		std::inplace_merge(_vec.begin(), _vec.begin() + old_size, _vec.end());
-	}
-
-	[[nodiscard]]
-	size_t total_size_of_container_space() const {
+	[[nodiscard]] size_t total_size_of_container_space() const {
 		return coretools::containerProduct(_dimensions_in_Z_space);
+	}
+
+	/// Fast current-state fill for a clique of `K` nodes running along one dimension, starting at
+	/// `start_index` (a multi-dimensional index in Z space). Mirror of
+	/// TStorageYMatrix::fill_current_state: walk a single row (increment == 1) or column
+	/// (increment > 1) once. Outputs, for every k in [0, K): the current state, whether the cell is
+	/// stored, and its linear index in Z space.
+	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
+	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
+	                        std::vector<size_t> &linear_index) const {
+		current_state.assign(K, 0);
+		exists.assign(K, 0);
+		linear_index.assign(K, 0);
+
+		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions_in_Z_space);
+		for (size_t k = 0; k < K; ++k) { linear_index[k] = start_linear + k * increment; }
+
+		if (increment == 1) {
+			// variable dimension is the last one -> a single matrix row, entries sorted by column.
+			const size_t row       = start_index[0];
+			const size_t start_col = start_index[1];
+			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
+				if (it->index < start_col) { continue; }
+				const size_t k = it->index - start_col;
+				if (k >= K) { break; } // sorted -> no later entry can fall in range
+				current_state[k] = it->val.is_one();
+				exists[k]        = 1;
+			}
+		} else {
+			// variable dimension is the first one -> a single matrix column, entries sorted by row.
+			const size_t col       = start_index[1];
+			const size_t start_row = start_index[0];
+			for (auto it = _mat.begin_col(col); it != _mat.end_col(col); ++it) {
+				if (it->index < start_row) { continue; }
+				const size_t k = it->index - start_row;
+				if (k >= K) { break; }
+				current_state[k] = it->val.is_one();
+				exists[k]        = 1;
+			}
+		}
+	}
+
+	/// Bulk-insert deferred 0 -> 1 transitions (linear indices in Z space), then re-sort once.
+	/// Mirror of TStorageYMatrix::insert_in_Y.
+	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_in_Z_space_to_insert) {
+		std::vector<size_t> merged_vec;
+		for (const auto &vec : linear_indices_in_Z_space_to_insert) {
+			merged_vec.insert(merged_vec.end(), vec.begin(), vec.end());
+		}
+		for (const auto &it : merged_vec) {
+			const auto md = _row_col(it);
+			_mat.setRaw(md[0], md[1], TStorageZ(true));
+		}
+		_mat.cleanUp();
 	}
 
 	[[nodiscard]] std::vector<size_t> get_full_Z_binary_vector() const {
 		std::vector<size_t> Z_as_vector;
-		for (size_t i = 0; i < total_size_of_container_space(); ++i) {
-			auto [found, idx] = binary_search(i);
-			if (found) {
-				Z_as_vector.push_back(_vec[idx].is_one());
-			} else {
-				Z_as_vector.push_back(false);
-			}
+		Z_as_vector.reserve(total_size_of_container_space());
+		for (size_t i = 0; i < _mat.nRows(); ++i) {
+			const auto row = _mat.getRow(i);
+			for (const auto &val : row) { Z_as_vector.push_back(val.is_one()); }
 		}
 		return Z_as_vector;
 	}
 
-	IndexArray get_multi_dimensional_index(uint32_t linear_index_in_Z_space) const {
-		auto tmp = static_cast<size_t>(linear_index_in_Z_space);
-		return coretools::getSubscriptsAsArray(tmp, _dimensions_in_Z_space);
+	/// Returns every stored cell as (linear index in Z space, value), in ascending linear-index
+	/// order (rows then columns is row-major, matching linear = row * nCols + col).
+	[[nodiscard]] std::vector<std::pair<size_t, TStorageZ>> get_stored_entries() const {
+		std::vector<std::pair<size_t, TStorageZ>> entries;
+		entries.reserve(_mat.nNonZero());
+		const size_t n_cols = _dimensions_in_Z_space[1];
+		for (size_t row = 0; row < _mat.nRows(); ++row) {
+			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
+				entries.emplace_back(row * n_cols + it->index, it->val);
+			}
+		}
+		return entries;
 	}
 
-	bool empty() const { return _vec.empty(); }
-
-	bool is_sorted() const { return std::is_sorted(_vec.begin(), _vec.end()); }
+	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
+	[[nodiscard]] size_t size() const { return _mat.nNonZero(); }
 };
 
 #endif // TSTORAGEZVECTOR_H

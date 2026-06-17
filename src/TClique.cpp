@@ -32,11 +32,11 @@ TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TSto
 	return current_state;
 }
 
-std::vector<TStorageZ> TClique::update_Z(
+std::vector<size_t> TClique::update_Z(
     std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZVector &Z,
     const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
-	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
+	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
 	const double stationary_0 = get_stationary_probability(false, alpha);
 
@@ -82,35 +82,35 @@ std::vector<TStorageZ> TClique::update_Z(
 
 void TClique::_update_current_state(TStorageZVector &Z, TCurrentState &current_state,
                                     size_t index_in_tree, bool new_state,
-                                    std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
-                                    const TTree *tree) const {
-	auto index_in_TStorageZVector = current_state.get_index_in_TStorageVector(index_in_tree);
-	// 1 -> 0: can simply set Z to zero (element exists already)
-	if (current_state.get(index_in_tree) && !new_state) { Z.set_to_zero(index_in_TStorageZVector); }
-	// 0 -> 1: it depends if element already exists in Z (i.e. has been a 1 previously)
-	if (!current_state.get(index_in_tree) && new_state) {
-		if (current_state.exists_in_TStorageVector(
-		        index_in_tree)) { // it does exist -> set it to one
-			Z.set_to_one(index_in_TStorageZVector);
-		} else { // it does not exist -> remember linear index in Z to be inserted later!
-			auto multidim_index_in_Z_space = _start_index_in_leaves_space;
-			multidim_index_in_Z_space[_variable_dimension] =
-			    tree->get_index_within_internal_nodes(index_in_tree);
-			size_t linear_index_in_Z_space =
-			    Z.get_linear_index_in_Z_space(multidim_index_in_Z_space);
+                                    std::vector<size_t> &linear_indices_in_Z_space_to_insert,
+                                    const TTree * /*tree*/) const {
+	// The Z slot of current_state holds the linear index in Z space of this node (filled by
+	// TStorageZVector::fill_current_state). This mirrors how Y is updated in
+	// TMarkovField::_set_new_Y: in-place state flips for cells that already exist, and deferred
+	// bulk insertion for new cells (so the shared sparse matrix is not reallocated in parallel).
+	const size_t linear_index_in_Z_space = current_state.get_index_in_TStorageVector(index_in_tree);
+	const bool cur_state                 = current_state.get(index_in_tree);
+	const bool exists                    = current_state.exists_in_TStorageVector(index_in_tree);
+
+	if (cur_state && !new_state) { // 1 -> 0: cell exists -> flip state in place
+		Z.set_state(linear_index_in_Z_space, false);
+	} else if (!cur_state && new_state) { // 0 -> 1
+		if (exists) {                     // already stored -> flip state in place
+			Z.set_state(linear_index_in_Z_space, true);
+		} else { // not stored yet -> defer the insert until after the parallel region
 			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
 		}
 	}
 	current_state.set(index_in_tree, new_state);
 }
 
-std::vector<TStorageZ> TClique::initialize_Z_from_children(
+std::vector<size_t> TClique::initialize_Z_from_children(
     TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
     const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 
 	// initialise vector that will insert the Z not in parallel
-	std::vector<TStorageZ> linear_indices_in_Z_space_to_insert;
+	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 	std::unordered_set<size_t> remaining;
 	std::vector<int> was_initilized(tree->get_number_of_nodes(), false);
 	for (size_t leaf_index : tree->get_leaf_nodes()) { was_initilized[leaf_index] = true; }
@@ -151,7 +151,7 @@ void TClique::_set_Z_to_MLE(
     size_t node_index, TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
     const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
-    std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert) const {
+    std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
 	_calculate_log_prob_node_to_children(node_index, tree, current_state, sum_log,

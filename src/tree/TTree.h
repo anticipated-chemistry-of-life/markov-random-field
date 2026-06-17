@@ -339,7 +339,7 @@ public:
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYMatrix &Y) {
 		_reset_joint_log_prob_density();
-		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
 		auto pairs         = _build_pairs_branch_lengths();
@@ -404,12 +404,8 @@ public:
 			std::array<size_t, 2> line{};
 			coretools::TOutputFile file(filename, header, "\t");
 			for (size_t i = 0; i < _Z.total_size_of_container_space(); ++i) {
-				auto [found, position] = _Z.binary_search(i);
-				if (found) {
-					line = {i, _Z.is_one(position)};
-				} else {
-					line = {i, 0};
-				}
+				// a missing cell reads as state 0, so a direct point lookup covers both cases
+				line                = {i, _Z.is_one(i)};
 				auto multidim_index = _Z.get_multi_dimensional_index(i);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
@@ -428,10 +424,10 @@ public:
 		} else {
 			std::array<size_t, 2> line{};
 			coretools::TOutputFile file(filename, header, "\t");
-			for (size_t i = 0; i < _Z.size(); ++i) {
-				const auto linear_index_in_Z_space = _Z[i].get_linear_index_in_Z_space();
-				const auto state                   = _Z[i].is_one();
-				line                               = {linear_index_in_Z_space, state};
+			// iterate only the stored (non-default) cells, in ascending linear-index order
+			for (const auto &[linear_index_in_Z_space, storage] : _Z.get_stored_entries()) {
+				const auto state = storage.is_one();
+				line             = {linear_index_in_Z_space, state};
 				auto multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
@@ -469,7 +465,7 @@ public:
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 
 		// Each clique is independent of each other so we should be able to parallelize this
-		std::vector<std::vector<TStorageZ>> indices_to_insert(this->_cliques.size());
+		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(indices_to_insert, Y)

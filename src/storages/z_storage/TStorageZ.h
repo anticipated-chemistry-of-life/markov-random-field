@@ -5,60 +5,34 @@
 #ifndef TSTORAGEZ_H
 #define TSTORAGEZ_H
 
-#include "coretools/Main/TError.h"
 #include <cstdint>
-
+/** A single Z cell. Since Z migrated to a TSparseMatrix (like Y), the (row, col)
+ * position encodes the linear index, so the element no longer needs to store its own
+ * index. Z also has no MCMC counter (only Y tracks a posterior fraction of ones), so
+ * the cell collapses to a single state bit stored in one byte.
+ */
 class TStorageZ {
 private:
-	uint32_t _value                      = 0;
-	/// bit equivalent : 1000 0000 0000 0000 0000 0000 0000 0000
-	static constexpr uint32_t STATE_MASK = 0x80000000;
-	/// bit equivalent : 0111 1111 1111 1111 1111 1111 1111 1111
-	static constexpr uint32_t INDEX_MASK = 0x7FFFFFFF;
+	/// 0 = false (this is also the "absent" sentinel TSparseMatrix uses), 1 = true.
+	uint8_t _state = 0;
 
 public:
-	static constexpr uint32_t MAX_INDEX = INDEX_MASK;
-	TStorageZ()                         = default;
-	~TStorageZ()                        = default;
-	explicit TStorageZ(const uint32_t linear_index_in_Z_space) {
-		set_linear_index_in_Z_space(linear_index_in_Z_space);
-		set_state(true);
-	}
-	[[nodiscard]] uint32_t get_linear_index_in_Z_space() const { return _value & INDEX_MASK; };
-	[[nodiscard]] uint32_t get_linear_index_in_container_space() const {
-		return get_linear_index_in_Z_space();
-	};
+	TStorageZ()  = default;
+	~TStorageZ() = default;
+	explicit TStorageZ(bool state) { set_state(state); }
 
-	void set_linear_index_in_Z_space(const uint32_t linear_index_in_Z_space) {
-		if (linear_index_in_Z_space > MAX_INDEX) {
-			throw coretools::TDevError("counter exceeds 31-bit maximum (", MAX_INDEX, ")");
-		}
-		_value = (linear_index_in_Z_space & INDEX_MASK) | (_value & STATE_MASK);
-	}
+	[[nodiscard]] bool is_one() const { return _state != 0; }
+	void set_state(bool state) { _state = state ? 1 : 0; }
+	void switch_state() { _state ^= 1; }
 
-	[[nodiscard]] inline bool is_one() const { return (_value & STATE_MASK) != 0; }
+	/// "Empty" == the sentinel the sparse matrix uses for an absent cell (state false).
+	/// Equivalent to *this == TStorageZ{}.
+	[[nodiscard]] bool is_empty() const { return _state == 0; }
 
-	void set_state(bool state)
-	// we want to set the state this is given
-	// so if the state is false, the value should be negative
-	// the state is true, we set the state to positive
-	{
-		_value = state ? (_value | STATE_MASK) : (_value & INDEX_MASK);
-	}
-
-	void switch_state() { _value ^= STATE_MASK; }
-
-	bool operator<(const TStorageZ &right) const {
-		return get_linear_index_in_Z_space() < right.get_linear_index_in_Z_space();
-	}
-	bool operator<(const uint32_t right) const { return get_linear_index_in_Z_space() < right; }
-	bool operator==(const uint32_t right) const { return get_linear_index_in_Z_space() == right; }
-	bool operator==(const TStorageZ &right) const {
-		return get_linear_index_in_Z_space() < right.get_linear_index_in_Z_space();
-	}
-	bool operator!=(const uint32_t right) const { return get_linear_index_in_Z_space() != right; }
+	bool operator==(const TStorageZ &other) const { return _state == other._state; }
+	bool operator!=(const TStorageZ &other) const { return _state != other._state; }
 };
 
-static_assert(sizeof(TStorageZ) == 4);
+static_assert(sizeof(TStorageZ) == 1);
 
 #endif // TSTORAGEZ_H

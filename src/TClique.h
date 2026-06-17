@@ -226,7 +226,7 @@ private:
 
 	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state,
 	                           size_t index_in_tree, bool new_state,
-	                           std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert,
+	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
 	                           const TTree *tree) const;
 
 	/// @brief Calculates the log probability of a node to its children
@@ -248,7 +248,7 @@ private:
 	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z,
 	                   const TTree *tree, const TypeParamBinBranches *binned_branch_lengths,
 	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
-	                   std::vector<TStorageZ> &linear_indices_in_Z_space_to_insert) const;
+	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
@@ -292,13 +292,13 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<TStorageZ>
+	std::vector<size_t>
 	update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
 	         TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
 	         const TypeParamBinBranches *binned_branch_lengths,
 	         const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	std::vector<TStorageZ> initialize_Z_from_children(
+	std::vector<size_t> initialize_Z_from_children(
 	    TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
 	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
