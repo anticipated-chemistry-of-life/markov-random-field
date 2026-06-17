@@ -130,11 +130,16 @@ TSheet::TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim)
 
 void TSheet::fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K,
                   const TStorageYMatrix &Y) {
-	// start index and how many Y need to be parsed
-	_start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back();
+	// Worksharing fill: this runs on the team created in TMarkovField::_update_all_Y (all threads
+	// call it), so we use `omp for`/`omp single` rather than spawning our own team. If ever called
+	// outside a parallel region the constructs are orphaned and execute sequentially, which is also
+	// correct.
 
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(static) shared(start_index_in_leaves_space, Y, K)
+	// start index and how many Y need to be parsed (scalar write -> single thread)
+#pragma omp single
+	{ _start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back(); }
+
+#pragma omp for schedule(static)
 	for (size_t i = 0; i < _tree.get_number_of_nodes();
 	     ++i) { // loop over all nodes along current dimension
 		std::vector<size_t> local_start_index_in_leaves_space =

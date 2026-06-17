@@ -163,54 +163,77 @@ private:
 		std::vector<coretools::TSumLogProbability> new_LL(ProgramOptions::NUMBER_OF_THREADS);
 		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
 		    ProgramOptions::NUMBER_OF_THREADS);
-		for (size_t k = 0; k < _num_outer_loops; ++k) {
-			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
-			// loop over all dimensions except last (linearized)
-			size_t num_inner_loops = coretools::containerProduct(_num_leaves_per_dim_except_last);
-			std::vector<size_t> previous_ix;
-			for (size_t i = 0; i < num_inner_loops; ++i) {
-				// get multi-dimensional index from linear coordinate and set the start of the last
-				// dimension
-				auto start_index_in_leaves_space =
-				    coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
-				start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
-				// calculate size of current sheet (make sure not to overshoot)
-				const size_t K_cur_sheet = std::min(_K, _trees.back()->get_number_of_leaves() -
-				                                            start_ix_in_leaves_last_dim);
-				// update sheet(s), if necessary
-				_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
+		// Persistent thread team for the whole sweep: the team is created ONCE here instead of once
+		// per inner iteration (the old `omp parallel for` sat inside the k x i loop, paying a
+		// fork/join every inner iteration). The k/i loops are now executed redundantly by all
+		// threads (SPMD) and the work is shared via `omp for`/`omp single`, turning the per-inner
+		// fork/joins into cheap barriers on a warm team.
+		// previous_ix and diff_counter_1_in_last_dim are shared across the team: previous_ix is
+		// read by all threads in _need_to_update_sheet and written in the post `single`; the
+		// reduction combines into diff_counter_1_in_last_dim (reset to 0 in the prep `single` each
+		// iteration).
+		std::vector<size_t> previous_ix;
+		int diff_counter_1_in_last_dim = 0;
+#pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
+    shared(new_LL, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,   \
+               lotus)
+		{
+			for (size_t k = 0; k < _num_outer_loops; ++k) {
+				const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
 
-				// fill clique along last dimension
-				_fill_clique_along_last_dim(start_index_in_leaves_space);
-				_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
+				// loop over all dimensions except last (linearized)
+				const size_t num_inner_loops =
+				    coretools::containerProduct(_num_leaves_per_dim_except_last);
+				for (size_t i = 0; i < num_inner_loops; ++i) {
+					// get multi-dimensional index from linear coordinate and set the start of the
+					// last dimension
+					auto start_index_in_leaves_space =
+					    coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
+					start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
+					// calculate size of current sheet (make sure not to overshoot)
+					const size_t K_cur_sheet = std::min(_K, _trees.back()->get_number_of_leaves() -
+					                                            start_ix_in_leaves_last_dim);
+					// update sheet(s), if necessary. Called by ALL threads: TSheet::fill uses
+					// worksharing (omp for) and thus distributes over this team.
+					_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
 
-				// now loop along all leaves of the last dimension for updating (only K leaves for
-				// which we have everything)
-				const size_t end_ix_in_leaves_last_dim = start_ix_in_leaves_last_dim + K_cur_sheet;
-				int diff_counter_1_in_last_dim         = 0;
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) schedule(static)           \
-    reduction(+ : diff_counter_1_in_last_dim) default(none)                                        \
-    shared(new_LL, lotus, start_index_in_leaves_space, start_ix_in_leaves_last_dim,                \
-               end_ix_in_leaves_last_dim, linear_indices_in_Y_space_to_insert)
-				for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim; ++j) {
-					auto [diff, prob_new_state] = _update_Y<IsSimulation, initYFromLotus>(
-					    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
-					    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
-					diff_counter_1_in_last_dim += diff;
-					if constexpr (!IsSimulation) {
-						new_LL[omp_get_thread_num()].add(prob_new_state);
+					// serial prep that writes shared state, done by one thread (implicit barrier)
+#pragma omp single
+					{
+						// fill clique along last dimension
+						_fill_clique_along_last_dim(start_index_in_leaves_space);
+						_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
+						diff_counter_1_in_last_dim = 0; // reset before the reduction below
+					}
+
+					// now loop along all leaves of the last dimension for updating (only K leaves
+					// for which we have everything)
+					const size_t end_ix_in_leaves_last_dim =
+					    start_ix_in_leaves_last_dim + K_cur_sheet;
+#pragma omp for schedule(static) reduction(+ : diff_counter_1_in_last_dim)
+					for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim;
+					     ++j) {
+						auto [diff, prob_new_state] = _update_Y<IsSimulation, initYFromLotus>(
+						    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
+						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
+						diff_counter_1_in_last_dim += diff;
+						if constexpr (!IsSimulation) {
+							new_LL[omp_get_thread_num()].add(prob_new_state);
+						}
+					}
+
+					// insert new 1-valued indices into Y
+					// Note: indices of where Y is one in _sheets is not accurate anymore, but we
+					// don't use them, so it's ok
+#pragma omp single
+					{
+						_trees.back()
+						    ->get_clique(start_index_in_leaves_space)
+						    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
+						previous_ix = start_index_in_leaves_space;
 					}
 				}
-
-				// insert new 1-valued indices into Y
-				// Note: indices of where Y is one in _sheets is not accurate anymore, but we don't
-				// use them, so it's ok
-				_trees.back()
-				    ->get_clique(start_index_in_leaves_space)
-				    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
-
-				previous_ix = start_index_in_leaves_space;
 			}
 		}
 
