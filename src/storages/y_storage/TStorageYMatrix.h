@@ -5,12 +5,10 @@
 #pragma once
 
 #include "TStorageY.h"
-#include "cli.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -24,11 +22,11 @@ private:
 	coretools::TSparseMatrix<TStorageY> _mat;
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
-	std::array<size_t, NUMBER_OF_TREES> _dimensions_Y_space;
+	IndexArray _dimensions_Y_space;
 
 	/// Allocation-free (row, col) of a linear index, for the hot internal paths. The public
 	/// get_multi_dimensional_index returns a std::vector and is meant for external callers.
-	[[nodiscard]] std::array<size_t, NUMBER_OF_TREES> _row_col(uint64_t linear_index_in_Y_space) const {
+	[[nodiscard]] IndexArray _row_col(uint64_t linear_index_in_Y_space) const {
 		return coretools::getSubscriptsAsArray(static_cast<size_t>(linear_index_in_Y_space),
 		                                       _dimensions_Y_space);
 	}
@@ -49,13 +47,11 @@ private:
 public:
 	TStorageYMatrix()  = default;
 	~TStorageYMatrix() = default;
-	TStorageYMatrix(const size_t n_iterations,
-	                const std::array<size_t, NUMBER_OF_TREES> &dimensions_Y_space) {
+	TStorageYMatrix(const size_t n_iterations, const IndexArray &dimensions_Y_space) {
 		initialize(n_iterations, dimensions_Y_space);
 	};
 
-	void initialize(const size_t n_iterations,
-	                const std::array<size_t, NUMBER_OF_TREES> &dimensions_Y_space) {
+	void initialize(const size_t n_iterations, const IndexArray &dimensions_Y_space) {
 		constexpr int16_t max_value = std::numeric_limits<int16_t>::max();
 		_thinning_factor =
 		    std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
@@ -68,7 +64,7 @@ public:
 		if (dimensions_Y_space.size() != NUMBER_OF_TREES) {
 			throw coretools::TDevError("dimensions_Y_space must have size NUMBER_OF_TREES");
 		}
-		std::array<size_t, NUMBER_OF_TREES> dims = {dimensions_Y_space[0], dimensions_Y_space[1]};
+		IndexArray dims = {dimensions_Y_space[0], dimensions_Y_space[1]};
 		initialize(n_iterations, dims);
 	}
 
@@ -126,15 +122,14 @@ public:
 		return static_cast<double>(storage.get_counter()) / static_cast<double>(_total_counts);
 	}
 
-	size_t get_total_counts() const { return _total_counts; }
+	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
 
 	TStorageY operator[](size_t index_in_TStorageYMatrix) const {
 		const auto multidim_index = _row_col(index_in_TStorageYMatrix);
 		return _mat.get(multidim_index[0], multidim_index[1]);
 	}
 
-	TStorageY
-	operator[](const std::array<size_t, NUMBER_OF_TREES> &index_in_TStorageYMatrix) const {
+	TStorageY operator[](const IndexArray &index_in_TStorageYMatrix) const {
 		return _mat.get(index_in_TStorageYMatrix[0], index_in_TStorageYMatrix[1]);
 	}
 
@@ -151,11 +146,11 @@ public:
 	/// Given a multi-dimensional index, we want to get its linear index.
 	/// @param multi_dim_index the multi-dimensional index
 	/// @return the linear index
-	uint64_t
+	[[nodiscard]] uint64_t
 	get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
 	}
-	uint64_t get_linear_index_in_container_space(
+	[[nodiscard]] uint64_t get_linear_index_in_container_space(
 	    const std::vector<size_t> &multidim_index_in_Y_space) const {
 		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
 	}
@@ -181,8 +176,8 @@ public:
 
 	/// Fast current-state fill for a clique of `K` nodes running along one dimension, starting at
 	/// `start_index` (a multi-dimensional index in leaves space). The clique's nodes occupy the
-	/// contiguous coordinates [start, start + K) along the variable dimension, all other coordinates
-	/// fixed. Outputs, for every k in [0, K):
+	/// contiguous coordinates [start, start + K) along the variable dimension, all other
+	/// coordinates fixed. Outputs, for every k in [0, K):
 	///   - current_state[k] : whether that cell is currently a one,
 	///   - exists[k]        : whether that cell is stored in the matrix,
 	///   - linear_index[k]  : the linear index in Y space of that cell.
@@ -191,9 +186,9 @@ public:
 	/// keeps rows and columns sorted, we walk the relevant row/column once (O(nnz in that line)):
 	///   - increment == 1   : the variable dimension is the last one -> walk the matrix row.
 	///   - increment  > 1   : the variable dimension is the first one -> walk the matrix column.
-	void fill_current_state(const std::array<size_t, NUMBER_OF_TREES> &start_index, size_t K,
-	                        size_t increment, std::vector<uint8_t> &current_state,
-	                        std::vector<uint8_t> &exists, std::vector<size_t> &linear_index) const {
+	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
+	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
+	                        std::vector<size_t> &linear_index) const {
 		current_state.assign(K, 0);
 		exists.assign(K, 0);
 		linear_index.assign(K, 0);
@@ -233,7 +228,7 @@ public:
 		if (start_index.size() != NUMBER_OF_TREES) {
 			throw coretools::TDevError("start_index must have size NUMBER_OF_TREES");
 		}
-		std::array<size_t, NUMBER_OF_TREES> start = {start_index[0], start_index[1]};
+		IndexArray start = {start_index[0], start_index[1]};
 		fill_current_state(start, K, increment, current_state, exists, linear_index);
 	}
 
