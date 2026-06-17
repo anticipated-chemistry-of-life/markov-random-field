@@ -233,6 +233,11 @@ TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed
 	return prod;
 }
 
+double TLotus::_return_error_rate(bool L) const {
+	if (L) { return _error_rate->value(); }
+	return 1.0 - _error_rate->value();
+}
+
 double TLotus::_calculate_probability_of_L_given_x(
     bool x, bool L, const std::vector<size_t> &index_in_collapsed_space) const {
 	if constexpr (UseSimpleErrorModel) {
@@ -243,13 +248,16 @@ double TLotus::_calculate_probability_of_L_given_x(
 	} else {
 		if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
 		if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
-		if (L) { return _error_rate->value(); }
-		return 1.0 - _error_rate->value();
+		return _return_error_rate(L);
 	}
 }
 
 double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
                                                    size_t linear_index_in_collapsed_space) const {
+	if (!x) {
+		// result is independent of position — no index conversion needed
+		return _return_error_rate(L);
+	}
 	const auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
 	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
 };

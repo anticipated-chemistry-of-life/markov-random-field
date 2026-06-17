@@ -100,6 +100,8 @@ private:
 	_get_state_of_L(size_t i, size_t index_in_L,
 	                const std::vector<std::pair<size_t, TStorageY>> &l_entries) const;
 
+	double _return_error_rate(bool L) const;
+
 public:
 	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
 	       TypeParamErrorRate *error_rate, size_t n_iterations,

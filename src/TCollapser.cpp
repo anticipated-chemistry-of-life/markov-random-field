@@ -91,8 +91,9 @@ bool TCollapser::x_is_one(const std::vector<size_t> &index_in_leaves) const {
 }
 
 std::vector<size_t> TCollapser::collapse(const std::vector<size_t> &index_in_full_space) const {
-	std::vector<size_t> index_in_collapsed_space(_dimensions_to_keep.size());
-	for (size_t i = 0; i < _dimensions_to_keep.size(); ++i) {
+	const size_t num_dim = _dimensions_to_keep.size();
+	std::vector<size_t> index_in_collapsed_space(num_dim, 0);
+	for (size_t i = 0; i < num_dim; ++i) {
 		index_in_collapsed_space[i] = index_in_full_space[_dimensions_to_keep[i]];
 	}
 

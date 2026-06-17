@@ -62,3 +62,5 @@ documentation/
 inference_test/
 inference_test_small/
 .xmake/
+CLAUDE.md
+.rtk/

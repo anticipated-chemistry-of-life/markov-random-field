@@ -99,11 +99,12 @@ void TMarkovField::_calculate_log_prob_field(
     std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	for (size_t dim = 0; dim < _trees.size(); ++dim) {
 		// get relevant clique
-		const auto &clique = _trees[dim]->get_clique(index_in_leaves_space);
+		const auto &tree   = _trees[dim].get();
+		const auto &clique = tree->get_clique(index_in_leaves_space);
 
 		// translate index in leaves to the index in tree
 		const size_t index_in_tree =
-		    _trees[dim]->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
+		    tree->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
 
 		// get leaf index in tree of last dimension
 		const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
@@ -113,12 +114,12 @@ void TMarkovField::_calculate_log_prob_field(
 		// stationary)
 		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
 			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
-			    _trees[dim].get(), leaf_index_in_tree_of_last_dim, _clique_last_dim, sum_log);
+			    index_in_tree, tree->get_binned_branch_length(index_in_tree), tree,
+			    leaf_index_in_tree_of_last_dim, _clique_last_dim, sum_log);
 		} else { // use sheet
 			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
-			    _trees[dim].get(), leaf_index_in_tree_of_last_dim, _sheets[dim], sum_log);
+			    index_in_tree, tree->get_binned_branch_length(index_in_tree), tree,
+			    leaf_index_in_tree_of_last_dim, _sheets[dim], sum_log);
 		}
 	}
 }
@@ -157,12 +158,12 @@ int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in
 	// Thread-safety: this runs inside the parallel loop over the last dimension, so all concurrent
 	// calls touch cells of the same matrix row. Flipping the state of an *existing* cell is an
 	// in-place value update of a distinct entry and is race-free. Inserting a *new* cell would
-	// reallocate the shared row/column vectors, so new cells are deferred and inserted in bulk after
-	// the parallel region (see insert_in_Y).
+	// reallocate the shared row/column vectors, so new cells are deferred and inserted in bulk
+	// after the parallel region (see insert_in_Y).
 	if (cur_state && !new_state) { // 1 -> 0: cell exists -> flip state in place
 		_Y.set_state(linear_index_in_Y_space, false);
 	} else if (!cur_state && new_state) { // 0 -> 1
-		if (exists_in_TStorageYMatrix) { // already stored -> flip state in place
+		if (exists_in_TStorageYMatrix) {  // already stored -> flip state in place
 			_Y.set_state(linear_index_in_Y_space, true);
 		} else { // not stored yet -> defer the insert until after the parallel region
 			linear_indices_in_Y_space_to_insert.emplace_back(linear_index_in_Y_space);

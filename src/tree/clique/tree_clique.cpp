@@ -1,17 +1,30 @@
 #include "../TTree.h"
 
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
+
 const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) const {
-	std::vector<size_t> local_index = index_in_leaves_space;
-	local_index[_dimension]         = 0; // set to start index
-	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
+	size_t ix_clique = 0;
+	size_t stride    = 1;
+
+	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
+		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
+		ix_clique += idx * stride;
+		stride *= _dimension_cliques[i];
+	}
+
 	return _cliques[ix_clique];
 }
 
 TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
-	std::vector<size_t> local_index = index_in_leaves_space;
-	local_index[_dimension]         = 0; // set to start index
-	const size_t ix_clique          = coretools::getLinearIndex(local_index, _dimension_cliques);
+	size_t ix_clique = 0;
+	size_t stride    = 1;
+
+	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
+		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
+		ix_clique += idx * stride;
+		stride *= _dimension_cliques[i];
+	}
+
 	return _cliques[ix_clique];
 }
 
@@ -46,7 +59,8 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 		std::string name;
 		for (size_t d = 0; d < all_trees.size(); ++d) {
 			if (d == _dimension) continue;
-			size_t node_idx = all_trees[d]->get_node_index_from_leaf_index(start_index_in_leaves_space[d]);
+			size_t node_idx =
+			    all_trees[d]->get_node_index_from_leaf_index(start_index_in_leaves_space[d]);
 			if (!name.empty()) name += "_";
 			name += all_trees[d]->get_node_id(node_idx);
 		}
