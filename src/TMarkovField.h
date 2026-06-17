@@ -70,7 +70,7 @@ private:
 	                                         const std::vector<size_t> &start_index_in_leaves_space,
 	                                         const std::vector<size_t> &previous_ix) const;
 	int _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
-	               std::vector<TStorageY> &linear_indices_in_Y_space_to_insert);
+	               std::vector<size_t> &linear_indices_in_Y_space_to_insert);
 	void _update_counter_1_cliques(bool new_state, bool old_state,
 	                               const std::vector<size_t> &index_in_leaves_space);
 
@@ -91,7 +91,7 @@ private:
 	template<bool IsSimulation, bool initYFromLotus>
 	std::pair<int, double> _update_Y(const std::vector<size_t> &index_in_leaves_space,
 	                                 size_t leaf_index_last_dim, size_t index_for_tmp_state,
-	                                 std::vector<TStorageY> &linear_indices_in_Y_space_to_insert,
+	                                 std::vector<size_t> &linear_indices_in_Y_space_to_insert,
 	                                 const TLotus &lotus) {
 		auto index_copy   = index_in_leaves_space;
 		index_copy.back() = leaf_index_last_dim;
@@ -161,7 +161,7 @@ private:
 
 		// loop over sheets in last dimension
 		std::vector<coretools::TSumLogProbability> new_LL(ProgramOptions::NUMBER_OF_THREADS);
-		std::vector<std::vector<TStorageY>> linear_indices_in_Y_space_to_insert(
+		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
 		    ProgramOptions::NUMBER_OF_THREADS);
 		for (size_t k = 0; k < _num_outer_loops; ++k) {
 			const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
@@ -267,39 +267,32 @@ private:
 
 	void _write_full_Y(coretools::TOutputFile &file) const {
 		std::array<size_t, 2> line{};
-		double fraction;
 		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
-			auto [found, position] = _Y.binary_search(i);
-			if (found) {
-				line = {i, _Y.is_one(position)};
-			} else {
-				line = {i, 0};
-			}
-			std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
+			// a missing cell reads as state 0, so a direct point lookup covers both cases
+			line                 = {i, _Y.is_one(i)};
+			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
 			std::vector<std::string> node_names;
 			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
 				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
 				node_names.push_back(_trees[idx]->get_node_id(node_idx));
 			};
-			fraction = _Y.get_fraction_of_ones(i);
+			const double fraction = _Y.get_fraction_of_ones(i);
 			file.writeln(line, node_names, fraction);
 		}
 	}
 
 	void _write_only_values_in_Y_vector(coretools::TOutputFile &file) const {
 		std::array<size_t, 2> line{};
-		double fraction;
-		for (size_t i = 0; i < _Y.size(); ++i) {
-			const auto linear_index_in_y        = _Y[i].get_linear_index_in_Y_space();
-			const auto state                    = _Y[i].is_one();
-			line                                = {linear_index_in_y, state};
-			fraction                            = _Y.get_fraction_of_ones(linear_index_in_y);
-			std::vector<size_t> leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
+		// iterate only the stored (non-default) cells, in ascending linear-index order
+		for (const auto &[linear_index_in_y, storage] : _Y.get_stored_entries()) {
+			line                 = {linear_index_in_y, storage.is_one()};
+			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
 			std::vector<std::string> node_names;
 			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
 				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
 				node_names.push_back(_trees[idx]->get_node_id(node_idx));
 			};
+			const double fraction = _Y.get_fraction_of_ones(linear_index_in_y);
 			file.writeln(line, node_names, fraction);
 		}
 	}
@@ -317,8 +310,6 @@ public:
 
 	// get Y
 	[[nodiscard]] const TStorageYMatrix &get_Y_matrix() const;
-	[[nodiscard]] TStorageY get_Y(size_t index) const;
-	[[nodiscard]] size_t size_Y() const;
 
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();

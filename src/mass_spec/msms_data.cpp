@@ -90,17 +90,12 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 	// Position 0 should be old, position 1 should be new
 	std::array<coretools::TSumLogProbability, 2> log_lik;
 	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
-	bool y;
 	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
 	     ++species_idx) {
 		const auto linear_index =
 		    y_storage.get_linear_index_in_Y_space({species_idx, molecule_idx});
-		const auto [found, index] = y_storage.binary_search(linear_index);
-		if (found) {
-			y = y_storage[index].is_one();
-		} else {
-			y = false;
-		}
+		// a missing cell reads as 0, so a direct point lookup covers both cases
+		const bool y = y_storage.is_one(linear_index);
 		// filter only enters the likelihood when the molecule is present
 		if (!y) { continue; }
 		for (const auto &run : get_ms_data_for_species(species_idx)) {

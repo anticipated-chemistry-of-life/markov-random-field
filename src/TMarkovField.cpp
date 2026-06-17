@@ -8,6 +8,7 @@
 #include "TLotus.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
@@ -145,23 +146,25 @@ void TMarkovField::_update_cur_LL_lotus(TLotus &lotus,
 }
 
 int TMarkovField::_set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
-                             std::vector<TStorageY> &linear_indices_in_Y_space_to_insert) {
+                             std::vector<size_t> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
-	// get current state, exists and index in TStorageYMatrix
-	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable
-	// with respect to indices of where TStorageYMatrix is a one
-	const auto [cur_state, exists_in_TStorageYMatrix, index_in_TStorageYMatrix] =
+	// get current state, exists and the linear index in Y space of this cell.
+	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable.
+	const auto [cur_state, exists_in_TStorageYMatrix, linear_index_in_Y_space] =
 	    _clique_last_dim.get_state_exist_ix_TStorageYMatrix(leaf_index_in_tree_of_last_dim);
 
-	if (cur_state && !new_state) { // 1 -> 0: set Y to zero
-		_Y.set_to_zero(index_in_TStorageYMatrix);
+	// Thread-safety: this runs inside the parallel loop over the last dimension, so all concurrent
+	// calls touch cells of the same matrix row. Flipping the state of an *existing* cell is an
+	// in-place value update of a distinct entry and is race-free. Inserting a *new* cell would
+	// reallocate the shared row/column vectors, so new cells are deferred and inserted in bulk after
+	// the parallel region (see insert_in_Y).
+	if (cur_state && !new_state) { // 1 -> 0: cell exists -> flip state in place
+		_Y.set_state(linear_index_in_Y_space, false);
 	} else if (!cur_state && new_state) { // 0 -> 1
-		if (exists_in_TStorageYMatrix) {
-			_Y.set_to_one(index_in_TStorageYMatrix);
-		} else { // does not yet exist -> remember linear index in Y to insert later
-			const size_t linear_index_in_Y_space =
-			    _Y.get_linear_index_in_Y_space(index_in_leaves_space);
+		if (exists_in_TStorageYMatrix) { // already stored -> flip state in place
+			_Y.set_state(linear_index_in_Y_space, true);
+		} else { // not stored yet -> defer the insert until after the parallel region
 			linear_indices_in_Y_space_to_insert.emplace_back(linear_index_in_Y_space);
 		}
 	}
@@ -355,10 +358,6 @@ void TMarkovField::MCMCHasFinished() {
 }
 
 const TStorageYMatrix &TMarkovField::get_Y_matrix() const { return _Y; }
-TStorageY TMarkovField::get_Y(size_t index_in_TStorageYMatrix) const {
-	return _Y[index_in_TStorageYMatrix];
-}
-size_t TMarkovField::size_Y() const { return _Y.size(); }
 
 double TMarkovField::_calculate_complete_joint_density() {
 

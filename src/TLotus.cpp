@@ -257,52 +257,52 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
 	coretools::TSumLogProbability sum_log;
 
-	size_t index_in_TStorage_Y_vector = 0;
-	size_t index_in_TStorage_L_vector = 0;
+	// snapshot the stored Y and L cells in ascending linear-index order, then merge-walk over them
+	const auto y_entries = _markov_field.get_Y_matrix().get_stored_entries();
+	const auto l_entries = _L.get_stored_entries();
+	size_t index_in_Y    = 0;
+	size_t index_in_L    = 0;
 	bool state_of_Y;
 	bool state_of_L;
 
-	for (size_t i = 0; i < _markov_field.get_Y_vector().total_size_of_container_space(); ++i) {
-		std::tie(state_of_Y, index_in_TStorage_Y_vector) =
-		    _get_state_of_Y(i, index_in_TStorage_Y_vector);
-		std::tie(state_of_L, index_in_TStorage_L_vector) =
-		    _get_state_of_L(i, index_in_TStorage_L_vector);
+	for (size_t i = 0; i < _markov_field.get_Y_matrix().total_size_of_container_space(); ++i) {
+		std::tie(state_of_Y, index_in_Y) = _get_state_of_Y(i, index_in_Y, y_entries);
+		std::tie(state_of_L, index_in_L) = _get_state_of_L(i, index_in_L, l_entries);
 
 		sum_log.add(_calculate_probability_of_L_given_x(state_of_Y, state_of_L, i));
 	}
 	return sum_log.getSum();
 }
 
-std::pair<bool, size_t> TLotus::_get_state_of_Y(size_t i, size_t index_in_TStorage_Y_vector) const {
-	if (index_in_TStorage_Y_vector >= _markov_field.size_Y()) {
-		return {false, index_in_TStorage_Y_vector};
-	} // make sure we don't overshoot
+std::pair<bool, size_t>
+TLotus::_get_state_of_Y(size_t i, size_t index_in_Y,
+                        const std::vector<std::pair<size_t, TStorageY>> &y_entries) const {
+	if (index_in_Y >= y_entries.size()) { return {false, index_in_Y}; } // don't overshoot
 
-	const auto &y = _markov_field.get_Y(index_in_TStorage_Y_vector);
-
-	auto index_in_Y = y.get_linear_index_in_container_space();
-	if (i == index_in_Y) { return {y.is_one(), index_in_TStorage_Y_vector + 1}; }
-	assert(i < index_in_Y);
-	return {false, index_in_TStorage_Y_vector};
+	const auto &[linear_index_in_Y, y] = y_entries[index_in_Y];
+	if (i == linear_index_in_Y) { return {y.is_one(), index_in_Y + 1}; }
+	assert(i < linear_index_in_Y);
+	return {false, index_in_Y};
 }
-std::pair<bool, size_t> TLotus::_get_state_of_L(size_t i, size_t index_in_TStorage_L_vector) const {
-	if (index_in_TStorage_L_vector >= _L.size()) { return {false, index_in_TStorage_L_vector}; }
+std::pair<bool, size_t>
+TLotus::_get_state_of_L(size_t i, size_t index_in_L,
+                        const std::vector<std::pair<size_t, TStorageY>> &l_entries) const {
+	if (index_in_L >= l_entries.size()) { return {false, index_in_L}; } // don't overshoot
 
-	auto index_in_L = _L[index_in_TStorage_L_vector].get_linear_index_in_container_space();
-	if (i == index_in_L) { return {true, index_in_TStorage_L_vector + 1}; }
-	assert(i < index_in_L);
-	return {false, index_in_TStorage_L_vector};
+	const auto &[linear_index_in_L, l] = l_entries[index_in_L];
+	if (i == linear_index_in_L) { return {l.is_one(), index_in_L + 1}; }
+	assert(i < linear_index_in_L);
+	return {false, index_in_L};
 }
 
 double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
-	const auto length_L = _L.size();
-
 	coretools::TSumLogProbability sum_log;
 
 	size_t previous_index_in_L_space = 0;
-	for (size_t i = 0; i < length_L; ++i) { // loop over all 1's in L
-		const auto linear_index_in_L_space = _L[i].get_linear_index_in_container_space();
-		auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_L_space);
+	// iterate over all stored 1's in L, in ascending linear-index order
+	for (const auto &[linear_index_in_L_space, l_val] : _L.get_stored_entries()) {
+		const auto multi_dim_index_in_L_space =
+		    _L.get_multi_dimensional_index(linear_index_in_L_space);
 
 		// loop over all 0's in L that occured before that 1.
 		for (size_t j = previous_index_in_L_space; j <= linear_index_in_L_space; ++j) {
@@ -361,15 +361,9 @@ void TLotus::_simulateUnderPrior(Storage *) {
 		if (_collapser.do_collapse()) {
 			x = _collapser.x_is_one(multi_dim_index_in_L_space);
 		} else {
-			// When we don't collapse, this means that the dimensions of Y are equal to the
-			// dimensions of Lotus. Since we do simulations, speed in not that important. We could
-			// simply run a binary search for each i in Y.
-			auto result = _markov_field.get_Y_vector().binary_search(i);
-			if (result.first) {
-				x = _markov_field.get_Y_vector().is_one(result.second);
-			} else {
-				x = false;
-			}
+			// When we don't collapse, the dimensions of Y equal the dimensions of Lotus, so we can
+			// look up the state of Y directly (a missing cell reads as 0).
+			x = _markov_field.get_Y_matrix().is_one(i);
 		}
 		const double proba =
 		    _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);

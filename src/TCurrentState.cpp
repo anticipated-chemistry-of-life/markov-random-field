@@ -33,14 +33,12 @@ void TCurrentState::fill(const std::vector<size_t> &start_index_in_leaves_space,
 	       Z); // parse all Z (all internal nodes)
 }
 
-void TCurrentState::fill_Y_along_last_dim(
-    const std::array<size_t, NUMBER_OF_TREES> &start_index_in_leaves_space,
-    size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
-	auto result      = fill_current_state<true>(Y, num_nodes_to_parse, start_index_in_leaves_space,
-	                                            _increment, Y.total_size_of_container_space());
-	_current_state_Y = result.current_state;
-	_exists_in_Y     = result.exists_in_container;
-	_index_in_TStorageYMatrix = result.index_in_TStorageVector;
+void TCurrentState::fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+                                          size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
+	// along the last dimension -> increment is 1 -> a single matrix row.
+	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
+	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
+	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
 }
 
 void TCurrentState::fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
@@ -54,11 +52,10 @@ void TCurrentState::fill_Z_along_last_dim(const std::vector<size_t> &start_index
 
 void TCurrentState::fill_Y(const std::vector<size_t> &start_index_in_leaves_space,
                            size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
-	auto result = fill_current_state(Y, num_nodes_to_parse, start_index_in_leaves_space, _increment,
-	                                 Y.total_size_of_container_space());
-	_current_state_Y          = result.current_state;
-	_exists_in_Y              = result.exists_in_container;
-	_index_in_TStorageYMatrix = result.index_in_TStorageVector;
+	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
+	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
+	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
+	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
 }
 
 void TCurrentState::fill_Z(const std::vector<size_t> &start_index_in_leaves_space,

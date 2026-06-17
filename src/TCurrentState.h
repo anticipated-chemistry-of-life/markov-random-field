@@ -20,6 +20,8 @@ private:
 	// current state of Y
 	std::vector<uint8_t> _current_state_Y;
 	std::vector<uint8_t> _exists_in_Y;
+	// Linear index in Y space of each parsed cell (the matrix maps it to (row, col)).
+	// Note: for Z below this stays a flat index into the sorted TStorageZVector.
 	std::vector<size_t> _index_in_TStorageYMatrix;
 
 	// current state of Z
@@ -41,9 +43,8 @@ public:
 	            const TStorageYMatrix &Y);
 	void fill_Z(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageZVector &Z);
-	void
-	fill_Y_along_last_dim(const std::array<size_t, NUMBER_OF_TREES> &start_index_in_leaves_space,
-	                      size_t num_nodes_to_parse, const TStorageYMatrix &Y);
+	void fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+	                           size_t num_nodes_to_parse, const TStorageYMatrix &Y);
 	void fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TStorageZVector &Z);
 
