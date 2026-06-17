@@ -32,8 +32,7 @@ private:
 		if (found) {
 			_vec[index].set_state(state);
 		} else {
-			_vec.insert(_vec.begin() + index,
-			            TStorageZ(static_cast<int32_t>(linear_index_in_Z_space)));
+			_vec.insert(_vec.begin() + index, TStorageZ(linear_index_in_Z_space));
 			_vec[index].set_state(state);
 		}
 	}
