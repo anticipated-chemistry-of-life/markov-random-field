@@ -83,10 +83,10 @@ private:
 
 	// private functions
 	[[nodiscard]] double
-	_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const;
+	_calculate_research_effort(const IndexArray &index_in_collapsed_space) const;
 	[[nodiscard]] double
 	_calculate_probability_of_L_given_x(bool x, bool L,
-	                                    const std::vector<size_t> &index_in_collapsed_space) const;
+	                                    const IndexArray &index_in_collapsed_space) const;
 	[[nodiscard]] double
 	_calculate_probability_of_L_given_x(bool x, bool L,
 	                                    size_t linear_index_in_collapsed_space) const;
@@ -122,11 +122,10 @@ public:
 	[[nodiscard]] double calculate_log_likelihood_of_L() const;
 	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 
-	void fill_tmp_state_along_last_dim(const std::vector<size_t> &start_index_clique_along_last_dim,
+	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
 	                                   size_t K);
-	void calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space,
-	                           size_t index_for_tmp_state, bool old_state,
-	                           std::array<double, 2> &prob) const;
+	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
+	                           bool old_state, std::array<double, 2> &prob) const;
 	void update_cur_LL(double cur_LL);
 
 	void update_markov_field();

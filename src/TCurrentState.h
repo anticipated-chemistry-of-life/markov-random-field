@@ -37,15 +37,15 @@ public:
 	TCurrentState(const TTree &tree, size_t increment);
 	TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
-	void fill(const std::vector<size_t> &start_index_in_leaves_space, const TStorageYMatrix &Y,
+	void fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
 	          const TStorageZVector &Z);
-	void fill_Y(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
+	void fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageYMatrix &Y);
-	void fill_Z(const std::vector<size_t> &start_index_in_leaves_space, size_t num_nodes_to_parse,
+	void fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageZVector &Z);
-	void fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+	void fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TStorageYMatrix &Y);
-	void fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+	void fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TStorageZVector &Z);
 
 	bool get(size_t index_in_tree) const;
@@ -87,8 +87,7 @@ public:
 	TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim);
 	~TSheet() = default;
 
-	void fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K,
-	          const TStorageYMatrix &Y);
+	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);

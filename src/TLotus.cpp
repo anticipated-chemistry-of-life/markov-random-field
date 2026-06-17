@@ -107,7 +107,7 @@ void TLotus::load_from_file(const std::string &filename) {
 		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
 
-	std::vector<size_t> index_in_collapsed_space(_collapser.num_dim_to_keep());
+	IndexArray index_in_collapsed_space;
 	for (; !file.empty(); file.popFront()) {
 		// loop over all columns
 		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
@@ -141,8 +141,8 @@ double TLotus::calculate_log_likelihood_of_L() const {
 
 double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; };
 
-void TLotus::fill_tmp_state_along_last_dim(
-    const std::vector<size_t> &start_index_clique_along_last_dim, size_t K) {
+void TLotus::fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
+                                           size_t K) {
 	// collapse start_index_in_leaves (this is the index in Y)
 	if (_collapser.do_collapse()) {
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(
@@ -153,7 +153,7 @@ void TLotus::fill_tmp_state_along_last_dim(
 };
 
 /// This function will be used when we update Y.
-void TLotus::calculate_LL_update_Y(const std::vector<size_t> &index_in_leaves_space,
+void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
                                    size_t index_for_tmp_state, bool old_state,
                                    std::array<double, 2> &prob) const {
 	// function gets the old_state and needs to calculate LL for new_state = 0 and 1
@@ -222,8 +222,7 @@ void TLotus::guessInitialValues() {
 
 const TStorageYMatrix &TLotus::get_Lotus() const { return _L; }
 
-double
-TLotus::_calculate_research_effort(const std::vector<size_t> &index_in_collapsed_space) const {
+double TLotus::_calculate_research_effort(const IndexArray &index_in_collapsed_space) const {
 	double prod = 1.0;
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		const size_t leaf_index = index_in_collapsed_space[i];
@@ -238,8 +237,9 @@ double TLotus::_return_error_rate(bool L) const {
 	return 1.0 - _error_rate->value();
 }
 
-double TLotus::_calculate_probability_of_L_given_x(
-    bool x, bool L, const std::vector<size_t> &index_in_collapsed_space) const {
+double
+TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
+                                            const IndexArray &index_in_collapsed_space) const {
 	if constexpr (UseSimpleErrorModel) {
 		if (x && L) { return 1 - _epsilon; }
 		if (x) { return _epsilon; }

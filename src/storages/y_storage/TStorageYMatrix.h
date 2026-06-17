@@ -26,12 +26,11 @@ private:
 
 	/// Allocation-free (row, col) of a linear index, for the hot internal paths. The public
 	/// get_multi_dimensional_index returns a std::vector and is meant for external callers.
-	[[nodiscard]] IndexArray _row_col(uint64_t linear_index_in_Y_space) const {
-		return coretools::getSubscriptsAsArray(static_cast<size_t>(linear_index_in_Y_space),
-		                                       _dimensions_Y_space);
+	[[nodiscard]] IndexArray _row_col(size_t linear_index_in_Y_space) const {
+		return coretools::getSubscriptsAsArray(linear_index_in_Y_space, _dimensions_Y_space);
 	}
 
-	void _insert(uint64_t linear_index_in_Y_space, bool state) {
+	void _insert(size_t linear_index_in_Y_space, bool state) {
 		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
 			throw coretools::TDevError(
 			    "You are trying to insert a value at an linear index bigger than the total "
@@ -96,17 +95,17 @@ public:
 	/// Set the state of the cell at `linear_index_in_Y_space` to `state`, preserving its counter.
 	/// If the cell does not exist yet, TSparseMatrix::set inserts it (counter starts at 0), so this
 	/// unifies the old set_to_one / set_to_zero / insert-later branches into a single call.
-	void set_state(uint64_t linear_index_in_Y_space, bool state) {
+	void set_state(size_t linear_index_in_Y_space, bool state) {
 		const auto multidim_index = _row_col(linear_index_in_Y_space);
 		auto s                    = _mat.get(multidim_index[0], multidim_index[1]);
 		s.set_state(state);
 		_mat.set(multidim_index[0], multidim_index[1], s);
 	}
 
-	void insert_one(uint64_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, true); }
+	void insert_one(size_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, true); }
 
 	/// Does the same as set_to_one but sets the element to zero
-	void insert_zero(uint64_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, false); }
+	void insert_zero(size_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, false); }
 
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {
@@ -114,7 +113,7 @@ public:
 		}
 	}
 
-	[[nodiscard]] double get_fraction_of_ones(uint64_t linear_index_in_Y_space) const {
+	[[nodiscard]] double get_fraction_of_ones(size_t linear_index_in_Y_space) const {
 		const auto multidim_index = _row_col(linear_index_in_Y_space);
 		// A missing cell returns a default-constructed TStorageY (counter == 0),
 		// so the result is 0.0 for absent entries without an explicit empty check.
@@ -146,22 +145,20 @@ public:
 	/// Given a multi-dimensional index, we want to get its linear index.
 	/// @param multi_dim_index the multi-dimensional index
 	/// @return the linear index
-	[[nodiscard]] uint64_t
-	get_linear_index_in_Y_space(const std::vector<size_t> &multidim_index_in_Y_space) const {
+	[[nodiscard]] size_t
+	get_linear_index_in_Y_space(const IndexArray &multidim_index_in_Y_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
 	}
-	[[nodiscard]] uint64_t get_linear_index_in_container_space(
-	    const std::vector<size_t> &multidim_index_in_Y_space) const {
+	[[nodiscard]] size_t
+	get_linear_index_in_container_space(const IndexArray &multidim_index_in_Y_space) const {
 		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
 	}
 
 	/// Given a linear index, we want to get the multi-dimensional index (in Y / leaves space).
 	/// Returns a std::vector for callers that need it (get_clique, x_is_one, ...); the hot internal
 	/// paths use the allocation-free _row_col instead.
-	[[nodiscard]] std::vector<size_t>
-	get_multi_dimensional_index(uint64_t linear_index_in_Y_space) const {
-		const auto md = _row_col(linear_index_in_Y_space);
-		return {md.begin(), md.end()};
+	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Y_space) const {
+		return _row_col(linear_index_in_Y_space);
 	}
 
 	/// Returns the product of the dimensions in the container. This is the

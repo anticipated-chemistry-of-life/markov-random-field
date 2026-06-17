@@ -8,6 +8,7 @@
 #include "TClique.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
@@ -68,7 +69,7 @@ private:
 
 	// cliques
 	std::vector<TClique> _cliques;
-	std::vector<size_t> _dimension_cliques;
+	IndexArray _dimension_cliques;
 	std::vector<std::string> _clique_names;
 
 	// Nus
@@ -94,8 +95,8 @@ private:
 	                                                      bool exclude_root) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths();
-	void _initialize_Z(std::vector<size_t> num_leaves_per_tree);
-	void _initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
+	void _initialize_Z(IndexArray num_leaves_per_tree);
+	void _initialize_cliques(const IndexArray &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	/// @brief Load tree from file
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
@@ -328,8 +329,8 @@ public:
 	[[nodiscard]] double get_delta() const { return _delta; }
 	[[nodiscard]] size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
-	[[nodiscard]] const TClique &get_clique(const std::vector<size_t> &index_in_leaves_space) const;
-	TClique &get_clique(const std::vector<size_t> &index_in_leaves_space);
+	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
+	TClique &get_clique(const IndexArray &index_in_leaves_space);
 	[[nodiscard]] const TStorageZVector &get_Z() const;
 	TStorageZVector &get_Z();
 
@@ -409,7 +410,7 @@ public:
 				} else {
 					line = {i, 0};
 				}
-				std::vector<size_t> multidim_index = _Z.get_multi_dimensional_index(i);
+				auto multidim_index = _Z.get_multi_dimensional_index(i);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {
@@ -431,8 +432,7 @@ public:
 				const auto linear_index_in_Z_space = _Z[i].get_linear_index_in_Z_space();
 				const auto state                   = _Z[i].is_one();
 				line                               = {linear_index_in_Z_space, state};
-				std::vector<size_t> multidim_index =
-				    _Z.get_multi_dimensional_index(linear_index_in_Z_space);
+				auto multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
 					if (idx == dimension_number_of_tree) {

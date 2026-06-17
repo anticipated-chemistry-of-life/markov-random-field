@@ -25,15 +25,15 @@ TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of
 	_index_in_TStorageZVector.resize(size_of_Z);
 }
 
-void TCurrentState::fill(const std::vector<size_t> &start_index_in_leaves_space,
-                         const TStorageYMatrix &Y, const TStorageZVector &Z) {
+void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
+                         const TStorageZVector &Z) {
 	fill_Y(start_index_in_leaves_space, _tree.get_number_of_leaves(),
 	       Y); // parse all Y (all leaves)
 	fill_Z(start_index_in_leaves_space, _tree.get_number_of_internal_nodes(),
 	       Z); // parse all Z (all internal nodes)
 }
 
-void TCurrentState::fill_Y_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
 	// along the last dimension -> increment is 1 -> a single matrix row.
 	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
@@ -41,7 +41,7 @@ void TCurrentState::fill_Y_along_last_dim(const std::vector<size_t> &start_index
 	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
 }
 
-void TCurrentState::fill_Z_along_last_dim(const std::vector<size_t> &start_index_in_leaves_space,
+void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse, const TStorageZVector &Z) {
 	auto result      = fill_current_state<true>(Z, num_nodes_to_parse, start_index_in_leaves_space,
 	                                            _increment, Z.total_size_of_container_space());
@@ -50,16 +50,16 @@ void TCurrentState::fill_Z_along_last_dim(const std::vector<size_t> &start_index
 	_index_in_TStorageZVector = result.index_in_TStorageVector;
 }
 
-void TCurrentState::fill_Y(const std::vector<size_t> &start_index_in_leaves_space,
-                           size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
+void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
+                           const TStorageYMatrix &Y) {
 	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
 	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
 	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
 	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
 }
 
-void TCurrentState::fill_Z(const std::vector<size_t> &start_index_in_leaves_space,
-                           size_t num_nodes_to_parse, const TStorageZVector &Z) {
+void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
+                           const TStorageZVector &Z) {
 	auto result = fill_current_state(Z, num_nodes_to_parse, start_index_in_leaves_space, _increment,
 	                                 Z.total_size_of_container_space());
 	_current_state_Z          = result.current_state;
@@ -128,7 +128,7 @@ TSheet::TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim)
 	}
 }
 
-void TSheet::fill(const std::vector<size_t> &start_index_in_leaves_space, size_t K,
+void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K,
                   const TStorageYMatrix &Y) {
 	// Worksharing fill: this runs on the team created in TMarkovField::_update_all_Y (all threads
 	// call it), so we use `omp for`/`omp single` rather than spawning our own team. If ever called
@@ -142,7 +142,7 @@ void TSheet::fill(const std::vector<size_t> &start_index_in_leaves_space, size_t
 #pragma omp for schedule(static)
 	for (size_t i = 0; i < _tree.get_number_of_nodes();
 	     ++i) { // loop over all nodes along current dimension
-		std::vector<size_t> local_start_index_in_leaves_space =
+		IndexArray local_start_index_in_leaves_space =
 		    start_index_in_leaves_space; // thread-local copy
 
 		if (_tree.isLeaf(

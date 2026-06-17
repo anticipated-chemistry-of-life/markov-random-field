@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.h"
+#include "constants.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Containers/TView.h"
 #include "coretools/Main/TError.h"
@@ -121,7 +122,7 @@ public:
 
 	// Sum log P(MS data for species | molecule = absent/present) into sum_log[0/1].
 	// Runs are treated as independent; features within a run as independent (approximation).
-	void add_log_likelihood(const std::vector<size_t> &indices_in_leaves,
+	void add_log_likelihood(const IndexArray &indices_in_leaves,
 	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const auto species_idx  = indices_in_leaves[_species_dim];
 		const auto molecule_idx = indices_in_leaves[_molecule_dim];

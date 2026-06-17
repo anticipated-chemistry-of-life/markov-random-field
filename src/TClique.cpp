@@ -4,6 +4,7 @@
 
 #include "TClique.h"
 #include "TCurrentState.h"
+#include "constants.h"
 #include "coretools/Math/TSumLog.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZ.h"
@@ -14,7 +15,7 @@
 #include <vector>
 double TMatrices::_delta;
 
-TClique::TClique(const std::vector<size_t> &start_index_in_leaves_space, size_t variable_dimension,
+TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_dimension,
                  size_t n_nodes, size_t increment) {
 	_start_index_in_leaves_space = start_index_in_leaves_space;
 	_variable_dimension          = variable_dimension;

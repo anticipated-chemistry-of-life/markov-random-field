@@ -7,6 +7,7 @@
 
 #include "TCurrentState.h"
 #include "Types.h"
+#include "constants.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
 #include "storages/y_storage/TStorageYMatrix.h"
@@ -201,7 +202,7 @@ private:
 	TMatrices _try_matrices;
 
 	// info about size and dimensionality of clique
-	std::vector<size_t> _start_index_in_leaves_space;
+	IndexArray _start_index_in_leaves_space;
 	size_t _variable_dimension;
 	size_t _n_nodes;
 	size_t _increment;
@@ -252,7 +253,7 @@ private:
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
 public:
-	TClique(const std::vector<size_t> &start_index, size_t variable_dimension, size_t n_nodes,
+	TClique(const IndexArray &start_index, size_t variable_dimension, size_t n_nodes,
 	        size_t increment);
 	~TClique() = default;
 
@@ -342,7 +343,7 @@ public:
 	[[nodiscard]] size_t get_increment() const { return _increment; }
 
 	/// @return Returns the start index in the leaf space of that specific clique
-	[[nodiscard]] const std::vector<size_t> &get_start_index_in_leaf_space() const {
+	[[nodiscard]] const IndexArray &get_start_index_in_leaf_space() const {
 		return _start_index_in_leaves_space;
 	}
 

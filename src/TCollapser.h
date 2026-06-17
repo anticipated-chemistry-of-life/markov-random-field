@@ -5,6 +5,7 @@
 #ifndef ACOL_TCOLLAPSER_H
 #define ACOL_TCOLLAPSER_H
 
+#include "constants.h"
 #include "tree/TTree.h"
 #include <string>
 #include <vector>
@@ -20,7 +21,7 @@ private:
 
 	template<bool ModifyCounter>
 	bool _x_is_one_in_clique(size_t dim_along_which_clique_runs,
-	                         const std::vector<size_t> &index_in_leaves) const {
+	                         const IndexArray &index_in_leaves) const {
 		// count the number of leaves with state = 1 in current clique (corresponds to old_state)
 		const auto c = _trees[dim_along_which_clique_runs]
 		                   ->get_clique(index_in_leaves)
@@ -36,7 +37,7 @@ private:
 		return ((int)c - 1) > 0;
 	}
 
-	template<bool ModifyCounter> bool _x_is_one(std::vector<size_t> index_in_leaves) const {
+	template<bool ModifyCounter> bool _x_is_one(IndexArray index_in_leaves) const {
 		assert(do_collapse());
 
 		// define dimension along which we take the cliques: always the last dimension to collapse
@@ -83,10 +84,10 @@ public:
 	                               std::string_view data_name);
 
 	// getters
-	bool x_is_one(const std::vector<size_t> &index_in_leaves, bool old_state) const;
-	bool x_is_one(const std::vector<size_t> &index_in_leaves) const;
+	bool x_is_one(const IndexArray &index_in_leaves, bool old_state) const;
+	bool x_is_one(const IndexArray &index_in_leaves) const;
 
-	std::vector<size_t> collapse(const std::vector<size_t> &index_in_full_space) const;
+	IndexArray collapse(const IndexArray &index_in_full_space) const;
 	std::vector<size_t> expand(const std::vector<size_t> &index_in_collapsed_space) const;
 	bool do_collapse() const;
 	size_t num_dim_to_keep() const;

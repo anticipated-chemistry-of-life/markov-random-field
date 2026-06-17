@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.h"
 #include "coretools/Main/TError.h"
 #include <algorithm>
 #include <cmath>
@@ -36,7 +37,7 @@ struct CurrentStateResult {
 
 template<typename Container>
 CurrentStateResult fill_current_state_easy(const Container &container,
-                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           const IndexArray &start_index_in_leaves_space,
                                            size_t n_nodes_in_clique_of_container) {
 
 	// NOTE : This is valid only when the dimension we are in is the last dimension. This allows us
@@ -91,7 +92,7 @@ template<typename Container>
 CurrentStateResult
 fill_current_state_hard_with_linear_window(const Container &container,
                                            size_t n_nodes_in_clique_of_container,
-                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           const IndexArray &start_index_in_leaves_space,
                                            size_t increment, size_t total_size_of_container) {
 	std::vector<uint8_t> current_state(n_nodes_in_clique_of_container, false);
 	std::vector<uint8_t> exists_in_container(n_nodes_in_clique_of_container, false);
@@ -191,7 +192,7 @@ fill_current_state_hard_with_linear_window(const Container &container,
 // Costs O(increment * density) per query on average — wins for sparse data.
 template<typename Container>
 CurrentStateResult hard_linear_scan(const Container &container, size_t n_nodes,
-                                    const std::vector<size_t> &start_index, size_t increment,
+                                    const IndexArray &start_index, size_t increment,
                                     size_t /*total_size*/) {
 	std::vector<uint8_t> state(n_nodes, false);
 	std::vector<uint8_t> exists(n_nodes, false);
@@ -229,7 +230,7 @@ CurrentStateResult hard_linear_scan(const Container &container, size_t n_nodes,
 template<typename Container>
 CurrentStateResult fill_current_state_hard(const Container &container,
                                            size_t n_nodes_in_clique_of_container,
-                                           const std::vector<size_t> &start_index_in_leaves_space,
+                                           const IndexArray &start_index_in_leaves_space,
                                            size_t increment, size_t total_size_of_container) {
 	const auto density =
 	    static_cast<double>(container.size()) / static_cast<double>(total_size_of_container);
@@ -247,7 +248,7 @@ CurrentStateResult fill_current_state_hard(const Container &container,
 template<bool AlongLastDim, typename Container>
 CurrentStateResult fill_current_state(const Container &container,
                                       size_t n_nodes_in_clique_of_container,
-                                      const std::vector<size_t> &start_index_in_leaves_space,
+                                      const IndexArray &start_index_in_leaves_space,
                                       size_t increment, size_t total_size_of_container) {
 	if constexpr (AlongLastDim) {
 		return fill_current_state_easy(container, start_index_in_leaves_space,
@@ -260,7 +261,7 @@ CurrentStateResult fill_current_state(const Container &container,
 template<typename Container>
 CurrentStateResult fill_current_state(const Container &container,
                                       size_t n_nodes_in_clique_of_container,
-                                      const std::vector<size_t> &start_index_in_leaves_space,
+                                      const IndexArray &start_index_in_leaves_space,
                                       size_t increment, size_t total_size_of_container) {
 	if (increment == 1) {
 		return fill_current_state<true>(container, n_nodes_in_clique_of_container,

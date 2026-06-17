@@ -5,6 +5,7 @@
 #ifndef TSTORAGEZVECTOR_H
 #define TSTORAGEZVECTOR_H
 #include "TStorageZ.h"
+#include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
 #include <algorithm>
@@ -21,7 +22,7 @@
 /// then the dimensions in Z space are [2, 3, 17, 5].
 class TStorageZVector {
 private:
-	std::vector<size_t> _dimensions_in_Z_space;
+	IndexArray _dimensions_in_Z_space;
 	std::vector<TStorageZ> _vec;
 	void _insert(uint32_t linear_index_in_Z_space, bool state) {
 		if (linear_index_in_Z_space > INT32_MAX) {
@@ -42,11 +43,11 @@ public:
 	using const_iterator = typename std::vector<TStorageZ>::const_iterator;
 	TStorageZVector()    = default;
 	~TStorageZVector()   = default;
-	explicit TStorageZVector(const std::vector<size_t> &dimensions_in_Z_space) {
+	explicit TStorageZVector(const IndexArray &dimensions_in_Z_space) {
 		initialize_dimensions(dimensions_in_Z_space);
 	}
 
-	void initialize_dimensions(const std::vector<size_t> &dimensions_in_Z_space) {
+	void initialize_dimensions(const IndexArray &dimensions_in_Z_space) {
 		_dimensions_in_Z_space = dimensions_in_Z_space;
 	}
 	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageZVector) const {
@@ -78,7 +79,7 @@ public:
 
 	void insert_one(uint32_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }
 
-	void insert_one(const std::vector<size_t> &multi_dim_index_in_Z_space) {
+	void insert_one(const IndexArray &multi_dim_index_in_Z_space) {
 		size_t linear_index_in_Z_space = get_linear_index_in_Z_space(multi_dim_index_in_Z_space);
 		insert_one(linear_index_in_Z_space);
 	}
@@ -99,13 +100,12 @@ public:
 		return _vec[index_in_TStorageZVector];
 	}
 
-	[[nodiscard]] uint64_t
-	get_linear_index_in_Z_space(const std::vector<size_t> &multidim_index_in_Z_space) const {
+	[[nodiscard]] size_t
+	get_linear_index_in_Z_space(const IndexArray &multidim_index_in_Z_space) const {
 		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
 	}
 
-	uint64_t get_linear_index_in_container_space(
-	    const std::vector<size_t> &multidim_index_in_Z_space) const {
+	size_t get_linear_index_in_container_space(const IndexArray &multidim_index_in_Z_space) const {
 		return get_linear_index_in_Z_space(multidim_index_in_Z_space);
 	}
 
@@ -130,7 +130,7 @@ public:
 	};
 
 	[[nodiscard]] std::pair<bool, size_t>
-	binary_search(const std::vector<size_t> &multidim_index_in_Z_space) const {
+	binary_search(const IndexArray &multidim_index_in_Z_space) const {
 		return binary_search(get_linear_index_in_Z_space(multidim_index_in_Z_space));
 	}
 
@@ -169,9 +169,9 @@ public:
 		return Z_as_vector;
 	}
 
-	std::vector<size_t> get_multi_dimensional_index(uint32_t linear_index_in_Z_space) const {
+	IndexArray get_multi_dimensional_index(uint32_t linear_index_in_Z_space) const {
 		auto tmp = static_cast<size_t>(linear_index_in_Z_space);
-		return coretools::getSubscripts(tmp, _dimensions_in_Z_space);
+		return coretools::getSubscriptsAsArray(tmp, _dimensions_in_Z_space);
 	}
 
 	bool empty() const { return _vec.empty(); }

@@ -5,6 +5,7 @@
 #include "TTree.h"
 #include "TClique.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
@@ -52,7 +53,7 @@ size_t TTree::get_node_index(const std::string &Id) const {
 void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees) {
 
 	// we initialize the number of leaves we have in each tree
-	std::vector<size_t> num_leaves_per_tree(all_trees.size());
+	IndexArray num_leaves_per_tree;
 	for (size_t i = 0; i < all_trees.size(); ++i) {
 		num_leaves_per_tree[i] = all_trees[i]->get_number_of_leaves();
 	}
@@ -114,7 +115,7 @@ void TTree::_simulateUnderPrior(Storage *) {
 	}
 }
 
-void TTree::_initialize_Z(std::vector<size_t> num_leaves_per_tree) {
+void TTree::_initialize_Z(IndexArray num_leaves_per_tree) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
 
 	_Z.initialize_dimensions(num_leaves_per_tree);

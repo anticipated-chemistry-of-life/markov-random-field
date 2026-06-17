@@ -13,6 +13,7 @@
 #include "constants.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include "coretools/algorithms.h"
 #include "coretools/devtools.h"
 #include "mass_spec/msms_data.h"
 #include "omp.h"
@@ -38,7 +39,7 @@ private:
 	// stuff for updating Y
 	size_t _K;
 	size_t _num_outer_loops;
-	std::vector<size_t> _num_leaves_per_dim_except_last;
+	IndexArray _num_leaves_per_dim_except_last;
 	std::vector<TSheet> _sheets;
 	TCurrentState _clique_last_dim;
 
@@ -61,25 +62,25 @@ private:
 	coretools::TOutputFile _joint_density_file;
 
 	// functions for updating Y
-	void _update_sheets(bool first, const std::vector<size_t> &start_index_in_leaves_space,
-	                    const std::vector<size_t> &previous_ix, size_t K_cur_sheet);
-	void _fill_clique_along_last_dim(std::vector<size_t> start_index_in_leaves_space);
-	void _calculate_log_prob_field(const std::vector<size_t> &index_in_leaves_space,
+	void _update_sheets(bool first, IndexArray &start_index_in_leaves_space,
+	                    IndexArray &previous_ix, size_t K_cur_sheet);
+	void _fill_clique_along_last_dim(IndexArray start_index_in_leaves_space);
+	void _calculate_log_prob_field(const IndexArray &index_in_leaves_space,
 	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix,
-	                                         const std::vector<size_t> &start_index_in_leaves_space,
-	                                         const std::vector<size_t> &previous_ix) const;
-	int _set_new_Y(bool new_state, const std::vector<size_t> &index_in_leaves_space,
+	                                         const IndexArray &start_index_in_leaves_space,
+	                                         const IndexArray &previous_ix) const;
+	int _set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
 	               std::vector<size_t> &linear_indices_in_Y_space_to_insert);
 	void _update_counter_1_cliques(bool new_state, bool old_state,
-	                               const std::vector<size_t> &index_in_leaves_space);
+	                               const IndexArray &index_in_leaves_space);
 
 	void _simulate_Y();
-	void _calc_lotus_LL(const std::vector<size_t> &index_in_leaves_space,
-	                    size_t index_for_tmp_state, size_t leaf_index_last_dim,
-	                    std::array<double, 2> &prob, const TLotus &lotus);
-	static void _prepare_lotus_LL(const std::vector<size_t> &start_index_in_leaves_space,
-	                              size_t K_cur_sheet, TLotus &lotus);
+	void _calc_lotus_LL(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
+	                    size_t leaf_index_last_dim, std::array<double, 2> &prob,
+	                    const TLotus &lotus);
+	static void _prepare_lotus_LL(const IndexArray &start_index_in_leaves_space, size_t K_cur_sheet,
+	                              TLotus &lotus);
 	static void _update_cur_LL_lotus(TLotus &lotus,
 	                                 std::vector<coretools::TSumLogProbability> &new_LL);
 	double _calculate_complete_joint_density();
@@ -89,7 +90,7 @@ private:
 	}
 
 	template<bool IsSimulation, bool initYFromLotus>
-	std::pair<int, double> _update_Y(const std::vector<size_t> &index_in_leaves_space,
+	std::pair<int, double> _update_Y(const IndexArray &index_in_leaves_space,
 	                                 size_t leaf_index_last_dim, size_t index_for_tmp_state,
 	                                 std::vector<size_t> &linear_indices_in_Y_space_to_insert,
 	                                 const TLotus &lotus) {
@@ -173,7 +174,7 @@ private:
 		// read by all threads in _need_to_update_sheet and written in the post `single`; the
 		// reduction combines into diff_counter_1_in_last_dim (reset to 0 in the prep `single` each
 		// iteration).
-		std::vector<size_t> previous_ix;
+		IndexArray previous_ix;
 		int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
     shared(new_LL, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,   \
@@ -189,7 +190,7 @@ private:
 					// get multi-dimensional index from linear coordinate and set the start of the
 					// last dimension
 					auto start_index_in_leaves_space =
-					    coretools::getSubscripts(i, _num_leaves_per_dim_except_last);
+					    coretools::getSubscriptsAsArray(i, _num_leaves_per_dim_except_last);
 					start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
 					// calculate size of current sheet (make sure not to overshoot)
 					const size_t K_cur_sheet = std::min(_K, _trees.back()->get_number_of_leaves() -

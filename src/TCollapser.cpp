@@ -4,6 +4,7 @@
 
 #include "TCollapser.h"
 
+#include "constants.h"
 #include "coretools/Main/TLog.h"
 
 TCollapser::TCollapser(const std::vector<std::unique_ptr<TTree>> &trees) : _trees(trees) {}
@@ -77,22 +78,22 @@ std::vector<size_t> TCollapser::initialize(const std::vector<std::string> &dimen
 	return len_per_dimension;
 }
 
-bool TCollapser::x_is_one(const std::vector<size_t> &index_in_leaves, bool old_state) const {
+bool TCollapser::x_is_one(const IndexArray &index_in_leaves, bool old_state) const {
 	// used for calculating likelihood when updating Y, used to evaluate if x=1 if Y=0
 	// need to modify counter if old_state == 1
 	if (old_state) { return _x_is_one<true>(index_in_leaves); }
 	return _x_is_one<false>(index_in_leaves);
 }
 
-bool TCollapser::x_is_one(const std::vector<size_t> &index_in_leaves) const {
+bool TCollapser::x_is_one(const IndexArray &index_in_leaves) const {
 	// used for calculating likelihood when updating gamma
 	// don't need to modify counter of cliques, always take current counter
 	return _x_is_one<false>(index_in_leaves);
 }
 
-std::vector<size_t> TCollapser::collapse(const std::vector<size_t> &index_in_full_space) const {
+IndexArray TCollapser::collapse(const IndexArray &index_in_full_space) const {
 	const size_t num_dim = _dimensions_to_keep.size();
-	std::vector<size_t> index_in_collapsed_space(num_dim, 0);
+	IndexArray index_in_collapsed_space;
 	for (size_t i = 0; i < num_dim; ++i) {
 		index_in_collapsed_space[i] = index_in_full_space[_dimensions_to_keep[i]];
 	}

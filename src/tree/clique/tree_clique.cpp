@@ -1,8 +1,10 @@
 #include "../TTree.h"
+#include "constants.h"
+#include "coretools/algorithms.h"
 
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
 
-const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) const {
+const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const {
 	size_t ix_clique = 0;
 	size_t stride    = 1;
 
@@ -15,7 +17,7 @@ const TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_spac
 	return _cliques[ix_clique];
 }
 
-TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
+TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) {
 	size_t ix_clique = 0;
 	size_t stride    = 1;
 
@@ -28,7 +30,7 @@ TClique &TTree::get_clique(const std::vector<size_t> &index_in_leaves_space) {
 	return _cliques[ix_clique];
 }
 
-void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
+void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
                                 const std::vector<std::unique_ptr<TTree>> &all_trees) {
 	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working
@@ -50,8 +52,7 @@ void TTree::_initialize_cliques(const std::vector<size_t> &num_leaves_per_tree,
 	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
 		// get start index of each clique in leaves space
-		std::vector<size_t> start_index_in_leaves_space =
-		    coretools::getSubscripts(i, _dimension_cliques);
+		auto start_index_in_leaves_space = coretools::getSubscriptsAsArray(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
 		_cliques.back().initialize(_delta, _number_of_bins);
 
