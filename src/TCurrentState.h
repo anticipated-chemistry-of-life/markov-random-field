@@ -7,7 +7,7 @@
 
 #include "constants.h"
 #include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZVector.h"
+#include "storages/z_storage/TStorageZMatrix.h"
 #include <cstddef>
 #include <tuple>
 #include <vector>
@@ -30,7 +30,7 @@ private:
 	std::vector<uint8_t> _current_state_Z;
 	std::vector<uint8_t> _exists_in_Z;
 	// Linear index in Z space of each parsed cell (Z is now a TSparseMatrix, like Y).
-	std::vector<size_t> _index_in_TStorageZVector;
+	std::vector<size_t> _index_in_TStorageZMatrix;
 
 	// increment and tree
 	size_t _increment;
@@ -41,15 +41,15 @@ public:
 	TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
 	void fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
-	          const TStorageZVector &Z);
+	          const TStorageZMatrix &Z);
 	void fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TStorageYMatrix &Y);
 	void fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	            const TStorageZVector &Z);
+	            const TStorageZMatrix &Z);
 	void fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TStorageYMatrix &Y);
 	void fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-	                           size_t num_nodes_to_parse, const TStorageZVector &Z);
+	                           size_t num_nodes_to_parse, const TStorageZMatrix &Z);
 
 	bool get(size_t index_in_tree) const;
 	bool get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const;

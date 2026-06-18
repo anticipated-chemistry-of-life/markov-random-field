@@ -22,11 +22,11 @@ TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of
 
 	_current_state_Z.resize(size_of_Z, false);
 	_exists_in_Z.resize(size_of_Z, false);
-	_index_in_TStorageZVector.resize(size_of_Z);
+	_index_in_TStorageZMatrix.resize(size_of_Z);
 }
 
 void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
-                         const TStorageZVector &Z) {
+                         const TStorageZMatrix &Z) {
 	fill_Y(start_index_in_leaves_space, _tree.get_number_of_leaves(),
 	       Y); // parse all Y (all leaves)
 	fill_Z(start_index_in_leaves_space, _tree.get_number_of_internal_nodes(),
@@ -42,11 +42,11 @@ void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leave
 }
 
 void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                          size_t num_nodes_to_parse, const TStorageZVector &Z) {
+                                          size_t num_nodes_to_parse, const TStorageZMatrix &Z) {
 	// along the last dimension -> increment is 1 -> a single matrix row.
-	// _index_in_TStorageZVector now holds the linear index in Z space of each parsed cell.
+	// _index_in_TStorageZMatrix now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
-	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZVector);
+	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZMatrix);
 }
 
 void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
@@ -58,11 +58,11 @@ void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t
 }
 
 void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-                           const TStorageZVector &Z) {
+                           const TStorageZMatrix &Z) {
 	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
-	// _index_in_TStorageZVector now holds the linear index in Z space of each parsed cell.
+	// _index_in_TStorageZMatrix now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
-	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZVector);
+	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZMatrix);
 }
 
 bool TCurrentState::get(size_t index_in_tree) const { return get(index_in_tree, 0, 0); }
@@ -94,7 +94,7 @@ size_t TCurrentState::get_index_in_TStorageVector(size_t index_in_tree) const {
 	if (_tree.isLeaf(index_in_tree)) {
 		return _index_in_TStorageYMatrix[_tree.get_index_within_leaves(index_in_tree)];
 	}
-	return _index_in_TStorageZVector[_tree.get_index_within_internal_nodes(index_in_tree)];
+	return _index_in_TStorageZMatrix[_tree.get_index_within_internal_nodes(index_in_tree)];
 }
 
 bool TCurrentState::exists_in_TStorageVector(size_t index_in_tree) const {

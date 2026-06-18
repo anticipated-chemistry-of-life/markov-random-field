@@ -18,7 +18,7 @@
 #include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZVector.h"
+#include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/node.h"
 #include <cstddef>
 #include <optional>
@@ -80,7 +80,7 @@ private:
 	TypeParamAlpha *_alpha_c = nullptr;
 
 	// Set Z
-	TStorageZVector _Z;
+	TStorageZMatrix _Z;
 
 	// Joint probability density
 	std::vector<double> _joint_log_prob_density;
@@ -331,8 +331,8 @@ public:
 	std::vector<TClique> &get_cliques();
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);
-	[[nodiscard]] const TStorageZVector &get_Z() const;
-	TStorageZVector &get_Z();
+	[[nodiscard]] const TStorageZMatrix &get_Z() const;
+	TStorageZMatrix &get_Z();
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
@@ -426,8 +426,8 @@ public:
 			coretools::TOutputFile file(filename, header, "\t");
 			// iterate only the stored (non-default) cells, in ascending linear-index order
 			for (const auto &[linear_index_in_Z_space, storage] : _Z.get_stored_entries()) {
-				const auto state = storage.is_one();
-				line             = {linear_index_in_Z_space, state};
+				const auto state    = storage.is_one();
+				line                = {linear_index_in_Z_space, state};
 				auto multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
 				std::vector<std::string> node_names;
 				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {

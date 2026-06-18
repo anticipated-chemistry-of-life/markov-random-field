@@ -12,7 +12,7 @@
 #include "coretools/devtools.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZ.h"
-#include "storages/z_storage/TStorageZVector.h"
+#include "storages/z_storage/TStorageZMatrix.h"
 #include <armadillo>
 #include <cstddef>
 #include <iomanip>
@@ -224,7 +224,7 @@ private:
 		}
 	}
 
-	void _update_current_state(TStorageZVector &Z, TCurrentState &current_state,
+	void _update_current_state(TStorageZMatrix &Z, TCurrentState &current_state,
 	                           size_t index_in_tree, bool new_state,
 	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
 	                           const TTree *tree) const;
@@ -245,7 +245,7 @@ private:
 	/// @param binned_branch_lengths the vector of branch length
 	/// @param leaves_and_internal_nodes_without_roots_indices Same as the variable name
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZVector &Z,
+	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZMatrix &Z,
 	                   const TTree *tree, const TypeParamBinBranches *binned_branch_lengths,
 	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
 	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
@@ -294,16 +294,16 @@ public:
 	/// @param tree The tree.
 	std::vector<size_t>
 	update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
-	         TStorageZVector &Z, const TTree *tree, TypeAlpha alpha,
+	         TStorageZMatrix &Z, const TTree *tree, TypeAlpha alpha,
 	         const TypeParamBinBranches *binned_branch_lengths,
 	         const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
 	std::vector<size_t> initialize_Z_from_children(
-	    TCurrentState &current_state, TStorageZVector &Z, const TTree *tree,
+	    TCurrentState &current_state, TStorageZMatrix &Z, const TTree *tree,
 	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
-	TCurrentState create_current_state(const TStorageYMatrix &Y, const TStorageZVector &Z,
+	TCurrentState create_current_state(const TStorageYMatrix &Y, const TStorageZMatrix &Z,
 	                                   const TTree &tree);
 
 	/// @brief Return the number of nodes in the clique
