@@ -9,7 +9,6 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/devtools.h"
-#include <Security/cssmconfig.h>
 #include <array>
 #include <cstddef>
 #include <cstdint>
