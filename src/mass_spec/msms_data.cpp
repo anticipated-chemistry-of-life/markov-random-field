@@ -88,7 +88,7 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 	const double cont = (double)_proba_contamination->value();
 
 	// Position 0 should be old, position 1 should be new
-	std::array<coretools::TSumLogProbability, 2> log_lik;
+	std::array<coretools::TSumLogProbability, 2> log_lik{};
 	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
 	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
 	     ++species_idx) {
@@ -109,6 +109,86 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 		}
 	}
 	return log_lik[1].getSum() - log_lik[0].getSum();
+}
+
+double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
+                                                         const TMassSpecRun &run,
+                                                         const TAssignmentProposal &move) const {
+	if (!move.is_valid()) { return 0.0; }
+
+	// accumulate probabilities (TSumLogProbability::add takes a probability; getSum returns its
+	// log).
+	coretools::TSumLogProbability p_new{};
+	coretools::TSumLogProbability p_old{};
+
+	// --- feature term: P(feature | assigned molecule) = assigned binned likelihood through the
+	// _log_lik_present table; the unknown molecule's binned value lives in the same assignment, so
+	// it flows through the same table. ---
+	auto feature_prob = [this](const TFeatureLikelihood &assignment) {
+		return _log_lik_present[assignment.get_binned_likelihood()];
+	};
+	p_old.add(feature_prob(move.old_a));
+	p_new.add(feature_prob(move.new_a));
+	if (move.type == AssignmentMoveType::Swap) {
+		p_old.add(feature_prob(move.old_b));
+		p_new.add(feature_prob(move.new_b));
+	}
+
+	// --- filter / contamination term: only real molecules whose "is assigned" status flips matter.
+	// Net the real molecules leaving (old assignments) against those arriving (new assignments);
+	// any molecule present in both (a Swap) cancels and contributes nothing. ---
+	std::array<uint32_t, 2> removed{};
+	std::array<uint32_t, 2> added{};
+	size_t n_removed = 0;
+	size_t n_added   = 0;
+	auto push_real   = [](std::array<uint32_t, 2> &out, size_t &n, const TFeatureLikelihood &a) {
+		if (!a.is_unknown_molecule()) { out[n++] = a.get_molecule_index(); }
+	};
+	push_real(removed, n_removed, move.old_a);
+	push_real(added, n_added, move.new_a);
+	if (move.type == AssignmentMoveType::Swap) {
+		push_real(removed, n_removed, move.old_b);
+		push_real(added, n_added, move.new_b);
+	}
+	auto contains = [](const std::array<uint32_t, 2> &arr, size_t n, uint32_t m) {
+		for (size_t k = 0; k < n; ++k) {
+			if (arr[k] == m) { return true; }
+		}
+		return false;
+	};
+
+	const double cont                = (double)_proba_contamination->value();
+	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
+	auto y_present                   = [&](uint32_t molecule_idx) {
+		return y_storage.is_one(
+		    y_storage.get_linear_index_in_Y_space({species_idx, (size_t)molecule_idx}));
+	};
+	auto filter_prob = [&](uint32_t molecule_idx) {
+		const size_t idx =
+		    _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx});
+		return LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(idx)];
+	};
+
+	// molecules that were assigned and now are not: ms 1 -> 0
+	for (size_t k = 0; k < n_removed; ++k) {
+		const uint32_t m = removed[k];
+		if (contains(added, n_added, m)) { continue; }
+		const bool y      = y_present(m);
+		const double filt = filter_prob(m);
+		p_old.add(TMassSpecRun::probability_of_assignment(y, true, filt, cont));
+		p_new.add(TMassSpecRun::probability_of_assignment(y, false, filt, cont));
+	}
+	// molecules that were not assigned and now are: ms 0 -> 1
+	for (size_t k = 0; k < n_added; ++k) {
+		const uint32_t m = added[k];
+		if (contains(removed, n_removed, m)) { continue; }
+		const bool y      = y_present(m);
+		const double filt = filter_prob(m);
+		p_old.add(TMassSpecRun::probability_of_assignment(y, false, filt, cont));
+		p_new.add(TMassSpecRun::probability_of_assignment(y, true, filt, cont));
+	}
+
+	return p_new.getSum() - p_old.getSum();
 }
 
 // void TMSMSData::add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,

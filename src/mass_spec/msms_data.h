@@ -122,14 +122,14 @@ public:
 
 	// Sum log P(MS data for species | molecule = absent/present) into sum_log[0/1].
 	// Runs are treated as independent; features within a run as independent (approximation).
-	void add_log_likelihood(const IndexArray &indices_in_leaves,
-	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		const auto species_idx  = indices_in_leaves[_species_dim];
-		const auto molecule_idx = indices_in_leaves[_molecule_dim];
-		const auto runs         = this->get_ms_data_for_species(species_idx);
-		for (const auto &run : runs) {
-			run.add_log_likelihood_for_molecule(static_cast<uint32_t>(molecule_idx),
-			                                    _log_lik_absent, _log_lik_present, sum_log);
+	void add_log_likelihood(
+	    const IndexArray &indices_in_leaves,
+	    [[maybe_unused]] std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		const auto species_idx                   = indices_in_leaves[_species_dim];
+		[[maybe_unused]] const auto molecule_idx = indices_in_leaves[_molecule_dim];
+		const auto runs                          = this->get_ms_data_for_species(species_idx);
+		for ([[maybe_unused]] const auto &run : runs) {
+			throw coretools::TDevError("not implemented.");
 		}
 	}
 
@@ -154,13 +154,32 @@ public:
 		return _molecules_tree->get_index_within_leaves(molecule_name);
 	}
 
+	/// Here it is like gamma and the error rate: we need to calculate the complete log likelihood
+	/// ratio
 	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
-		_cur_LL_contamination = 0.0;
-		_old_LL_contamination = 0.0;
+		_old_LL_contamination = _cur_LL_contamination;
+		// TODO: _cur_LL_contamination = _calculate_log_likelihood_msdata()
 		throw coretools::TDevError("Function not implemented yet");
 	};
 
 	double calculateLLRatio(TypeParamMassSpecFilter *, size_t index);
+
+	/// Log-likelihood ratio (new - old) of a proposed assignment move in a single run. Y and the
+	/// mass-spec filter/contamination parameters are held fixed; only the terms that the move
+	/// changes are scored:
+	///   * the feature term(s): P(feature | assigned molecule), the assigned binned likelihood
+	///   mapped
+	///     through `_log_lik_present` (for the unknown molecule the per-feature unknown probability
+	///     is mapped through the same table);
+	///   * the filter/contamination term(s) for the real molecules whose "is assigned" status flips
+	///     (none flip for a Swap, so only feature terms change there), via
+	///     probability_of_assignment.
+	/// Returns 0 for an invalid (no-op) proposal. This is the likelihood ratio only; any
+	/// proposal/Hastings ratio must be added by the caller.
+	[[nodiscard]] double
+	calculate_LL_ratio_for_assignment_move(size_t species_idx, const TMassSpecRun &run,
+	                                       const TAssignmentProposal &move) const;
+
 	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {
 		if (!Accepted) {
 			_cur_LL_contamination = _old_LL_contamination; // reset

@@ -16,14 +16,14 @@ private:
 	/// The remaining bits for the linear index
 	/// This also defines the maximum number of molecules that can be stored
 	static constexpr uint32_t _molecule_index_mask = MAX_NUMBER_OF_MOLECULES;
-	void _set_molecule_index(const uint32_t linear_index) {
-		if (linear_index > _molecule_index_mask - 1) { // _molecule_index_mask - 1 because we need
-			                                           // to keep a spot for the unknown molecule
+	void _set_molecule_index(const uint32_t molecule_index) {
+		if (molecule_index > _molecule_index_mask - 1) { // _molecule_index_mask - 1 because we need
+			                                             // to keep a spot for the unknown molecule
 			throw coretools::TUserError(
-			    "Molecule index '", linear_index,
+			    "Molecule index '", molecule_index,
 			    "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask, ".");
 		}
-		_value = (_value & ~_molecule_index_mask) | (linear_index & _molecule_index_mask);
+		_value = (_value & ~_molecule_index_mask) | (molecule_index & _molecule_index_mask);
 	}
 
 	void _set_feature_to_unknown_molecule(const uint8_t binned_likelihood) {
@@ -37,8 +37,8 @@ private:
 
 public:
 	TFeatureLikelihood() = default;
-	explicit TFeatureLikelihood(const uint32_t linear_index, const uint8_t binned_likelihood) {
-		this->_set_molecule_index(linear_index);
+	explicit TFeatureLikelihood(const uint32_t molecule_index, const uint8_t binned_likelihood) {
+		this->_set_molecule_index(molecule_index);
 		this->_set_binned_likelihood(binned_likelihood);
 	}
 
@@ -66,3 +66,5 @@ public:
 	bool operator==(const uint32_t right) const { return get_molecule_index() == right; }
 	static uint32_t get_unknown_molecule_index() { return _molecule_index_mask; }
 };
+
+static_assert(sizeof(TFeatureLikelihood) == 4, "TFeatureLikelihood should be 4 bytes");
