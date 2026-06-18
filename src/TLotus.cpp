@@ -7,11 +7,11 @@
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <deque>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -187,6 +187,7 @@ void TLotus::update_markov_field() { _markov_field.update(*this, _mrf_update_ite
 
 [[nodiscard]] double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/) {
 	_oldLL = _curLL;                          // store current likelihood
+	_refresh_research_effort_factor();        // gamma was just proposed -> rebuild the factors
 	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
 	return _curLL - _oldLL;
 }
@@ -199,7 +200,8 @@ double TLotus::calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/) {
 
 void TLotus::updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted) {
 	if (!Accepted) {
-		_curLL = _oldLL; // reset
+		_curLL = _oldLL;                   // reset
+		_refresh_research_effort_factor(); // gamma was reverted -> resync the factors
 	}
 }
 
@@ -215,6 +217,8 @@ void TLotus::guessInitialValues() {
 	}
 	_error_rate->set(ProgramOptions::EPSILON);
 
+	_refresh_research_effort_factor(); // gamma just set -> sync the memoized factors before the LL
+
 	// initialize _curLL
 	_curLL = calculate_log_likelihood_of_L();
 	_oldLL = _curLL;
@@ -222,12 +226,29 @@ void TLotus::guessInitialValues() {
 
 const TStorageYMatrix &TLotus::get_Lotus() const { return _L; }
 
+void TLotus::_refresh_research_effort_factor() {
+	// Recompute the memoized research-effort factors from the current gamma values. Called whenever
+	// gamma changes (init, accepted/rejected gamma moves, simulation), so the per-cell hot path never
+	// has to call exp() or touch the gamma parameter storage. Looping over _occurrence_counters keeps
+	// this a no-op under the simple error model (no occurrence counters / gamma there).
+	_research_effort_factor.resize(_occurrence_counters.size());
+	for (size_t i = 0; i < _occurrence_counters.size(); ++i) {
+		const double gamma = (double)_gamma->value(i);
+		const auto &occ    = _occurrence_counters[i];
+		auto &factor       = _research_effort_factor[i];
+		factor.resize(occ.size());
+		for (size_t leaf = 0; leaf < occ.size(); ++leaf) {
+			factor[leaf] = 1.0 - std::exp(-gamma * occ[leaf]);
+		}
+	}
+}
+
 double TLotus::_calculate_research_effort(const IndexArray &index_in_collapsed_space) const {
+	// _research_effort_factor[i][leaf] caches 1 - exp(-gamma_i * occ_i[leaf]) (see
+	// _refresh_research_effort_factor), so this collapses to a product of table lookups.
 	double prod = 1.0;
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		const size_t leaf_index = index_in_collapsed_space[i];
-		const auto counts       = _occurrence_counters[i][leaf_index];
-		prod *= 1.0 - std::exp(-(double)_gamma->value(i) * counts);
+	for (size_t i = 0; i < _research_effort_factor.size(); ++i) {
+		prod *= _research_effort_factor[i][index_in_collapsed_space[i]];
 	}
 	return prod;
 }
@@ -263,44 +284,41 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 };
 
 double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
+	const auto &Y      = _markov_field.get_Y_matrix();
+	const size_t total = Y.total_size_of_container_space();
+
+	// Merge-join the two sparse matrices in ascending linear-index order without materializing
+	// their entries. We only need to evaluate cells that are stored in Y and/or L: for every other
+	// cell both states are false, and _calculate_probability_of_L_given_x(false, false, i) is
+	// position-independent, so those collapse into a single bulk term below.
 	coretools::TSumLogProbability sum_log;
+	auto y_cur = Y.stored_cursor();
+	auto l_cur = _L.stored_cursor();
 
-	// snapshot the stored Y and L cells in ascending linear-index order, then merge-walk over them
-	const auto y_entries = _markov_field.get_Y_matrix().get_stored_entries();
-	const auto l_entries = _L.get_stored_entries();
-	size_t index_in_Y    = 0;
-	size_t index_in_L    = 0;
-	bool state_of_Y;
-	bool state_of_L;
+	size_t n_visited = 0; // distinct linear indices stored in Y and/or L
+	while (y_cur.valid() || l_cur.valid()) {
+		const size_t yi = y_cur.valid() ? y_cur.linear_index() : total;
+		const size_t li = l_cur.valid() ? l_cur.linear_index() : total;
+		const size_t i  = std::min(yi, li);
 
-	for (size_t i = 0; i < _markov_field.get_Y_matrix().total_size_of_container_space(); ++i) {
-		std::tie(state_of_Y, index_in_Y) = _get_state_of_Y(i, index_in_Y, y_entries);
-		std::tie(state_of_L, index_in_L) = _get_state_of_L(i, index_in_L, l_entries);
+		bool state_of_Y = false;
+		bool state_of_L = false;
+		if (yi == i) {
+			state_of_Y = y_cur.is_one();
+			y_cur.advance();
+		}
+		if (li == i) {
+			state_of_L = l_cur.is_one();
+			l_cur.advance();
+		}
 
 		sum_log.add(_calculate_probability_of_L_given_x(state_of_Y, state_of_L, i));
+		++n_visited;
 	}
-	return sum_log.getSum();
-}
 
-std::pair<bool, size_t>
-TLotus::_get_state_of_Y(size_t i, size_t index_in_Y,
-                        const std::vector<std::pair<size_t, TStorageY>> &y_entries) {
-	if (index_in_Y >= y_entries.size()) { return {false, index_in_Y}; } // don't overshoot
-
-	const auto &[linear_index_in_Y, y] = y_entries[index_in_Y];
-	if (i == linear_index_in_Y) { return {y.is_one(), index_in_Y + 1}; }
-	assert(i < linear_index_in_Y);
-	return {false, index_in_Y};
-}
-std::pair<bool, size_t>
-TLotus::_get_state_of_L(size_t i, size_t index_in_L,
-                        const std::vector<std::pair<size_t, TStorageY>> &l_entries) {
-	if (index_in_L >= l_entries.size()) { return {false, index_in_L}; } // don't overshoot
-
-	const auto &[linear_index_in_L, l] = l_entries[index_in_L];
-	if (i == linear_index_in_L) { return {l.is_one(), index_in_L + 1}; }
-	assert(i < linear_index_in_L);
-	return {false, index_in_L};
+	// Every remaining cell is (Y = 0, L = 0): a single constant, position-independent term.
+	const double p_absent = _calculate_probability_of_L_given_x(false, false, static_cast<size_t>(0));
+	return sum_log.getSum() + static_cast<double>(total - n_visited) * std::log(p_absent);
 }
 
 double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
@@ -357,6 +375,8 @@ void TLotus::_simulateUnderPrior(Storage *) {
 		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 			_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 		}
+
+		_refresh_research_effort_factor(); // gamma + counts ready -> sync factors before simulating L
 	}
 
 	// first simulate Markov random field
