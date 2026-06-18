@@ -2,16 +2,17 @@
 // Created by VISANI Marco on 18.10.2024.
 //
 
-#ifndef TSTORAGEZVECTOR_H
-#define TSTORAGEZVECTOR_H
+#ifndef TStorageZMatrix_H
+#define TStorageZMatrix_H
 #include "TStorageZ.h"
 #include "constants.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
 #include <cstddef>
 #include <utility>
 #include <vector>
-/// There is one TStorageZVector per dimension `d`. The dimensions in Z space correspond
+/// There is one TStorageZMatrix per dimension `d`. The dimensions in Z space correspond
 /// to the number of leaves in each dimension except for dimension `d`, where the
 /// dimension is given by the number of internal nodes.
 /// For example, for dimension of interest `d` with number of leaves [2, 3] and 17
@@ -20,7 +21,7 @@
 /// Backed by a coretools::TSparseMatrix<TStorageZ>, mirroring TStorageYMatrix: rows and
 /// columns are kept sorted, so a clique's nodes can be range-walked in O(nnz in that
 /// line) and the (row, col) position encodes the linear index in Z space.
-class TStorageZVector {
+class TStorageZMatrix {
 private:
 	IndexArray _dimensions_in_Z_space{};
 	coretools::TSparseMatrix<TStorageZ> _mat;
@@ -31,14 +32,21 @@ private:
 	}
 
 	void _insert(size_t linear_index_in_Z_space, bool state) {
+		if (linear_index_in_Z_space >= this->total_size_of_container_space()) {
+			throw coretools::TDevError(
+			    "You are trying to insert a value at an linear index bigger than the total "
+			    "size of the container. ",
+			    "The index is: ", linear_index_in_Z_space,
+			    " and the total size of the container is : ", this->total_size_of_container_space());
+		}
 		const auto md = _row_col(linear_index_in_Z_space);
 		_mat.set(md[0], md[1], TStorageZ(state));
 	}
 
 public:
-	TStorageZVector()  = default;
-	~TStorageZVector() = default;
-	explicit TStorageZVector(const IndexArray &dimensions_in_Z_space) {
+	TStorageZMatrix()  = default;
+	~TStorageZMatrix() = default;
+	explicit TStorageZMatrix(const IndexArray &dimensions_in_Z_space) {
 		initialize_dimensions(dimensions_in_Z_space);
 	}
 
@@ -172,4 +180,4 @@ public:
 	[[nodiscard]] size_t size() const { return _mat.nNonZero(); }
 };
 
-#endif // TSTORAGEZVECTOR_H
+#endif // TStorageZMatrix_H
