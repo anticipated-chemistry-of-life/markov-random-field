@@ -218,17 +218,6 @@ public:
 		}
 	}
 
-	/// Overload taking the start index as a vector (the common shape at call sites).
-	void fill_current_state(const std::vector<size_t> &start_index, size_t K, size_t increment,
-	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
-	                        std::vector<size_t> &linear_index) const {
-		if (start_index.size() != NUMBER_OF_TREES) {
-			throw coretools::TDevError("start_index must have size NUMBER_OF_TREES");
-		}
-		IndexArray start = {start_index[0], start_index[1]};
-		fill_current_state(start, K, increment, current_state, exists, linear_index);
-	}
-
 	std::vector<uint8_t> get_full_Y_binary_vector() const {
 		std::vector<uint8_t> Y_as_vector;
 		size_t total_size = total_size_of_container_space();
@@ -255,6 +244,10 @@ public:
 	}
 
 	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
+	[[nodiscard]] double sparsity() const {
+		return static_cast<double>(_mat.nNonZero()) /
+		       static_cast<double>(total_size_of_container_space());
+	}
 	[[nodiscard]] size_t number_of_dimensions() const { return _dimensions_Y_space.size(); }
 	[[nodiscard]] size_t get_thinning_factor() const { return _thinning_factor; }
 	[[nodiscard]] size_t number_of_ones() const {
