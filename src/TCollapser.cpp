@@ -94,6 +94,13 @@ bool TCollapser::x_is_one(const IndexArray &index_in_leaves) const {
 IndexArray TCollapser::collapse(const IndexArray &index_in_full_space) const {
 	const size_t num_dim = _dimensions_to_keep.size();
 	IndexArray index_in_collapsed_space;
+	if (num_dim != index_in_collapsed_space.max_size()) {
+		throw coretools::TDevError(
+		    "The number of dimensions to keep is not equal to the number of dimensions in the full "
+		    "space. ",
+		    "The number of dimensions to keep is: ", num_dim,
+		    " and the number of dimensions in the full space is: ", index_in_full_space.size());
+	}
 	for (size_t i = 0; i < num_dim; ++i) {
 		index_in_collapsed_space[i] = index_in_full_space[_dimensions_to_keep[i]];
 	}

@@ -227,7 +227,7 @@ double TLotus::_calculate_research_effort(const IndexArray &index_in_collapsed_s
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		const size_t leaf_index = index_in_collapsed_space[i];
 		const auto counts       = _occurrence_counters[i][leaf_index];
-		prod *= 1.0 - exp(-(double)_gamma->value(i) * counts);
+		prod *= 1.0 - std::exp(-(double)_gamma->value(i) * counts);
 	}
 	return prod;
 }
@@ -284,7 +284,7 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
 
 std::pair<bool, size_t>
 TLotus::_get_state_of_Y(size_t i, size_t index_in_Y,
-                        const std::vector<std::pair<size_t, TStorageY>> &y_entries) const {
+                        const std::vector<std::pair<size_t, TStorageY>> &y_entries) {
 	if (index_in_Y >= y_entries.size()) { return {false, index_in_Y}; } // don't overshoot
 
 	const auto &[linear_index_in_Y, y] = y_entries[index_in_Y];
@@ -294,7 +294,7 @@ TLotus::_get_state_of_Y(size_t i, size_t index_in_Y,
 }
 std::pair<bool, size_t>
 TLotus::_get_state_of_L(size_t i, size_t index_in_L,
-                        const std::vector<std::pair<size_t, TStorageY>> &l_entries) const {
+                        const std::vector<std::pair<size_t, TStorageY>> &l_entries) {
 	if (index_in_L >= l_entries.size()) { return {false, index_in_L}; } // don't overshoot
 
 	const auto &[linear_index_in_L, l] = l_entries[index_in_L];
@@ -425,6 +425,7 @@ void TLotus::burninHasFinished() {
 }
 
 void TLotus::oneBurninHasFinished() {
+	_markov_field.oneBurninHasFinished();
 	const size_t round      = ++_burnin_round;
 	const auto total_rounds = coretools::instances::parameters().get<size_t>("numBurnin", 10);
 

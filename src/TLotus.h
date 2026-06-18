@@ -93,12 +93,12 @@ private:
 	[[nodiscard]] double _calculate_log_likelihood_of_L_no_collapsing() const;
 	[[nodiscard]] double _calculate_log_likelihood_of_L_do_collapse() const;
 	void _simulateUnderPrior(Storage *) override;
-	[[nodiscard]] std::pair<bool, size_t>
+	[[nodiscard]] static std::pair<bool, size_t>
 	_get_state_of_Y(size_t i, size_t index_in_Y,
-	                const std::vector<std::pair<size_t, TStorageY>> &y_entries) const;
-	[[nodiscard]] std::pair<bool, size_t>
+	                const std::vector<std::pair<size_t, TStorageY>> &y_entries);
+	[[nodiscard]] static std::pair<bool, size_t>
 	_get_state_of_L(size_t i, size_t index_in_L,
-	                const std::vector<std::pair<size_t, TStorageY>> &l_entries) const;
+	                const std::vector<std::pair<size_t, TStorageY>> &l_entries);
 
 	double _return_error_rate(bool L) const;
 

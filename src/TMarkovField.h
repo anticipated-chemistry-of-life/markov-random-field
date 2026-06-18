@@ -338,6 +338,7 @@ public:
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();
 	void MCMCHasFinished();
+	void oneBurninHasFinished();
 
 	static size_t get_num_iterations_simulation() {
 		return coretools::instances::parameters().get("num_iterations", 5000);

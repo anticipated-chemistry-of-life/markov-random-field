@@ -12,6 +12,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
+#include "coretools/devtools.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "tree/TTree.h"
 #include <cstddef>
@@ -228,6 +229,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 		auto sum_log_field = _calculate_complete_joint_density();
 		_joint_density_file.writeln(sum_log_field);
 	}
+	OUT(_Y.sparsity());
 }
 
 void TMarkovField::_calc_lotus_LL(const IndexArray &index_in_leaves_space,
@@ -350,6 +352,8 @@ void TMarkovField::burninHasFinished() {
 	_Y.reset_counts();
 	_Y.remove_zeros();
 }
+
+void TMarkovField::oneBurninHasFinished() { _Y.remove_zeros(); }
 
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
