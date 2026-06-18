@@ -35,7 +35,7 @@ using TypeNu                       = coretools::StrictlyPositive;
 using TypeMeanLogNu                = coretools::Unbounded;
 using TypeVarLogNu                 = coretools::StrictlyPositive;
 using TypeBinnedBranchLengths      = coretools::UnsignedInt8WithMax<0>;
-using TypeFilterProbability        = coretools::Probability;
+using TypeFilterProbability        = coretools::UnsignedInt8;
 using TypeContaminationProbability = coretools::ZeroOneOpen;
 
 // Gamma

@@ -25,6 +25,12 @@ private:
 		}
 		_value = (_value & ~_molecule_index_mask) | (linear_index & _molecule_index_mask);
 	}
+
+	void _set_feature_to_unknown_molecule(const uint8_t binned_likelihood) {
+		_value = (_value & ~_molecule_index_mask) | (_molecule_index_mask & _molecule_index_mask);
+		_set_binned_likelihood(binned_likelihood);
+	}
+
 	void _set_binned_likelihood(const uint8_t binned_likelihood) {
 		_value = (_value & ~_likelihood_mask) | (static_cast<uint32_t>(binned_likelihood) << 24);
 	}
@@ -35,6 +41,17 @@ public:
 		this->_set_molecule_index(linear_index);
 		this->_set_binned_likelihood(binned_likelihood);
 	}
+
+	static TFeatureLikelihood new_unknown_molecule(const uint8_t binned_likelihood) {
+		TFeatureLikelihood result;
+		result._set_feature_to_unknown_molecule(binned_likelihood);
+		return result;
+	}
+
+	[[nodiscard]] bool is_unknown_molecule() const {
+		return (_value & _molecule_index_mask) == _molecule_index_mask;
+	}
+
 	[[nodiscard]] uint32_t get_molecule_index() const { return _value & _molecule_index_mask; };
 
 	[[nodiscard]] uint32_t get_binned_likelihood() const {

@@ -40,7 +40,9 @@ public:
 
 	static inline double LOG_NU_C = 0.0;
 
-	static inline double PROBA_TO_PASS_MS_FILTER = 0.5;
+	/// the index of the probability to pass the MS filter. Actual probabilities are found in
+	/// constants.h
+	static inline size_t INDEX_PROBA_TO_PASS_MS_FILTER = 128;
 
 	static inline double PROBA_OF_MS_CONTAMINATION = 0.001;
 

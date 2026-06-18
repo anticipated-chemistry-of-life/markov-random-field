@@ -229,7 +229,6 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 		auto sum_log_field = _calculate_complete_joint_density();
 		_joint_density_file.writeln(sum_log_field);
 	}
-	OUT(_Y.sparsity());
 }
 
 void TMarkovField::_calc_lotus_LL(const IndexArray &index_in_leaves_space,

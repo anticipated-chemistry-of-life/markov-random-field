@@ -2,6 +2,7 @@
 #include "TMarkovField.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Main/TError.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include <array>
@@ -27,8 +28,7 @@ void TMSMSData::initialize() {
 
 void TMSMSData::guessInitialValues() {
 	for (size_t i = 0; i < _molecules_tree->get_number_of_leaves(); ++i) {
-		_proba_to_pass_filter->set(i,
-		                           coretools::Probability(ProgramOptions::PROBA_TO_PASS_MS_FILTER));
+		_proba_to_pass_filter->set(i, ProgramOptions::INDEX_PROBA_TO_PASS_MS_FILTER);
 	}
 
 	_proba_contamination->set(ProgramOptions::PROBA_OF_MS_CONTAMINATION);
@@ -83,9 +83,9 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 	const size_t filter_index = multidim[0];
 	const size_t molecule_idx = multidim[1];
 
-	const double new_p = (double)_proba_to_pass_filter->value(index);
-	const double old_p = (double)_proba_to_pass_filter->oldValue(index);
-	const double cont  = (double)_proba_contamination->value();
+	const auto new_p  = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(index)];
+	const auto old_p  = LINEAR_SPACE_PROBA[_proba_to_pass_filter->oldValue(index)];
+	const double cont = (double)_proba_contamination->value();
 
 	// Position 0 should be old, position 1 should be new
 	std::array<coretools::TSumLogProbability, 2> log_lik;
