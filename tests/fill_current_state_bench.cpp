@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"
 #include <chrono>
@@ -84,7 +85,7 @@ TEST(FillCurrentState_Matrix, matches_brute_force) {
 
 		// easy path: scan a full row (increment 1) -> linear = row * dim1 + k
 		for (size_t row : {size_t{0}, size_t{37}, dim0 - 1}) {
-			const std::vector<size_t> start = {row, 0};
+			const IndexArray start = {row, 0};
 			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
 			for (size_t k = 0; k < dim1; ++k) {
 				const size_t linear = row * dim1 + k;
@@ -96,7 +97,7 @@ TEST(FillCurrentState_Matrix, matches_brute_force) {
 
 		// hard path: scan a full column (increment dim1) -> linear = k * dim1 + col
 		for (size_t col : {size_t{0}, size_t{37}, dim1 - 1}) {
-			const std::vector<size_t> start = {0, col};
+			const IndexArray start = {0, col};
 			Y.fill_current_state(start, dim0, /*increment=*/dim1, cur, exists, lin);
 			for (size_t k = 0; k < dim0; ++k) {
 				const size_t linear = k * dim1 + col;
@@ -118,7 +119,7 @@ TEST(Benchmark_FillCurrentState, easy_path) {
 	constexpr size_t dim1  = 1000;
 	constexpr size_t total = dim0 * dim1;
 
-	const std::vector<size_t> start = {0, 0}; // scan row 0
+	const IndexArray start = {0, 0}; // scan row 0
 
 	std::cout << "\n=== fill_current_state — easy path (increment=1, along last dim) ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
@@ -131,8 +132,8 @@ TEST(Benchmark_FillCurrentState, easy_path) {
 		std::vector<size_t> lin;
 		size_t sink = 0;
 		auto r      = timed([&] {
-            Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
-            sink += cur[0]; // prevent dead-code elimination
+			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
+			sink += cur[0]; // prevent dead-code elimination
 		});
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
@@ -149,7 +150,7 @@ TEST(Benchmark_FillCurrentState, hard_path) {
 	constexpr size_t total     = dim0 * dim1;
 	constexpr size_t increment = dim1; // stride between consecutive row elements
 
-	const std::vector<size_t> start = {0, 0}; // scan column 0
+	const IndexArray start = {0, 0}; // scan column 0
 
 	std::cout << "\n=== fill_current_state — hard path (increment=" << increment
 	          << ", non-last dim) ===\n";
@@ -163,8 +164,8 @@ TEST(Benchmark_FillCurrentState, hard_path) {
 		std::vector<size_t> lin;
 		size_t sink = 0;
 		auto r      = timed([&] {
-            Y.fill_current_state(start, dim0, increment, cur, exists, lin);
-            sink += cur[0];
+			Y.fill_current_state(start, dim0, increment, cur, exists, lin);
+			sink += cur[0];
 		});
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
@@ -179,7 +180,7 @@ TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
 	constexpr size_t dim1      = 1000;
 	constexpr size_t increment = dim1;
 
-	const std::vector<size_t> start = {0, 0};
+	const IndexArray start = {0, 0};
 
 	std::cout << "\n=== easy vs. hard comparison  (" << dim0 << "×" << dim1 << ") ===\n\n";
 	std::cout << "    " << std::left << std::setw(10) << "density" << std::setw(12) << "stored"
@@ -195,10 +196,10 @@ TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
 
 		size_t sink = 0;
 		auto easy   = timed([&] {
-            Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
-            sink += cur[0];
+			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
+			sink += cur[0];
 		});
-		auto hard = timed([&] {
+		auto hard   = timed([&] {
 			Y.fill_current_state(start, dim0, increment, cur, exists, lin);
 			sink += cur[0];
 		});

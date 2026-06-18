@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "mass_spec/feature_likelihood.h"
 #include "mass_spec/msms_run.h"
 #include "gtest/gtest.h"
@@ -20,6 +21,25 @@ TEST(TFeatureLikelihood_Tests, set_linear_index_3) {
 	TFeatureLikelihood storage(1, 200);
 	EXPECT_EQ(storage.get_molecule_index(), 1);
 	EXPECT_EQ(storage.get_binned_likelihood(), 200);
+}
+
+TEST(TFeatureLikelihood_Tests, set_unknown_molecule) {
+	auto storage = TFeatureLikelihood::new_unknown_molecule(128);
+	EXPECT_TRUE(storage.is_unknown_molecule());
+	EXPECT_EQ(storage.get_binned_likelihood(), 128);
+	EXPECT_EQ(storage.get_molecule_index(), TFeatureLikelihood::get_unknown_molecule_index());
+	EXPECT_EQ(storage.get_molecule_index(), MAX_NUMBER_OF_MOLECULES);
+
+	auto storage2 = TFeatureLikelihood::new_unknown_molecule(0);
+	EXPECT_TRUE(storage2.is_unknown_molecule());
+	EXPECT_EQ(storage2.get_binned_likelihood(), 0);
+	EXPECT_EQ(storage2.get_molecule_index(), TFeatureLikelihood::get_unknown_molecule_index());
+	EXPECT_EQ(storage2.get_molecule_index(), MAX_NUMBER_OF_MOLECULES);
+
+	auto storage3 = TFeatureLikelihood(0, 255);
+	EXPECT_FALSE(storage3.is_unknown_molecule());
+	EXPECT_EQ(storage3.get_binned_likelihood(), 255);
+	EXPECT_EQ(storage3.get_molecule_index(), 0);
 }
 
 TEST(TFeatureLikelihood_Tests, set_binned_likelihood_1) {

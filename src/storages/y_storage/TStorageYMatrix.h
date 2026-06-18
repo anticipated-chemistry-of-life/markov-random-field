@@ -274,4 +274,46 @@ public:
 		}
 		return entries;
 	}
+
+	/// Allocation-free forward walk over the stored cells in ascending linear-index order
+	/// (row-major: linear = row * nCols + col) -- the streaming form of get_stored_entries().
+	/// Within a row the sparse entries are already column-sorted and rows are visited in order,
+	/// so the linear index increases monotonically. Lets callers merge-join two matrices without
+	/// materializing a vector for either.
+	class StoredCursor {
+		const coretools::TSparseMatrix<TStorageY> *_mat = nullptr;
+		size_t _n_cols                                  = 0;
+		size_t _row                                     = 0;
+		decltype(std::declval<const coretools::TSparseMatrix<TStorageY>>().begin_row(0)) _it{};
+
+		void _skip_empty_rows() {
+			while (_row < _mat->nRows() && _it == _mat->end_row(_row)) {
+				++_row;
+				if (_row < _mat->nRows()) { _it = _mat->begin_row(_row); }
+			}
+		}
+
+	public:
+		StoredCursor() = default;
+		StoredCursor(const coretools::TSparseMatrix<TStorageY> &mat, size_t n_cols)
+		    : _mat(&mat), _n_cols(n_cols) {
+			if (_mat->nRows() > 0) {
+				_it = _mat->begin_row(0);
+				_skip_empty_rows();
+			}
+		}
+
+		[[nodiscard]] bool valid() const { return _mat != nullptr && _row < _mat->nRows(); }
+		[[nodiscard]] size_t linear_index() const { return _row * _n_cols + _it->index; }
+		[[nodiscard]] bool is_one() const { return _it->val.is_one(); }
+		[[nodiscard]] const TStorageY &value() const { return _it->val; }
+		void advance() {
+			++_it;
+			_skip_empty_rows();
+		}
+	};
+
+	[[nodiscard]] StoredCursor stored_cursor() const {
+		return StoredCursor(_mat, _dimensions_Y_space[1]);
+	}
 };
