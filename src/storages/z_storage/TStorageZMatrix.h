@@ -4,6 +4,7 @@
 
 #ifndef TStorageZMatrix_H
 #define TStorageZMatrix_H
+
 #include "TStorageZ.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
@@ -12,6 +13,7 @@
 #include <cstddef>
 #include <utility>
 #include <vector>
+
 /// There is one TStorageZMatrix per dimension `d`. The dimensions in Z space correspond
 /// to the number of leaves in each dimension except for dimension `d`, where the
 /// dimension is given by the number of internal nodes.
@@ -37,7 +39,8 @@ private:
 			    "You are trying to insert a value at an linear index bigger than the total "
 			    "size of the container. ",
 			    "The index is: ", linear_index_in_Z_space,
-			    " and the total size of the container is : ", this->total_size_of_container_space());
+			    " and the total size of the container is : ",
+			    this->total_size_of_container_space());
 		}
 		const auto md = _row_col(linear_index_in_Z_space);
 		_mat.set(md[0], md[1], TStorageZ(state));

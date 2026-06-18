@@ -4,7 +4,6 @@
 /// molecule dimension. So for each feature, we have a list of molecule indices and binned
 /// likelihoods.
 #include "./feature_likelihood.h"
-#include "Types.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"

@@ -8,13 +8,13 @@
 #include "coretools/Main/TError.h"
 #include <cstdint>
 #include <cstdlib>
+
 /** TStorage Y is the class to store a single value Y of the Random Markov Field
  * We store in a single 64 bits integer (8 bytes) the following information:
  * - the first 16 bits are the counter of the number of times the element was a one in the MCMC
  * - the 17th (position 16 ) is the current state of the element (0 or 1)
  * - the rest is the linear index in the Y space.
  */
-
 class TStorageY {
 private:
 	uint16_t _value = 0; // bit 15 = state, bits 0..14 = counter

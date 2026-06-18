@@ -7,12 +7,12 @@
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
 #include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZ.h"
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <unordered_set>
 #include <vector>
+
 double TMatrices::_delta;
 
 TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_dimension,
