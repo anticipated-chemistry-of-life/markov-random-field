@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "storages/y_storage/TStorageY.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"
@@ -288,7 +289,7 @@ TEST(YStorageMatrix_Tests, add_data) {
 	Y.set_to_zero(5); // linear index 5 -> (row 1, col 2)
 	EXPECT_EQ(Y.get_full_Y_binary_vector(), (std::vector<uint8_t>{0, 0, 0, 0, 0, 0}));
 
-	EXPECT_EQ(Y.get_multi_dimensional_index(5), (std::vector<size_t>{1, 2}));
+	EXPECT_EQ(Y.get_multi_dimensional_index(5), (IndexArray{1, 2}));
 	EXPECT_FALSE(Y.is_one(5));
 	EXPECT_EQ(Y.get_thinning_factor(), 1u);
 
