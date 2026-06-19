@@ -87,7 +87,13 @@ void TTree::initialize() {
 
 void TTree::guessInitialValues() {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
-		_log_nu_c->set(c, ProgramOptions::LOG_NU_C);
+		// Draw log_nu[c] ~ Normal(LOG_NU_C, LOG_NU_C_INIT_SD^2) instead of setting every clique to
+		// the same constant. Identical initial values would make the MLE that seeds var_log_nu 0,
+		// yielding a degenerate prior that freezes log_nu, mean_log_nu and var_log_nu (their
+		// proposals would never be accepted).
+		const double log_nu_init = coretools::instances::randomGenerator().getNormalRandom(
+		    ProgramOptions::LOG_NU_C, ProgramOptions::LOG_NU_C_INIT_SD);
+		_log_nu_c->set(c, log_nu_init);
 		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
 		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);

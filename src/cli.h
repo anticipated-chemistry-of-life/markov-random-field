@@ -40,6 +40,12 @@ public:
 
 	static inline double LOG_NU_C = 0.0;
 
+	/// Standard deviation of the Normal that jitters the per-clique log_nu initial values around
+	/// LOG_NU_C. Must be > 0: if every log_nu starts identical, the MLE that seeds var_log_nu is 0,
+	/// producing a degenerate (zero-variance) prior that freezes log_nu, mean_log_nu and var_log_nu
+	/// (proposals keep being made but are never accepted).
+	static inline double LOG_NU_C_INIT_SD = 0.1;
+
 	/// the index of the probability to pass the MS filter. Actual probabilities are found in
 	/// constants.h
 	static inline size_t INDEX_PROBA_TO_PASS_MS_FILTER = 128;
@@ -94,6 +100,8 @@ public:
 		ALPHA = params.get<double>("alpha", ALPHA);
 
 		LOG_NU_C = params.get<double>("log_nu_c", LOG_NU_C);
+
+		LOG_NU_C_INIT_SD = params.get<double>("log_nu_c_init_sd", LOG_NU_C_INIT_SD);
 
 		NUM_ITERATIONS = params.get<size_t>("iterations", NUM_ITERATIONS);
 	}
