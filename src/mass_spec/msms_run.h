@@ -8,6 +8,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -45,6 +46,12 @@ struct TAssignmentProposal {
 	size_t feature_b = 0;
 	TFeatureLikelihood old_b;
 	TFeatureLikelihood new_b;
+
+	/// log of the proposal (Hastings) ratio q(old|new)/q(new|old) for this move, computed at
+	/// proposal time from the counts the proposal sampled from. Zero for the symmetric moves
+	/// (`Swap`, `MoveToFree`); non-zero for `ToUnknown`/`FromUnknown`. The Metropolis-Hastings
+	/// acceptance must use `log_likelihood_ratio + log_hastings`.
+	double log_hastings = 0.0;
 
 	[[nodiscard]] bool is_valid() const { return type != AssignmentMoveType::Invalid; }
 };
@@ -262,6 +269,14 @@ private:
 		proposal.feature_a = f;
 		proposal.old_a     = _current_assignments[f];
 		proposal.new_a = TFeatureLikelihood::new_unknown_molecule(_probabilities_of_unkowns.at(f));
+		// Hastings ratio q(reverse)/q(forward). Forward picks f among R real features (the unknown
+		// target is forced) -> q_fwd = 1/R. The reverse is FromUnknown picking f among the (U+1)
+		// unknown features and then its old molecule among the (free(f)+1) free candidates it now
+		// has (the molecule freed by this move re-enters the set) -> q_rev = 1/((U+1)(free(f)+1)).
+		const auto R   = (double)real.size();
+		const auto U   = (double)(_current_assignments.size() - real.size());
+		const auto free_after = (double)(_free_candidates_of_feature(f).size() + 1);
+		proposal.log_hastings = std::log(R / ((U + 1.0) * free_after));
 		return proposal;
 	}
 
@@ -277,6 +292,14 @@ private:
 		proposal.old_a     = _current_assignments[f];
 		proposal.new_a =
 		    free_candidates[coretools::instances::randomGenerator().sample(free_candidates.size())];
+		// Hastings ratio q(reverse)/q(forward), the exact inverse of the ToUnknown case. Forward
+		// picks f among U unknown features and a molecule among its free(f) free candidates ->
+		// q_fwd = 1/(U*free(f)). The reverse is ToUnknown picking f among the (R+1) real features
+		// (target forced) -> q_rev = 1/(R+1).
+		const auto U           = (double)unknown.size();
+		const auto R           = (double)(_current_assignments.size() - unknown.size());
+		const auto free_before = (double)free_candidates.size();
+		proposal.log_hastings  = std::log((U * free_before) / (R + 1.0));
 		return proposal;
 	}
 

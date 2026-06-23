@@ -8,6 +8,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "mass_spec/msms_run.h"
+#include "stattools/ParametersObservations/TParameter.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -55,18 +56,13 @@ private:
 	size_t _number_of_filters;
 	const TMarkovField &_markov_field;
 
-	// log P(observation | molecule absent/present), indexed by binned_value (0-255).
-	// Initialized to 0.0 (= log(1), no contribution) until populated from file.
-	std::array<double, 256> _log_lik_absent{}; // TODO: maybe remove and just add 1-p(score| x=1) ?
-	std::array<double, 256> _log_lik_present{};
-
 	TypeParamContamination *_proba_contamination   = nullptr;
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
 	double _old_LL_contamination;
 	double _cur_LL_contamination;
 
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
-	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	[[maybe_unused]] const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	    &_markov_field_stattools_param;
 
 	// Private functions
@@ -90,6 +86,15 @@ private:
 		return coretools::getSubscriptsAsArray(filter_molecule_pair_index, _dimensions_for_filters);
 	}
 
+	/// Complete log-likelihood of all the mass-spec data given the current assignments, the current
+	/// Y (molecule presence/absence), and the current filter/contamination parameters. Per run it is
+	///   sum_features  log P(feature | assigned molecule)              [feature term, PHRED table]
+	/// + sum_molecules log probability_of_assignment(Y, ms, filter, c) [detection term, all molecules]
+	/// where `ms` = "molecule is assigned to some feature in this run". The detection term spans the
+	/// whole molecule space; the dominant (absent & unassigned -> 1-contamination) case is added as a
+	/// single bulk term, only present or assigned molecules are scored individually.
+	[[nodiscard]] double _calculate_log_likelihood_of_MSData() const;
+
 public:
 	explicit TMSMSData(
 	    const std::vector<std::unique_ptr<TTree>> &trees, const TMarkovField &markov_field,
@@ -109,27 +114,25 @@ public:
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	// Populate lookup tables from pre-computed log-probability arrays (called during data loading).
-	void set_lookup_tables(const std::array<double, 256> &log_lik_absent,
-	                       const std::array<double, 256> &log_lik_present) {
-		_log_lik_absent  = log_lik_absent;
-		_log_lik_present = log_lik_present;
-	}
-
-	void add_to_sumlog(coretools::TSumLogProbability &sum_log, uint8_t binned_value) const;
-	void add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
-	                   uint8_t binned_value) const;
-
-	// Sum log P(MS data for species | molecule = absent/present) into sum_log[0/1].
-	// Runs are treated as independent; features within a run as independent (approximation).
-	void add_log_likelihood(
-	    const IndexArray &indices_in_leaves,
-	    [[maybe_unused]] std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		const auto species_idx                   = indices_in_leaves[_species_dim];
-		[[maybe_unused]] const auto molecule_idx = indices_in_leaves[_molecule_dim];
-		const auto runs                          = this->get_ms_data_for_species(species_idx);
-		for ([[maybe_unused]] const auto &run : runs) {
-			throw coretools::TDevError("not implemented.");
+	// Add the MS-data log-likelihood contribution of the Y cell (species, molecule) for both Y
+	// states into sum_log[0] (molecule absent) and sum_log[1] (molecule present). This is the hook
+	// used by the Y Gibbs update, so only the terms that depend on Y[species, molecule] are scored:
+	// the per-run detection term (filter / contamination) for this molecule given its current
+	// assignment status in each run. The feature term P(feature | assigned molecule) does not depend
+	// on Y and would cancel between the two states, so it is intentionally omitted here.
+	void add_log_likelihood(const IndexArray &indices_in_leaves,
+	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		const auto species_idx  = indices_in_leaves[_species_dim];
+		const auto molecule_idx = indices_in_leaves[_molecule_dim];
+		const double cont       = (double)_proba_contamination->value();
+		for (const auto &run : this->get_ms_data_for_species(species_idx)) {
+			if (run.size() == 0) { continue; }
+			const bool ms = run.is_molecule_assigned(molecule_idx);
+			const double filt =
+			    LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
+			        _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx}))];
+			sum_log[0].add(TMassSpecRun::probability_of_assignment(false, ms, filt, cont)); // Y = 0
+			sum_log[1].add(TMassSpecRun::probability_of_assignment(true, ms, filt, cont));  // Y = 1
 		}
 	}
 
@@ -139,8 +142,13 @@ public:
 		return _msms_data.at(species_idx);
 	};
 
-	[[nodiscard]] coretools::TView<TMassSpecRun>
-	get_mutable_ms_data_for_species(size_t species_idx) const {
+	[[nodiscard]] coretools::TConstView<TMassSpecRun>
+	get_ms_data_for_species(const std::string &species_name) const {
+		const size_t species_idx = _species_tree->get_index_within_leaves(species_name);
+		return this->get_ms_data_for_species(species_idx);
+	};
+
+	[[nodiscard]] coretools::TView<TMassSpecRun> get_ms_data_for_species(size_t species_idx) {
 		this->_check_trees_exist();
 		return _msms_data.at(species_idx);
 	};
@@ -150,23 +158,18 @@ public:
 		return _msms_data.at(species_idx).size();
 	};
 
-	[[nodiscard]] coretools::TConstView<TMassSpecRun>
-	get_ms_data_for_species(const std::string &species_name) const {
-		size_t species_idx = _species_tree->get_index_within_leaves(species_name);
-		return this->get_ms_data_for_species(species_idx);
-	};
-
 	[[nodiscard]] size_t get_molecule_index_within_leaves(const std::string &molecule_name) const {
 		this->_check_trees_exist();
 		return _molecules_tree->get_index_within_leaves(molecule_name);
 	}
 
 	/// Here it is like gamma and the error rate: we need to calculate the complete log likelihood
-	/// ratio
+	/// ratio. The contamination probability is a single scalar that enters (almost) every term of
+	/// the MS-data likelihood, so we recompute the whole thing rather than a localized ratio.
 	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
 		_old_LL_contamination = _cur_LL_contamination;
-		// TODO: _cur_LL_contamination = _calculate_log_likelihood_msdata()
-		throw coretools::TDevError("Function not implemented yet");
+		_cur_LL_contamination = _calculate_log_likelihood_of_MSData();
+		return _cur_LL_contamination - _old_LL_contamination;
 	};
 
 	double calculateLLRatio(TypeParamMassSpecFilter *, size_t index);
@@ -193,18 +196,7 @@ public:
 		}
 	};
 
-	void update_all_MS_assignments() {
-		const size_t number_of_species = this->_species_tree->get_number_of_leaves();
-		for (size_t i = 0; i < number_of_species; ++i) {
-			if (this->number_of_ms_runs_for_species(i) == 0) continue;
-			auto ms_runs = this->get_mutable_ms_data_for_species(i);
-			for (auto &run : ms_runs) {
-				const auto move = run.propose_move();
-				if (!move.is_valid()) continue;
-				const auto ll_ratio = this->calculate_LL_ratio_for_assignment_move(i, run, move);
-				const bool accepted = coretools::TAcceptOddsRatio::accept(ll_ratio);
-				if (accepted) run.apply_move(move);
-			}
-		}
-	}
+	/// TODO: In the current implementation there would be only one update/proposal per MCMC
+	/// iteration. We could also propose multiple moves per iteration using an additional loop.
+	void update_all_MS_assignments();
 };
