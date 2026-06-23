@@ -70,6 +70,7 @@ TMSMSData::TMSMSData(
 	_proba_contamination  = contamination_proba;
 	// Register parameters with the DAG — same pattern as TLotus
 	this->addPriorParameter({_proba_to_pass_filter, _proba_contamination});
+	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
 }
 
 double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {

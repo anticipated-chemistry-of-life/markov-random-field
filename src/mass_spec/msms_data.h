@@ -60,8 +60,7 @@ private:
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
 
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
-	[[maybe_unused]] const std::vector<
-	    std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	    &_markov_field_stattools_param;
 
 	// Private functions

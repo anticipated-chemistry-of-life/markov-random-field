@@ -222,6 +222,7 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	} else {
 		_update_all_Z<false, false>(iteration);
 	}
+	if (_ms_data.has_value()) _ms_data->update_all_MS_assignments();
 	_Y.add_to_counter(iteration);
 	// calculate joint density
 	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration % _Y.get_thinning_factor() == 0) {
