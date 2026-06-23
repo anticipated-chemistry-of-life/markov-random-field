@@ -190,10 +190,3 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 
 	return p_new.getSum() - p_old.getSum();
 }
-
-// void TMSMSData::add_to_sumlog(std::array<coretools::TSumLogProbability, 2> &sum_log,
-//                               uint8_t binned_value) const {
-// 	// sum_log[0].add(_log_lik_absent[binned_value]);
-// 	// sum_log[1].add(_log_lik_present[binned_value]);
-// 	throw coretools::TDevError("We still don't know how to add this.");
-// }

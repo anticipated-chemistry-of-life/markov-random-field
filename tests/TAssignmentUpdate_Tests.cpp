@@ -44,7 +44,8 @@ TEST(TAssignmentUpdate_Tests, initialize_to_unknown) {
 	ASSERT_EQ(run.number_of_assignments(), 3u);
 	for (size_t f = 0; f < 3; ++f) {
 		EXPECT_TRUE(run.get_current_assignment(f).is_unknown_molecule());
-		EXPECT_EQ(run.get_current_assignment(f).get_binned_likelihood(), run.probability_of_unknown(f));
+		EXPECT_EQ(run.get_current_assignment(f).get_binned_likelihood(),
+		          run.probability_of_unknown(f));
 	}
 	EXPECT_FALSE(run.is_molecule_assigned(10));
 	EXPECT_TRUE(no_molecule_assigned_twice(run));
@@ -112,10 +113,14 @@ TEST(TAssignmentUpdate_Tests, propose_move_preserves_invariant) {
 	run.set_current_assignment(1, TFeatureLikelihood(20, 80));
 	ASSERT_TRUE(no_molecule_assigned_twice(run));
 
-	int n_valid = 0;
+	size_t n_valid   = 0;
+	size_t n_invalid = 0;
 	for (int it = 0; it < 3000; ++it) {
 		const auto p = run.propose_move();
-		if (!p.is_valid()) { continue; }
+		if (!p.is_valid()) {
+			++n_invalid;
+			continue;
+		}
 		++n_valid;
 		run.apply_move(p);
 		ASSERT_TRUE(no_molecule_assigned_twice(run))

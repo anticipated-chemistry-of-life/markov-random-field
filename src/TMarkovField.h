@@ -38,7 +38,7 @@ private:
 	// stuff for updating Y
 	size_t _K;
 	size_t _num_outer_loops;
-	IndexArray _num_leaves_per_dim_except_last;
+	IndexArray _num_leaves_per_dim_except_last{};
 	std::vector<TSheet> _sheets;
 	TCurrentState _clique_last_dim;
 

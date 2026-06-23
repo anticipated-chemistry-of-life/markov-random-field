@@ -12,7 +12,6 @@
 #include "tree/TTree.h"
 #include <cstddef>
 #include <string>
-#include <utility>
 #include <vector>
 
 class TLotus : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeLotus,
@@ -42,8 +41,8 @@ private:
 	/// Memoized per-(kept dimension, leaf) research-effort factor: 1 - exp(-gamma_i * occ_i[leaf]).
 	/// Both gamma (changes only on a gamma MCMC move) and the occurrence counts (constant data) are
 	/// invariant across a whole Y sweep, so we precompute this table whenever gamma changes; the
-	/// per-cell hot path (_calculate_research_effort) then becomes a product of table lookups with no
-	/// exp() and no gamma-parameter access. See _refresh_research_effort_factor.
+	/// per-cell hot path (_calculate_research_effort) then becomes a product of table lookups with
+	/// no exp() and no gamma-parameter access. See _refresh_research_effort_factor.
 	std::vector<std::vector<double>> _research_effort_factor;
 
 	// Markov field
@@ -90,7 +89,8 @@ private:
 	// private functions
 	[[nodiscard]] double
 	_calculate_research_effort(const IndexArray &index_in_collapsed_space) const;
-	/// Recompute _research_effort_factor from the current gamma values. Call whenever gamma changes.
+	/// Recompute _research_effort_factor from the current gamma values. Call whenever gamma
+	/// changes.
 	void _refresh_research_effort_factor();
 	[[nodiscard]] double
 	_calculate_probability_of_L_given_x(bool x, bool L,
@@ -102,7 +102,7 @@ private:
 	[[nodiscard]] double _calculate_log_likelihood_of_L_do_collapse() const;
 	void _simulateUnderPrior(Storage *) override;
 
-	double _return_error_rate(bool L) const;
+	[[nodiscard]] double _return_error_rate(bool L) const;
 
 public:
 	TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
