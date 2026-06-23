@@ -89,6 +89,8 @@ public:
 
 class TCore {
 private:
+	bool _started = false;
+
 public:
 	TCore();
 	~TCore() = default;

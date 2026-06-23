@@ -101,7 +101,8 @@ void TModel::_create_trees(const std::string &prefix) {
 
 TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
     : _gamma("gamma", &_prior_on_gamma, {prefix, ProgramOptions::FIXED_PRIOR_ON_GAMMA}),
-      _error_rate("epsilon", &_prior_on_error_rate, {prefix, ProgramOptions::FIXED_PRIOR_ON_EPSILON})
+      _error_rate("epsilon", &_prior_on_error_rate,
+                  {prefix, ProgramOptions::FIXED_PRIOR_ON_EPSILON})
 #ifdef USE_MS_DATA
       ,
       _mass_spec_filters("filter_proba", &_prior_on_mass_spec_filter, {prefix}),
@@ -125,8 +126,8 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 	                                   stattools::TObservationDefinition{});
 
 #ifdef USE_MS_DATA
-	_msms_data = std::make_unique<TMSMSData>(_trees, _markov_field_stattools_param,
-	                                         &_mass_spec_filters, &_contamination_proba);
+	_msms_data  = std::make_unique<TMSMSData>(_trees, _markov_field_stattools_param,
+	                                          &_mass_spec_filters, &_contamination_proba);
 	_msdata_obs = std::make_unique<SpecMSData>("msdata_obs", _msms_data.get(), StorageMSData(),
 	                                           stattools::TObservationDefinition{});
 #endif
@@ -143,6 +144,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 TCore::TCore() { ProgramOptions::parse(); }
 
 void TCore::infer() {
+	_started                   = true;
 	// read filename of lotus
 	std::string filename_lotus = TLotus::get_filename_lotus();
 
@@ -168,6 +170,7 @@ void TCore::infer() {
 }
 
 void TCore::simulate() {
+	_started            = true;
 	std::string prefix  = parameters().get("out", "acol");
 	size_t n_iterations = TMarkovField::get_num_iterations_simulation();
 
