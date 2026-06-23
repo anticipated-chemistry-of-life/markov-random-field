@@ -58,11 +58,10 @@ private:
 
 	TypeParamContamination *_proba_contamination   = nullptr;
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
-	double _old_LL_contamination;
-	double _cur_LL_contamination;
 
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
-	[[maybe_unused]] const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
+	[[maybe_unused]] const std::vector<
+	    std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	    &_markov_field_stattools_param;
 
 	// Private functions
@@ -87,13 +86,17 @@ private:
 	}
 
 	/// Complete log-likelihood of all the mass-spec data given the current assignments, the current
-	/// Y (molecule presence/absence), and the current filter/contamination parameters. Per run it is
+	/// Y (molecule presence/absence), and the current filter/contamination parameters. Per run it
+	/// is
 	///   sum_features  log P(feature | assigned molecule)              [feature term, PHRED table]
-	/// + sum_molecules log probability_of_assignment(Y, ms, filter, c) [detection term, all molecules]
-	/// where `ms` = "molecule is assigned to some feature in this run". The detection term spans the
-	/// whole molecule space; the dominant (absent & unassigned -> 1-contamination) case is added as a
-	/// single bulk term, only present or assigned molecules are scored individually.
-	[[nodiscard]] double _calculate_log_likelihood_of_MSData() const;
+	/// + sum_molecules log probability_of_assignment(Y, ms, filter, c) [detection term, all
+	/// molecules] where `ms` = "molecule is assigned to some feature in this run". The detection
+	/// term spans the whole molecule space; the dominant (absent & unassigned -> 1-contamination)
+	/// case is added as a /// single bulk term, only present or assigned molecules are scored
+	/// individually. The contamination probability is passed in (rather than read from the
+	/// parameter) so the same routine can score both the old and the proposed contamination value
+	/// in a ratio.
+	[[nodiscard]] double _calculate_log_likelihood_of_MSData(double contamination) const;
 
 public:
 	explicit TMSMSData(
@@ -118,8 +121,8 @@ public:
 	// states into sum_log[0] (molecule absent) and sum_log[1] (molecule present). This is the hook
 	// used by the Y Gibbs update, so only the terms that depend on Y[species, molecule] are scored:
 	// the per-run detection term (filter / contamination) for this molecule given its current
-	// assignment status in each run. The feature term P(feature | assigned molecule) does not depend
-	// on Y and would cancel between the two states, so it is intentionally omitted here.
+	// assignment status in each run. The feature term P(feature | assigned molecule) does not
+	// depend on Y and would cancel between the two states, so it is intentionally omitted here.
 	void add_log_likelihood(const IndexArray &indices_in_leaves,
 	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const auto species_idx  = indices_in_leaves[_species_dim];
@@ -127,10 +130,9 @@ public:
 		const double cont       = (double)_proba_contamination->value();
 		for (const auto &run : this->get_ms_data_for_species(species_idx)) {
 			if (run.size() == 0) { continue; }
-			const bool ms = run.is_molecule_assigned(molecule_idx);
-			const double filt =
-			    LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
-			        _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx}))];
+			const bool ms     = run.is_molecule_assigned(molecule_idx);
+			const double filt = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
+			    _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx}))];
 			sum_log[0].add(TMassSpecRun::probability_of_assignment(false, ms, filt, cont)); // Y = 0
 			sum_log[1].add(TMassSpecRun::probability_of_assignment(true, ms, filt, cont));  // Y = 1
 		}
@@ -163,13 +165,18 @@ public:
 		return _molecules_tree->get_index_within_leaves(molecule_name);
 	}
 
-	/// Here it is like gamma and the error rate: we need to calculate the complete log likelihood
-	/// ratio. The contamination probability is a single scalar that enters (almost) every term of
-	/// the MS-data likelihood, so we recompute the whole thing rather than a localized ratio.
+	/// Like gamma and the error rate, the contamination probability is a single scalar that enters
+	/// (almost) every term of the MS-data likelihood, so we score the whole thing rather than a
+	/// localized ratio. The likelihood also depends on Y, the filter probabilities and the
+	/// assignments, all of which change in other updates; rather than cache the value and keep it
+	/// in sync, we recompute the full likelihood at both the old and the proposed contamination
+	/// value here, which is always correct regardless of the order of updates.
 	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
-		_old_LL_contamination = _cur_LL_contamination;
-		_cur_LL_contamination = _calculate_log_likelihood_of_MSData();
-		return _cur_LL_contamination - _old_LL_contamination;
+		const double old_LL =
+		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->oldValue());
+		const double cur_LL =
+		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->value());
+		return cur_LL - old_LL;
 	};
 
 	double calculateLLRatio(TypeParamMassSpecFilter *, size_t index);
@@ -189,12 +196,6 @@ public:
 	[[nodiscard]] double
 	calculate_LL_ratio_for_assignment_move(size_t species_idx, const TMassSpecRun &run,
 	                                       const TAssignmentProposal &move) const;
-
-	void updateTempVals(TypeParamContamination *, size_t /*Index*/, bool Accepted) {
-		if (!Accepted) {
-			_cur_LL_contamination = _old_LL_contamination; // reset
-		}
-	};
 
 	/// TODO: In the current implementation there would be only one update/proposal per MCMC
 	/// iteration. We could also propose multiple moves per iteration using an additional loop.
