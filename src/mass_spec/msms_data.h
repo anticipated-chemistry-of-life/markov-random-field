@@ -51,7 +51,7 @@ private:
 	TTree *_species_tree   = nullptr;
 	size_t _molecule_dim   = 0;
 	size_t _species_dim    = 0;
-	std::array<size_t, 2> _dimensions_for_filters;
+	std::array<size_t, 2> _dimensions_for_filters{};
 	size_t _number_of_filters;
 	const TMarkovField &_markov_field;
 
@@ -138,6 +138,13 @@ public:
 		this->_check_trees_exist();
 		return _msms_data.at(species_idx);
 	};
+
+	[[nodiscard]] coretools::TView<TMassSpecRun>
+	get_mutable_ms_data_for_species(size_t species_idx) const {
+		this->_check_trees_exist();
+		return _msms_data.at(species_idx);
+	};
+
 	[[nodiscard]] size_t number_of_ms_runs_for_species(size_t species_idx) const {
 		this->_check_trees_exist();
 		return _msms_data.at(species_idx).size();
@@ -185,4 +192,19 @@ public:
 			_cur_LL_contamination = _old_LL_contamination; // reset
 		}
 	};
+
+	void update_all_MS_assignments() {
+		const size_t number_of_species = this->_species_tree->get_number_of_leaves();
+		for (size_t i = 0; i < number_of_species; ++i) {
+			if (this->number_of_ms_runs_for_species(i) == 0) continue;
+			auto ms_runs = this->get_mutable_ms_data_for_species(i);
+			for (auto &run : ms_runs) {
+				const auto move = run.propose_move();
+				if (!move.is_valid()) continue;
+				const auto ll_ratio = this->calculate_LL_ratio_for_assignment_move(i, run, move);
+				const bool accepted = coretools::TAcceptOddsRatio::accept(ll_ratio);
+				if (accepted) run.apply_move(move);
+			}
+		}
+	}
 };

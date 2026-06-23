@@ -7,8 +7,6 @@
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TRandomGenerator.h"
-#include "coretools/Math/TSumLog.h"
-#include "coretools/devtools.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -67,9 +65,6 @@ private:
 
 	/// The filter index for the current MSMS run.
 	size_t _filter_index = 0;
-
-	// const stattools::TParameter<SpecContaminationProba, TMSMSData> *_proba_of_contamination;
-	// const stattools::TParameter<SpecMassSpecFilter, TMSMSData> *_proba_to_pass_filter;
 
 public:
 	TMassSpecRun() = default;
@@ -134,9 +129,9 @@ public:
 	/// This value will then be multiplied by the likelihood of the molecule being present
 	/// in the feature to get the final probability.
 	/// TMassSpecRun — pure: caller passes the filter prob (for this molecule) and contamination
-	[[nodiscard]] static double probability_of_assignment(bool y, bool ms,
-	                                                      double proba_to_pass_filter,
-	                                                      double proba_contamination) {
+	[[nodiscard]] static inline double probability_of_assignment(bool y, bool ms,
+	                                                             double proba_to_pass_filter,
+	                                                             double proba_contamination) {
 		if (y && ms) { return proba_to_pass_filter; }        // present & detected -> passed filter
 		if (y && !ms) { return 1.0 - proba_to_pass_filter; } // present & not detected
 		if (!y && ms) { return proba_contamination; }        // absent  & detected -> contamination
