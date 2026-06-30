@@ -19,13 +19,13 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS src/* tests/integrationtests/*)
 include(FetchContent)
 FetchContent_Declare(coretools
  GIT_REPOSITORY https://bitbucket.org/wegmannlab/coretools.git
- GIT_TAG madleina/interface_stattools
+ GIT_TAG master
  SOURCE_DIR "${CMAKE_SOURCE_DIR}/coretools_cmake"
 )
 
 FetchContent_Declare(stattools
  GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
- GIT_TAG madleina/interface
+ GIT_TAG master
  SOURCE_DIR "${CMAKE_SOURCE_DIR}/stattools_cmake"
 )
 
