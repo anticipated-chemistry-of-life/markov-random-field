@@ -12,7 +12,6 @@
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -126,7 +125,7 @@ public:
 	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const auto species_idx  = indices_in_leaves[_species_dim];
 		const auto molecule_idx = indices_in_leaves[_molecule_dim];
-		const double cont       = (double)_proba_contamination->value();
+		const double cont       = _proba_contamination->value();
 		for (const auto &run : this->get_ms_data_for_species(species_idx)) {
 			if (run.size() == 0) { continue; }
 			const bool ms     = run.is_molecule_assigned(molecule_idx);

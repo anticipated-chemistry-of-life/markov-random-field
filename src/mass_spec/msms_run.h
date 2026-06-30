@@ -53,7 +53,7 @@ struct TAssignmentProposal {
 	/// acceptance must use `log_likelihood_ratio + log_hastings`.
 	double log_hastings = 0.0;
 
-	[[nodiscard]] bool is_valid() const { return type != AssignmentMoveType::Invalid; }
+	[[nodiscard]] bool is_valid() const { return this->type != AssignmentMoveType::Invalid; }
 };
 
 class TMassSpecRun {
@@ -72,6 +72,10 @@ private:
 
 	/// The filter index for the current MSMS run.
 	size_t _filter_index = 0;
+
+	/// The complete vector of molecules that are currently assigned. This will have length
+	/// n_molecules (uint8 that will actually be a bool).
+	std::vector<uint8_t> _molecules_assigned;
 
 public:
 	TMassSpecRun() = default;
