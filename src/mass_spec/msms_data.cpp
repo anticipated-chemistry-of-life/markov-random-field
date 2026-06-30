@@ -62,9 +62,14 @@ TMSMSData::TMSMSData(
 		throw coretools::TUserError("Number of molecules exceeds the maximum allowed (" +
 		                            std::to_string(MAX_NUMBER_OF_MOLECULES) + ")");
 	}
+	_number_of_species      = _species_tree->get_number_of_leaves();
 	// once the trees are checked we can initialize the MSMS data
 	_dimensions_for_filters = {_number_of_filters, number_of_molecules};
-	_msms_data.resize(_species_tree->get_number_of_leaves());
+	_msms_data.resize(_number_of_species);
+	_species_has_ms_data.resize(_number_of_species, false);
+
+	// TODO: load ms data from file
+	// load_ms_data_from_file()
 
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
@@ -74,42 +79,56 @@ TMSMSData::TMSMSData(
 }
 
 double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
-	const auto multidim       = _get_filter_molecule_pair_multidimensional_index_(index);
+	const auto &multidim      = _get_filter_molecule_pair_multidimensional_index_(index);
 	const size_t filter_index = multidim[0];
 	const size_t molecule_idx = multidim[1];
 
-	const auto new_p  = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(index)];
-	const auto old_p  = LINEAR_SPACE_PROBA[_proba_to_pass_filter->oldValue(index)];
-	const double cont = (double)_proba_contamination->value();
+	const auto new_index = _proba_to_pass_filter->value(index);
+	const auto old_index = _proba_to_pass_filter->oldValue(index);
+	const auto new_p_pos = LOG_LINEAR_SPACE_PROBA[new_index];
+	const auto new_p_neg = LOG_LINEAR_SPACE_PROBA_REVERSED[new_index];
+	const auto old_p_pos = LOG_LINEAR_SPACE_PROBA[old_index];
+	const auto old_p_neg = LOG_LINEAR_SPACE_PROBA_REVERSED[old_index];
 
 	// Position 0 should be old, position 1 should be new
-	std::array<coretools::TSumLogProbability, 2> log_lik{};
+	std::array<double, 2> log_lik{};
+
+	// avoid heap allocation by using a local index array
+	IndexArray index_in_Y_space      = {0, molecule_idx};
 	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
-	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
-	     ++species_idx) {
-		const auto linear_index =
-		    y_storage.get_linear_index_in_Y_space({species_idx, molecule_idx});
+	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
+		// if the species has no MS data, skip it
+		if (!_species_has_ms_data.at(species_idx)) { continue; }
+
+		// allocate the species index
+		index_in_Y_space[0] = species_idx;
+
 		// a missing cell reads as 0, so a direct point lookup covers both cases
-		const bool y = y_storage.is_one(linear_index);
+		const bool y = y_storage.is_one(index_in_Y_space);
 		// filter only enters the likelihood when the molecule is present
 		if (!y) { continue; }
 		for (const auto &run : get_ms_data_for_species(species_idx)) {
-			if (run.size() == 0) { continue; }
-			if (run.filter_index() != filter_index) { continue; }        // not this extraction
-			const bool ms      = run.is_molecule_assigned(molecule_idx); // hook (2)
-			const double p_new = TMassSpecRun::probability_of_assignment(y, ms, new_p, cont);
-			log_lik[1].add(p_new);
-			const double p_old = TMassSpecRun::probability_of_assignment(y, ms, old_p, cont);
-			log_lik[0].add(p_old);
+			if (run.filter_index() != filter_index) { continue; }   // not this extraction
+			const bool ms = run.is_molecule_assigned(molecule_idx); // hook (2)
+			if (ms) {
+				log_lik[1] += new_p_pos;
+				log_lik[0] += old_p_pos;
+			} else {
+				log_lik[1] += new_p_neg;
+				log_lik[0] += old_p_neg;
+			}
 		}
 	}
-	return log_lik[1].getSum() - log_lik[0].getSum();
+	return log_lik[1] - log_lik[0];
 }
 
 double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
                                                          const TMassSpecRun &run,
                                                          const TAssignmentProposal &move) const {
-	if (!move.is_valid()) { return 0.0; }
+	if (!move.is_valid()) {
+		throw coretools::TDevError(
+		    "Move is invalid and should have been handeled before calling this method");
+	}
 
 	// accumulate probabilities (TSumLogProbability::add takes a probability; getSum returns its
 	// log).
@@ -194,7 +213,7 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 
 	// Present (Y == 1) molecules grouped by species. Y is sparse, so this is O(nNonZero(Y)); the
 	// streaming cursor walks the stored cells without materializing a vector.
-	std::vector<std::vector<uint32_t>> present_per_species(_species_tree->get_number_of_leaves());
+	std::vector<std::vector<uint32_t>> present_per_species(_number_of_species);
 	for (auto cursor = Y.stored_cursor(); cursor.valid(); cursor.advance()) {
 		if (!cursor.is_one()) { continue; }
 		const auto md = Y.get_multi_dimensional_index(cursor.linear_index()); // {species, molecule}
@@ -204,8 +223,7 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 	coretools::TSumLogProbability sum_log{};
 	double bulk_log = 0.0; // (1 - contamination) terms for absent & unassigned molecules
 
-	for (size_t species_idx = 0; species_idx < _species_tree->get_number_of_leaves();
-	     ++species_idx) {
+	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
 		const auto runs = get_ms_data_for_species(species_idx);
 		if (runs.empty()) { continue; }
 		const auto &present = present_per_species[species_idx];
@@ -251,10 +269,11 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 }
 
 void TMSMSData::update_all_MS_assignments() {
-	const size_t number_of_species = this->_species_tree->get_number_of_leaves();
-	for (size_t i = 0; i < number_of_species; ++i) {
-		if (this->number_of_ms_runs_for_species(i) == 0) continue;
+#pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)
+	for (size_t i = 0; i < _number_of_species; ++i) {
+		if (!_species_has_ms_data.at(i)) continue;
 		auto ms_runs = this->get_ms_data_for_species(i);
+#pragma omp for
 		for (auto &run : ms_runs) {
 			const auto move = run.propose_move();
 			if (!move.is_valid()) continue;

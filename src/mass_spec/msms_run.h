@@ -74,11 +74,37 @@ private:
 	size_t _filter_index = 0;
 
 	/// The complete vector of molecules that are currently assigned. This will have length
-	/// n_molecules (uint8 that will actually be a bool).
+	/// n_molecules (uint8 that will actually be a bool because bools are uint8).
 	std::vector<uint8_t> _molecules_assigned;
+
+	size_t _number_of_molecules = 0;
+
+private:
+	void _reset_molecules_assigned() {
+		_molecules_assigned.clear();
+		_molecules_assigned.resize(_number_of_molecules, false);
+	}
 
 public:
 	TMassSpecRun() = default;
+	void initialize(size_t number_of_molecules) {
+		_number_of_molecules = number_of_molecules;
+		_reset_molecules_assigned();
+	}
+
+	void fill_molecules_assigned() {
+		_reset_molecules_assigned();
+		for (const auto &assignment : _current_assignments) {
+			_molecules_assigned.at(assignment.get_molecule_index()) = true;
+		}
+	}
+
+	/// This will release the memory of that vector else we just store a vector of capacity N
+	/// molecules for every single MSMS run which is way to much memory.
+	void drop_molecule_assigned() {
+		_molecules_assigned.clear();
+		_molecules_assigned.shrink_to_fit();
+	}
 	[[nodiscard]] size_t capacity() const { return _features.capacity(); }
 	void reserve(size_t n) { _features.reserve(n); }
 	[[nodiscard]] bool empty() const { return _features.empty(); }
@@ -86,6 +112,9 @@ public:
 
 	[[nodiscard]] coretools::TConstView<TFeatureLikelihood>
 	get_likelihoods_for_feature(size_t i) const {
+		return _features.at(i);
+	}
+	[[nodiscard]] coretools::TView<TFeatureLikelihood> get_likelihoods_for_feature(size_t i) {
 		return _features.at(i);
 	}
 	[[nodiscard]] size_t size() const { return _features.size(); }

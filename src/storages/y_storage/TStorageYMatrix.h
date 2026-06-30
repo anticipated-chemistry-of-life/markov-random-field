@@ -76,6 +76,10 @@ public:
 		return _mat.get(multidim_index[0], multidim_index[1]).is_one();
 	};
 
+	[[nodiscard]] inline bool is_one(const IndexArray &index_in_Y_space) const {
+		return _mat.get(index_in_Y_space[0], index_in_Y_space[1]).is_one();
+	};
+
 	/** set_to_one will set the element at the index_in_TStorageYMatrix to 1.
 	 * @param index_in_TStorageYMatrix the position of the element in the Y vector
 	 */

@@ -12,6 +12,7 @@
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -53,6 +54,7 @@ private:
 	size_t _species_dim    = 0;
 	std::array<size_t, 2> _dimensions_for_filters{};
 	size_t _number_of_filters;
+	size_t _number_of_species;
 	const TMarkovField &_markov_field;
 
 	TypeParamContamination *_proba_contamination   = nullptr;
@@ -62,7 +64,9 @@ private:
 	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
 	    &_markov_field_stattools_param;
 
-	// Private functions
+	std::vector<uint8_t> _species_has_ms_data;
+
+	/// Private functions
 private:
 	void _add_mass_spec_runs_for_species(const std::vector<TMassSpecRun> &runs) {
 		_msms_data.push_back(runs);
@@ -123,14 +127,19 @@ public:
 	// depend on Y and would cancel between the two states, so it is intentionally omitted here.
 	void add_log_likelihood(const IndexArray &indices_in_leaves,
 	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		const auto species_idx  = indices_in_leaves[_species_dim];
-		const auto molecule_idx = indices_in_leaves[_molecule_dim];
-		const double cont       = _proba_contamination->value();
+		const auto species_idx = indices_in_leaves[_species_dim];
+
+		// if the species does not have MS data, skip it
+		if (!_species_has_ms_data.at(species_idx)) { return; }
+		const auto molecule_idx                    = indices_in_leaves[_molecule_dim];
+		const double cont                          = _proba_contamination->value();
+		std::array<size_t, 2> filter_molecule_pair = {0, molecule_idx};
 		for (const auto &run : this->get_ms_data_for_species(species_idx)) {
-			if (run.size() == 0) { continue; }
-			const bool ms     = run.is_molecule_assigned(molecule_idx);
-			const double filt = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
-			    _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx}))];
+			if (run.empty()) { continue; }
+			filter_molecule_pair[0] = run.filter_index();
+			const bool ms           = run.is_molecule_assigned(molecule_idx);
+			const double filt       = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
+			    _get_linear_index_filter_molecule_pair(filter_molecule_pair))];
 			sum_log[0].add(TMassSpecRun::probability_of_assignment(false, ms, filt, cont)); // Y = 0
 			sum_log[1].add(TMassSpecRun::probability_of_assignment(true, ms, filt, cont));  // Y = 1
 		}
