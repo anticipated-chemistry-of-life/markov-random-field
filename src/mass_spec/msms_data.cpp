@@ -269,18 +269,22 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 }
 
 void TMSMSData::update_all_MS_assignments() {
-#pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)
-	for (size_t i = 0; i < _number_of_species; ++i) {
-		if (!_species_has_ms_data.at(i)) continue;
-		auto ms_runs = this->get_ms_data_for_species(i);
-#pragma omp for
-		for (auto &run : ms_runs) {
-			const auto move = run.propose_move();
-			if (!move.is_valid()) continue;
-			const auto ll_ratio = this->calculate_LL_ratio_for_assignment_move(i, run, move);
-			// full log odds ratio = log-likelihood ratio + log proposal (Hastings) ratio
-			const bool accepted = coretools::TAcceptOddsRatio::accept(ll_ratio + move.log_hastings);
-			if (accepted) run.apply_move(move);
+	_check_trees_exist();
+#pragma omp parallel default(none) num_threads(ProgramOptions::NUMBER_OF_THREADS)
+	{
+		for (size_t i = 0; i < _number_of_species; ++i) {
+			if (!_species_has_ms_data.at(i)) continue;
+			auto ms_runs = _msms_data.at(i);
+#pragma omp for nowait
+			for (auto &run : ms_runs) {
+				const auto move = run.propose_move();
+				if (!move.is_valid()) continue;
+				const auto ll_ratio = this->calculate_LL_ratio_for_assignment_move(i, run, move);
+				// full log odds ratio = log-likelihood ratio + log proposal (Hastings) ratio
+				const bool accepted =
+				    coretools::TAcceptOddsRatio::accept(ll_ratio + move.log_hastings);
+				if (accepted) run.apply_move(move);
+			}
 		}
 	}
 }

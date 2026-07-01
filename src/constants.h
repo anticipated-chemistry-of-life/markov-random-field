@@ -345,7 +345,7 @@ static constexpr std::array<double, 256> LOG_LINEAR_SPACE_PROBA_REVERSED = {
     -4.44265126e+00, -4.84811636e+00, -5.54126355e+00, std::numeric_limits<double>::lowest()};
 
 /// Generated using python.
-/// Formula : 1.0-1.1**(-i/10.0) for i in range(256)]
+/// Formula : [1.0-1.1**(-i/10.0) for i in range(256)]
 /// TODO: this should be checked and adapted if needed
 static constexpr std::array<double, 256> PHRED_LIKE_PROBA = {0.0,
                                                              0.00948574178547823,

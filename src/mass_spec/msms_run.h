@@ -7,6 +7,7 @@
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TRandomGenerator.h"
+#include "coretools/devtools.h"
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -39,19 +40,18 @@ enum class AssignmentMoveType : uint8_t {
 /// reverted, and scored without re-deriving anything. `feature_b`/`old_b`/`new_b` are only used by
 /// `Swap`.
 struct TAssignmentProposal {
-	AssignmentMoveType type = AssignmentMoveType::Invalid;
-	size_t feature_a        = 0;
-	TFeatureLikelihood old_a;
-	TFeatureLikelihood new_a;
-	size_t feature_b = 0;
-	TFeatureLikelihood old_b;
-	TFeatureLikelihood new_b;
-
+	size_t feature_a    = 0;
+	size_t feature_b    = 0;
 	/// log of the proposal (Hastings) ratio q(old|new)/q(new|old) for this move, computed at
 	/// proposal time from the counts the proposal sampled from. Zero for the symmetric moves
 	/// (`Swap`, `MoveToFree`); non-zero for `ToUnknown`/`FromUnknown`. The Metropolis-Hastings
 	/// acceptance must use `log_likelihood_ratio + log_hastings`.
 	double log_hastings = 0.0;
+	TFeatureLikelihood old_a;
+	TFeatureLikelihood new_a;
+	TFeatureLikelihood old_b;
+	TFeatureLikelihood new_b;
+	AssignmentMoveType type = AssignmentMoveType::Invalid;
 
 	[[nodiscard]] bool is_valid() const { return this->type != AssignmentMoveType::Invalid; }
 };
@@ -80,9 +80,49 @@ private:
 	size_t _number_of_molecules = 0;
 
 private:
+	/// Features whose current assignment is a real (non-unknown) molecule.
+	[[nodiscard]] std::vector<size_t> _features_assigned_to_real_molecule() const {
+		std::vector<size_t> features;
+		for (size_t f = 0; f < _current_assignments.size(); ++f) {
+			if (!_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
+		}
+		return features;
+	}
+
+	/// Features currently assigned to the unknown molecule.
+	[[nodiscard]] std::vector<size_t> _features_assigned_to_unknown() const {
+		std::vector<size_t> features;
+		for (size_t f = 0; f < _current_assignments.size(); ++f) {
+			if (_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
+		}
+		return features;
+	}
+
+	/// Candidate molecules of feature `f` (i.e. molecules with a likelihood for it) that are not
+	/// currently assigned to any feature -> the molecules `f` could legally move onto.
+	[[nodiscard]] std::vector<TFeatureLikelihood> _free_candidates_of_feature(size_t f) const;
+	[[nodiscard]] TAssignmentProposal _propose_to_unknown() const;
+	[[nodiscard]] TAssignmentProposal _propose_from_unknown() const;
+	[[nodiscard]] TAssignmentProposal _propose_move_to_free() const;
+	[[nodiscard]] TAssignmentProposal _propose_swap() const;
+
 	void _reset_molecules_assigned() {
 		_molecules_assigned.clear();
 		_molecules_assigned.resize(_number_of_molecules, false);
+	}
+
+	void _fill_molecules_assigned() {
+		_reset_molecules_assigned();
+		for (const auto &assignment : _current_assignments) {
+			_molecules_assigned.at(assignment.get_molecule_index()) = true;
+		}
+	}
+
+	/// This will release the memory of that vector else we just store a vector of capacity N
+	/// molecules for every single MSMS run which is way to much memory.
+	void _drop_molecules_assigned() {
+		_molecules_assigned.clear();
+		_molecules_assigned.shrink_to_fit();
 	}
 
 public:
@@ -92,19 +132,6 @@ public:
 		_reset_molecules_assigned();
 	}
 
-	void fill_molecules_assigned() {
-		_reset_molecules_assigned();
-		for (const auto &assignment : _current_assignments) {
-			_molecules_assigned.at(assignment.get_molecule_index()) = true;
-		}
-	}
-
-	/// This will release the memory of that vector else we just store a vector of capacity N
-	/// molecules for every single MSMS run which is way to much memory.
-	void drop_molecule_assigned() {
-		_molecules_assigned.clear();
-		_molecules_assigned.shrink_to_fit();
-	}
 	[[nodiscard]] size_t capacity() const { return _features.capacity(); }
 	void reserve(size_t n) { _features.reserve(n); }
 	[[nodiscard]] bool empty() const { return _features.empty(); }
@@ -125,7 +152,22 @@ public:
 	auto end() { return _features.end(); }
 	/// Returns the filter index for the current MSMS run.
 	[[nodiscard]] size_t filter_index() const { return _filter_index; }
-	///
+	void update_all_assignments() {
+		_fill_molecules_assigned();
+		const size_t features_size    = _features.size();
+		const size_t assignments_size = _current_assignments.size();
+		// check that there are as many features than the length of the current assignments
+		if (features_size != assignments_size) {
+			throw coretools::TDevError(
+			    "Number of features does not match the length of the current assignments");
+		}
+		// do all the updates
+		for (size_t i = 0; i < features_size; ++i) {
+			auto &assignment       = _current_assignments[i];
+			const auto likelihoods = _features.at(i);
+		}
+		_drop_molecules_assigned();
+	}
 	[[nodiscard]] BinarySearchResult is_molecule_in_feature(size_t feature_idx,
 	                                                        uint32_t molecule_index) const {
 		const auto &likelihoods = _features.at(feature_idx);
@@ -140,12 +182,6 @@ public:
 		size_t index = std::distance(feature.begin(), it);
 		if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
 		return {true, it->get_binned_likelihood(), index};
-	}
-
-	static double
-	get_likelihood_from_binned_value(const std::array<double, 256> &binned_likelihoods,
-	                                 uint8_t binned_value) {
-		return binned_likelihoods[binned_value];
 	}
 
 	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule
@@ -260,124 +296,5 @@ public:
 		if (proposal.type == AssignmentMoveType::Swap) {
 			_current_assignments.at(proposal.feature_b) = proposal.old_b;
 		}
-	}
-
-private:
-	/// Features whose current assignment is a real (non-unknown) molecule.
-	[[nodiscard]] std::vector<size_t> _features_assigned_to_real_molecule() const {
-		std::vector<size_t> features;
-		for (size_t f = 0; f < _current_assignments.size(); ++f) {
-			if (!_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
-		}
-		return features;
-	}
-
-	/// Features currently assigned to the unknown molecule.
-	[[nodiscard]] std::vector<size_t> _features_assigned_to_unknown() const {
-		std::vector<size_t> features;
-		for (size_t f = 0; f < _current_assignments.size(); ++f) {
-			if (_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
-		}
-		return features;
-	}
-
-	/// Candidate molecules of feature `f` (i.e. molecules with a likelihood for it) that are not
-	/// currently assigned to any feature -> the molecules `f` could legally move onto.
-	[[nodiscard]] std::vector<TFeatureLikelihood> _free_candidates_of_feature(size_t f) const {
-		std::vector<TFeatureLikelihood> free_candidates;
-		for (const auto &candidate : _features.at(f)) {
-			const uint32_t molecule_idx = candidate.get_molecule_index();
-			if (molecule_idx >= TFeatureLikelihood::get_unknown_molecule_index()) { continue; }
-			if (!is_molecule_assigned(molecule_idx)) { free_candidates.push_back(candidate); }
-		}
-		return free_candidates;
-	}
-
-	[[nodiscard]] TAssignmentProposal _propose_to_unknown() const {
-		const auto real = _features_assigned_to_real_molecule();
-		if (real.empty()) { return {}; }
-		const size_t f = real[coretools::instances::randomGenerator().sample(real.size())];
-		TAssignmentProposal proposal;
-		proposal.type      = AssignmentMoveType::ToUnknown;
-		proposal.feature_a = f;
-		proposal.old_a     = _current_assignments[f];
-		proposal.new_a = TFeatureLikelihood::new_unknown_molecule(_probabilities_of_unkowns.at(f));
-		// Hastings ratio q(reverse)/q(forward). Forward picks f among R real features (the unknown
-		// target is forced) -> q_fwd = 1/R. The reverse is FromUnknown picking f among the (U+1)
-		// unknown features and then its old molecule among the (free(f)+1) free candidates it now
-		// has (the molecule freed by this move re-enters the set) -> q_rev = 1/((U+1)(free(f)+1)).
-		const auto R   = (double)real.size();
-		const auto U   = (double)(_current_assignments.size() - real.size());
-		const auto free_after = (double)(_free_candidates_of_feature(f).size() + 1);
-		proposal.log_hastings = std::log(R / ((U + 1.0) * free_after));
-		return proposal;
-	}
-
-	[[nodiscard]] TAssignmentProposal _propose_from_unknown() const {
-		const auto unknown = _features_assigned_to_unknown();
-		if (unknown.empty()) { return {}; }
-		const size_t f = unknown[coretools::instances::randomGenerator().sample(unknown.size())];
-		const auto free_candidates = _free_candidates_of_feature(f);
-		if (free_candidates.empty()) { return {}; }
-		TAssignmentProposal proposal;
-		proposal.type      = AssignmentMoveType::FromUnknown;
-		proposal.feature_a = f;
-		proposal.old_a     = _current_assignments[f];
-		proposal.new_a =
-		    free_candidates[coretools::instances::randomGenerator().sample(free_candidates.size())];
-		// Hastings ratio q(reverse)/q(forward), the exact inverse of the ToUnknown case. Forward
-		// picks f among U unknown features and a molecule among its free(f) free candidates ->
-		// q_fwd = 1/(U*free(f)). The reverse is ToUnknown picking f among the (R+1) real features
-		// (target forced) -> q_rev = 1/(R+1).
-		const auto U           = (double)unknown.size();
-		const auto R           = (double)(_current_assignments.size() - unknown.size());
-		const auto free_before = (double)free_candidates.size();
-		proposal.log_hastings  = std::log((U * free_before) / (R + 1.0));
-		return proposal;
-	}
-
-	[[nodiscard]] TAssignmentProposal _propose_move_to_free() const {
-		const auto real = _features_assigned_to_real_molecule();
-		if (real.empty()) { return {}; }
-		const size_t f = real[coretools::instances::randomGenerator().sample(real.size())];
-		// the feature's own (assigned) molecule is excluded automatically: it is assigned, hence
-		// not a free candidate.
-		const auto free_candidates = _free_candidates_of_feature(f);
-		if (free_candidates.empty()) { return {}; }
-		TAssignmentProposal proposal;
-		proposal.type      = AssignmentMoveType::MoveToFree;
-		proposal.feature_a = f;
-		proposal.old_a     = _current_assignments[f];
-		proposal.new_a =
-		    free_candidates[coretools::instances::randomGenerator().sample(free_candidates.size())];
-		return proposal;
-	}
-
-	[[nodiscard]] TAssignmentProposal _propose_swap() const {
-		const auto real = _features_assigned_to_real_molecule();
-		if (real.size() < 2) { return {}; }
-		auto &rng           = coretools::instances::randomGenerator();
-		const size_t pick_i = rng.sample(real.size());
-		size_t pick_j       = rng.sample(real.size() - 1);
-		if (pick_j >= pick_i) { ++pick_j; } // pick a distinct second feature
-		const size_t i = real[pick_i];
-		const size_t j = real[pick_j];
-
-		const uint32_t molecule_i = _current_assignments[i].get_molecule_index();
-		const uint32_t molecule_j = _current_assignments[j].get_molecule_index();
-		// the swap is only legal if each molecule is a candidate of the feature it moves onto.
-		const auto i_takes_j      = is_molecule_in_feature(i, molecule_j);
-		const auto j_takes_i      = is_molecule_in_feature(j, molecule_i);
-		if (!i_takes_j.found || !j_takes_i.found) { return {}; }
-
-		TAssignmentProposal proposal;
-		proposal.type      = AssignmentMoveType::Swap;
-		proposal.feature_a = i;
-		proposal.old_a     = _current_assignments[i];
-		proposal.new_a     = TFeatureLikelihood(molecule_j, *i_takes_j.binned_likelihood);
-		proposal.feature_b = j;
-		proposal.old_b     = _current_assignments[j];
-		proposal.new_b     = TFeatureLikelihood(molecule_i, *j_takes_i.binned_likelihood);
-		return proposal;
 	}
 };
