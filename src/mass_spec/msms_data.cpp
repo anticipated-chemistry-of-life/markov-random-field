@@ -71,6 +71,9 @@ TMSMSData::TMSMSData(
 	// TODO: load ms data from file
 	// load_ms_data_from_file()
 
+	// must happen after the runs have been created by the loader above
+	_initialize_runs(number_of_molecules);
+
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
 	// Register parameters with the DAG — same pattern as TLotus
@@ -143,14 +146,17 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	};
 	p_old.add(feature_prob(move.old_a));
 	p_new.add(feature_prob(move.new_a));
-	if (move.type == AssignmentMoveType::Swap) {
+	if (move.touches_two_features()) {
 		p_old.add(feature_prob(move.old_b));
 		p_new.add(feature_prob(move.new_b));
 	}
 
 	// --- filter / contamination term: only real molecules whose "is assigned" status flips matter.
 	// Net the real molecules leaving (old assignments) against those arriving (new assignments);
-	// any molecule present in both (a Swap) cancels and contributes nothing. ---
+	// any molecule present in both cancels and contributes nothing. Both swap types cancel
+	// completely: a plain Swap because each molecule stays assigned, just to the other feature, and
+	// a SwapWithUnknown because the molecule that changes hands leaves the other feature and
+	// arrives at this one in the same move. ---
 	std::array<uint32_t, 2> removed{};
 	std::array<uint32_t, 2> added{};
 	size_t n_removed = 0;
@@ -160,7 +166,7 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	};
 	push_real(removed, n_removed, move.old_a);
 	push_real(added, n_added, move.new_a);
-	if (move.type == AssignmentMoveType::Swap) {
+	if (move.touches_two_features()) {
 		push_real(removed, n_removed, move.old_b);
 		push_real(added, n_added, move.new_b);
 	}
@@ -268,8 +274,39 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 	return sum_log.getSum() + bulk_log;
 }
 
+void TMSMSData::_initialize_runs(size_t number_of_molecules) {
+	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
+		for (auto &run : _msms_data.at(species_idx)) {
+			run.set_number_of_molecules(number_of_molecules);
+		}
+	}
+}
+
+namespace {
+/// Supplies `TMassSpecRun` with the part of the assignment likelihood ratio that lives in
+/// `TMSMSData`: Y, the mass-spec filter probabilities and the contamination probability. One
+/// instance is bound to a single (species, run) pair for the duration of one sweep.
+class TMSMSDataScorer final : public TAssignmentScorer {
+private:
+	const TMSMSData &_data;
+	size_t _species_idx;
+	const TMassSpecRun &_run;
+
+public:
+	TMSMSDataScorer(const TMSMSData &data, size_t species_idx, const TMassSpecRun &run)
+	    : _data(data), _species_idx(species_idx), _run(run) {}
+
+	[[nodiscard]] double log_likelihood_ratio(const TAssignmentProposal &proposal) const override {
+		return _data.calculate_LL_ratio_for_assignment_move(_species_idx, _run, proposal);
+	}
+};
+} // namespace
+
 void TMSMSData::update_all_MS_assignments() {
 	_check_trees_exist();
+	// Each run is swept by exactly one thread and everything the scorer reads (Y, the filter and
+	// contamination parameters) is read-only for the duration. Note that the random generator is
+	// thread-local, so results are not reproducible across different numbers of threads.
 #pragma omp parallel default(none) num_threads(ProgramOptions::NUMBER_OF_THREADS)
 	{
 		for (size_t i = 0; i < _number_of_species; ++i) {
@@ -277,13 +314,8 @@ void TMSMSData::update_all_MS_assignments() {
 			auto ms_runs = _msms_data.at(i);
 #pragma omp for nowait
 			for (auto &run : ms_runs) {
-				const auto move = run.propose_move();
-				if (!move.is_valid()) continue;
-				const auto ll_ratio = this->calculate_LL_ratio_for_assignment_move(i, run, move);
-				// full log odds ratio = log-likelihood ratio + log proposal (Hastings) ratio
-				const bool accepted =
-				    coretools::TAcceptOddsRatio::accept(ll_ratio + move.log_hastings);
-				if (accepted) run.apply_move(move);
+				const TMSMSDataScorer scorer(*this, i, run);
+				run.update_all_assignments(scorer, ProgramOptions::MS_PROBA_MOVE_TO_UNKNOWN);
 			}
 		}
 	}

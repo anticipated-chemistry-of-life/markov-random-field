@@ -9,6 +9,7 @@
 #include "coretools/algorithms.h"
 #include "mass_spec/msms_run.h"
 #include "stattools/ParametersObservations/TParameter.h"
+#include "stattools/Priors/TBaseLikelihoodPrior.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -99,6 +100,10 @@ private:
 	/// parameter) so the same routine can score both the old and the proposed contamination value
 	/// in a ratio.
 	[[nodiscard]] double _calculate_log_likelihood_of_MSData(double contamination) const;
+
+	/// Tells every run how large the molecule space is, which it needs to size the lookup table
+	/// that maps a molecule to the feature holding it during an assignment sweep.
+	void _initialize_runs(size_t number_of_molecules);
 
 public:
 	explicit TMSMSData(
@@ -196,7 +201,7 @@ public:
 	///     through `_log_lik_present` (for the unknown molecule the per-feature unknown probability
 	///     is mapped through the same table);
 	///   * the filter/contamination term(s) for the real molecules whose "is assigned" status flips
-	///     (none flip for a Swap, so only feature terms change there), via
+	///     (none flip for either swap type, so only feature terms change there), via
 	///     probability_of_assignment.
 	/// Returns 0 for an invalid (no-op) proposal. This is the likelihood ratio only; any
 	/// proposal/Hastings ratio must be added by the caller.
@@ -204,7 +209,7 @@ public:
 	calculate_LL_ratio_for_assignment_move(size_t species_idx, const TMassSpecRun &run,
 	                                       const TAssignmentProposal &move) const;
 
-	/// TODO: In the current implementation there would be only one update/proposal per MCMC
-	/// iteration. We could also propose multiple moves per iteration using an additional loop.
+	/// One Metropolis-Hastings sweep over every feature of every run of every species that has MS
+	/// data. See `TMassSpecRun::update_all_assignments`.
 	void update_all_MS_assignments();
 };

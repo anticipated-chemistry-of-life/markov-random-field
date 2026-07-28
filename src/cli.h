@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
 #include <cstddef>
 #include <iostream>
@@ -51,6 +52,13 @@ public:
 	static inline size_t INDEX_PROBA_TO_PASS_MS_FILTER = 128;
 
 	static inline double PROBA_OF_MS_CONTAMINATION = 0.001;
+
+	/// Beta: the probability with which the assignment update proposes to move an already assigned
+	/// feature back to the unknown molecule. With probability 1 - beta the update instead picks a
+	/// molecule among the candidates of that feature. Must be strictly inside (0, 1): at 0 no
+	/// feature ever returns to the unknown molecule (and the reverse move has an infinite Hastings
+	/// ratio), at 1 no feature ever moves between two real molecules.
+	static inline double MS_PROBA_MOVE_TO_UNKNOWN = 0.1;
 
 	static inline std::string_view FIXED_PRIOR_ON_EPSILON = "0.3,5.0";
 
@@ -104,6 +112,14 @@ public:
 		LOG_NU_C_INIT_SD = params.get<double>("log_nu_c_init_sd", LOG_NU_C_INIT_SD);
 
 		NUM_ITERATIONS = params.get<size_t>("iterations", NUM_ITERATIONS);
+
+		MS_PROBA_MOVE_TO_UNKNOWN =
+		    params.get<double>("ms_proba_move_to_unknown", MS_PROBA_MOVE_TO_UNKNOWN);
+		if (MS_PROBA_MOVE_TO_UNKNOWN <= 0.0 || MS_PROBA_MOVE_TO_UNKNOWN >= 1.0) {
+			throw coretools::TUserError("--ms_proba_move_to_unknown must be strictly between 0 and "
+			                            "1, but got ",
+			                            MS_PROBA_MOVE_TO_UNKNOWN, ".");
+		}
 	}
 
 	static void printHelp() {
@@ -113,5 +129,7 @@ public:
 		std::cout << "--write_Z                      Write Z output\n";
 		std::cout << "--write_Z_trace                Write Z trace\n";
 		std::cout << "--write_branch_lengths         Output branch lengths\n";
+		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
+		             "MS feature back to the unknown molecule (in (0,1))\n";
 	}
 };

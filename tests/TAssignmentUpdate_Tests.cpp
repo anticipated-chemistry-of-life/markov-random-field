@@ -1,4 +1,3 @@
-#include "coretools/Main/TRandomGenerator.h"
 #include "mass_spec/feature_likelihood.h"
 #include "mass_spec/msms_run.h"
 #include "gtest/gtest.h"
@@ -104,41 +103,67 @@ TEST(TAssignmentUpdate_Tests, swap_apply_revert) {
 	EXPECT_EQ(run.get_current_assignment(1).get_molecule_index(), 20u);
 }
 
-// Property test: starting from a valid state, proposing-and-applying any number of moves must never
-// break the "a molecule is assigned to at most one feature" invariant.
-TEST(TAssignmentUpdate_Tests, propose_move_preserves_invariant) {
-	coretools::instances::randomGenerator().setSeed(42, true);
+TEST(TAssignmentUpdate_Tests, swap_with_unknown_apply_revert) {
 	auto run = make_run();
-	run.set_current_assignment(0, TFeatureLikelihood(10, 100));
-	run.set_current_assignment(1, TFeatureLikelihood(20, 80));
-	ASSERT_TRUE(no_molecule_assigned_twice(run));
+	run.set_current_assignment(1, TFeatureLikelihood(20, 80)); // feature 1 holds molecule 20
+	ASSERT_TRUE(run.get_current_assignment(0).is_unknown_molecule());
 
-	size_t n_valid   = 0;
-	size_t n_invalid = 0;
-	for (int it = 0; it < 3000; ++it) {
-		const auto p = run.propose_move();
-		if (!p.is_valid()) {
-			++n_invalid;
-			continue;
-		}
-		++n_valid;
-		run.apply_move(p);
-		ASSERT_TRUE(no_molecule_assigned_twice(run))
-		    << "invariant broken after move type " << static_cast<int>(p.type);
-		// exercise revert on roughly half the accepted moves
-		if (coretools::instances::randomGenerator().pickOneOfTwo()) {
-			run.revert_move(p);
-			ASSERT_TRUE(no_molecule_assigned_twice(run));
-		}
-	}
-	EXPECT_GT(n_valid, 0); // the mixed state should make at least some moves constructible
+	// feature 0 takes molecule 20 (its own binned likelihood for it is 120, not feature 1's 80) and
+	// pushes feature 1 back to the unknown molecule
+	TAssignmentProposal p;
+	p.type      = AssignmentMoveType::SwapWithUnknown;
+	p.feature_a = 0;
+	p.old_a     = run.get_current_assignment(0);
+	p.new_a     = TFeatureLikelihood(20, 120);
+	p.feature_b = 1;
+	p.old_b     = run.get_current_assignment(1);
+	p.new_b     = TFeatureLikelihood::new_unknown_molecule(run.probability_of_unknown(1));
+
+	run.apply_move(p);
+	EXPECT_EQ(run.get_current_assignment(0).get_molecule_index(), 20u);
+	EXPECT_EQ(run.get_current_assignment(0).get_binned_likelihood(), 120u);
+	EXPECT_TRUE(run.get_current_assignment(1).is_unknown_molecule());
+	EXPECT_TRUE(no_molecule_assigned_twice(run));
+
+	run.revert_move(p);
+	EXPECT_TRUE(run.get_current_assignment(0).is_unknown_molecule());
+	EXPECT_EQ(run.get_current_assignment(1).get_molecule_index(), 20u);
+	EXPECT_EQ(run.get_current_assignment(1).get_binned_likelihood(), 80u);
 }
 
-TEST(TAssignmentUpdate_Tests, propose_move_invalid_when_no_candidates) {
+// Guards against a future move type that changes two features but is missed by one of the three
+// gates that dispatch on this predicate (apply_move, revert_move and the likelihood ratio).
+TEST(TAssignmentUpdate_Tests, touches_two_features_covers_both_swap_types) {
+	TAssignmentProposal p;
+	p.type = AssignmentMoveType::Swap;
+	EXPECT_TRUE(p.touches_two_features());
+	p.type = AssignmentMoveType::SwapWithUnknown;
+	EXPECT_TRUE(p.touches_two_features());
+
+	for (const auto type : {AssignmentMoveType::ToUnknown, AssignmentMoveType::FromUnknown,
+	                        AssignmentMoveType::MoveToFree, AssignmentMoveType::Invalid}) {
+		p.type = type;
+		EXPECT_FALSE(p.touches_two_features()) << "for move type " << static_cast<int>(type);
+	}
+}
+
+TEST(TAssignmentUpdate_Tests, add_likelihood_vector_rejects_zero_binned_likelihood) {
 	TMassSpecRun run;
-	std::vector<TFeatureLikelihood> empty_feature; // a feature with no candidate molecules
-	run.add_likelihood_vector(empty_feature);
-	run.set_probabilities_of_unknowns({42});
-	run.initialize_assignments_to_unknown();
-	for (int i = 0; i < 50; ++i) { EXPECT_FALSE(run.propose_move().is_valid()); }
+	// binned likelihood 0 maps to probability 0, which no assignment could ever have
+	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100), TFeatureLikelihood(20, 0)};
+	EXPECT_ANY_THROW(run.add_likelihood_vector(f0));
+}
+
+TEST(TAssignmentUpdate_Tests, add_likelihood_vector_rejects_duplicate_molecules) {
+	TMassSpecRun run;
+	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100), TFeatureLikelihood(10, 90)};
+	EXPECT_ANY_THROW(run.add_likelihood_vector(f0));
+}
+
+TEST(TAssignmentUpdate_Tests, initialize_to_unknown_rejects_zero_probability) {
+	TMassSpecRun run;
+	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100)};
+	run.add_likelihood_vector(f0);
+	run.set_probabilities_of_unknowns({0});
+	EXPECT_ANY_THROW(run.initialize_assignments_to_unknown());
 }

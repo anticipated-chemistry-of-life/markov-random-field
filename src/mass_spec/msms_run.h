@@ -6,12 +6,10 @@
 #include "./feature_likelihood.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TError.h"
-#include "coretools/Main/TRandomGenerator.h"
-#include "coretools/devtools.h"
-#include <array>
-#include <cmath>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -22,9 +20,9 @@ struct BinarySearchResult {
 	size_t index{};
 };
 
-/// The four ways the molecule<->feature assignment of a single run can change in one MCMC step.
-/// `Invalid` means no eligible move of the chosen type could be constructed for the current state
-/// (the caller should treat it as a no-op / reject).
+/// The five ways the molecule<->feature assignment of a single run can change in one MCMC step.
+/// `Invalid` means no eligible move could be constructed for the current state (the caller should
+/// treat it as a no-op / reject).
 enum class AssignmentMoveType : uint8_t {
 	ToUnknown,   // a feature assigned to a real molecule -> the unknown molecule (frees that
 	             // molecule)
@@ -32,20 +30,22 @@ enum class AssignmentMoveType : uint8_t {
 	Swap,        // two features exchange their (real) molecules
 	MoveToFree,  // a feature assigned to a real molecule -> one of its unassigned candidate
 	             // molecules
+	SwapWithUnknown, // a feature at the unknown molecule takes a molecule from another feature,
+	                 // which is pushed to the unknown molecule in exchange
 	Invalid
 };
 
 /// A single proposed change to a run's `_current_assignments`. It records, for every feature it
 /// touches, the assignment before (`old_*`) and after (`new_*`) the move, so it can be applied,
 /// reverted, and scored without re-deriving anything. `feature_b`/`old_b`/`new_b` are only used by
-/// `Swap`.
+/// the two move types for which `touches_two_features()` is true.
 struct TAssignmentProposal {
 	size_t feature_a    = 0;
 	size_t feature_b    = 0;
 	/// log of the proposal (Hastings) ratio q(old|new)/q(new|old) for this move, computed at
-	/// proposal time from the counts the proposal sampled from. Zero for the symmetric moves
-	/// (`Swap`, `MoveToFree`); non-zero for `ToUnknown`/`FromUnknown`. The Metropolis-Hastings
-	/// acceptance must use `log_likelihood_ratio + log_hastings`.
+	/// proposal time from the candidate counts the proposal sampled from. Zero for the symmetric
+	/// moves (`Swap`, `MoveToFree`); non-zero for the others. The Metropolis-Hastings acceptance
+	/// must use `log_likelihood_ratio + log_hastings`.
 	double log_hastings = 0.0;
 	TFeatureLikelihood old_a;
 	TFeatureLikelihood new_a;
@@ -54,9 +54,33 @@ struct TAssignmentProposal {
 	AssignmentMoveType type = AssignmentMoveType::Invalid;
 
 	[[nodiscard]] bool is_valid() const { return this->type != AssignmentMoveType::Invalid; }
+
+	/// True for the move types that change two features, i.e. the ones for which `feature_b`,
+	/// `old_b` and `new_b` are meaningful. Every place that has to decide whether to look at the
+	/// `*_b` fields must go through this predicate, so that adding a further two-feature move type
+	/// only requires changing it here.
+	[[nodiscard]] bool touches_two_features() const {
+		return this->type == AssignmentMoveType::Swap ||
+		       this->type == AssignmentMoveType::SwapWithUnknown;
+	}
+};
+
+/// Scores a proposed assignment change of a single run: returns log P(new state) - log P(old state)
+/// under the full model. `TMassSpecRun` owns the assignments and the proposal mechanics but knows
+/// nothing about Y, the mass-spec filter probabilities or the contamination probability, all of
+/// which enter that ratio; `TMSMSData` implements this interface to supply them.
+class TAssignmentScorer {
+public:
+	virtual ~TAssignmentScorer() = default;
+	[[nodiscard]] virtual double
+	log_likelihood_ratio(const TAssignmentProposal &proposal) const = 0;
 };
 
 class TMassSpecRun {
+public:
+	/// Value stored in the holder map for a molecule that is currently not assigned to any feature.
+	static constexpr uint32_t NO_HOLDER = std::numeric_limits<uint32_t>::max();
+
 private:
 	coretools::TNestedVector<TFeatureLikelihood> _features;
 
@@ -73,64 +97,83 @@ private:
 	/// The filter index for the current MSMS run.
 	size_t _filter_index = 0;
 
-	/// The complete vector of molecules that are currently assigned. This will have length
-	/// n_molecules (uint8 that will actually be a bool because bools are uint8).
-	std::vector<uint8_t> _molecules_assigned;
+	/// Maps a molecule index to the feature that currently holds it, or `NO_HOLDER` if the molecule
+	/// is free. Only alive during `update_all_assignments`, where it turns both "is this molecule
+	/// free?" and "which feature holds it?" into O(1) lookups; outside the sweep it is dropped
+	/// because keeping one vector of n_molecules entries per MSMS run would be far too much memory.
+	/// Every access goes through the five `_*_holder*` methods below, so the representation can be
+	/// changed (e.g. to a hash map sized on the number of features) without touching the sweep.
+	std::vector<uint32_t> _holder_of_molecule;
 
 	size_t _number_of_molecules = 0;
 
 private:
-	/// Features whose current assignment is a real (non-unknown) molecule.
-	[[nodiscard]] std::vector<size_t> _features_assigned_to_real_molecule() const {
-		std::vector<size_t> features;
+	void _reset_holders() { _holder_of_molecule.assign(_number_of_molecules, NO_HOLDER); }
+
+	/// Builds the holder map from the current assignments. Features at the unknown molecule are
+	/// skipped: the unknown molecule is shared by arbitrarily many features and its sentinel index
+	/// is out of range of the map. Throws if a real molecule is held twice, which turns a
+	/// bookkeeping bug in one sweep into a loud failure at the start of the next one.
+	void _fill_holders() {
+		_reset_holders();
 		for (size_t f = 0; f < _current_assignments.size(); ++f) {
-			if (!_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
-		}
-		return features;
-	}
-
-	/// Features currently assigned to the unknown molecule.
-	[[nodiscard]] std::vector<size_t> _features_assigned_to_unknown() const {
-		std::vector<size_t> features;
-		for (size_t f = 0; f < _current_assignments.size(); ++f) {
-			if (_current_assignments[f].is_unknown_molecule()) { features.push_back(f); }
-		}
-		return features;
-	}
-
-	/// Candidate molecules of feature `f` (i.e. molecules with a likelihood for it) that are not
-	/// currently assigned to any feature -> the molecules `f` could legally move onto.
-	[[nodiscard]] std::vector<TFeatureLikelihood> _free_candidates_of_feature(size_t f) const;
-	[[nodiscard]] TAssignmentProposal _propose_to_unknown() const;
-	[[nodiscard]] TAssignmentProposal _propose_from_unknown() const;
-	[[nodiscard]] TAssignmentProposal _propose_move_to_free() const;
-	[[nodiscard]] TAssignmentProposal _propose_swap() const;
-
-	void _reset_molecules_assigned() {
-		_molecules_assigned.clear();
-		_molecules_assigned.resize(_number_of_molecules, false);
-	}
-
-	void _fill_molecules_assigned() {
-		_reset_molecules_assigned();
-		for (const auto &assignment : _current_assignments) {
-			_molecules_assigned.at(assignment.get_molecule_index()) = true;
+			const auto &assignment = _current_assignments[f];
+			if (assignment.is_unknown_molecule()) { continue; }
+			const uint32_t molecule_idx = assignment.get_molecule_index();
+			if (_holder_of(molecule_idx) != NO_HOLDER) {
+				throw coretools::TDevError("TMassSpecRun: molecule ", molecule_idx,
+				                           " is assigned to both feature ",
+				                           _holder_of(molecule_idx), " and feature ", f, ".");
+			}
+			_set_holder(molecule_idx, static_cast<uint32_t>(f));
 		}
 	}
 
 	/// This will release the memory of that vector else we just store a vector of capacity N
 	/// molecules for every single MSMS run which is way to much memory.
-	void _drop_molecules_assigned() {
-		_molecules_assigned.clear();
-		_molecules_assigned.shrink_to_fit();
+	void _drop_holders() {
+		_holder_of_molecule.clear();
+		_holder_of_molecule.shrink_to_fit();
 	}
+
+	[[nodiscard]] uint32_t _holder_of(uint32_t molecule_idx) const {
+		return _holder_of_molecule.at(molecule_idx);
+	}
+
+	void _set_holder(uint32_t molecule_idx, uint32_t feature_idx) {
+		_holder_of_molecule.at(molecule_idx) = feature_idx;
+	}
+
+	/// Builds the proposal for a feature that is currently assigned to the unknown molecule.
+	[[nodiscard]] TAssignmentProposal _propose_for_unknown_feature(size_t f, double beta) const;
+	/// Builds the proposal for a feature that is currently assigned to a real molecule.
+	[[nodiscard]] TAssignmentProposal _propose_for_assigned_feature(size_t f, double beta) const;
+
+	[[nodiscard]] TAssignmentProposal _make_from_unknown(size_t f, TFeatureLikelihood target,
+	                                                     size_t c_f, double beta) const;
+	[[nodiscard]] TAssignmentProposal _make_to_unknown(size_t f, size_t c_f, double beta) const;
+	[[nodiscard]] TAssignmentProposal _make_move_to_free(size_t f, TFeatureLikelihood target) const;
+	[[nodiscard]] TAssignmentProposal _make_swap(size_t f, size_t other,
+	                                             TFeatureLikelihood target) const;
+	[[nodiscard]] TAssignmentProposal
+	_make_swap_with_unknown(size_t f, size_t other, TFeatureLikelihood target, size_t c_f) const;
+
+	/// Brings the holder map back in sync after `apply_move` accepted `proposal`.
+	void _sync_holders_after_accept(const TAssignmentProposal &proposal);
+
+	/// Checks everything `update_all_assignments` relies on and returns false if the run has
+	/// nothing to update.
+	[[nodiscard]] bool _assignments_are_updatable() const;
 
 public:
 	TMassSpecRun() = default;
-	void initialize(size_t number_of_molecules) {
+
+	/// Size of the molecule space this run's candidate indices live in. Must be set before the
+	/// first call to `update_all_assignments`, which needs it to size the holder map.
+	void set_number_of_molecules(size_t number_of_molecules) {
 		_number_of_molecules = number_of_molecules;
-		_reset_molecules_assigned();
 	}
+	[[nodiscard]] size_t number_of_molecules() const { return _number_of_molecules; }
 
 	[[nodiscard]] size_t capacity() const { return _features.capacity(); }
 	void reserve(size_t n) { _features.reserve(n); }
@@ -152,22 +195,20 @@ public:
 	auto end() { return _features.end(); }
 	/// Returns the filter index for the current MSMS run.
 	[[nodiscard]] size_t filter_index() const { return _filter_index; }
-	void update_all_assignments() {
-		_fill_molecules_assigned();
-		const size_t features_size    = _features.size();
-		const size_t assignments_size = _current_assignments.size();
-		// check that there are as many features than the length of the current assignments
-		if (features_size != assignments_size) {
-			throw coretools::TDevError(
-			    "Number of features does not match the length of the current assignments");
-		}
-		// do all the updates
-		for (size_t i = 0; i < features_size; ++i) {
-			auto &assignment       = _current_assignments[i];
-			const auto likelihoods = _features.at(i);
-		}
-		_drop_molecules_assigned();
-	}
+
+	/// Number of candidate molecules of feature `i`, i.e. `c_f` in the Hastings ratios.
+	[[nodiscard]] size_t number_of_candidates(size_t i) const { return _features.size(i); }
+
+	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule
+	/// likelihoods that are associated to it. The vector will be sorted before being added to
+	/// guarantee the order and be able to do binary search.
+	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods);
+
+	/// One Metropolis-Hastings sweep over every feature of this run, see `msms_run.cpp` for the
+	/// move types and their Hastings ratios. `beta` is the probability of proposing to move an
+	/// already assigned feature back to the unknown molecule.
+	void update_all_assignments(const TAssignmentScorer &scorer, double beta);
+
 	[[nodiscard]] BinarySearchResult is_molecule_in_feature(size_t feature_idx,
 	                                                        uint32_t molecule_index) const {
 		const auto &likelihoods = _features.at(feature_idx);
@@ -182,14 +223,6 @@ public:
 		size_t index = std::distance(feature.begin(), it);
 		if (it->get_molecule_index() != molecule_index) { return {false, std::nullopt, index}; }
 		return {true, it->get_binned_likelihood(), index};
-	}
-
-	/// Adds a vector of molecule likelihoods. This represents one feature with all the molecule
-	/// likelihoods that are associated to it. The vector will be sorted before being added to
-	/// guarantee the order and be able to do binary search.
-	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
-		std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
-		_features.push_back(feature_likelihoods);
 	}
 
 	[[nodiscard]] bool feature_has_unknown_molecule_assigned(size_t feature_idx) const {
@@ -247,6 +280,13 @@ public:
 		}
 		_current_assignments.assign(n, TFeatureLikelihood{});
 		for (size_t f = 0; f < n; ++f) {
+			// bin 0 maps to probability 0 (see PHRED_LIKE_PROBA), which would make the initial
+			// state impossible and every likelihood ratio involving it undefined.
+			if (_probabilities_of_unkowns[f] == 0) {
+				throw coretools::TUserError("TMassSpecRun: the probability of the unknown molecule "
+				                            "for feature ",
+				                            f, " is 0, which makes that feature impossible.");
+			}
 			_current_assignments[f] =
 			    TFeatureLikelihood::new_unknown_molecule(_probabilities_of_unkowns[f]);
 		}
@@ -263,37 +303,24 @@ public:
 	//------------------------------------------------------------------------------------------------
 	// Assignment latent state: MCMC moves
 	//
-	// A proposal only ever changes one (or, for a swap, two) feature(s) and is built so that the
-	// invariant "a real molecule is assigned to at most one feature" is preserved. The unknown
-	// molecule is exempt: many features may share it. `apply_move`/`revert_move` are exact
+	// A proposal only ever changes one (or, for the two swap types, two) feature(s) and is built so
+	// that the invariant "a real molecule is assigned to at most one feature" is preserved. The
+	// unknown molecule is exempt: many features may share it. `apply_move`/`revert_move` are exact
 	// inverses, and the proposal carries the old assignments so the likelihood ratio can be scored
-	// elsewhere (see TMSMSData::calculate_LL_ratio_for_assignment_move). NOTE: the returned
-	// proposals are symmetric only for `Swap`; a correct Metropolis-Hastings step for the other
-	// move types still needs the (asymmetric) proposal/Hastings ratio, which is not computed here.
+	// elsewhere (see TMSMSData::calculate_LL_ratio_for_assignment_move). The proposals are
+	// asymmetric in general, so acceptance must use `log_likelihood_ratio + log_hastings`.
 	//------------------------------------------------------------------------------------------------
-
-	/// Pick one of the four move types uniformly at random and try to build a concrete, invariant-
-	/// preserving proposal for the current state. Returns an `Invalid` proposal if no such move of
-	/// the chosen type exists right now.
-	[[nodiscard]] TAssignmentProposal propose_move() const {
-		switch (coretools::instances::randomGenerator().sample(4)) {
-		case 0: return _propose_to_unknown();
-		case 1: return _propose_from_unknown();
-		case 2: return _propose_swap();
-		default: return _propose_move_to_free();
-		}
-	}
 
 	void apply_move(const TAssignmentProposal &proposal) {
 		_current_assignments.at(proposal.feature_a) = proposal.new_a;
-		if (proposal.type == AssignmentMoveType::Swap) {
+		if (proposal.touches_two_features()) {
 			_current_assignments.at(proposal.feature_b) = proposal.new_b;
 		}
 	}
 
 	void revert_move(const TAssignmentProposal &proposal) {
 		_current_assignments.at(proposal.feature_a) = proposal.old_a;
-		if (proposal.type == AssignmentMoveType::Swap) {
+		if (proposal.touches_two_features()) {
 			_current_assignments.at(proposal.feature_b) = proposal.old_b;
 		}
 	}
