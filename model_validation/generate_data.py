@@ -22,7 +22,11 @@ cd "$ROOT" && xmake
 ACOL=$(find "$ROOT/build" -name "acol" -not -path "*/obj/*" -type f | head -1)
 
 cd "$SCRIPT_DIR"
+# --out is required: without it coretools registers an empty 'out', so the simulated files would
+# be written with an empty prefix (_simulated_lotus.tsv) and infer_lotus.sh / visualize.py, which
+# both look for acol_simulated_*, would not find them.
 "$ACOL" simulate \\
+    --out acol \\
     --tree_species {species_tree_name}.txt \\
     --tree_molecules {molecules_tree_name}.txt \\
     --species_paper_counts {species_tree_name}_papers.txt \\
@@ -38,6 +42,7 @@ cd "$SCRIPT_DIR"
     --molecules_mean_log_nu acol_input_simulated.txt \\
     --molecules_log_nu acol_input_simulated.txt \\
     --molecules_alpha acol_input_simulated.txt \\
+    --epsilon_simple_model 0.2 \\
     --numThreads all \\
     --write_Y \\
     --write_Z \\
@@ -60,18 +65,20 @@ ACOL=$(find "$ROOT/build" -name "acol" -not -path "*/obj/*" -type f | head -1)
 
 cd "$SCRIPT_DIR"
 mkdir -p test_out
+# Both data files are always passed: which sources are actually read is decided at compile time
+# by the xmake options 'lotus' and 'simple_data'. Options for a source that is not compiled in
+# are parsed and ignored, so this one script works for every build configuration.
 "$ACOL" infer \\
     --out ./test_out/acol \\
     --tree_species {species_tree_name}.txt \\
     --tree_molecules {molecules_tree_name}.txt \\
     --lotus acol_simulated_lotus.tsv \\
+    --simple_data acol_simulated_simple_data.tsv \\
     --species_paper_counts {species_tree_name}_papers.txt \\
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
     --iterations 3000 \\
     --numThreads all \\
-    --writeBurnin \\
-    --molecules_branch_lengths.update false \\
-    --species_branch_lengths.update false
+    --writeBurnin
 """
 
 

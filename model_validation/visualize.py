@@ -25,6 +25,9 @@ DIM_COLORS = {"species": "#2196F3", "molecules": "#FF9800", "other": "#9E9E9E"}
 def _param_type(name: str) -> str:
     if re.match(r"^gamma_", name):
         return "gamma"
+    # checked before "epsilon" so the exact-match test below cannot shadow it
+    if name == "epsilon_simple_model":
+        return "epsilon_simple_model"
     if name == "epsilon":
         return "epsilon"
     if re.search(r"_alpha_", name):
@@ -244,6 +247,7 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
     plot_order = [
         "gamma",
         "epsilon",
+        "epsilon_simple_model",
         "alpha",
         "log_nu",
         "mean_log_nu",
