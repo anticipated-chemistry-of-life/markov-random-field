@@ -38,12 +38,11 @@ void TMSMSData::guessInitialValues() {
 	_proba_contamination->set(ProgramOptions::PROBA_OF_MS_CONTAMINATION);
 }
 
-TMSMSData::TMSMSData(
-    const std::vector<std::unique_ptr<TTree>> &trees, const TMarkovField &markov_field,
-    size_t number_of_filters,
-    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
-        &markov_field_stattools_param,
-    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba)
+TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
+                     const TMarkovField &markov_field, size_t number_of_filters,
+                     const MarkovFieldParams &markov_field_stattools_param,
+                     TypeParamMassSpecFilter *filter_proba,
+                     TypeParamContamination *contamination_proba)
     : _number_of_filters(number_of_filters), _markov_field(markov_field),
       _markov_field_stattools_param(markov_field_stattools_param) {
 	for (size_t d = 0; d < trees.size(); ++d) {

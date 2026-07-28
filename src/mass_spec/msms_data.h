@@ -62,8 +62,7 @@ private:
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
 
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
-	const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
-	    &_markov_field_stattools_param;
+	const MarkovFieldParams &_markov_field_stattools_param;
 
 	std::vector<uint8_t> _species_has_ms_data;
 
@@ -106,12 +105,11 @@ private:
 	void _initialize_runs(size_t number_of_molecules);
 
 public:
-	explicit TMSMSData(
-	    const std::vector<std::unique_ptr<TTree>> &trees, const TMarkovField &markov_field,
-	    size_t number_of_filters,
-	    const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
-	        &markov_field_stattools_param,
-	    TypeParamMassSpecFilter *filter_proba, TypeParamContamination *contamination_proba);
+	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
+	                   const TMarkovField &markov_field, size_t number_of_filters,
+	                   const MarkovFieldParams &markov_field_stattools_param,
+	                   TypeParamMassSpecFilter *filter_proba,
+	                   TypeParamContamination *contamination_proba);
 	~TMSMSData() override = default;
 
 	// stattools overrides

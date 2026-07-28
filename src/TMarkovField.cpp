@@ -5,7 +5,7 @@
 #include "TMarkovField.h"
 #include "TClique.h"
 #include "TCurrentState.h"
-#include "TLotus.h"
+#include "TDataModel.h"
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
@@ -135,14 +135,21 @@ void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
 	}
 }
 
-void TMarkovField::_update_cur_LL_lotus(TLotus &lotus,
-                                        std::vector<coretools::TSumLogProbability> &new_LL) {
+void TDataSweepAccumulator::commit(TDataModel &data_model) {
+#ifdef USE_LOTUS
 	double sum_new_LL = 0.0;
-	for (auto &i : new_LL) {
+	for (auto &i : _lotus_LL) {
 		// loop over all LL (stored per thread) and sum
 		sum_new_LL += i.getSum();
 	}
-	lotus.update_cur_LL(sum_new_LL);
+	data_model.get_lotus().update_cur_LL(sum_new_LL);
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+	size_t total_disagree = 0;
+	for (const auto &i : _n_disagree) { total_disagree += i; }
+	// The sweep visits every cell of Y exactly once, so this is the complete disagreement count.
+	data_model.get_simple_error_model().set_n_disagree(total_disagree);
+#endif
 }
 
 int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
@@ -200,7 +207,7 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 	}
 }
 
-void TMarkovField::update(TLotus &lotus, size_t iteration) {
+void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0 &&
 	    !_joint_density_file.isOpen()) {
 		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
@@ -211,11 +218,11 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 
 	if (iteration == 0 && !_z_initialized_from_children) {
-		_update_all_Y<false, true>(lotus, iteration);
+		_update_all_Y<false, true>(data_model, iteration);
 		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
 		_z_initialized_from_children = true;
 	} else {
-		_update_all_Y<false, false>(lotus, iteration);
+		_update_all_Y<false, false>(data_model, iteration);
 	}
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);
@@ -231,19 +238,35 @@ void TMarkovField::update(TLotus &lotus, size_t iteration) {
 	}
 }
 
+#ifdef USE_LOTUS
 void TMarkovField::_calc_lotus_LL(const IndexArray &index_in_leaves_space,
                                   size_t index_for_tmp_state, size_t leaf_index_last_dim,
-                                  std::array<double, 2> &prob, const TLotus &lotus) {
+                                  std::array<double, 2> &prob, const TDataModel &data_model) {
 	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
-	lotus.calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state, cur_state, prob);
+	data_model.get_lotus().calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state,
+	                                             cur_state, prob);
+}
+#endif
+
+#ifdef USE_SIMPLE_ERROR_MODEL
+void TMarkovField::_calc_simple_error_model_LL(size_t index_for_tmp_state,
+                                               std::array<double, 2> &prob,
+                                               const TDataModel &data_model) {
+	data_model.get_simple_error_model().probabilities_for_Y_update(index_for_tmp_state, prob);
 }
 
-void TMarkovField::_prepare_lotus_LL(const IndexArray &start_index_in_leaves_space,
-                                     size_t K_cur_sheet, TLotus &lotus) {
-	lotus.fill_tmp_state_along_last_dim(start_index_in_leaves_space, K_cur_sheet);
+bool TMarkovField::_simple_error_model_disagrees(size_t index_for_tmp_state, bool new_state,
+                                                 const TDataModel &data_model) {
+	return data_model.get_simple_error_model().disagrees_with(index_for_tmp_state, new_state);
+}
+#endif
+
+void TMarkovField::_prepare_data_LL(const IndexArray &start_index_in_leaves_space,
+                                    size_t K_cur_sheet, TDataModel &data_model) {
+	data_model.fill_tmp_state_along_last_dim(start_index_in_leaves_space, K_cur_sheet);
 }
 
-void TMarkovField::simulate(TLotus &lotus) {
+void TMarkovField::simulate(TDataModel &data_model) {
 	// For simulation we always draw from the prior. (top-down)
 	// 1. Draw branch len -> draw mus
 	// 2. For every tree draw the root from those mus and the we BFS sample all the internal nodes
@@ -251,8 +274,9 @@ void TMarkovField::simulate(TLotus &lotus) {
 	// we know which leaves and which internal node are 0 or 1.
 	// 2. draw Z since its unique per tree
 	// 3. Draw Y (this function)
-	// 4. Draw Lotus.
-	// 5. From that simulated Lotus can we go back and infer the prior params
+	// 4. Draw the data of every compiled-in source from that Y (done by the caller,
+	//    TDataModel::_simulateUnderPrior, so that all sources see the same Y).
+	// 5. From that simulated data can we go back and infer the prior params
 	//
 	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
 		auto &tree = _trees[tree_index];
@@ -280,7 +304,7 @@ void TMarkovField::simulate(TLotus &lotus) {
 	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 
-		_update_all_Y<true, false>(lotus, iteration);
+		_update_all_Y<true, false>(data_model, iteration);
 
 		if (_fix_Z) {
 			_update_all_Z<true, true>(iteration);

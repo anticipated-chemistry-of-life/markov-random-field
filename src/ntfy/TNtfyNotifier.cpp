@@ -57,47 +57,41 @@ void TNtfyNotifier::notify_start(const std::vector<std::string> &tree_names,
 	_send("ACOL run started", msg, 3, "rocket");
 }
 
-void TNtfyNotifier::notify_burnin_round(size_t round, size_t total_rounds,
-                                        const std::vector<std::string> &dim_names,
-                                        const std::vector<ParamStats> &gamma_stats,
-                                        const ParamStats &epsilon_stats) const {
+std::string TNtfyNotifier::_format_param_stats(const std::vector<std::string> &dim_names,
+                                               const std::vector<ParamStats> &gamma_stats,
+                                               const std::vector<NamedStats> &scalar_stats) {
 	std::ostringstream msg;
 	msg << std::setprecision(6);
 	for (size_t i = 0; i < dim_names.size(); ++i) {
 		msg << "gamma_" << dim_names[i] << ": mean=" << gamma_stats[i].mean
 		    << " var=" << gamma_stats[i].var << " sd=" << gamma_stats[i].sd << "\n";
 	}
-	msg << "epsilon: mean=" << epsilon_stats.mean << " var=" << epsilon_stats.var
-	    << " sd=" << epsilon_stats.sd;
+	for (size_t i = 0; i < scalar_stats.size(); ++i) {
+		if (i > 0) { msg << "\n"; }
+		msg << scalar_stats[i].name << ": mean=" << scalar_stats[i].stats.mean
+		    << " var=" << scalar_stats[i].stats.var << " sd=" << scalar_stats[i].stats.sd;
+	}
+	return msg.str();
+}
+
+void TNtfyNotifier::notify_burnin_round(size_t round, size_t total_rounds,
+                                        const std::vector<std::string> &dim_names,
+                                        const std::vector<ParamStats> &gamma_stats,
+                                        const std::vector<NamedStats> &scalar_stats) const {
 	std::string title =
 	    "Burnin " + std::to_string(round) + "/" + std::to_string(total_rounds) + " finished";
-	_send(title, msg.str(), 2, "white_check_mark");
+	_send(title, _format_param_stats(dim_names, gamma_stats, scalar_stats), 2, "white_check_mark");
 }
 
 void TNtfyNotifier::notify_burnin_finished(const std::vector<std::string> &dim_names,
                                            const std::vector<ParamStats> &gamma_stats,
-                                           const ParamStats &epsilon_stats) const {
-	std::ostringstream msg;
-	msg << std::setprecision(6);
-	for (size_t i = 0; i < dim_names.size(); ++i) {
-		msg << "gamma_" << dim_names[i] << ": mean=" << gamma_stats[i].mean
-		    << " var=" << gamma_stats[i].var << " sd=" << gamma_stats[i].sd << "\n";
-	}
-	msg << "epsilon: mean=" << epsilon_stats.mean << " var=" << epsilon_stats.var
-	    << " sd=" << epsilon_stats.sd;
-	_send("Burnin finished", msg.str(), 2, "white_check_mark");
+                                           const std::vector<NamedStats> &scalar_stats) const {
+	_send("Burnin finished", _format_param_stats(dim_names, gamma_stats, scalar_stats), 2,
+	      "white_check_mark");
 }
 
 void TNtfyNotifier::notify_mcmc_finished(const std::vector<std::string> &dim_names,
                                          const std::vector<ParamStats> &gamma_stats,
-                                         const ParamStats &epsilon_stats) const {
-	std::ostringstream msg;
-	msg << std::setprecision(6);
-	for (size_t i = 0; i < dim_names.size(); ++i) {
-		msg << "gamma_" << dim_names[i] << ": mean=" << gamma_stats[i].mean
-		    << " var=" << gamma_stats[i].var << " sd=" << gamma_stats[i].sd << "\n";
-	}
-	msg << "epsilon: mean=" << epsilon_stats.mean << " var=" << epsilon_stats.var
-	    << " sd=" << epsilon_stats.sd;
-	_send("MCMC finished", msg.str(), 4, "tada");
+                                         const std::vector<NamedStats> &scalar_stats) const {
+	_send("MCMC finished", _format_param_stats(dim_names, gamma_stats, scalar_stats), 4, "tada");
 }

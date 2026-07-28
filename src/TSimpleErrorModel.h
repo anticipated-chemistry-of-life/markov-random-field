@@ -1,0 +1,121 @@
+//
+// The "simple error model" data source.
+//
+// D is a binary matrix with exactly the same dimensions as the latent field Y: each cell of D is a
+// direct observation of the corresponding cell of Y, correct with probability 1 - epsilon and
+// inverted with probability epsilon. Unlike LOTUS, D is never collapsed and carries no notion of
+// research effort -- it is deliberately the simplest possible data source, so that switching every
+// other source off isolates whether a convergence problem lives in a data likelihood or in the
+// Markov field itself.
+//
+// This class is not a stattools box. Its parameter (epsilon_simple_model) hangs off TDataModel,
+// which owns this object and forwards the MCMC callbacks; see TDataModel.h.
+//
+
+#pragma once
+
+#include "TSimpleErrorModelMath.h"
+
+#ifdef USE_SIMPLE_ERROR_MODEL
+
+#include "TCurrentState.h"
+#include "Types.h"
+#include "constants.h"
+#include "stattools/ParametersObservations/TParameter.h"
+#include "storages/y_storage/TStorageYMatrix.h"
+#include "tree/TTree.h"
+#include <array>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <vector>
+
+class TSimpleErrorModel {
+public:
+	using TypeParamEpsilon = stattools::TParameter<SpecEpsilonSimpleModel, TDataModel>;
+
+private:
+	// trees are a const ref: we neither modify nor copy them
+	const std::vector<std::unique_ptr<TTree>> &_trees;
+
+	// the observed data, same dimensions as Y
+	TStorageYMatrix _D;
+
+	// error rate; owned by TModel, updated by stattools
+	TypeParamEpsilon *_epsilon = nullptr;
+
+	/// Number of cells where D and Y currently disagree, and the total number of cells. The
+	/// likelihood depends on the data only through these two numbers (see TSimpleErrorModelMath.h),
+	/// so keeping the count up to date after each Y sweep makes every epsilon move O(1).
+	size_t _n_disagree  = 0;
+	size_t _total_cells = 0;
+
+	/// Cache of the D cells of the current sheet, filled once per sheet by the Y sweep. Mirrors
+	/// TLotus's cache: it turns the per-cell lookup inside the OpenMP loop into an array read.
+	TCurrentState _tmp_state_along_last_dim;
+
+	[[nodiscard]] double _eps() const { return (double)_epsilon->value(); }
+
+public:
+	TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamEpsilon *epsilon);
+	~TSimpleErrorModel() = default;
+
+	/// Sizes D from the trees. Called in both inference and simulation: during simulation D starts
+	/// empty and is filled by simulate_D_from_Y.
+	void initialize_storage();
+
+	void load_from_file(const std::string &filename);
+
+	/// Synchronises the disagreement count with the current Y. Must be called once before the first
+	/// likelihood evaluation, and after anything that changes Y outside of a sweep.
+	void guess_initial_values(const TStorageYMatrix &Y);
+
+	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
+
+	void fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space, size_t K);
+
+	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1) for the cell at position
+	/// `index_for_tmp_state` within the current sheet.
+	void probabilities_for_Y_update(size_t index_for_tmp_state, std::array<double, 2> &prob) const {
+		simple_error_model::probabilities_for_both_Y_states(
+		    _tmp_state_along_last_dim.get_Y(index_for_tmp_state), _eps(), prob);
+	}
+
+	/// Whether the observed cell contradicts the state Y was just set to.
+	[[nodiscard]] bool disagrees_with(size_t index_for_tmp_state, bool new_state) const {
+		return _tmp_state_along_last_dim.get_Y(index_for_tmp_state) != new_state;
+	}
+
+	/// Installs the disagreement count accumulated over a full Y sweep.
+	void set_n_disagree(size_t n_disagree) { _n_disagree = n_disagree; }
+
+	// --- likelihood ---
+
+	[[nodiscard]] double log_likelihood() const {
+		return simple_error_model::log_likelihood_from_counts(_total_cells, _n_disagree, _eps());
+	}
+
+	/// Log-likelihood ratio between two epsilon values. O(1): the disagreement count does not
+	/// depend on epsilon, so nothing has to be re-scanned.
+	[[nodiscard]] double log_likelihood_ratio(double old_eps, double new_eps) const {
+		return simple_error_model::log_likelihood_ratio(_total_cells, _n_disagree, old_eps,
+		                                                new_eps);
+	}
+
+	// --- simulation ---
+
+	/// Draws every cell of D from the corresponding cell of Y at the current error rate.
+	void simulate_D_from_Y(const TStorageYMatrix &Y);
+
+	/// Writes the simulated D as <prefix>_simulated_simple_data.tsv: a header naming every tree,
+	/// then one row of leaf node ids per cell whose state is 1 (same sparse format as the LOTUS
+	/// file, so it can be read straight back by load_from_file).
+	void write_simulated_D(const std::string &prefix) const;
+
+	// --- accessors ---
+
+	[[nodiscard]] const TStorageYMatrix &get_D() const { return _D; }
+	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
+};
+
+#endif // USE_SIMPLE_ERROR_MODEL

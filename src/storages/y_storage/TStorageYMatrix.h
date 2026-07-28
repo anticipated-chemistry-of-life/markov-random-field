@@ -247,6 +247,10 @@ public:
 		_mat.cleanUp();
 	}
 
+	/// Number of leaf nodes per dimension. Two matrices are cell-by-cell comparable (their linear
+	/// indices denote the same cell) only if their dimensions are equal.
+	[[nodiscard]] const IndexArray &dimensions() const { return _dimensions_Y_space; }
+
 	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
 	[[nodiscard]] double sparsity() const {
 		return static_cast<double>(_mat.nNonZero()) /

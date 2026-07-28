@@ -17,16 +17,78 @@
 #include "mass_spec/msms_data.h"
 #include "omp.h"
 #include "tree/TTree.h"
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
 
 //-----------------------------------
-// TMarkovField
+// Y sweep bookkeeping
 //-----------------------------------
 
-class TLotus; // forward declaration
+class TDataModel; // forward declaration
+
+/// Per-cell outcome of one Y update. Each data source keeps its own likelihood bookkeeping (they
+/// are independent terms), so the results are handed back separately instead of merged.
+struct TYUpdateResult {
+	int diff_counter_1_in_last_dim = 0;
+#ifdef USE_LOTUS
+	/// P(L_cell | x = new_state). Neutral value 1.0 (log 0), used when collapsing makes the LOTUS
+	/// term identical for both Y states and calculate_LL_update_Y leaves it untouched.
+	double prob_lotus_new_state = 1.0;
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+	/// Whether the observed D cell contradicts the state Y was just set to.
+	bool simple_model_disagrees = false;
+#endif
+};
+
+/// Per-thread accumulators for one full Y sweep, committed to the data sources at the end.
+///
+/// The accumulators are bundled into a single object on purpose: `#ifdef` cannot appear inside a
+/// `#pragma omp` line, and the sweep's `default(none) shared(...)` clause has to name every
+/// variable it touches. One object keeps that clause identical in every build configuration.
+class TDataSweepAccumulator {
+private:
+#ifdef USE_LOTUS
+	std::vector<coretools::TSumLogProbability> _lotus_LL;
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+	std::vector<size_t> _n_disagree;
+#endif
+
+public:
+	/// Sizing happens in the body rather than in a member-initializer list, so that adding or
+	/// removing a source does not require rebalancing the commas of a #ifdef'd init list.
+	explicit TDataSweepAccumulator(size_t n_threads) {
+#ifdef USE_LOTUS
+		_lotus_LL.resize(n_threads);
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+		_n_disagree.assign(n_threads, 0);
+#endif
+	}
+
+	/// Hot path: called once per updated Y cell, from inside the parallel region. Only ever touches
+	/// the slot of the calling thread.
+	void add(size_t thread, const TYUpdateResult &result) {
+#ifdef USE_LOTUS
+		_lotus_LL[thread].add(result.prob_lotus_new_state);
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+		_n_disagree[thread] += static_cast<size_t>(result.simple_model_disagrees);
+#endif
+	}
+
+	/// Sums the per-thread slots and installs the results in the data sources. Called once, after
+	/// the parallel region.
+	void commit(TDataModel &data_model);
+};
+
+//-----------------------------------
+// TMarkovField
+//-----------------------------------
 
 class TMarkovField {
 private:
@@ -75,24 +137,37 @@ private:
 	                               const IndexArray &index_in_leaves_space);
 
 	void _simulate_Y();
+	// These forward into the data sources. They are declared here and defined in TMarkovField.cpp
+	// (which includes TDataModel.h) because TDataModel is only forward-declared in this header:
+	// _update_Y is a template, but `data_model` is not a dependent type, so any member access on it
+	// would be checked right here against an incomplete type.
+#ifdef USE_LOTUS
 	void _calc_lotus_LL(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
 	                    size_t leaf_index_last_dim, std::array<double, 2> &prob,
-	                    const TLotus &lotus);
-	static void _prepare_lotus_LL(const IndexArray &start_index_in_leaves_space, size_t K_cur_sheet,
-	                              TLotus &lotus);
-	static void _update_cur_LL_lotus(TLotus &lotus,
-	                                 std::vector<coretools::TSumLogProbability> &new_LL);
+	                    const TDataModel &data_model);
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+	static void _calc_simple_error_model_LL(size_t index_for_tmp_state, std::array<double, 2> &prob,
+	                                        const TDataModel &data_model);
+	[[nodiscard]] static bool _simple_error_model_disagrees(size_t index_for_tmp_state,
+	                                                        bool new_state,
+	                                                        const TDataModel &data_model);
+#endif
+	/// Per-sheet preparation: every compiled-in source caches the slice of its data that the sweep
+	/// is about to walk over.
+	static void _prepare_data_LL(const IndexArray &start_index_in_leaves_space, size_t K_cur_sheet,
+	                             TDataModel &data_model);
 	double _calculate_complete_joint_density();
 	void _reset_log_joint_density() {
 		_complete_log_density.clear();
 		_complete_log_density.resize(ProgramOptions::NUMBER_OF_THREADS);
 	}
 
-	template<bool IsSimulation, bool initYFromLotus>
-	std::pair<int, double> _update_Y(const IndexArray &index_in_leaves_space,
-	                                 size_t leaf_index_last_dim, size_t index_for_tmp_state,
-	                                 std::vector<size_t> &linear_indices_in_Y_space_to_insert,
-	                                 const TLotus &lotus) {
+	template<bool IsSimulation, bool initYFromData>
+	TYUpdateResult _update_Y(const IndexArray &index_in_leaves_space, size_t leaf_index_last_dim,
+	                         size_t index_for_tmp_state,
+	                         std::vector<size_t> &linear_indices_in_Y_space_to_insert,
+	                         const TDataModel &data_model) {
 		auto index_copy   = index_in_leaves_space;
 		index_copy.back() = leaf_index_last_dim;
 
@@ -100,40 +175,58 @@ private:
 		std::array<coretools::TSumLogProbability, 2> sum_log;
 
 		// calculate probabilities in Markov random field
-		if constexpr (!initYFromLotus) { _calculate_log_prob_field(index_copy, sum_log); }
+		if constexpr (!initYFromData) { _calculate_log_prob_field(index_copy, sum_log); }
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
-		// calculate log likelihood (lotus)
-		std::array<double, 2> prob_lotus{};
+		// Declared outside the IsSimulation branch so the simulation instantiation does not warn
+		// about an unused variable. 1.0 is the neutral value: calculate_LL_update_Y leaves prob
+		// untouched when collapsing makes the LOTUS term identical for both states, and adding
+		// log(1) = 0 is exactly the no-op that case needs.
+#ifdef USE_LOTUS
+		std::array<double, 2> prob_lotus{1.0, 1.0};
+#endif
 		if constexpr (!IsSimulation) {
-			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus, lotus);
+			// calculate log likelihood (lotus)
+#ifdef USE_LOTUS
+			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus,
+			               data_model);
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
-		}
-
-		// calculate log likelihood mass spec data
-		if constexpr (!IsSimulation) {
+#endif
+			// calculate log likelihood (simple error model)
+#ifdef USE_SIMPLE_ERROR_MODEL
+			std::array<double, 2> prob_simple{};
+			_calc_simple_error_model_LL(index_for_tmp_state, prob_simple, data_model);
+			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_simple[i]); }
+#endif
+			// calculate log likelihood mass spec data
 			if (_ms_data.has_value()) { _ms_data->add_log_likelihood(index_copy, sum_log); }
 		}
 
 		// sample state
-		bool new_state = sample(sum_log);
+		const bool new_state = sample(sum_log);
 
 		// update Y accordingly
-		int diff_counter_1_in_last_dim =
+		TYUpdateResult result;
+		result.diff_counter_1_in_last_dim =
 		    _set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
-		double prob_new_state = prob_lotus[new_state];
-
-		if (new_state) {
-			_complete_log_density[omp_get_thread_num()] += sum_log_field[1].getSum();
-		} else {
-			_complete_log_density[omp_get_thread_num()] += sum_log_field[0].getSum();
+#ifdef USE_LOTUS
+		result.prob_lotus_new_state = prob_lotus[new_state];
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+		if constexpr (!IsSimulation) {
+			result.simple_model_disagrees =
+			    _simple_error_model_disagrees(index_for_tmp_state, new_state, data_model);
 		}
+#endif
 
-		return {diff_counter_1_in_last_dim, prob_new_state};
+		_complete_log_density[omp_get_thread_num()] +=
+		    sum_log_field[static_cast<size_t>(new_state)].getSum();
+
+		return result;
 	}
 
-	template<bool IsSimulation, bool initYFromLotus>
-	void _update_all_Y(TLotus &lotus, size_t iteration) {
+	template<bool IsSimulation, bool initYFromData>
+	void _update_all_Y(TDataModel &data_model, size_t iteration) {
 		_reset_log_joint_density();
 
 		if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
@@ -160,7 +253,7 @@ private:
 		}
 
 		// loop over sheets in last dimension
-		std::vector<coretools::TSumLogProbability> new_LL(ProgramOptions::NUMBER_OF_THREADS);
+		TDataSweepAccumulator acc(ProgramOptions::NUMBER_OF_THREADS);
 		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
 		    ProgramOptions::NUMBER_OF_THREADS);
 
@@ -176,8 +269,8 @@ private:
 		IndexArray previous_ix;
 		int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
-    shared(new_LL, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,   \
-               lotus)
+    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,      \
+               data_model)
 		{
 			for (size_t k = 0; k < _num_outer_loops; ++k) {
 				const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
@@ -203,7 +296,7 @@ private:
 					{
 						// fill clique along last dimension
 						_fill_clique_along_last_dim(start_index_in_leaves_space);
-						_prepare_lotus_LL(start_index_in_leaves_space, K_cur_sheet, lotus);
+						_prepare_data_LL(start_index_in_leaves_space, K_cur_sheet, data_model);
 						diff_counter_1_in_last_dim = 0; // reset before the reduction below
 					}
 
@@ -214,12 +307,12 @@ private:
 #pragma omp for schedule(static) reduction(+ : diff_counter_1_in_last_dim)
 					for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim;
 					     ++j) {
-						auto [diff, prob_new_state] = _update_Y<IsSimulation, initYFromLotus>(
+						const auto result = _update_Y<IsSimulation, initYFromData>(
 						    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
-						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], lotus);
-						diff_counter_1_in_last_dim += diff;
+						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], data_model);
+						diff_counter_1_in_last_dim += result.diff_counter_1_in_last_dim;
 						if constexpr (!IsSimulation) {
-							new_LL[omp_get_thread_num()].add(prob_new_state);
+							acc.add(static_cast<size_t>(omp_get_thread_num()), result);
 						}
 					}
 
@@ -238,8 +331,8 @@ private:
 		}
 
 		_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-		// at the very end: sum the LL of all threads and store it in TLotus
-		if constexpr (!IsSimulation) { _update_cur_LL_lotus(lotus, new_LL); }
+		// at the very end: sum the per-thread accumulators and store them in the data sources
+		if constexpr (!IsSimulation) { acc.commit(data_model); }
 		if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) &&
 		    !_fix_Y) {
 			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
@@ -326,10 +419,10 @@ public:
 	~TMarkovField() = default;
 
 	// updates
-	void update(TLotus &lotus, size_t iteration);
+	void update(TDataModel &data_model, size_t iteration);
 
 	// simulation
-	void simulate(TLotus &lotus);
+	void simulate(TDataModel &data_model);
 
 	// get Y
 	[[nodiscard]] const TStorageYMatrix &get_Y_matrix() const;

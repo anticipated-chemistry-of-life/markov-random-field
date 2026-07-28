@@ -35,6 +35,13 @@ public:
 
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
+	static inline std::string SIMPLE_DATA_FILENAME = "simple_data.tsv";
+
+	/// Error rate of the simple error model: the probability that a cell of the observed matrix D
+	/// reports the opposite of the latent state Y. Used as the simulated truth during simulation
+	/// and as the starting value of the inferred epsilon_simple_model parameter during inference.
+	static inline double EPSILON_SIMPLE_MODEL = 0.2;
+
 	static inline double GAMMA = 5.0;
 
 	static inline double ALPHA = 0.5;
@@ -61,6 +68,11 @@ public:
 	static inline double MS_PROBA_MOVE_TO_UNKNOWN = 0.1;
 
 	static inline std::string_view FIXED_PRIOR_ON_EPSILON = "0.3,5.0";
+
+	/// Beta(1, 1) = uniform on (0, 1). The simple error model is a debugging aid, so its error rate
+	/// should be driven by the likelihood alone. Override with
+	/// --epsilon_simple_model.priorParameters "<alpha>,<beta>".
+	static inline std::string_view FIXED_PRIOR_ON_EPSILON_SIMPLE_MODEL = "1.0,1.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_GAMMA = "2.0,4.6";
 
@@ -103,6 +115,17 @@ public:
 
 		LOTUS_FILENAME = params.get("lotus", LOTUS_FILENAME);
 
+		SIMPLE_DATA_FILENAME = params.get("simple_data", SIMPLE_DATA_FILENAME);
+
+		EPSILON_SIMPLE_MODEL = params.get<double>("epsilon_simple_model", EPSILON_SIMPLE_MODEL);
+		// The parameter is ZeroOneOpen; letting an out-of-range value through here would surface as
+		// an opaque throw from deep inside stattools instead of a message the user can act on.
+		if (EPSILON_SIMPLE_MODEL <= 0.0 || EPSILON_SIMPLE_MODEL >= 1.0) {
+			throw coretools::TUserError("--epsilon_simple_model must be strictly between 0 and 1, "
+			                            "but got ",
+			                            EPSILON_SIMPLE_MODEL, ".");
+		}
+
 		GAMMA = params.get<double>("gamma", GAMMA);
 
 		ALPHA = params.get<double>("alpha", ALPHA);
@@ -122,6 +145,16 @@ public:
 		}
 	}
 
+	/// The file the default output prefix is derived from when '--out' is not given. Which data
+	/// source that is depends on what was compiled in.
+	[[nodiscard]] static std::string default_prefix_source_filename() {
+#ifdef USE_LOTUS
+		return LOTUS_FILENAME;
+#else
+		return SIMPLE_DATA_FILENAME;
+#endif
+	}
+
 	static void printHelp() {
 		std::cout << "--numThreads                   Set the number of threads you want to use\n";
 		std::cout << "--write_Y                      Write Y output\n";
@@ -129,6 +162,12 @@ public:
 		std::cout << "--write_Z                      Write Z output\n";
 		std::cout << "--write_Z_trace                Write Z trace\n";
 		std::cout << "--write_branch_lengths         Output branch lengths\n";
+		std::cout << "--lotus                        LOTUS data file (only with the 'lotus' build "
+		             "option)\n";
+		std::cout << "--simple_data                  Simple error model data file (only with the "
+		             "'simple_data' build option)\n";
+		std::cout << "--epsilon_simple_model         Error rate of the simple error model, in "
+		             "(0,1). Simulated truth when simulating, starting value when inferring\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 	}

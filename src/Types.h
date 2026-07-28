@@ -9,6 +9,7 @@
 #include "coretools/Types/commonWeakTypes.h"
 #include "coretools/Types/probability.h"
 #include "stattools/ParametersObservations/TObservation.h"
+#include "stattools/ParametersObservations/TParameter.h"
 #include "stattools/ParametersObservations/spec.h"
 #include "stattools/Priors/TPriorBeta.h"
 #include "stattools/Priors/TPriorExponential.h"
@@ -16,19 +17,36 @@
 #include "stattools/Priors/TPriorNormal.h"
 #include "stattools/Priors/TPriorUniform.h"
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 class TTree; // forward declaration to avoid circular inclusion
 
-// use simple error model for Lotus?
+// Which sources of information are compiled in? These are independent switches (xmake options
+// 'lotus' and 'simple_data'), so a build can use either, both, or -- once MS data is wired up --
+// all three. Note that these constants are only for static_asserts and for logging: members and
+// member functions of a data source must be guarded with #ifdef, not with `if constexpr`, because
+// a discarded `if constexpr` branch still has to name-resolve.
 #ifdef USE_LOTUS
-constexpr static bool UseSimpleErrorModel = false;
+constexpr static bool UseLotus = true;
 #else
-constexpr static bool UseSimpleErrorModel = true;
+constexpr static bool UseLotus = false;
 #endif
+
+#ifdef USE_SIMPLE_ERROR_MODEL
+constexpr static bool UseSimpleErrorModel = true;
+#else
+constexpr static bool UseSimpleErrorModel = false;
+#endif
+
+static_assert(UseLotus || UseSimpleErrorModel,
+              "No source of data was compiled in: Y could not be informed by anything. Configure "
+              "the build with at least one of 'xmake f --lotus=y' or 'xmake f --simple_data=y'.");
 
 // Parameter types
 using TypeGamma                    = coretools::StrictlyPositive;
 using TypeErrorRate                = coretools::ZeroOneOpen;
+using TypeEpsilonSimpleModel       = coretools::ZeroOneOpen;
 using TypeAlpha                    = coretools::Probability;
 using TypeLogNu                    = coretools::Unbounded;
 using TypeNu                       = coretools::StrictlyPositive;
@@ -55,6 +73,21 @@ using PriorOnErrorRate = stattools::prior::TBetaFixed<stattools::TParameterBase,
 using SpecErrorRate =
     stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
                          PriorOnErrorRate>;
+
+// Epsilon of the simple error model
+// The rate at which the simple error model data D misreports the latent state Y. Default prior is
+// Beta(1, 1), i.e. uniform on (0, 1): the simple error model exists to diagnose the rest of the
+// model, so its error rate should be driven by the likelihood alone and not pulled anywhere by the
+// prior. Hyperparameters set via --epsilon_simple_model.priorParameters "<alpha>,<beta>".
+// Note this is a *different* type from SpecErrorRate even though both are ZeroOneOpen + Beta: the
+// name hash is a template parameter, which is what lets TDataModel overload calculateLLRatio on
+// each of them.
+using PriorOnEpsilonSimpleModel =
+    stattools::prior::TBetaFixed<stattools::TParameterBase, TypeEpsilonSimpleModel, 1>;
+using SpecEpsilonSimpleModel =
+    stattools::ParamSpec<TypeEpsilonSimpleModel,
+                         stattools::Hash<coretools::toHash("epsilon_simple_model")>,
+                         PriorOnEpsilonSimpleModel>;
 
 // Alpha
 using PriorOnAlpha = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeAlpha, 1>;
@@ -110,6 +143,10 @@ using SpecContaminationProba =
                          stattools::Hash<coretools::toHash("contamination_proba")>,
                          PriorOnContaminationProba>;
 
+// The likelihood box that anchors the model in the stattools DAG. It owns the Markov field and
+// every compiled-in data source; see TDataModel.h.
+class TDataModel; // forward declaration to avoid circular inclusion
+
 // Markov Field (only needed for stattools purposes)
 using TypeMarkovField = coretools::Boolean;
 constexpr static size_t NumDimMarkovField =
@@ -118,13 +155,15 @@ using PriorOnMarkovField = TTree;
 using SpecMarkovField =
     stattools::ParamSpec<TypeMarkovField, stattools::Hash<coretools::toHash("MRF")>,
                          PriorOnMarkovField>;
+using ParamMarkovField  = stattools::TParameter<SpecMarkovField, TDataModel>;
+using MarkovFieldParams = std::vector<std::unique_ptr<ParamMarkovField>>;
 
-// Observation: Lotus
-class TLotus; // forward declaration to avoid circular inclusion
-using TypeLotus                     = coretools::Boolean;
-constexpr static size_t NumDimLotus = 2;
-using StorageLotus                  = coretools::TMultiDimensionalStorage<TypeLotus, NumDimLotus>;
-using SpecLotus                     = stattools::TObservation<TypeLotus, NumDimLotus, TLotus>;
+// Observation anchoring TDataModel in the DAG. This is a "fake" observation: the real data lives
+// in the individual data sources, but stattools requires a box to sit above an observation.
+using TypeDataObs                     = coretools::Boolean;
+constexpr static size_t NumDimDataObs = 2;
+using StorageDataObs = coretools::TMultiDimensionalStorage<TypeDataObs, NumDimDataObs>;
+using SpecDataObs    = stattools::TObservation<TypeDataObs, NumDimDataObs, TDataModel>;
 
 // Observations: Mass Spec
 class TMSMSData;

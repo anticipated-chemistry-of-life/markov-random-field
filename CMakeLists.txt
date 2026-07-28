@@ -37,15 +37,23 @@ if (OpenMP_CXX_FOUND)
 endif ()
 
 
-# Use simple error model or lotus?
-# -> if you want to use lotus: compile cmake with command "cmake -DLOTUS=ON .."
-option(LOTUS "Using Lotus" OFF)
+# Which sources of information to compile in? These are independent: any combination is valid
+# except all-off, which Types.h rejects with a static_assert. Defaults mirror xmake.lua.
+option(LOTUS "Compile in the LOTUS data source" ON)
 if (LOTUS)
-  message("Using Lotus (option -DLOTUS=ON)")
+  message("Using LOTUS data (run 'cmake -DLOTUS=OFF ..' to change)")
   # add compile definition to source files (everything behind -D will be replaced with bool)
   add_definitions(-DUSE_LOTUS)
 else ()
-  message("Using simple error model (run 'cmake -DLOTUS=ON ..' to change)")
+  message("Not using LOTUS data (run 'cmake -DLOTUS=ON ..' to change)")
+endif ()
+
+option(SIMPLE_DATA "Compile in the simple error model data source" OFF)
+if (SIMPLE_DATA)
+  message("Using simple error model data (run 'cmake -DSIMPLE_DATA=OFF ..' to change)")
+  add_definitions(-DUSE_SIMPLE_ERROR_MODEL)
+else ()
+  message("Not using simple error model data (run 'cmake -DSIMPLE_DATA=ON ..' to change)")
 endif ()
 
 

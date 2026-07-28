@@ -2,100 +2,47 @@
 // Created by madleina on 03.03.25.
 //
 #include "TLotus.h"
+
+#ifdef USE_LOTUS
+
+#include "TSparseDataFile.h"
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
+#include "coretools/Files/TInputFile.h"
+#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <deque>
-#include <utility>
+#include <string>
 #include <vector>
 
-TLotus::TLotus(std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
-               TypeParamErrorRate *error_rate, size_t n_iterations,
-               const std::vector<std::unique_ptr<stattools::TParameter<SpecMarkovField, TLotus>>>
-                   &markov_field_stattools_param,
-               std::string prefix, bool simulate)
-    : _trees(trees), _markov_field(n_iterations, trees, prefix),
-      _markov_field_stattools_param(markov_field_stattools_param), _collapser(trees), _gamma(gamma),
-      _error_rate(error_rate), _tmp_state_along_last_dim(*trees.back().get(), 1),
-      _prefix(std::move(prefix)), _simulate(simulate) {
-	this->addPriorParameter({_gamma, _error_rate});
-	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
+TLotus::TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
+               TypeParamErrorRate *error_rate)
+    : _trees(trees), _collapser(trees), _gamma(gamma), _error_rate(error_rate),
+      _tmp_state_along_last_dim(*trees.back().get(), 1) {}
 
-	_oldLL = 0.0;
-	_curLL = 0.0;
-}
+void TLotus::initialize(TDataModel *box, bool simulate) {
+	if (!simulate) { load_from_file(get_filename_lotus()); }
 
-[[nodiscard]] std::string TLotus::name() const { return "lotus_likelihood"; }
-
-void TLotus::initialize() {
-	if (!_simulate) { load_from_file(get_filename_lotus()); }
-
-	std::vector<std::string> tree_names;
-	tree_names.reserve(_collapser.num_dim_to_keep());
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		tree_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
-	}
-
-	// initialize storage
-	_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
-	                    {std::make_shared<coretools::TNamesStrings>(tree_names)});
-
-	_error_rate->initStorage(this, {1});
-	if constexpr (UseSimpleErrorModel) {
-		_epsilon = ProgramOptions::EPSILON;
-		coretools::instances::logfile().list("Using simple error model with epsilon = ", _epsilon);
-	}
-	for (auto &it : _markov_field_stattools_param) { it->initStorage(this, {0}); }
-
-	if (!_simulate) {
-		std::vector<size_t> leaf_counts;
-		leaf_counts.reserve(_collapser.num_dim_to_keep());
-		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-			leaf_counts.push_back(_trees[_collapser.dim_to_keep(i)]->get_number_of_leaves());
-		}
-		const auto n_iter   = coretools::instances::parameters().get<size_t>("iterations", 100000);
-		const auto n_burnin = coretools::instances::parameters().get<size_t>("numBurnin", 10);
-		const auto n_burnin_iter = coretools::instances::parameters().get<size_t>("burnin", 1000);
-		_notifier.notify_start(tree_names, leaf_counts, n_iter, n_burnin, n_burnin_iter);
-	}
+	// Note: when simulating, the collapser has not been initialized yet (that happens in
+	// load_from_file, which is skipped), so gamma is sized to 0 here and re-initialized in
+	// prepare_for_simulation once the kept dimensions are known.
+	_gamma->initStorage(box, {_collapser.num_dim_to_keep()},
+	                    {std::make_shared<coretools::TNamesStrings>(kept_tree_names())});
+	_error_rate->initStorage(box, {1});
 }
 
 void TLotus::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().startIndent("Reading links from file '", filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 
+	// LOTUS may name fewer trees than exist; the remaining dimensions are collapsed away.
+	sparse_data_file::validate_header_against_trees(file, _trees, filename);
+
 	// initialize collapser: know which dimensions to keep and which to collapse
-	std::vector<std::string> tree_names(_trees.size());
-	for (const auto &tree : _trees) { tree_names.push_back(tree->get_tree_name()); }
-
-	// check if all headers in file match a tree name
-	for (const auto &header_name : file.header()) {
-		if (std::find(tree_names.begin(), tree_names.end(), header_name) == tree_names.end()) {
-			throw coretools::TUserError("Header '", header_name, "' in file '", filename,
-			                            "' does not match any tree name!");
-		}
-	}
-
-	// since lotus can also contain less dimensions than the trees, we need to check if the order of
-	// the headers matches the order of the trees. To do so we can do a dequing of the tree names
-	// and the headers and check if the headers are a subset of the tree names.
-	std::deque<std::string> header_names_deque(file.header().size());
-	for (const auto &header_name : file.header()) { header_names_deque.push_back(header_name); }
-	for (const auto &tree_name : tree_names) {
-		if (header_names_deque.empty()) { break; }
-		if (header_names_deque.front() == tree_name) { header_names_deque.pop_front(); }
-	}
-	if (!header_names_deque.empty()) {
-		throw coretools::TUserError("Headers in file '", filename,
-		                            "' should be ordered in the same way as the trees.");
-	}
-
 	const auto len_per_dimension_lotus = _collapser.initialize(file.header(), "LOTUS");
 
 	// initialize the size of L
@@ -107,39 +54,48 @@ void TLotus::load_from_file(const std::string &filename) {
 		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
 
-	IndexArray index_in_collapsed_space;
+	IndexArray index_in_collapsed_space{};
 	for (; !file.empty(); file.popFront()) {
 		// loop over all columns
 		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-			std::string node_name = std::string(file.get(i));
-
-			const size_t tree_index = _collapser.dim_to_keep(i);
-			if (!_trees[tree_index]->isLeaf(_trees[tree_index]->get_node_index(node_name))) {
-				throw coretools::TUserError("Node '", node_name, "' in tree '",
-				                            _trees[tree_index]->get_tree_name(),
-				                            "' is not a leaf !");
-			}
-
-			const size_t ix             = _trees[tree_index]->get_index_within_leaves(node_name);
-			index_in_collapsed_space[i] = ix;
+			const size_t tree_index     = _collapser.dim_to_keep(i);
+			index_in_collapsed_space[i] = sparse_data_file::leaf_index_or_throw(
+			    *_trees[tree_index], std::string(file.get(i)));
 		}
-
-		size_t linear_index_in_Y_space =
-		    _L.get_linear_index_in_container_space(index_in_collapsed_space);
-		_L.insert_one(linear_index_in_Y_space);
+		_L.insert_one(_L.get_linear_index_in_container_space(index_in_collapsed_space));
 	}
 	coretools::instances::logfile().endIndent();
-};
+}
 
-double TLotus::calculate_log_likelihood_of_L() const {
+std::vector<std::string> TLotus::kept_tree_names() const {
+	std::vector<std::string> tree_names;
+	tree_names.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		tree_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
+	}
+	return tree_names;
+}
+
+std::vector<TNtfyNotifier::ParamStats> TLotus::gamma_stats() const {
+	std::vector<TNtfyNotifier::ParamStats> stats;
+	stats.reserve(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
+	}
+	return stats;
+}
+
+TNtfyNotifier::ParamStats TLotus::error_rate_stats() const {
+	return {_error_rate->mean(0), _error_rate->var(0), _error_rate->sd(0)};
+}
+
+double TLotus::calculate_log_likelihood_of_L(const TStorageYMatrix &Y) const {
 	if (_collapser.do_collapse()) {
 		throw coretools::TDevError("calculate_log_likelihood_of_L: do_collapse() is true. This "
 		                           "part has not been implemented yet.");
 	}
-	return _calculate_log_likelihood_of_L_no_collapsing();
-};
-
-double TLotus::getSumLogPriorDensity(const Storage &) const { return _curLL; };
+	return _calculate_log_likelihood_of_L_no_collapsing(Y);
+}
 
 void TLotus::fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
                                            size_t K) {
@@ -150,7 +106,7 @@ void TLotus::fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_
 	} else { // no need to collapse
 		_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
 	}
-};
+}
 
 /// This function will be used when we update Y.
 void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
@@ -164,7 +120,10 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
 	}
 
 	if (x_is_one_for_Y_0) { // Y=0 also results in x=1 (others in clique are a one)
-		return; // x is one for both states (due to collapsing) -> likelihood doesn't matter
+		// x is one for both states (due to collapsing) -> likelihood doesn't matter. `prob` is left
+		// at its caller-provided neutral value (1.0), so both states get the same zero
+		// contribution.
+		return;
 	}
 
 	const auto index_in_collapsed_space = _collapser.collapse(index_in_leaves_space);
@@ -174,44 +133,29 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
 		prob[i] = _calculate_probability_of_L_given_x(
 		    i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state), index_in_collapsed_space);
 	}
-};
-
-void TLotus::update_cur_LL(double cur_LL) {
-	// _curLL must be updated when Markov Field (Y) changes
-	// Markov Field keeps track of new LL while updating Y; at the very end, it calls this function
-	// to set _curLL
-	_curLL = cur_LL;
 }
 
-void TLotus::update_markov_field() { _markov_field.update(*this, _mrf_update_iteration++); }
-
-[[nodiscard]] double TLotus::calculateLLRatio(TypeParamGamma *, size_t /*Index*/) {
-	_oldLL = _curLL;                          // store current likelihood
-	_refresh_research_effort_factor();        // gamma was just proposed -> rebuild the factors
-	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
+double TLotus::ll_ratio_after_gamma_move(const TStorageYMatrix &Y) {
+	_oldLL = _curLL;                           // store current likelihood
+	_refresh_research_effort_factor();         // gamma was just proposed -> rebuild the factors
+	_curLL = calculate_log_likelihood_of_L(Y); // calculate likelihood of new gamma
 	return _curLL - _oldLL;
 }
 
-double TLotus::calculateLLRatio(TypeParamErrorRate *, size_t /*Index*/) {
-	_oldLL = _curLL;                          // store current likelihood
-	_curLL = calculate_log_likelihood_of_L(); // calculate likelihood of new gamma
+void TLotus::revert_gamma_move() {
+	_curLL = _oldLL;                   // reset
+	_refresh_research_effort_factor(); // gamma was reverted -> resync the factors
+}
+
+double TLotus::ll_ratio_after_error_rate_move(const TStorageYMatrix &Y) {
+	_oldLL = _curLL;                           // store current likelihood
+	_curLL = calculate_log_likelihood_of_L(Y); // calculate likelihood of new error rate
 	return _curLL - _oldLL;
 }
 
-void TLotus::updateTempVals(TypeParamGamma *, size_t /*Index*/, bool Accepted) {
-	if (!Accepted) {
-		_curLL = _oldLL;                   // reset
-		_refresh_research_effort_factor(); // gamma was reverted -> resync the factors
-	}
-}
+void TLotus::revert_error_rate_move() { _curLL = _oldLL; }
 
-void TLotus::updateTempVals(TypeParamErrorRate *, size_t /*Index*/, bool Accepted) {
-	if (!Accepted) {
-		_curLL = _oldLL; // reset
-	}
-}
-
-void TLotus::guessInitialValues() {
+void TLotus::guess_initial_values(const TStorageYMatrix &Y) {
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		_gamma->set(i, ProgramOptions::GAMMA);
 	}
@@ -220,17 +164,14 @@ void TLotus::guessInitialValues() {
 	_refresh_research_effort_factor(); // gamma just set -> sync the memoized factors before the LL
 
 	// initialize _curLL
-	_curLL = calculate_log_likelihood_of_L();
+	_curLL = calculate_log_likelihood_of_L(Y);
 	_oldLL = _curLL;
 }
 
-const TStorageYMatrix &TLotus::get_Lotus() const { return _L; }
-
 void TLotus::_refresh_research_effort_factor() {
 	// Recompute the memoized research-effort factors from the current gamma values. Called whenever
-	// gamma changes (init, accepted/rejected gamma moves, simulation), so the per-cell hot path never
-	// has to call exp() or touch the gamma parameter storage. Looping over _occurrence_counters keeps
-	// this a no-op under the simple error model (no occurrence counters / gamma there).
+	// gamma changes (init, accepted/rejected gamma moves, simulation), so the per-cell hot path
+	// never has to call exp() or touch the gamma parameter storage.
 	_research_effort_factor.resize(_occurrence_counters.size());
 	for (size_t i = 0; i < _occurrence_counters.size(); ++i) {
 		const double gamma = (double)_gamma->value(i);
@@ -261,16 +202,9 @@ double TLotus::_return_error_rate(bool L) const {
 double
 TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
                                             const IndexArray &index_in_collapsed_space) const {
-	if constexpr (UseSimpleErrorModel) {
-		if (x && L) { return 1 - _epsilon; }
-		if (x) { return _epsilon; }
-		if (L) { return _epsilon; }
-		return 1 - _epsilon;
-	} else {
-		if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
-		if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
-		return _return_error_rate(L);
-	}
+	if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
+	if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
+	return _return_error_rate(L);
 }
 
 double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
@@ -281,10 +215,9 @@ double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
 	}
 	const auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
 	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
-};
+}
 
-double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
-	const auto &Y      = _markov_field.get_Y_matrix();
+double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatrix &Y) const {
 	const size_t total = Y.total_size_of_container_space();
 
 	// Merge-join the two sparse matrices in ascending linear-index order without materializing
@@ -317,31 +250,12 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing() const {
 	}
 
 	// Every remaining cell is (Y = 0, L = 0): a single constant, position-independent term.
-	const double p_absent = _calculate_probability_of_L_given_x(false, false, static_cast<size_t>(0));
+	const double p_absent =
+	    _calculate_probability_of_L_given_x(false, false, static_cast<size_t>(0));
 	return sum_log.getSum() + static_cast<double>(total - n_visited) * std::log(p_absent);
 }
 
-double TLotus::_calculate_log_likelihood_of_L_do_collapse() const {
-	coretools::TSumLogProbability sum_log;
-
-	size_t previous_index_in_L_space = 0;
-	// iterate over all stored 1's in L, in ascending linear-index order
-	for (const auto &[linear_index_in_L_space, l_val] : _L.get_stored_entries()) {
-		const auto multi_dim_index_in_L_space =
-		    _L.get_multi_dimensional_index(linear_index_in_L_space);
-
-		// loop over all 0's in L that occured before that 1.
-		for (size_t j = previous_index_in_L_space; j <= linear_index_in_L_space; ++j) {
-			const bool L = (j == linear_index_in_L_space);
-			const bool x = _collapser.x_is_one(multi_dim_index_in_L_space);
-			sum_log.add(_calculate_probability_of_L_given_x(x, L, multi_dim_index_in_L_space));
-		}
-		previous_index_in_L_space = linear_index_in_L_space + 1;
-	}
-	return sum_log.getSum();
-};
-
-void TLotus::_simulateUnderPrior(Storage *) {
+void TLotus::prepare_for_simulation(TDataModel *box) {
 	// by default, we keep all the trees
 	std::vector<std::string> tree_names_to_keep_default;
 	tree_names_to_keep_default.reserve(_trees.size());
@@ -355,129 +269,67 @@ void TLotus::_simulateUnderPrior(Storage *) {
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
 
+	// initialize the error rate
+	const auto error_rate =
+	    coretools::instances::parameters().get<double>("error_rate", ProgramOptions::EPSILON);
+	_error_rate->set(error_rate);
+
+	// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the
+	// gamma is never initilized. That is why we need to do it here.
+	_gamma->initStorage(box, {_collapser.num_dim_to_keep()},
+	                    {std::make_shared<coretools::TNamesStrings>(tree_names_to_keep)});
+	const auto gamma = ProgramOptions::GAMMA;
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, gamma); }
+
 	// 2025.06.16 after discussion of last week with Dan, we should be able to also simuate and
 	// provide the number of papers prior to the simulation.
-	if constexpr (!UseSimpleErrorModel) {
-		// initialize the error rate
-		const auto error_rate =
-		    coretools::instances::parameters().get<double>("error_rate", ProgramOptions::EPSILON);
-		_error_rate->set(error_rate);
-
-		// initialize the gamma parameters. Since we don't read Lotus from a file, the size of the
-		// gamma is never initilized. That is why we need to do it here.
-		_gamma->initStorage(this, {_collapser.num_dim_to_keep()},
-		                    {std::make_shared<coretools::TNamesStrings>(tree_names_to_keep)});
-		const auto gamma = ProgramOptions::GAMMA;
-		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) { _gamma->set(i, gamma); }
-
-		_occurrence_counters.resize(
-		    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
-		for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-			_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
-		}
-
-		_refresh_research_effort_factor(); // gamma + counts ready -> sync factors before simulating L
+	_occurrence_counters.resize(
+	    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
 
-	// first simulate Markov random field
-	_markov_field.simulate(*this);
+	_refresh_research_effort_factor(); // gamma + counts ready -> sync factors before simulating L
+}
 
-	std::vector<std::vector<std::string>> node_names;
-	bool x;
+void TLotus::simulate_L_from_Y(const TStorageYMatrix &Y) {
 	for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
-		auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
+		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
+		bool x                                = false;
 		if (_collapser.do_collapse()) {
 			x = _collapser.x_is_one(multi_dim_index_in_L_space);
 		} else {
 			// When we don't collapse, the dimensions of Y equal the dimensions of Lotus, so we can
 			// look up the state of Y directly (a missing cell reads as 0).
-			x = _markov_field.get_Y_matrix().is_one(i);
+			x = Y.is_one(i);
 		}
 		const double proba =
 		    _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
-		coretools::Probability p(proba);
-		bool draw = coretools::instances::randomGenerator().pickOneOfTwo(p);
-		if (draw) {
-			// for each draw we need to get the node name of the leaf in the correct tree and write
-			// it a file
-			std::vector<std::string> line(_collapser.num_dim_to_keep());
-			for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
-				const size_t tree_index = _collapser.dim_to_keep(j);
-				const size_t leaf_index = multi_dim_index_in_L_space[j];
-				const size_t node_index_in_tree =
-				    _trees[tree_index]->get_node_index_from_leaf_index(leaf_index);
-				line[j] = _trees[tree_index]->get_node_id(node_index_in_tree);
-			}
-			node_names.push_back(line);
-		}
+		const coretools::Probability p(proba);
+		if (coretools::instances::randomGenerator().pickOneOfTwo(p)) { _L.insert_one(i); }
 	}
+}
 
-	// write to file
-	std::string file_name = _prefix + "_simulated_lotus.tsv";
+void TLotus::write_simulated_L(const std::string &prefix) const {
+	const std::string file_name = prefix + "_simulated_lotus.tsv";
 
 	// we get the tree name for the header of the file.
-	std::vector<std::string> header(_collapser.num_dim_to_keep());
-	for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
-		const size_t tree_index = _collapser.dim_to_keep(j);
-		header[j]               = _trees[tree_index]->get_tree_name();
-	}
+	const auto header = kept_tree_names();
 
 	coretools::TOutputFile file(file_name, header, "\t");
-	for (const auto &line : node_names) { file.writeln(line); }
-};
-
-void TLotus::burninHasFinished() {
-	_markov_field.burninHasFinished();
-
-	std::vector<std::string> dim_names;
-	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
-	dim_names.reserve(_collapser.num_dim_to_keep());
-	gamma_stats.reserve(_collapser.num_dim_to_keep());
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
-		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
+	std::vector<std::string> line(_collapser.num_dim_to_keep());
+	for (const auto &[linear_index, storage] : _L.get_stored_entries()) {
+		if (!storage.is_one()) { continue; }
+		// for each draw we need to get the node name of the leaf in the correct tree and write it
+		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(linear_index);
+		for (size_t j = 0; j < _collapser.num_dim_to_keep(); ++j) {
+			const size_t tree_index = _collapser.dim_to_keep(j);
+			const size_t node_index_in_tree =
+			    _trees[tree_index]->get_node_index_from_leaf_index(multi_dim_index_in_L_space[j]);
+			line[j] = _trees[tree_index]->get_node_id(node_index_in_tree);
+		}
+		file.writeln(line);
 	}
-	const TNtfyNotifier::ParamStats epsilon_stats =
-	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
-	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
-	                                                    _error_rate->sd(0)};
-	_notifier.notify_burnin_finished(dim_names, gamma_stats, epsilon_stats);
 }
 
-void TLotus::oneBurninHasFinished() {
-	_markov_field.oneBurninHasFinished();
-	const size_t round      = ++_burnin_round;
-	const auto total_rounds = coretools::instances::parameters().get<size_t>("numBurnin", 10);
-
-	std::vector<std::string> dim_names;
-	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
-	dim_names.reserve(_collapser.num_dim_to_keep());
-	gamma_stats.reserve(_collapser.num_dim_to_keep());
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
-		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
-	}
-	const TNtfyNotifier::ParamStats epsilon_stats =
-	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
-	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
-	                                                    _error_rate->sd(0)};
-	_notifier.notify_burnin_round(round, total_rounds, dim_names, gamma_stats, epsilon_stats);
-}
-
-void TLotus::MCMCHasFinished() {
-	_markov_field.MCMCHasFinished();
-
-	std::vector<std::string> dim_names;
-	std::vector<TNtfyNotifier::ParamStats> gamma_stats;
-	dim_names.reserve(_collapser.num_dim_to_keep());
-	gamma_stats.reserve(_collapser.num_dim_to_keep());
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		dim_names.push_back(_trees[_collapser.dim_to_keep(i)]->get_tree_name());
-		gamma_stats.push_back({_gamma->mean(i), _gamma->var(i), _gamma->sd(i)});
-	}
-	const TNtfyNotifier::ParamStats epsilon_stats =
-	    UseSimpleErrorModel ? TNtfyNotifier::ParamStats{_epsilon, 0.0, 0.0}
-	                        : TNtfyNotifier::ParamStats{_error_rate->mean(0), _error_rate->var(0),
-	                                                    _error_rate->sd(0)};
-	_notifier.notify_mcmc_finished(dim_names, gamma_stats, epsilon_stats);
-}
+#endif // USE_LOTUS
