@@ -22,12 +22,9 @@
 
 #include "TLotus.h"
 #include "TMarkovField.h"
-#include "TSimpleErrorModel.h"
 #include "Types.h"
 #include "ntfy/TNtfyNotifier.h"
-#include "stattools/ParametersObservations/TParameter.h"
-#include "stattools/Priors/TPriorBase.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "simple_error_model/TSimpleErrorModel.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <memory>
@@ -59,7 +56,7 @@ public:
 private:
 	// trees should be a const ref because we don't want to change the trees and don't want to copy
 	// them
-	std::vector<std::unique_ptr<TTree>> &_trees;
+	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// the latent field: Y and, per tree, Z
 	TMarkovField _markov_field;

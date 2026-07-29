@@ -1,7 +1,7 @@
 //
 // Created for the split of the data sources (LOTUS / simple error model / MS data).
 //
-#include "TSimpleErrorModel.h"
+#include "simple_error_model/TSimpleErrorModel.h"
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 

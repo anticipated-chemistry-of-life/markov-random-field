@@ -1,4 +1,4 @@
-#include "TSimpleErrorModelMath.h"
+#include "simple_error_model/TSimpleErrorModelMath.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"

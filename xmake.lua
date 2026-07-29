@@ -17,7 +17,7 @@ add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
 
 -- Each option compiles in one source of information. They are independent: any combination is
 -- valid except all-off, which Types.h rejects with a static_assert (there would be no data).
-option("lotus",
+option("lotus_data",
     { default = true, defines = "USE_LOTUS", description = "Whether to use and run inference on LOTUS data." })
 option("simple_data", {
     default = false,
@@ -98,7 +98,7 @@ if is_plat("macosx") then
     add_frameworks("CoreFoundation", "Security")
 end
 add_defines("DEVTOOLS", "DEV_LOCATION")
-add_options("lotus")
+add_options("lotus_data")
 add_options("simple_data")
 add_options("msdata")
 add_cxxflags("-Wall", "-Wextra", "-Werror", "-Wpedantic", "-Wuninitialized",
@@ -145,7 +145,7 @@ add_deps("coretools", "stattools")
 -- The tests compile src/**.cpp, so they must see the same data-source configuration as the
 -- acol binary. Without this the test build gets neither USE_LOTUS nor USE_SIMPLE_ERROR_MODEL
 -- and trips the static_assert in Types.h.
-add_options("lotus")
+add_options("lotus_data")
 add_options("simple_data")
 add_options("msdata")
 

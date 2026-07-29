@@ -4,7 +4,6 @@
 #include "TDataModel.h"
 #include "Types.h"
 #include "cli.h"
-#include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
 #include <cstddef>
 #include <string>

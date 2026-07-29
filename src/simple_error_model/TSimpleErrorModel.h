@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "TSimpleErrorModelMath.h"
+#include "simple_error_model/TSimpleErrorModelMath.h"
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 
@@ -35,13 +35,13 @@ public:
 	using TypeParamEpsilon = stattools::TParameter<SpecEpsilonSimpleModel, TDataModel>;
 
 private:
-	// trees are a const ref: we neither modify nor copy them
+	/// trees are a const ref: we neither modify nor copy them
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
-	// the observed data, same dimensions as Y
+	/// the observed data, same dimensions as Y
 	TStorageYMatrix _D;
 
-	// error rate; owned by TModel, updated by stattools
+	/// error rate; owned by TModel, updated by stattools
 	TypeParamEpsilon *_epsilon = nullptr;
 
 	/// Number of cells where D and Y currently disagree, and the total number of cells. The
