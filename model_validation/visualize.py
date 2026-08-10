@@ -11,6 +11,7 @@ from dictances import cosine as cosine_dist
 from dictances import mae as dict_mae
 from dictances import mse as dict_mse
 from dictances import pearson as dict_pearson
+from sklearn.metrics import confusion_matrix, matthews_corrcoef
 
 
 def _load_tsv(path: pathlib.Path) -> pd.DataFrame | None:
@@ -129,11 +130,44 @@ def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
     }
 
 
-def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
+def _binarize_y(
+    true_state: dict[int, int],
+    pred_prob: dict[int, float],
+    threshold: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """True binary Y and the thresholded prediction, aligned on the true positions."""
+    keys = list(true_state)
+    y_true = np.array([true_state[k] for k in keys], dtype=int)
+    probs = np.array([pred_prob.get(k, 0.0) for k in keys], dtype=float)
+    return y_true, (probs >= threshold).astype(int)
+
+
+def _compute_y_classification_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray
+) -> dict[str, float]:
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+    precision = tp / (tp + fp) if tp + fp else float("nan")
+    recall = tp / (tp + fn) if tp + fn else float("nan")
+    denom = precision + recall
+    return {
+        "MCC": matthews_corrcoef(y_true, y_pred),
+        "Accuracy": (tp + tn) / len(y_true),
+        "Precision": precision,
+        "Recall (sensitivity)": recall,
+        "Specificity": tn / (tn + fp) if tn + fp else float("nan"),
+        "F1": 2 * precision * recall / denom if denom else float("nan"),
+    }
+
+
+def _plot_y_metrics(ax: plt.Axes, sections: dict[str, dict[str, float]]) -> None:
     ax.axis("off")
-    lines = [f"{'Metric':<30}{'Value':>12}", "-" * 43]
-    for k, v in metrics.items():
-        lines.append(f"{k:<30}{v:>12.4f}")
+    lines: list[str] = []
+    for section, metrics in sections.items():
+        if lines:
+            lines.append("")
+        lines += [section, "-" * 43]
+        for k, v in metrics.items():
+            lines.append(f"{k:<30}{v:>12.4f}")
     ax.text(
         0.05,
         0.95,
@@ -143,7 +177,30 @@ def _plot_y_metrics(ax: plt.Axes, metrics: dict[str, float]) -> None:
         fontfamily="monospace",
         fontsize=10,
     )
-    ax.set_title("Y distribution distances (dictances)")
+    ax.set_title("Y metrics")
+
+
+def _plot_confusion_matrix(ax: plt.Axes, cm: np.ndarray, threshold: float) -> None:
+    """2x2 confusion matrix heatmap annotated with counts and share of all positions."""
+    total = cm.sum()
+    ax.imshow(cm, cmap="Blues")
+    for i in range(2):
+        for j in range(2):
+            count = int(cm[i, j])
+            ax.text(
+                j,
+                i,
+                f"{count:,}\n{100 * count / total:.1f}%",
+                ha="center",
+                va="center",
+                color="white" if count > cm.max() / 2 else "black",
+                fontsize=11,
+            )
+    ax.set_xticks([0, 1], ["Y=0", "Y=1"])
+    ax.set_yticks([0, 1], ["Y=0", "Y=1"])
+    ax.set_xlabel(f"Predicted (P(Y=1) >= {threshold:g})")
+    ax.set_ylabel("True Y")
+    ax.set_title(f"Confusion matrix (n={total:,})")
 
 
 def _logistic_y(
@@ -211,7 +268,14 @@ def _logistic_y(
     default=False,
     help="Display plots interactively after saving.",
 )
-def main(scenario_dir: str, out: str | None, show: bool) -> None:
+@click.option(
+    "--y-threshold",
+    type=click.FloatRange(0.0, 1.0),
+    default=0.5,
+    show_default=True,
+    help="P(Y=1) cutoff used to binarize the posterior for the confusion matrix / MCC.",
+)
+def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> None:
     base = pathlib.Path(scenario_dir)
     out_dir = pathlib.Path(out) if out else base / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -299,10 +363,20 @@ def main(scenario_dir: str, out: str | None, show: bool) -> None:
     sim_state = _load_y_state(base / "acol_simulated_Y.txt")
     post_y = _load_y_file(base / "test_out" / "acol_Y_posterior.txt")
     if sim_y is not None and sim_state is not None and post_y is not None:
-        y_metrics = _compute_y_metrics(sim_y, post_y)
-        fig_y, (ax_scatter, ax_metrics) = plt.subplots(1, 2, figsize=(12, 5))
+        y_true, y_pred = _binarize_y(sim_state, post_y, y_threshold)
+        cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+        sections = {
+            "Y distribution distances (dictances)": _compute_y_metrics(sim_y, post_y),
+            f"Y classification (cutoff {y_threshold:g})": (
+                _compute_y_classification_metrics(y_true, y_pred)
+            ),
+        }
+        fig_y, (ax_scatter, ax_cm, ax_metrics) = plt.subplots(
+            1, 3, figsize=(18, 5), gridspec_kw={"width_ratios": [1.2, 0.85, 1.1]}
+        )
         _logistic_y(ax_scatter, sim_state, post_y)
-        _plot_y_metrics(ax_metrics, y_metrics)
+        _plot_confusion_matrix(ax_cm, cm, y_threshold)
+        _plot_y_metrics(ax_metrics, sections)
         fig_y.suptitle(f"Y comparison — {base.name}", fontsize=13)
         fig_y.tight_layout()
         out_file_y = out_dir / "y_distribution_distances.pdf"
