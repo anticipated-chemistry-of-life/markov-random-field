@@ -25,7 +25,7 @@ public:
 
 	static inline double EPSILON = 0.001;
 
-	static inline size_t BRANCH_LENGTHS_BINS = 20;
+	static inline size_t BRANCH_LENGTHS_BINS = 100;
 
 	static inline size_t SHEET_SIZE_K = static_cast<size_t>(1e7);
 
@@ -40,7 +40,7 @@ public:
 	/// Error rate of the simple error model: the probability that a cell of the observed matrix D
 	/// reports the opposite of the latent state Y. Used as the simulated truth during simulation
 	/// and as the starting value of the inferred epsilon_simple_model parameter during inference.
-	static inline double EPSILON_SIMPLE_MODEL = 0.2;
+	static inline double EPSILON_SIMPLE_MODEL = 0.1;
 
 	static inline double GAMMA = 5.0;
 
@@ -66,19 +66,6 @@ public:
 	/// feature ever returns to the unknown molecule (and the reverse move has an infinite Hastings
 	/// ratio), at 1 no feature ever moves between two real molecules.
 	static inline double MS_PROBA_MOVE_TO_UNKNOWN = 0.1;
-
-	static inline std::string_view FIXED_PRIOR_ON_EPSILON = "0.3,5.0";
-
-	/// Beta(1, 1) = uniform on (0, 1). The simple error model is a debugging aid, so its error rate
-	/// should be driven by the likelihood alone. Override with
-	/// --epsilon_simple_model.priorParameters "<alpha>,<beta>".
-	static inline std::string_view FIXED_PRIOR_ON_EPSILON_SIMPLE_MODEL = "1.0,1.0";
-
-	static inline std::string_view FIXED_PRIOR_ON_GAMMA = "2.0,4.6";
-
-	static inline std::string_view FIXED_PRIOR_ON_MEAN_LOG_NU = "0.0,2.0";
-
-	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 

@@ -64,12 +64,13 @@ using TypeContaminationProbability = coretools::ZeroOneOpen;
 // that lets the field collapse against detection. Hyperparameters set via
 // --gamma.priorParameters "<alpha>,<beta>".
 // TODO : verify this Claude bullshit
-using PriorOnGamma = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeGamma, 1>;
+using PriorOnGamma = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeGamma, 1>;
 using SpecGamma =
     stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
 
 // Epsilon
-using PriorOnErrorRate = stattools::prior::TBetaFixed<stattools::TParameterBase, TypeErrorRate, 1>;
+using PriorOnErrorRate =
+    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeErrorRate, 1>;
 using SpecErrorRate =
     stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
                          PriorOnErrorRate>;
@@ -83,7 +84,7 @@ using SpecErrorRate =
 // name hash is a template parameter, which is what lets TDataModel overload calculateLLRatio on
 // each of them.
 using PriorOnEpsilonSimpleModel =
-    stattools::prior::TBetaFixed<stattools::TParameterBase, TypeEpsilonSimpleModel, 1>;
+    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeEpsilonSimpleModel, 1>;
 using SpecEpsilonSimpleModel =
     stattools::ParamSpec<TypeEpsilonSimpleModel,
                          stattools::Hash<coretools::toHash("epsilon_simple_model")>,
@@ -95,22 +96,14 @@ using SpecAlpha =
     stattools::ParamSpec<TypeAlpha, stattools::Hash<coretools::toHash("alpha")>, PriorOnAlpha>;
 
 // Mean Nu
-// Weakly-informative Normal(mean, var) prior on mean_log_nu. Branch lengths are
-// normalized to mean 1 and the likelihood depends on the product nu·t, so nu≈O(1)
-// (mean_log_nu≈0) is the natural scale: the field is neither frozen (nu→0, constant
-// cliques) nor maximally noisy. var=3 (sd≈1.73) keeps it weak while excluding the
-// nu→0 collapse (mean_log_nu≈-9) at ~5 sd. Hyperparameters set via
-// --<tree>_mean_log_nu.priorParameters "<mean>,<var>".
-// TODO : verify this Claude bullshit
 using PriorOnMeanLogNu =
-    stattools::prior::TNormalFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
+    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
 using SpecMeanLogNu =
     stattools::ParamSpec<TypeMeanLogNu, stattools::Hash<coretools::toHash("mean_log_nu")>,
                          PriorOnMeanLogNu>;
 
 // Var Nu
-using PriorOnVarLogNu =
-    stattools::prior::TExponentialFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
+using PriorOnVarLogNu = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
 using SpecVarLogNu =
     stattools::ParamSpec<TypeVarLogNu, stattools::Hash<coretools::toHash("var_log_nu")>,
                          PriorOnVarLogNu>;

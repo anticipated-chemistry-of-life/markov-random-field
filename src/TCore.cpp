@@ -25,12 +25,11 @@ void TModel::_create_tree(size_t dimension, const std::string &filename,
 	// create mean log nu
 	_mean_log_nu.push_back(std::make_unique<stattools::TParameter<SpecMeanLogNu, PriorOnLogNu>>(
 	    tree_name + "_mean_log_nu", &_prior_on_mean_log_nu,
-	    stattools::TParameterDefinition{prefix, ProgramOptions::FIXED_PRIOR_ON_MEAN_LOG_NU}));
+	    stattools::TParameterDefinition{prefix}));
 
 	// create var log nu
 	_var_log_nu.push_back(std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(
-	    tree_name + "_var_log_nu", &_prior_on_var_log_nu,
-	    stattools::TParameterDefinition{prefix, ProgramOptions::FIXED_PRIOR_ON_VAR_LOG_NU}));
+	    tree_name + "_var_log_nu", &_prior_on_var_log_nu, stattools::TParameterDefinition{prefix}));
 
 	// create prior on log nu
 	_prior_on_log_nu.push_back(
@@ -103,14 +102,12 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
     : _prefix(prefix)
 #ifdef USE_LOTUS
       ,
-      _gamma("gamma", &_prior_on_gamma, {_prefix, ProgramOptions::FIXED_PRIOR_ON_GAMMA}),
-      _error_rate("epsilon", &_prior_on_error_rate,
-                  {_prefix, ProgramOptions::FIXED_PRIOR_ON_EPSILON})
+      _gamma("gamma", &_prior_on_gamma, {_prefix}),
+      _error_rate("epsilon", &_prior_on_error_rate, {_prefix})
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
       ,
-      _epsilon_simple_model("epsilon_simple_model", &_prior_on_epsilon_simple_model,
-                            {_prefix, ProgramOptions::FIXED_PRIOR_ON_EPSILON_SIMPLE_MODEL})
+      _epsilon_simple_model("epsilon_simple_model", &_prior_on_epsilon_simple_model, {_prefix})
 #endif
 #ifdef USE_MS_DATA
       ,
