@@ -29,7 +29,9 @@ class ParameterGenerator:
 
         self._binned_branch_lengths: pd.DataFrame
         self._mean_log_nu: pd.DataFrame
+        self._mean_log_nu_scalar: float
         self._var_log_nu: pd.DataFrame
+        self._var_log_nu_scalar: float
         self._log_nu: pd.DataFrame
         self._alpha: pd.DataFrame
 
@@ -45,7 +47,7 @@ class ParameterGenerator:
         if binned_branch_length is not None:
             values = [int(binned_branch_length)] * n
         else:
-            values = np.random.randint(0, 20, size=n).tolist()
+            values = np.random.randint(0, 100, size=n).tolist()
         self._binned_branch_lengths = pd.DataFrame(
             {
                 "name": [
@@ -58,7 +60,9 @@ class ParameterGenerator:
 
     def _generate_mean_log_nu_params(self, mean_log_nu: float | None) -> None:
         value = (
-            mean_log_nu if mean_log_nu is not None else float(np.random.normal(0, 0.5))
+            mean_log_nu
+            if mean_log_nu is not None
+            else float(np.random.normal(-1.0, 0.5))
         )
         self._mean_log_nu = pd.DataFrame(
             {
@@ -66,6 +70,7 @@ class ParameterGenerator:
                 "value": [value],
             }
         )
+        self._mean_log_nu_scalar = value
 
     def _generate_var_log_nu_params(self, var_log_nu: float | None) -> None:
         value = (
@@ -79,6 +84,7 @@ class ParameterGenerator:
                 "value": [value],
             }
         )
+        self._var_log_nu_scalar = value
 
     def _generate_log_nu_params(self, log_nu: float | None) -> None:
         leaf_names = self._other_tree.get_leaf_names_in_cpp_order()
@@ -86,7 +92,9 @@ class ParameterGenerator:
         if log_nu is not None:
             values = [log_nu] * n
         else:
-            values = np.random.normal(0, 1, size=n).tolist()
+            values = np.random.normal(
+                self._mean_log_nu_scalar, self._var_log_nu_scalar, size=n
+            ).tolist()
         self._log_nu = pd.DataFrame(
             {
                 "name": [

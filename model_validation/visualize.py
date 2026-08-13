@@ -84,7 +84,7 @@ def _scatter_true_vs_inferred(
         ax.errorbar(
             inferred_means[mask],
             true_vals[mask],
-            yerr=2 * inferred_sds[mask],
+            xerr=2 * inferred_sds[mask],
             fmt="o",
             color=color,
             markersize=4,
