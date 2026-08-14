@@ -20,6 +20,9 @@
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/node.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -49,6 +52,11 @@ private:
 	std::vector<size_t> _internal_nodes;
 	std::vector<size_t> _internal_nodes_without_roots;
 	std::vector<size_t> _leaves_and_internal_nodes_without_roots;
+
+	/// Internal nodes (roots included) ordered so that every node appears after all of its
+	/// children. Built once when the tree is read. The block sampler walks it forwards for the
+	/// pruning pass and backwards (parents before children) for the sampling pass.
+	std::vector<size_t> _internal_nodes_post_order;
 
 	// The four vectors below have size _nodes.size()
 	std::vector<size_t> _leafIndices;
@@ -302,6 +310,11 @@ public:
 	}
 	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_without_roots() const {
 		return _internal_nodes_without_roots;
+	}
+
+	/// @return Internal nodes ordered children-before-parents (see _internal_nodes_post_order).
+	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_post_order() const {
+		return _internal_nodes_post_order;
 	}
 
 	/** Checks whether a node is in the tree

@@ -4,7 +4,10 @@
 
 #include "TClique.h"
 #include "TCurrentState.h"
+#include "cli.h"
 #include "constants.h"
+#include <algorithm>
+#include <cmath>
 #include "coretools/Math/TSumLog.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
@@ -36,6 +39,20 @@ std::vector<size_t> TClique::update_Z(
     std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZMatrix &Z,
     const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+	if (ProgramOptions::SINGLE_SITE_Z) {
+		return _update_Z_single_site(joint_prob_density, current_state, Z, tree, alpha,
+		                             binned_branch_lengths,
+		                             leaves_and_internal_nodes_without_roots_indices);
+	}
+	return _update_Z_block(joint_prob_density, current_state, Z, tree, alpha,
+	                       binned_branch_lengths,
+	                       leaves_and_internal_nodes_without_roots_indices);
+}
+
+std::vector<size_t> TClique::_update_Z_single_site(
+    std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZMatrix &Z,
+    const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
 	const double stationary_0 = get_stationary_probability(false, alpha);
@@ -58,7 +75,7 @@ std::vector<size_t> TClique::update_Z(
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
-		_calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log,
+		calculate_log_prob_node_to_children(index_in_tree, tree, current_state, sum_log,
 		                                     binned_branch_lengths,
 		                                     leaves_and_internal_nodes_without_roots_indices);
 
@@ -76,6 +93,62 @@ std::vector<size_t> TClique::update_Z(
 		_update_current_state(Z, current_state, index_in_tree, new_state,
 		                      linear_indices_in_Z_space_to_insert, tree);
 	}
+
+	return linear_indices_in_Z_space_to_insert;
+}
+
+std::vector<size_t> TClique::_update_Z_block(
+    std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZMatrix &Z,
+    const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+	std::vector<size_t> linear_indices_in_Z_space_to_insert;
+
+	const auto &post_order = tree->get_internal_nodes_post_order();
+
+	auto bin_of = [&](size_t node_index_in_tree) {
+		// Note: oldValue, because the branch lengths are proposed before this loop starts.
+		return binned_branch_lengths->oldValue(
+		    leaves_and_internal_nodes_without_roots_indices[node_index_in_tree]);
+	};
+
+	// The algorithm itself lives in TClique.h so that it can be unit tested against exact
+	// enumeration without a TTree; here we just bind it to our storage.
+	std::vector<std::array<double, 2>> log_L;
+	sample_clique_states_exact(
+	    post_order, tree->get_number_of_nodes(), _cur_matrices, alpha,
+	    [&](size_t v) -> const std::vector<size_t> & {
+		    return tree->get_node(v).children_indices_in_tree();
+	    },
+	    [&](size_t v) { return tree->isLeaf(v); },
+	    [&](size_t v) { return _get_parent_index(v, tree); },
+	    [&](size_t v) { return tree->get_node(v).is_root(); }, bin_of,
+	    [&](size_t v) { return current_state.get(v); },
+	    [&](size_t v, bool new_state) {
+		    _update_current_state(Z, current_state, v, new_state,
+		                          linear_indices_in_Z_space_to_insert, tree);
+	    },
+	    log_L);
+
+	// ---- 3. joint density diagnostic ---------------------------------------------------------
+	// Same quantity the single-site sweep reports (per internal node: the log of its parent term
+	// times the product over its children), but evaluated once at the final sampled states rather
+	// than while the sweep is half-way through.
+	double density = 0.0;
+	for (const size_t node_index : post_order) {
+		const auto &node = tree->get_node(node_index);
+		const bool state = current_state.get(node_index);
+		if (node.is_root()) {
+			density += std::log(get_stationary_probability(state, alpha));
+		} else {
+			const bool parent_state = current_state.get(_get_parent_index(node_index, tree));
+			density += std::log(_cur_matrices[bin_of(node_index)](parent_state, state));
+		}
+		for (const size_t child_index : node.children_indices_in_tree()) {
+			density += std::log(
+			    _cur_matrices[bin_of(child_index)](state, current_state.get(child_index)));
+		}
+	}
+	joint_prob_density[omp_get_thread_num()] += density;
 
 	return linear_indices_in_Z_space_to_insert;
 }
@@ -154,7 +227,7 @@ void TClique::_set_Z_to_MLE(
     std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
-	_calculate_log_prob_node_to_children(node_index, tree, current_state, sum_log,
+	calculate_log_prob_node_to_children(node_index, tree, current_state, sum_log,
 	                                     binned_branch_lengths,
 	                                     leaves_and_internal_nodes_without_roots_indices);
 
@@ -173,18 +246,20 @@ void TClique::_calculate_log_prob_root(double stationary_0,
 	sum_log[1].add(1.0 - stationary_0);
 }
 
-void TClique::_calculate_log_prob_node_to_children(
+void TClique::calculate_log_prob_node_to_children(
     size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
     std::array<coretools::TSumLogProbability, 2> &sum_log,
     const TypeParamBinBranches *binned_branch_lengths,
-    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
-	const auto &node = tree->get_node(index_in_tree);
+    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
+    bool UseTryMatrix) const {
+	const auto &node      = tree->get_node(index_in_tree);
+	const auto &matrices  = UseTryMatrix ? _try_matrices : _cur_matrices;
 	for (const auto &child_index : node.children_indices_in_tree()) {
 		// Note: need to take old value of branch length because new values were proposed before the
 		// loop started
 		auto bin_length = binned_branch_lengths->oldValue(
 		    leaves_and_internal_nodes_without_roots_indices[child_index]);
-		const auto &matrix_for_bin = _cur_matrices[bin_length];
+		const auto &matrix_for_bin = matrices[bin_length];
 		const bool child_state     = current_state.get(child_index);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			sum_log[i].add(matrix_for_bin(i, child_state));

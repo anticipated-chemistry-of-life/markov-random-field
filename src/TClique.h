@@ -12,7 +12,10 @@
 #include "coretools/devtools.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
+#include <algorithm>
 #include <armadillo>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <iomanip>
 #include <unistd.h>
@@ -186,6 +189,178 @@ public:
 	}
 };
 
+bool sample(double log_prob_0, double log_prob_1); // defined in TClique.cpp
+
+/** @brief Exact joint draw of the internal states of one clique from p(Z | leaf states).
+ *
+ * Conditional on the leaf states and the rate parameters, a clique is a two-state
+ * tree-structured hidden Markov model, so the whole state vector can be drawn exactly in time
+ * linear in the number of edges:
+ *
+ *  1. Upward pass (Felsenstein pruning), children before parents. For every internal node v,
+ *         L_v(s) = prod_{u in children(v)} sum_{s'} P(t_u)_{s,s'} L_u(s'),
+ *     where a leaf child contributes P(t_u)_{s, state(u)} directly (its "partial likelihood" is
+ *     an indicator, which in logs would be a -infinity). Held in logs and renormalised by its
+ *     maximum at every node, which is harmless because only ratios of partial likelihoods are
+ *     ever used and keeps deep trees from underflowing.
+ *  2. Downward pass, parents before children. Sample the root from pi(s) L_root(s), then each
+ *     remaining node from P(t_v)_{state(parent(v)), s} L_v(s).
+ *
+ * The upward pass reads only leaf states, never internal ones, so the downward pass may
+ * overwrite internal states in place.
+ *
+ * The tree is passed as a set of callables rather than a concrete type. That keeps the
+ * production call site allocation-free (the lambdas bind straight to TTree / TCurrentState)
+ * while letting the unit tests drive the algorithm from plain vectors and check it against
+ * exact enumeration, without having to stand up a TTree and its stattools parameter graph.
+ *
+ * @param post_order internal nodes (roots included) ordered children-before-parents
+ * @param n_nodes    total number of nodes, leaves included
+ * @param matrices   transition matrices, indexed by branch-length bin
+ * @param alpha      stationary probability of state 1, used at the roots
+ * @param children   node -> const reference to its child indices
+ * @param is_leaf    node -> is it a leaf (i.e. is its state observed)
+ * @param parent     node -> parent index; only called for non-roots
+ * @param is_root    node -> is it a root
+ * @param bin        node -> branch-length bin of the branch above it; not called for roots
+ * @param get_state  node -> its current state
+ * @param set_state  (node, state) -> record the sampled state
+ * @param log_L      scratch space, resized to n_nodes; passed in so the caller can reuse it
+ */
+template<class Children, class IsLeaf, class Parent, class IsRoot, class Bin, class GetState,
+         class SetState>
+void sample_clique_states_exact(const std::vector<size_t> &post_order, size_t n_nodes,
+                                const TMatrices &matrices, double alpha, Children children,
+                                IsLeaf is_leaf, Parent parent, IsRoot is_root, Bin bin,
+                                GetState get_state, SetState set_state,
+                                std::vector<std::array<double, 2>> &log_L) {
+	log_L.assign(n_nodes, {0.0, 0.0});
+
+	// ---- upward pass -------------------------------------------------------------------
+	for (const size_t node_index : post_order) {
+		std::array<double, 2> acc{0.0, 0.0};
+		for (const size_t child_index : children(node_index)) {
+			const auto &matrix = matrices[bin(child_index)];
+			if (is_leaf(child_index)) {
+				const bool child_state = get_state(child_index);
+				acc[0] += std::log(matrix(0, child_state));
+				acc[1] += std::log(matrix(1, child_state));
+			} else {
+				const auto &L = log_L[child_index]; // renormalised, so max(L) == 0
+				for (size_t s = 0; s < 2; ++s) {
+					acc[s] += std::log(matrix(s, 0) * std::exp(L[0]) + matrix(s, 1) * std::exp(L[1]));
+				}
+			}
+		}
+		const double max_acc = std::max(acc[0], acc[1]);
+		log_L[node_index][0] = acc[0] - max_acc;
+		log_L[node_index][1] = acc[1] - max_acc;
+	}
+
+	// ---- downward pass -----------------------------------------------------------------
+	for (auto it = post_order.rbegin(); it != post_order.rend(); ++it) {
+		const size_t node_index = *it;
+		double log_prob_0       = log_L[node_index][0];
+		double log_prob_1       = log_L[node_index][1];
+		if (is_root(node_index)) {
+			log_prob_0 += std::log(1.0 - alpha);
+			log_prob_1 += std::log(alpha);
+		} else {
+			// the parent was resampled earlier in this same pass
+			const bool parent_state = get_state(parent(node_index));
+			const auto &matrix      = matrices[bin(node_index)];
+			log_prob_0 += std::log(matrix(parent_state, 0));
+			log_prob_1 += std::log(matrix(parent_state, 1));
+		}
+		set_state(node_index, sample(log_prob_0, log_prob_1));
+	}
+}
+
+/** @brief Exact joint draw of *every* state in one clique -- leaves included -- from
+ *         p(states | emissions).
+ *
+ * This generalises sample_clique_states_exact. There the leaf states were observed and only the
+ * internal nodes were drawn. Here every leaf instead carries an emission likelihood
+ *
+ *     e_v(s) = P(everything attached to leaf v | state of v is s),
+ *
+ * and the leaves are drawn along with the internal nodes. The recursion becomes uniform across
+ * node types, with e_v == 1 at nodes that emit nothing:
+ *
+ *     L_v(s) = e_v(s) * prod_{u in children(v)} sum_{s'} P(t_u)_{s,s'} L_u(s'),
+ *
+ * so a leaf (no children) simply has L_v = e_v. The downward pass then samples every node,
+ * a leaf from P(t_v)_{state(parent(v)), s} e_v(s).
+ *
+ * This is what the joint (Y, Z) clique block needs. Conditioning a species clique on the
+ * *other* tree turns that tree's parent term into a per-leaf emission, and both data sources
+ * factorise over cells, so
+ *
+ *     e_i(s) = P_molecules(t_j)_{Z_molecules[i, parent(j)], s} * P(data_ij | s),
+ *
+ * which is exactly the emission this function expects. Given the other tree's Z the cliques are
+ * mutually independent, so they can be drawn in parallel.
+ *
+ * @param post_order ALL nodes ordered children-before-parents (unlike the Z-only variant, which
+ *                   takes internal nodes only, because here the leaves are sampled too)
+ * @param n_nodes    total number of nodes
+ * @param matrices   transition matrices, indexed by branch-length bin
+ * @param alpha      stationary probability of state 1, used at the roots
+ * @param children   node -> const reference to its child indices
+ * @param parent     node -> parent index; only called for non-roots
+ * @param is_root    node -> is it a root
+ * @param bin        node -> branch-length bin of the branch above it; not called for roots
+ * @param log_emission (node, state) -> log e_v(state); return 0 where there is no emission.
+ *                     Must be finite for at least one state of every node: a node whose two
+ *                     emissions are both zero makes the whole configuration impossible and the
+ *                     renormalisation below would produce a NaN.
+ * @param get_state  node -> its current state; called on parents, which have already been drawn
+ * @param set_state  (node, state) -> record the sampled state
+ * @param log_L      scratch space, resized to n_nodes; passed in so the caller can reuse it
+ */
+template<class Children, class Parent, class IsRoot, class Bin, class LogEmission, class GetState,
+         class SetState>
+void sample_clique_states_with_emissions(const std::vector<size_t> &post_order, size_t n_nodes,
+                                         const TMatrices &matrices, double alpha, Children children,
+                                         Parent parent, IsRoot is_root, Bin bin,
+                                         LogEmission log_emission, GetState get_state,
+                                         SetState set_state,
+                                         std::vector<std::array<double, 2>> &log_L) {
+	log_L.assign(n_nodes, {0.0, 0.0});
+
+	// ---- upward pass -------------------------------------------------------------------
+	for (const size_t node_index : post_order) {
+		std::array<double, 2> acc{log_emission(node_index, false), log_emission(node_index, true)};
+		for (const size_t child_index : children(node_index)) {
+			const auto &matrix = matrices[bin(child_index)];
+			const auto &L      = log_L[child_index]; // renormalised, so max(L) == 0
+			for (size_t s = 0; s < 2; ++s) {
+				acc[s] += std::log(matrix(s, 0) * std::exp(L[0]) + matrix(s, 1) * std::exp(L[1]));
+			}
+		}
+		const double max_acc = std::max(acc[0], acc[1]);
+		log_L[node_index][0] = acc[0] - max_acc;
+		log_L[node_index][1] = acc[1] - max_acc;
+	}
+
+	// ---- downward pass -----------------------------------------------------------------
+	for (auto it = post_order.rbegin(); it != post_order.rend(); ++it) {
+		const size_t node_index = *it;
+		double log_prob_0       = log_L[node_index][0];
+		double log_prob_1       = log_L[node_index][1];
+		if (is_root(node_index)) {
+			log_prob_0 += std::log(1.0 - alpha);
+			log_prob_1 += std::log(alpha);
+		} else {
+			const bool parent_state = get_state(parent(node_index));
+			const auto &matrix      = matrices[bin(node_index)];
+			log_prob_0 += std::log(matrix(parent_state, 0));
+			log_prob_1 += std::log(matrix(parent_state, 1));
+		}
+		set_state(node_index, sample(log_prob_0, log_prob_1));
+	}
+}
+
 /** Class representing a clique in our model. A clique is defined as having a set of nodes that are
  * all leaves in all dimensions except one. Each clique has a set of matrices, the change rate
  * parameters, and the start index of the nodes in the tree. The start index, the variable
@@ -228,12 +403,38 @@ private:
 	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
 	                           const TTree *tree) const;
 
-	/// @brief Calculates the log probability of a node to its children
-	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log,
-	    const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+	/// @brief Historical single-site Gibbs sweep over the internal nodes. Correct but slow to
+	/// mix; kept for comparison against the block sampler.
+	std::vector<size_t>
+	_update_Z_single_site(std::vector<double> &joint_prob_density, TCurrentState &current_state,
+	                      TStorageZMatrix &Z, const TTree *tree, TypeAlpha alpha,
+	                      const TypeParamBinBranches *binned_branch_lengths,
+	                      const std::vector<size_t> &leaves_and_internal_nodes_without_roots) const;
+
+	/// @brief Exact joint draw of every internal state of this clique from p(Z | Y, alpha, nu).
+	///
+	/// Given Y and the rate parameters, a clique is a two-state tree-structured hidden Markov
+	/// model, so the whole vector can be drawn exactly in time linear in the number of edges:
+	///
+	///  1. Upward pass (Felsenstein pruning), children before parents. For every internal node v
+	///     compute the partial likelihood of everything observed below it,
+	///         L_v(s) = prod_{u in children(v)} sum_{s'} P(t_u)_{s,s'} L_u(s'),
+	///     where a leaf child contributes P(t_u)_{s, Y_u} directly. Held in logs and renormalised
+	///     by its maximum at every node, which is harmless because only ratios are ever used.
+	///  2. Downward pass, parents before children. Sample the root from pi(s) L_root(s), then each
+	///     node from P(t_v)_{parent_state, s} L_v(s).
+	///
+	/// Same cost as one single-site sweep, but the result is an independent draw rather than a
+	/// highly correlated one. The target distribution is unchanged: this is an exact block Gibbs
+	/// step, not an approximation.
+	///
+	/// Note the upward pass reads only leaf states, never internal ones, so the downward pass may
+	/// overwrite internal states in place.
+	std::vector<size_t>
+	_update_Z_block(std::vector<double> &joint_prob_density, TCurrentState &current_state,
+	                TStorageZMatrix &Z, const TTree *tree, TypeAlpha alpha,
+	                const TypeParamBinBranches *binned_branch_lengths,
+	                const std::vector<size_t> &leaves_and_internal_nodes_without_roots) const;
 
 	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
 	/// that Z is stuck in a state and cannot change.
@@ -288,6 +489,13 @@ public:
 	[[nodiscard]] const TMatrices &get_matrices() const { return _cur_matrices; }
 
 	/// @brief Update the Z dimension for this clique.
+	///
+	/// Dispatches to one of two schemes, both of which target the same conditional
+	/// p(Z | Y, alpha, nu):
+	///  - the block sampler (default), which draws the whole clique at once and is what makes
+	///    the chain mix; see _update_Z_block.
+	///  - the historical single-site Gibbs sweep, kept behind --single_site_Z so the two can be
+	///    compared: they must agree on the posterior and differ only in autocorrelation.
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
@@ -333,6 +541,19 @@ public:
 		}
 	}
 
+	/// @brief Adds P(child | node = 0) and P(child | node = 1) for every child of a node.
+	/// @param UseTryMatrix whether to score with the proposed (try) transition matrices instead of
+	/// the current ones. This is a runtime flag rather than a template parameter because the body
+	/// needs a complete TTree, which this header cannot include (TTree.h includes TClique.h).
+	/// Public because TTree::_add_pseudo_likelihood_term needs the same children terms that
+	/// update_Z uses, in order to build the normalised full conditional of a node.
+	void calculate_log_prob_node_to_children(
+	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log,
+	    const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
+	    bool UseTryMatrix = false) const;
+
 	/// Updates the counter of the clique. This is used by the collapser.
 	void update_counter_leaves_state_1(bool new_state, bool old_state);
 	void update_counter_leaves_state_1(int difference);
@@ -363,6 +584,6 @@ public:
 };
 
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
-bool sample(double log_prob_0, double log_prob_1);
+// bool sample(double, double) is declared above sample_clique_states_exact, which needs it.
 
 #endif // ACOL_TBRANCHLENGTHS_H

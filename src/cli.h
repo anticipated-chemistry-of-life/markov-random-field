@@ -33,6 +33,11 @@ public:
 
 	static inline bool FIX_Z = false;
 
+	/// Use the historical single-site Gibbs sweep for Z instead of the exact block sampler.
+	/// Both target the same conditional; the block sampler simply mixes far better. Kept so the
+	/// two can be compared (they must agree on the posterior, not on the autocorrelation).
+	static inline bool SINGLE_SITE_Z = false;
+
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
 	static inline std::string SIMPLE_DATA_FILENAME = "simple_data.tsv";
@@ -111,6 +116,8 @@ public:
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
 
+		SINGLE_SITE_Z = params.exists("single_site_Z");
+
 		LOTUS_FILENAME = params.get("lotus", LOTUS_FILENAME);
 
 		SIMPLE_DATA_FILENAME = params.get("simple_data", SIMPLE_DATA_FILENAME);
@@ -179,5 +186,7 @@ public:
 		             "false-report rate, e.g. \"1,99\"\n";
 		std::cout << "--prior_mean_log_nu            Normal(mean,var) prior on the hyper-mean of "
 		             "log_nu, e.g. \"0,1\"\n";
+		std::cout << "--single_site_Z                Update Z one node at a time instead of "
+		             "drawing each clique as an exact block\n";
 	}
 };

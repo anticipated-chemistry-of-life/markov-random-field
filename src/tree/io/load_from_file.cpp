@@ -129,6 +129,29 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		}
 	}
 
+	// Order the internal nodes children-before-parents, for the Z block sampler. A breadth-first
+	// walk from the roots visits every node after its parent, so reversing it visits every node
+	// before its parent; keeping only the internal ones preserves that property.
+	{
+		std::vector<size_t> bfs;
+		bfs.reserve(_nodes.size());
+		for (size_t root_index : _roots) { bfs.push_back(root_index); }
+		for (size_t head = 0; head < bfs.size(); ++head) {
+			for (size_t child_index : _nodes[bfs[head]].children_indices_in_tree()) {
+				bfs.push_back(child_index);
+			}
+		}
+		if (bfs.size() != _nodes.size()) {
+			throw coretools::TUserError("Tree '", tree_name, "' is not a forest of trees: reached ",
+			                            bfs.size(), " of ", _nodes.size(),
+			                            " nodes from the roots. Is there a cycle?");
+		}
+		_internal_nodes_post_order.reserve(_internal_nodes.size());
+		for (auto it = bfs.rbegin(); it != bfs.rend(); ++it) {
+			if (!_nodes[*it].is_leaf()) { _internal_nodes_post_order.push_back(*it); }
+		}
+	}
+
 	// binned branches
 	_bin_branch_lengths_from_tree(branch_lengths);
 
