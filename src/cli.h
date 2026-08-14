@@ -42,7 +42,7 @@ public:
 	/// and as the starting value of the inferred epsilon_simple_model parameter during inference.
 	static inline double EPSILON_SIMPLE_MODEL = 0.1;
 
-	static inline double GAMMA = 5.0;
+	static inline double GAMMA = 1.1;
 
 	static inline double ALPHA = 0.5;
 
@@ -69,7 +69,7 @@ public:
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
-	static inline size_t NUM_ITERATIONS = 10000;
+	static inline size_t NUM_ITERATIONS = 20000;
 
 	static void parse() {
 
