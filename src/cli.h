@@ -69,6 +69,17 @@ public:
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
+	/// Hyperparameters of the fixed priors, as "<p1>,<p2>" strings. stattools only ever reads
+	/// fixed prior parameters from the TParameterDefinition passed at construction time (see
+	/// TNodeTyped, which forwards them to setFixedPriorParameters immediately), so there is no
+	/// generic '--<name>.priorParameters' option; these go through TModel instead.
+	/// Gamma(alpha, beta) on the LOTUS detection rate.
+	static inline std::string PRIOR_GAMMA       = "2,4.6";
+	/// Beta(alpha, beta) on the LOTUS false-report rate.
+	static inline std::string PRIOR_EPSILON     = "1,99";
+	/// Normal(mean, var) on the hyper-mean of log_nu, for every tree.
+	static inline std::string PRIOR_MEAN_LOG_NU = "0,1";
+
 	static inline size_t NUM_ITERATIONS = 20000;
 
 	static void parse() {
@@ -115,6 +126,10 @@ public:
 
 		GAMMA = params.get<double>("gamma", GAMMA);
 
+		PRIOR_GAMMA       = params.get("prior_gamma", PRIOR_GAMMA);
+		PRIOR_EPSILON     = params.get("prior_epsilon", PRIOR_EPSILON);
+		PRIOR_MEAN_LOG_NU = params.get("prior_mean_log_nu", PRIOR_MEAN_LOG_NU);
+
 		ALPHA = params.get<double>("alpha", ALPHA);
 
 		LOG_NU_C = params.get<double>("log_nu_c", LOG_NU_C);
@@ -157,5 +172,12 @@ public:
 		             "(0,1). Simulated truth when simulating, starting value when inferring\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
+		std::cout
+		    << "--prior_gamma                  Gamma(alpha,beta) prior on the LOTUS detection "
+		       "rate, e.g. \"2,4.6\"\n";
+		std::cout << "--prior_epsilon                Beta(alpha,beta) prior on the LOTUS "
+		             "false-report rate, e.g. \"1,99\"\n";
+		std::cout << "--prior_mean_log_nu            Normal(mean,var) prior on the hyper-mean of "
+		             "log_nu, e.g. \"0,1\"\n";
 	}
 };

@@ -61,16 +61,24 @@ using TypeContaminationProbability = coretools::ZeroOneOpen;
 // Counts enter as log(paper_count+1) (median c̄≈1.61), so gamma*=ln2/c̄≈0.43 gives
 // detection 1-exp(-gamma·c̄)=0.5 at the median. Gamma(2, 4.6) -> mean=alpha/beta≈0.43,
 // mode=(alpha-1)/beta≈0.22, with negligible mass on the saturation corner (gamma≫1)
-// that lets the field collapse against detection. Hyperparameters set via
-// --gamma.priorParameters "<alpha>,<beta>".
-// TODO : verify this Claude bullshit
-using PriorOnGamma = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeGamma, 1>;
+// that lets the field collapse against detection.
+// The saturation corner is real and measured: with the paper counts of the balanced-255
+// validation scenario, the detection factor is already >0.997 at gamma=5, so the likelihood
+// is flat for every gamma above that. Under the previous uniform prior gamma_species drifted
+// to 74 +- 39. Hyperparameters are set via --prior_gamma "<alpha>,<beta>" (see cli.h); they
+// are NOT read from --gamma.priorParameters, which stattools never consults.
+using PriorOnGamma = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeGamma, 1>;
 using SpecGamma =
     stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
 
 // Epsilon
-using PriorOnErrorRate =
-    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeErrorRate, 1>;
+// Beta(alpha, beta) prior on the LOTUS false-report rate, concentrated near 0.
+// A LOTUS row is a published occurrence report, so reporting a metabolite that is truly
+// absent should be rare. Under a uniform prior this parameter is the cheapest way for the
+// sampler to pay for a frozen Markov field: it drifted from a simulated 0.001 to 0.202,
+// i.e. ~20% of all cells declared errors, while Y collapsed to all-zeros. Hyperparameters
+// are set via --prior_epsilon "<alpha>,<beta>" (see cli.h).
+using PriorOnErrorRate = stattools::prior::TBetaFixed<stattools::TParameterBase, TypeErrorRate, 1>;
 using SpecErrorRate =
     stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
                          PriorOnErrorRate>;
@@ -96,8 +104,15 @@ using SpecAlpha =
     stattools::ParamSpec<TypeAlpha, stattools::Hash<coretools::toHash("alpha")>, PriorOnAlpha>;
 
 // Mean Nu
+// Normal(mean, var) prior on the hyper-mean of log_nu. Branch lengths are normalised so the
+// mean branch length is 1, hence nu*t ~ nu and log_nu = 0 means "one expected change per
+// branch". Normal(0, 1) keeps ~95% of the mass in nu in [0.14, 7.4], which is the whole
+// plausible range, while penalising the nu -> 0 direction. That direction is unbounded in the
+// field term (as nu -> 0 every P(child|parent) -> 1), so under a uniform prior the sampler
+// walks off to log_nu ~ -3.2 and freezes the field. Hyperparameters are set via
+// --prior_mean_log_nu "<mean>,<var>" (see cli.h).
 using PriorOnMeanLogNu =
-    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
+    stattools::prior::TNormalFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
 using SpecMeanLogNu =
     stattools::ParamSpec<TypeMeanLogNu, stattools::Hash<coretools::toHash("mean_log_nu")>,
                          PriorOnMeanLogNu>;
