@@ -62,7 +62,7 @@ class ParameterGenerator:
         value = (
             mean_log_nu
             if mean_log_nu is not None
-            else float(np.random.normal(-1.0, 0.5))
+            else float(np.random.normal(-0.5, 0.1))
         )
         self._mean_log_nu = pd.DataFrame(
             {
@@ -76,7 +76,7 @@ class ParameterGenerator:
         value = (
             var_log_nu
             if var_log_nu is not None
-            else float(np.random.uniform(0.05, 0.5))
+            else float(np.random.uniform(0.05, 0.1))
         )
         self._var_log_nu = pd.DataFrame(
             {
@@ -92,8 +92,10 @@ class ParameterGenerator:
         if log_nu is not None:
             values = [log_nu] * n
         else:
+            # np.random.normal takes a standard deviation, but var_log_nu is a variance
+            # (the C++ prior does _sd = sqrt(var), see stattools TNormalInferred).
             values = np.random.normal(
-                self._mean_log_nu_scalar, self._var_log_nu_scalar, size=n
+                self._mean_log_nu_scalar, np.sqrt(self._var_log_nu_scalar), size=n
             ).tolist()
         self._log_nu = pd.DataFrame(
             {
