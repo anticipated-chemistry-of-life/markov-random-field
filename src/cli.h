@@ -38,6 +38,28 @@ public:
 	/// two can be compared (they must agree on the posterior, not on the autocorrelation).
 	static inline bool SINGLE_SITE_Z = false;
 
+	/// Also score nu/alpha proposals on the leaves (the Y cells), not just the internal nodes.
+	///
+	/// Scoring only the internal nodes leaves theta's information entirely in the latent Z layer,
+	/// which closes a feedback loop: a slightly too small nu produces an over-smoothed Z, which in
+	/// turn supports a small nu. That was measured to account for roughly three quarters of the
+	/// residual bias in nu, so adding the leaves ought to help.
+	///
+	/// ON by default. With the field inferred -- the regime that matters -- the leaf terms take Y
+	/// recovery from 0.68 to 0.92 and bring epsilon (0.058 -> 0.008) and epsilon_simple_model
+	/// (0.320 -> 0.206, simulated 0.200) back to their true values. Reproduced across two runs.
+	///
+	/// One oddity remains: with Y and Z *pinned at the truth* the leaf terms make nu worse, not
+	/// better. That is not a lookup bug -- the lookup is verified cell by cell, see
+	/// --check_leaf_lookup -- and the likeliest explanation is that the leaf terms couple the two
+	/// trees' parameter estimates, so each inherits the other's current error. Disable with
+	/// --no_leaf_pseudo_likelihood to get the internal-nodes-only behaviour back.
+	static inline bool LEAF_PSEUDO_LIKELIHOOD = true;
+
+	/// Verify the cross-tree lookup behind the leaf pseudo-likelihood terms once, at the first
+	/// iteration, and abort if any cell disagrees. See TTree::check_leaf_lookup_consistency.
+	static inline bool CHECK_LEAF_LOOKUP = false;
+
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
 	static inline std::string SIMPLE_DATA_FILENAME = "simple_data.tsv";
@@ -116,7 +138,9 @@ public:
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
 
-		SINGLE_SITE_Z = params.exists("single_site_Z");
+		SINGLE_SITE_Z             = params.exists("single_site_Z");
+		LEAF_PSEUDO_LIKELIHOOD    = !params.exists("no_leaf_pseudo_likelihood");
+		CHECK_LEAF_LOOKUP         = params.exists("check_leaf_lookup");
 
 		LOTUS_FILENAME = params.get("lotus", LOTUS_FILENAME);
 
@@ -188,5 +212,9 @@ public:
 		             "log_nu, e.g. \"0,1\"\n";
 		std::cout << "--single_site_Z                Update Z one node at a time instead of "
 		             "drawing each clique as an exact block\n";
+		std::cout << "--no_leaf_pseudo_likelihood    Score nu/alpha on the internal nodes only, "
+		             "leaving the Y cells out of the pseudo-likelihood\n";
+		std::cout << "--check_leaf_lookup            Verify the cross-tree lookup behind the leaf "
+		             "terms and abort on mismatch\n";
 	}
 };

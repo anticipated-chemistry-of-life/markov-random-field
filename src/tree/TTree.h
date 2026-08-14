@@ -58,6 +58,10 @@ private:
 	/// pruning pass and backwards (parents before children) for the sampling pass.
 	std::vector<size_t> _internal_nodes_post_order;
 
+	/// 0, 1, ... n_nodes - 1. Lets the pseudo-likelihood loop switch between "internal nodes
+	/// only" and "every node" by picking a vector rather than branching per node.
+	std::vector<size_t> _all_nodes_indices;
+
 	// The four vectors below have size _nodes.size()
 	std::vector<size_t> _leafIndices;
 	std::vector<size_t> _rootIndices;
@@ -86,6 +90,28 @@ private:
 
 	// Alphas
 	TypeParamAlpha *_alpha_c = nullptr;
+
+	// All trees, needed by the leaf terms of the pseudo-likelihood: the full conditional of a Y
+	// cell couples both trees. Set in initialize_cliques_and_Z, which already receives them.
+	// Owned by TModel, which outlives every TTree.
+	const std::vector<std::unique_ptr<TTree>> *_all_trees = nullptr;
+
+	/// State of the *other* tree's parent for every Y cell of this tree, laid out for this
+	/// tree's access pattern: index [clique * number_of_leaves + index_within_leaves].
+	///
+	/// For the species tree the underlying quantity is Z_molecules[i, parent(j)] with i the
+	/// species leaf and j the molecule leaf; reading that straight out of the other tree's Z
+	/// walks it with a stride, so it is transposed into this cache once per sweep instead of
+	/// being chased per node. One bit per cell: 3 MB at 5000 x 5000.
+	std::vector<bool> _other_parent_state;
+	void _refresh_other_parent_state();
+
+	/// P_other(parent state -> s) for s = 0, 1, at the Y cell (clique, index_within_leaves).
+	/// This is the factor that stops the leaf conditional from collapsing to this tree's own
+	/// transition probability; it does not depend on this tree's parameters but does not cancel,
+	/// because it sits inside the normaliser.
+	[[nodiscard]] std::array<double, 2> _prob_other_tree_at_leaf(size_t clique,
+	                                                             size_t index_within_leaves) const;
 
 	// Set Z
 	TStorageZMatrix _Z;
@@ -129,19 +155,72 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
+	/// @brief Adds one node's contribution to the pseudo-likelihood of nu / alpha.
+	///
+	/// The Markov field is a product of the per-tree factors that share the leaf layer Y:
+	///   p(Y, Z_species, Z_molecules | theta) = f_species * f_molecules / C(theta).
+	/// Scoring a proposal with the raw factor f alone (what this function used to do) drops
+	/// C(theta), which depends on nu, alpha and the branch lengths of *both* trees. That makes the
+	/// estimator biased, and it leaves the nu -> 0 direction unbounded: as nu shrinks every
+	/// P(child | parent) tends to 1, so log f grows without the compensating -log C.
+	///
+	/// Instead we score with the node's *normalised full conditional*
+	///   p(x_i | x_-i) = P(x_i | pa) * prod_children P(child | x_i)
+	///                   / sum_{x' in {0,1}} P(x' | pa) * prod_children P(child | x'),
+	/// i.e. maximum pseudo-likelihood. Every term is a genuine probability, C(theta) cancels
+	/// between numerator and denominator, and no normalising constant has to be evaluated.
+	///
+	/// Only internal nodes are scored (see _update_nu_or_alpha). Their conditionals involve this
+	/// tree's transition matrices only, so no cross-tree information is needed. Leaves are shared
+	/// with the other tree and their conditional would need that tree's parent term; leaving them
+	/// out keeps the estimator consistent (a composite likelihood over any subset of correct
+	/// conditionals is), at the cost of some efficiency, and it also removes the double counting of
+	/// the leaf layer that the old code performed (each Y cell was scored once per tree).
 	template<bool UseTryMatrix>
-	void _compute_LL_old_and_new_nu_or_alpha(const TNode &node, size_t index_in_tree,
-	                                         const TClique &clique, bool state_of_node,
-	                                         coretools::TSumLogProbability &LL,
-	                                         const TCurrentState &current_state,
-	                                         std::optional<size_t> branch_len_bin, double alpha) {
+	void _add_pseudo_likelihood_term(const TNode &node, size_t index_in_tree, const TClique &clique,
+	                                 bool state_of_node, coretools::TSumLogProbability &LL,
+	                                 const TCurrentState &current_state,
+	                                 std::optional<size_t> branch_len_bin, double alpha,
+	                                 size_t clique_index) const {
+		std::array<coretools::TSumLogProbability, 2> sum_log;
+
+		// P(node = 0 | parent) and P(node = 1 | parent), or the stationary probabilities at a root
 		if (node.is_root()) {
-			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
+			for (size_t i = 0; i < 2; ++i) {
+				sum_log[i].add(TClique::get_stationary_probability(i == 1, alpha));
+			}
 		} else {
-			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
-			    index_in_tree, this, branch_len_bin.value(), current_state);
-			LL.add(prob);
+			clique.calculate_log_prob_parent_to_node<TCurrentState, UseTryMatrix>(
+			    index_in_tree, branch_len_bin.value(), this, 0, current_state, sum_log);
 		}
+
+		if (node.is_leaf()) {
+			// A leaf is a cell of Y, which both trees claim. Its full conditional under the field
+			// is proportional to the product of the two trees' parent terms, so the other tree's
+			// factor has to be carried: it is constant in this tree's parameters, but it sits
+			// inside the normaliser below and therefore does not cancel from the ratio.
+			//
+			// Note the data likelihood does *not* appear. The pseudo-likelihood being maximised
+			// is that of the field p(Y, Z | theta); P(data | Y) carries no theta and drops out of
+			// the Hastings ratio entirely.
+			const auto prob_other =
+			    _prob_other_tree_at_leaf(clique_index, _leafIndices[index_in_tree]);
+			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_other[i]); }
+		} else {
+			// P(child | node = 0) and P(child | node = 1) for every child
+			clique.calculate_log_prob_node_to_children(
+			    index_in_tree, this, current_state, sum_log, _binned_branch_lengths,
+			    _leaves_and_internal_nodes_without_roots_indices, UseTryMatrix);
+		}
+
+		// normalise over the two states of this node. Done as a logistic of the log difference so
+		// that the two products never have to be exponentiated on their own; the clamp keeps a
+		// vanishing conditional at ~1e-305 instead of an exact 0, which would make LL -infinity and
+		// poison the Hastings ratio.
+		const double log_p_state = sum_log[static_cast<size_t>(state_of_node)].getSum();
+		const double log_p_other = sum_log[static_cast<size_t>(!state_of_node)].getSum();
+		const double diff        = std::min(log_p_other - log_p_state, 700.0);
+		LL.add(1.0 / (1.0 + std::exp(diff)));
 	}
 
 	template<bool IsAlpha, typename TypeParam>
@@ -172,7 +251,13 @@ private:
 
 		const auto &clique = _cliques[c];
 		std::optional<size_t> branch_len_bin;
-		for (size_t i = 0; i < _nodes.size(); ++i) {
+		// Every node, internal and leaf. The internal conditionals involve this tree alone; the
+		// leaf conditionals additionally carry the other tree's parent term (Phase 2). Dropping
+		// the leaves is still available via --no_leaf_pseudo_likelihood, because leaving theta's
+		// only information in the latent Z layer is what closes the feedback loop that biases nu.
+		const auto &nodes_to_score =
+		    ProgramOptions::LEAF_PSEUDO_LIKELIHOOD ? _all_nodes_indices : _internal_nodes;
+		for (const size_t i : nodes_to_score) {
 			const auto &node   = _nodes[i];
 			bool state_of_node = current_state.get(i);
 
@@ -186,18 +271,17 @@ private:
 			}
 
 			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           old_value);
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin, new_value);
+				_add_pseudo_likelihood_term<false>(node, i, clique, state_of_node, LL_old,
+				                                   current_state, branch_len_bin, old_value, c);
+				_add_pseudo_likelihood_term<true>(node, i, clique, state_of_node, LL_new,
+				                                  current_state, branch_len_bin, new_value, c);
 			} else {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           _alpha_c->value(c));
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin,
-				                                          _alpha_c->value(c));
+				_add_pseudo_likelihood_term<false>(node, i, clique, state_of_node, LL_old,
+				                                   current_state, branch_len_bin,
+				                                   _alpha_c->value(c), c);
+				_add_pseudo_likelihood_term<true>(node, i, clique, state_of_node, LL_new,
+				                                  current_state, branch_len_bin,
+				                                  _alpha_c->value(c), c);
 			}
 		}
 
@@ -312,6 +396,13 @@ public:
 		return _internal_nodes_without_roots;
 	}
 
+	/// @brief Cross-check the cross-tree lookup used by the leaf pseudo-likelihood terms.
+	///
+	/// Recomputes P_other(parent -> s) for every Y cell by a route that does not assume the
+	/// clique/leaf role swap, and compares. Returns the number of disagreeing cells; 0 is the
+	/// only acceptable answer. Run with --check_leaf_lookup.
+	size_t check_leaf_lookup_consistency();
+
 	/// @return Internal nodes ordered children-before-parents (see _internal_nodes_post_order).
 	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_post_order() const {
 		return _internal_nodes_post_order;
@@ -342,6 +433,9 @@ public:
 	[[nodiscard]] double get_delta() const { return _delta; }
 	[[nodiscard]] size_t get_number_of_bins() const { return _number_of_bins; }
 	std::vector<TClique> &get_cliques();
+	[[nodiscard]] const TClique &get_clique_by_index(size_t clique_index) const {
+		return _cliques[clique_index];
+	}
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);
 	[[nodiscard]] const TStorageZMatrix &get_Z() const;
@@ -352,6 +446,12 @@ public:
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYMatrix &Y) {
 		_reset_joint_log_prob_density();
+		// The leaf terms of the pseudo-likelihood read the other tree's parent state for every
+		// Y cell. Transpose those bits once here rather than chasing them per node inside the
+		// parallel region (see _other_parent_state).
+		if constexpr (!IsSimulation) {
+			if (ProgramOptions::LEAF_PSEUDO_LIKELIHOOD) { _refresh_other_parent_state(); }
+		}
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update

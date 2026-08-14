@@ -129,6 +129,9 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 		}
 	}
 
+	_all_nodes_indices.resize(_nodes.size());
+	for (size_t i = 0; i < _nodes.size(); ++i) { _all_nodes_indices[i] = i; }
+
 	// Order the internal nodes children-before-parents, for the Z block sampler. A breadth-first
 	// walk from the roots visits every node after its parent, so reversing it visits every node
 	// before its parent; keeping only the internal ones preserves that property.

@@ -51,6 +51,8 @@ size_t TTree::get_node_index(const std::string &Id) const {
 }
 
 void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees) {
+	// kept for the leaf terms of the pseudo-likelihood, which need the other tree
+	_all_trees = &all_trees;
 
 	// we initialize the number of leaves we have in each tree
 	IndexArray num_leaves_per_tree;
@@ -83,6 +85,118 @@ void TTree::initialize() {
 	}
 	_binned_branch_lengths->initStorage(this, {get_number_of_nodes() - get_number_of_roots()},
 	                                    {std::make_shared<coretools::TNamesStrings>(branch_names)});
+}
+
+void TTree::_refresh_other_parent_state() {
+	// Only meaningful for two trees: with more, a Y cell would have one parent term per tree and
+	// the leaf conditional would need all of them.
+	static_assert(NUMBER_OF_TREES == 2,
+	              "the leaf pseudo-likelihood term assumes exactly two trees");
+	const TTree &other = *(*_all_trees)[1 - _dimension];
+
+	const size_t n_cliques = _cliques.size();
+	const size_t n_leaves  = get_number_of_leaves();
+	_other_parent_state.assign(n_cliques * n_leaves, false);
+
+	const auto &other_Z = other.get_Z();
+	for (size_t clique = 0; clique < n_cliques; ++clique) {
+		// our clique index is a leaf of the other tree; we need that leaf's parent there
+		const size_t node_in_other  = other.get_node_index_from_leaf_index(clique);
+		const size_t parent_ix      = other.get_node(node_in_other).parent_index_in_tree();
+		const size_t parent_interna = other.get_index_within_internal_nodes(parent_ix);
+
+		IndexArray index_in_other_Z{};
+		index_in_other_Z[other._dimension] = parent_interna;
+		for (size_t leaf = 0; leaf < n_leaves; ++leaf) {
+			// symmetrically, our leaf indexes the other tree's clique dimension
+			index_in_other_Z[_dimension] = leaf;
+			_other_parent_state[clique * n_leaves + leaf] =
+			    other_Z.is_one(other_Z.get_linear_index_in_container_space(index_in_other_Z));
+		}
+	}
+}
+
+std::array<double, 2> TTree::_prob_other_tree_at_leaf(size_t clique,
+                                                      size_t index_within_leaves) const {
+	const TTree &other = *(*_all_trees)[1 - _dimension];
+
+	// The roles swap across the two trees: our clique index is a leaf over there, and our leaf
+	// index selects which of its cliques (hence which alpha and nu) applies to this cell.
+	const size_t node_in_other = other.get_node_index_from_leaf_index(clique);
+	const auto &other_clique   = other.get_clique_by_index(index_within_leaves);
+	// value(), not oldValue(): the other tree's branch lengths are not mid-proposal here, only
+	// our own are (they are proposed at the top of our own update).
+	const auto bin          = other.get_binned_branch_length(node_in_other);
+	const bool parent_state = _other_parent_state[clique * get_number_of_leaves() +
+	                                              index_within_leaves];
+	const auto &matrix      = other_clique.get_matrix<false>(bin);
+	return {matrix(parent_state, 0), matrix(parent_state, 1)};
+}
+
+size_t TTree::check_leaf_lookup_consistency() {
+	// _prob_other_tree_at_leaf reaches the other tree by swapping roles: our clique index is a
+	// leaf over there, our leaf index selects which of its cliques applies. That swap is the one
+	// piece of Phase 2 that the neutral-tree control cannot exercise -- when the other tree is
+	// neutral its factor is {0.5, 0.5} whatever cell is read, so a wrong index is invisible.
+	//
+	// So recompute the same quantity by a route that does not assume the swap: build the cell's
+	// index in Y space from (clique, leaf), and from that derive the other tree's clique with
+	// get_clique(IndexArray) -- the same call the Y sweep makes in _calculate_log_prob_field --
+	// its leaf node, and its parent's state. The two must agree cell for cell.
+	_refresh_other_parent_state();
+
+	const TTree &other       = *(*_all_trees)[1 - _dimension];
+	const size_t n_cliques   = _cliques.size();
+	const size_t n_leaves    = get_number_of_leaves();
+	const auto &other_Z      = other.get_Z();
+	size_t n_mismatch        = 0;
+	size_t first_bad_clique  = 0;
+	size_t first_bad_leaf    = 0;
+
+	for (size_t clique = 0; clique < n_cliques; ++clique) {
+		for (size_t leaf = 0; leaf < n_leaves; ++leaf) {
+			// the cell, in Y space: our leaf runs along our own dimension, our clique index
+			// along the other one
+			IndexArray index_in_Y{};
+			index_in_Y[_dimension]     = leaf;
+			index_in_Y[1 - _dimension] = clique;
+
+			// --- independent route ---
+			const size_t other_leaf_node =
+			    other.get_node_index_from_leaf_index(index_in_Y[1 - _dimension]);
+			const size_t other_parent = other.get_node(other_leaf_node).parent_index_in_tree();
+			IndexArray index_in_other_Z    = index_in_Y;
+			index_in_other_Z[1 - _dimension] = other.get_index_within_internal_nodes(other_parent);
+			const bool parent_state =
+			    other_Z.is_one(other_Z.get_linear_index_in_container_space(index_in_other_Z));
+			const auto &matrix = other.get_clique(index_in_Y).get_matrix<false>(
+			    other.get_binned_branch_length(other_leaf_node));
+			const std::array<double, 2> expected{matrix(parent_state, 0), matrix(parent_state, 1)};
+
+			// --- the route Phase 2 actually uses ---
+			const auto got = _prob_other_tree_at_leaf(clique, leaf);
+
+			if (std::abs(got[0] - expected[0]) > 1e-12 ||
+			    std::abs(got[1] - expected[1]) > 1e-12) {
+				if (n_mismatch == 0) {
+					first_bad_clique = clique;
+					first_bad_leaf   = leaf;
+				}
+				++n_mismatch;
+			}
+		}
+	}
+
+	if (n_mismatch == 0) {
+		coretools::instances::logfile().list("Leaf lookup check (", get_tree_name(), "): all ",
+		                                     n_cliques * n_leaves, " cells agree.");
+	} else {
+		coretools::instances::logfile().list(
+		    "Leaf lookup check (", get_tree_name(), "): ", n_mismatch, " of ",
+		    n_cliques * n_leaves, " cells DISAGREE, first at clique ", first_bad_clique,
+		    " leaf ", first_bad_leaf, ".");
+	}
+	return n_mismatch;
 }
 
 void TTree::guessInitialValues() {

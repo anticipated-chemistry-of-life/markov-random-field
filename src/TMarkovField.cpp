@@ -221,6 +221,17 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 		_update_all_Y<false, true>(data_model, iteration);
 		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
 		_z_initialized_from_children = true;
+		// Z is populated now, which is what the cross-tree lookup reads.
+		if (ProgramOptions::CHECK_LEAF_LOOKUP) {
+			size_t n_mismatch = 0;
+			for (auto &tree : _trees) { n_mismatch += tree->check_leaf_lookup_consistency(); }
+			if (n_mismatch > 0) {
+				throw coretools::TUserError(
+				    "The cross-tree lookup used by the leaf pseudo-likelihood terms disagrees "
+				    "with the same quantity derived from the cell index: ",
+				    n_mismatch, " cells. See TTree::check_leaf_lookup_consistency.");
+			}
+		}
 	} else {
 		_update_all_Y<false, false>(data_model, iteration);
 	}
