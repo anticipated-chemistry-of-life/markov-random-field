@@ -1,0 +1,704 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black}
+
+\newcommand{\Ys}{Y}
+\newcommand{\Zs}{Z^{\mathrm{s}}}
+\newcommand{\Zm}{Z^{\mathrm{m}}}
+\newcommand{\fs}{f_{\mathrm{s}}}
+\newcommand{\fm}{f_{\mathrm{m}}}
+\newcommand{\pa}{\mathrm{pa}}
+\newcommand{\ch}{\mathrm{ch}}
+\newcommand{\given}{\,\vert\,}
+\DeclareMathOperator{\PL}{PL}
+
+\title{The metabolite Markov random field:\\
+model, estimation, and why the inference was changed}
+\author{Notes accompanying the \texttt{markov-random-field} code base}
+\date{Last updated: 14 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document records the probabilistic model implemented in the code base, an error in the
+way its parameters were being estimated, the corrections that were made, and the reasoning
+behind each. It is maintained alongside the code; section~\ref{sec:status} lists what is
+implemented and what is not. A companion file \texttt{CONVERSATION.md} records the
+empirical measurements that motivated each change.
+\end{abstract}
+
+\tableofcontents
+
+%==========================================================================
+\section{The model}
+\label{sec:model}
+
+\subsection{State space}
+
+There are two trees: a species tree $T_{\mathrm{s}}$ and a molecule tree $T_{\mathrm{m}}$.
+Write $S$ for the number of species \emph{leaves} and $M$ for the number of molecule leaves.
+
+The observable latent object is the binary matrix
+\[
+  \Ys \in \{0,1\}^{S \times M},
+  \qquad
+  \Ys_{ij} = 1 \iff \text{species leaf } i \text{ produces molecule leaf } j .
+\]
+
+Each tree additionally carries latent states at its \emph{internal} nodes. For the species
+tree these are
+\[
+  \Zs \in \{0,1\}^{I_{\mathrm{s}} \times M},
+\]
+where $I_{\mathrm{s}}$ is the number of internal species nodes (roots included): for every
+molecule leaf $j$ there is one binary state per internal species node. Symmetrically
+$\Zm \in \{0,1\}^{S \times I_{\mathrm{m}}}$.
+
+\paragraph{Cliques.} A \emph{clique} of the species tree is the set of species-tree nodes
+obtained by fixing a molecule leaf $j$; there are $M$ of them, indexed by $c = j$. Within a
+clique the leaves carry $\Ys_{\cdot j}$ and the internal nodes carry $\Zs_{\cdot j}$. The
+cliques of the molecule tree are indexed by species leaves. This is the meaning of the
+parameter names \texttt{species\_log\_nu\_molecules\_<j>}: a species-tree parameter indexed
+by a molecule leaf.
+
+\subsection{The per-tree factor}
+
+Along each branch of a tree the binary state evolves as a two-state continuous-time Markov
+chain. For clique $c$ with switching rate $\nu_c > 0$ and stationary occupancy
+$\alpha_c \in (0,1)$ the generator is
+\[
+  \Lambda_c \;=\; \nu_c
+  \begin{pmatrix}
+    -\alpha_c & \alpha_c\\[2pt]
+    1-\alpha_c & -(1-\alpha_c)
+  \end{pmatrix},
+  \qquad
+  P_c(t) \;=\; e^{\Lambda_c t}
+  \;=\;
+  \begin{pmatrix}
+    1-\alpha_c + \alpha_c e^{-\nu_c t} & \alpha_c\bigl(1 - e^{-\nu_c t}\bigr)\\[2pt]
+    (1-\alpha_c)\bigl(1 - e^{-\nu_c t}\bigr) & \alpha_c + (1-\alpha_c) e^{-\nu_c t}
+  \end{pmatrix}.
+\]
+The stationary distribution is $(1-\alpha_c,\ \alpha_c)$, so $\alpha_c$ is the long-run
+probability of state $1$ and $\nu_c$ sets how fast a branch forgets its parent.
+
+Branch lengths are discretised onto a grid of $K$ bins. With
+$\delta = 2/(K+1)$, bin $k$ represents length $\delta\,(k + \tfrac12)$, and the code builds
+the bin matrices by the recursion
+$P^{(0)} = e^{\Lambda_c \delta/2}$, $P^{(k)} = P^{(k-1)} e^{\Lambda_c \delta}$
+(\texttt{TMatrices::\_fill\_matrices}). The bin indices are constrained so that the mean
+branch length is $1$, which is what makes $\nu_c$ identifiable at all: only the product
+$\nu_c t$ enters $P$.
+
+For a single tree, writing $x_v$ for the state at node $v$, $\pa(v)$ for its parent and
+$t_v$ for the length of the branch above it, the factor is
+\begin{equation}
+  \fs(\Ys, \Zs \given \theta_{\mathrm{s}})
+  \;=\;
+  \prod_{c=1}^{M}
+  \Biggl[
+    \pi_c\bigl(x_{r_c}\bigr)
+    \prod_{v \ne r_c} P_c\bigl(t_v\bigr)_{x_{\pa(v)},\, x_v}
+  \Biggr],
+  \label{eq:factor}
+\end{equation}
+where $r_c$ is the root and $\pi_c = (1-\alpha_c, \alpha_c)$. Taken on its own,
+\eqref{eq:factor} is a \emph{proper, normalised} distribution over $(\Ys, \Zs)$:
+$\sum_{\Ys,\Zs} \fs = 1$.
+
+\subsection{The joint field: a product of experts}
+
+The two trees are combined multiplicatively, sharing the leaf layer $\Ys$:
+\begin{equation}
+  p\bigl(\Ys, \Zs, \Zm \given \theta\bigr)
+  \;=\;
+  \frac{\fs(\Ys, \Zs \given \theta_{\mathrm{s}})\,
+        \fm(\Ys, \Zm \given \theta_{\mathrm{m}})}
+       {C(\theta)},
+  \qquad
+  C(\theta) \;=\; \sum_{\Ys} p_{\mathrm{s}}(\Ys)\, p_{\mathrm{m}}(\Ys),
+  \label{eq:joint}
+\end{equation}
+where $p_{\mathrm{s}}(\Ys) = \sum_{\Zs} \fs$ is the species tree's marginal over the leaf
+layer, and likewise for $p_{\mathrm{m}}$.
+
+\begin{quote}
+\textbf{This is the crux.} Each factor is separately normalised, but their product is not:
+$\Ys$ is claimed by both. The constant $C(\theta)$ is a function of every
+$\alpha$, $\nu$ and branch length in \emph{both} trees, and it is a sum over $2^{SM}$
+configurations --- intractable.
+\end{quote}
+
+Note that $C(\theta)$ becomes independent of $\theta_{\mathrm{s}}$ exactly when
+$p_{\mathrm{m}}$ is uniform over $\Ys$; that special case is used in
+section~\ref{sec:evidence} as a control.
+
+\subsection{Observation models}
+
+Two data sources sit above $\Ys$ (a third, mass spectrometry, is stubbed out).
+
+\paragraph{LOTUS.} $L_{ij} \in \{0,1\}$ records whether an occurrence was reported. With
+$o^{\mathrm{s}}_i = \log(1 + \text{papers}_i)$ and likewise $o^{\mathrm{m}}_j$, the
+detection probability is
+\[
+  \rho_{ij} \;=\; \bigl(1 - e^{-\gamma_{\mathrm{s}} o^{\mathrm{s}}_i}\bigr)
+                  \bigl(1 - e^{-\gamma_{\mathrm{m}} o^{\mathrm{m}}_j}\bigr),
+  \qquad
+  \Pr(L_{ij}=1 \given \Ys_{ij}) =
+  \begin{cases}
+    \rho_{ij} & \Ys_{ij} = 1,\\
+    \varepsilon & \Ys_{ij} = 0 .
+  \end{cases}
+\]
+
+\paragraph{Simple error model.} $D_{ij}$ reports $\Ys_{ij}$ flipped independently with
+probability $\varepsilon_{\mathrm{simple}}$.
+
+%==========================================================================
+\section{What was wrong with the estimation}
+\label{sec:wrong}
+
+\subsection{The latent-field updates were correct}
+
+$C(\theta)$ cancels in any \emph{conditional} of \eqref{eq:joint}, so the Gibbs updates for
+the field were already right:
+\begin{align}
+  \Pr\bigl(\Ys_{ij} = y \given \text{rest}\bigr)
+  &\;\propto\;
+  P^{\mathrm{s}}_{j}\bigl(t_i\bigr)_{\,\Zs_{\pa(i),j},\, y}
+  \cdot
+  P^{\mathrm{m}}_{i}\bigl(t_j\bigr)_{\,\Zm_{i,\pa(j)},\, y}
+  \cdot
+  \Pr(\text{data}_{ij} \given y),
+  \label{eq:ycond}\\[4pt]
+  \Pr\bigl(z_v = s \given \text{rest}\bigr)
+  &\;\propto\;
+  P_c\bigl(t_v\bigr)_{\,z_{\pa(v)},\, s}
+  \prod_{u \in \ch(v)} P_c\bigl(t_u\bigr)_{\,s,\, x_u}.
+  \label{eq:zcond}
+\end{align}
+
+Two structural consequences of \eqref{eq:ycond} are worth stating explicitly.
+
+\begin{enumerate}[label=(\alph*)]
+  \item The conditional of $\Ys_{ij}$ depends on the rest of the field \emph{only} through
+        the two parent states $\Zs_{\pa(i),j}$ and $\Zm_{i,\pa(j)}$. Hence
+        \textbf{all $\Ys$ cells are conditionally independent given $(\Zs,\Zm)$}, and the
+        existing sweep over $\Ys$ is already an \emph{exact block draw}.
+  \item Given $\Ys$, the two trees decouple: $\Zs \perp \Zm \given \Ys$.
+\end{enumerate}
+
+So the sampler is a three-block Gibbs scheme on $\{\Ys\}, \{\Zs\}, \{\Zm\}$.
+
+\subsection{The parameter update was not}
+
+For $\theta$ the constant does \emph{not} cancel. The correct conditional is
+\[
+  p\bigl(\theta_{\mathrm{s}} \given \Ys, \Zs, \Zm\bigr)
+  \;\propto\;
+  \fs(\Ys,\Zs \given \theta_{\mathrm{s}})\;
+  C(\theta)^{-1}\;
+  p(\theta_{\mathrm{s}}),
+\]
+but \texttt{TTree::\_update\_nu\_or\_alpha} scored proposals with $\log \fs$ alone. This is
+a \emph{doubly intractable} posterior being sampled as if it were an ordinary one. Two
+distinct failures follow.
+
+\paragraph{Bias.} The estimate is displaced by $\partial \log C / \partial \theta$. Measured
+magnitude: $\pm 0.25$ to $0.30$ in $\log \nu$ and in $\alpha$, with the sign depending on the
+operating point, vanishing entirely when the second tree is made neutral.
+
+\paragraph{An unbounded direction.} As $\nu_c \to 0$ every $P_c(t) \to I$, so a frozen field
+drives $\log \fs$ towards its maximum. In the true posterior this is paid for by $-\log C$
+growing equally; with $C$ omitted the gain is free. Empirically the field term gained
+$\approx 5.6\times 10^{4}$ log units between a typical field and a frozen one, and the
+sampler duly ran $\log\nu \to -18$, froze $\Ys$ to all zeros, and charged the entire data
+set to the error rates.
+
+\begin{quote}
+\textbf{Why priors cannot patch this.} A Normal$(0,1)$ penalty at $\log\nu = -7.5$ costs
+$28$ log units; a Beta$(1,99)$ penalty at $\varepsilon = 0.14$ costs $\approx 15$. Against
+$5.6\times10^{4}$ these are three orders of magnitude too small. Only a hard constraint
+(pinning $\varepsilon$) stopped the collapse, which is a diagnostic, not a fix.
+\end{quote}
+
+%==========================================================================
+\section{Phase 1: maximum pseudo-likelihood on internal nodes}
+\label{sec:phase1}
+
+\subsection{Formulation}
+
+Replace the product of unnormalised factors by a product of \emph{normalised full
+conditionals}. For any subset $\mathcal{V}$ of sites,
+\begin{equation}
+  \log \PL(\theta) \;=\; \sum_{v \in \mathcal{V}} \log p\bigl(x_v \given x_{-v},\, \theta\bigr).
+  \label{eq:pl}
+\end{equation}
+Every term is a probability in $[0,1]$; $C(\theta)$ appears in both numerator and
+denominator of each conditional and cancels exactly. Maximum pseudo-likelihood is a
+composite likelihood and is consistent under the usual regularity conditions, for
+\emph{any} choice of $\mathcal{V}$ --- a fact this implementation exploits.
+
+Phase 1 takes $\mathcal{V} = \{\text{internal nodes of the tree being updated}\}$. By
+\eqref{eq:zcond} those conditionals involve only that tree's own transition matrices, so no
+cross-tree information is required:
+\begin{equation}
+  p\bigl(z_v = s \given x_{-v}\bigr)
+  \;=\;
+  \frac{
+    P_c(t_v)_{\,z_{\pa(v)},\,s} \displaystyle\prod_{u \in \ch(v)} P_c(t_u)_{\,s,\,x_u}
+  }{
+    \displaystyle\sum_{s' \in \{0,1\}}
+    P_c(t_v)_{\,z_{\pa(v)},\,s'} \prod_{u \in \ch(v)} P_c(t_u)_{\,s',\,x_u}
+  },
+  \label{eq:plterm}
+\end{equation}
+with $P_c(t_v)_{z_{\pa(v)},s}$ replaced by $\pi_c(s)$ at a root.
+
+Two things are gained beyond the removal of $C$:
+\begin{enumerate}[label=(\roman*)]
+  \item The $\nu \to 0$ direction is no longer unbounded --- numerator and denominator move
+        together.
+  \item The old code scored every $\Ys$ cell \emph{twice}, once per tree, which
+        over-weighted the field relative to the data by roughly a factor of two. Dropping
+        the leaves removes that double counting outright.
+\end{enumerate}
+
+The cost is statistical efficiency: roughly half the nodes, so a standard error worse by
+about $\sqrt2$. Since per-clique $\nu$ was already not estimable (SE $\approx 0.5$ against a
+true spread $\approx 0.3$), little was lost.
+
+\subsection{Implementation}
+
+The denominator of \eqref{eq:plterm} is exactly the normaliser the $Z$ sampler already
+computes, so the term is evaluated as a logistic of a log difference,
+\[
+  p\bigl(z_v = s\bigr) = \bigl[1 + \exp(\ell_{1-s} - \ell_{s})\bigr]^{-1},
+  \qquad
+  \ell_s = \log P_c(t_v)_{z_{\pa(v)},s} + \sum_{u\in\ch(v)} \log P_c(t_u)_{s,x_u},
+\]
+clamping the exponent at $700$ so that a vanishing conditional yields $\approx 10^{-305}$
+rather than an exact zero (which would send the Hastings ratio to $-\infty$).
+
+Code: \texttt{TTree::\_add\_pseudo\_likelihood\_term}, with
+\texttt{TClique::calculate\_log\_prob\_node\_to\_children} exposed and given a runtime
+\texttt{UseTryMatrix} flag.
+
+\subsection{Result}
+
+The field stopped collapsing with the error rates left free. With $\Ys$ and $Z$ pinned at
+the truth the estimator became essentially unbiased ($+0.055$ and $+0.024$ in $\log\nu$,
+against $\pm0.25$--$0.30$ before).
+
+%==========================================================================
+\section{Phase 2: leaf conditionals (not yet implemented)}
+\label{sec:phase2}
+
+\subsection{Why it matters}
+
+After Phase 1, $\theta$ learns about $\nu$ \emph{only} through the latent $Z$ layer, and $Z$
+is itself sampled given $\theta$. This closes a feedback loop: a slightly too small $\nu$
+produces an over-smoothed $Z$, which in turn supports a small $\nu$. It is a bias in the
+target distribution, so no amount of extra sampling removes it.
+
+Measured (true $-0.446$):
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+regime & inferred \texttt{species\_mean\_log\_nu} & bias\\
+\midrule
+$\Ys$ and $Z$ both pinned at truth & $-0.402$ & $+0.055$\\
+$\Ys$ pinned at truth, $Z$ free    & $-0.854$ & $-0.400$\\
+$\Ys$ and $Z$ both free            & $-1.002$ & $-0.546$\\
+\bottomrule
+\end{tabular}
+\end{center}
+About three quarters of the residual bias is already present with a \emph{perfect} $\Ys$.
+
+Adding the leaf terms anchors $\theta$ to $\Ys$, which the data constrains directly. The
+extra terms are, from \eqref{eq:ycond},
+\[
+  p\bigl(\Ys_{ij} = y \given \text{rest}\bigr)
+  \;=\;
+  \frac{P^{\mathrm{s}}_{j}(t_i)_{\,\Zs_{\pa(i),j},\,y}\;
+        P^{\mathrm{m}}_{i}(t_j)_{\,\Zm_{i,\pa(j)},\,y}}
+       {\sum_{y'} P^{\mathrm{s}}_{j}(t_i)_{\,\Zs_{\pa(i),j},\,y'}\;
+        P^{\mathrm{m}}_{i}(t_j)_{\,\Zm_{i,\pa(j)},\,y'}} .
+\]
+The other tree's factor does not depend on $\theta_{\mathrm{s}}$ in the numerator but does
+not cancel from the denominator, which is precisely why it must be carried.
+
+\subsection{Implementation status and an unresolved discrepancy}
+\label{sec:phase2status}
+
+Implemented and \textbf{on by default}; \texttt{--no\_leaf\_pseudo\_likelihood} restores the
+internal-nodes-only behaviour of section~\ref{sec:phase1}.
+
+Note first that the data likelihood does \emph{not} enter the leaf term. The pseudo-likelihood
+being maximised is that of the field $p(\Ys, Z \given \theta)$; the factor
+$\Pr(\text{data}\given \Ys)$ carries no $\theta$ and cancels from the Hastings ratio. Only the
+other tree's parent term has to be carried, and only because it sits inside the normaliser.
+
+Measured, with $\Ys$ and $Z$ pinned at the simulated truth:
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+$\mu_{\log\nu}$ (species) & coupled field & control: molecules tree neutral\\
+                          & (true $-0.446$) & (true $-0.500$)\\
+\midrule
+internal nodes only (Phase 1) & $-0.402$ (bias $+0.044$) & $-0.355$ (bias $+0.146$)\\
+with leaf terms (Phase 2)     & $-0.753$ (bias $-0.307$) & $-0.529$ (bias $-0.029$)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+On the control the leaf terms behave exactly as the theory says: the estimator improves, on
+$\alpha$ as well ($0.585$ versus $0.523$ against a true $0.600$). On a genuinely coupled field
+they make it worse.
+
+A diagnostic build that forces the other-tree factor to a constant $\{\tfrac12,\tfrac12\}$ on
+the coupled scenario gives bias $-0.046$, against $-0.307$ with the real factor. So the factor
+is live and the leaf-term algebra is right, yet supplying the \emph{correct} factor is worse
+than supplying a deliberately wrong constant --- which cannot be.
+
+The one component the control does not exercise is the cross-tree lookup: when the other tree
+is neutral its factor is $\{\tfrac12,\tfrac12\}$ regardless of which parent state is read, so a
+wrong index cannot show up there. That lookup is exactly what matters once the trees couple.
+
+\subsubsection*{The lookup is correct}
+
+\texttt{TTree::check\_leaf\_lookup\_consistency()}, run with \texttt{--check\_leaf\_lookup},
+recomputes $P_{\mathrm{other}}$ for every cell by a route that does \emph{not} assume the
+clique/leaf role swap: it builds the cell's index in $\Ys$ space from (clique, leaf), and from
+that derives the other tree's clique through \texttt{get\_clique(IndexArray)} --- the call the
+$\Ys$ sweep itself makes --- together with its leaf node and its parent's state.
+
+All $16384$ cells agree, for both trees. Mutation-checked, which matters because both test
+scenarios are $128\times128$ and a clique/leaf swap would not even go out of range: swapping
+the roles makes $16256$ of $16384$ cells disagree (the survivors are exactly the diagonal
+$\text{clique}=\text{leaf}$), and swapping the two dimensions of the $Z$ index makes $5774$
+disagree.
+
+\subsubsection*{Then what causes the pinned-field discrepancy?}
+
+Not the lookup. The likeliest remaining explanation is that the leaf terms \emph{couple the two
+trees' parameter estimates}: the species leaf term contains $\alpha_{\mathrm{m}}$ and
+$\nu_{\mathrm{m}}$, which are themselves weakly identified and wandering. The score for
+$\theta_{\mathrm{s}}$ has zero expectation only when $\theta_{\mathrm{m}}$ sits at the truth,
+so each tree inherits the other's current error --- a coupling the internal-node terms do not
+have, since those involve one tree alone. This is a hypothesis, not a demonstrated fact.
+
+In practice it is dominated by the gain: with an \emph{inferred} field the leaf terms take Y
+recovery from $0.681$ to $0.920$ and bring both error rates back to their simulated values.
+
+\subsection{The only cross-tree quantity needed}
+
+For the species update, cell $(i,j)$ requires the single bit $\Zm_{i,\pa(j)}$. For a fixed
+species clique (molecule leaf $j$) that is a fixed molecule-internal index with varying $i$
+--- a strided walk through $\Zm$. Transposing those bits once per iteration into a bit-set
+costs $SM$ bits ($\approx 3$\,MB at $S=M=5000$) and one $O(SM)$ pass, after which the inner
+loop is a bit lookup plus one $2\times2$ matrix.
+
+%==========================================================================
+\section{Exact block sampling of \texorpdfstring{$Z$}{Z}}
+\label{sec:block}
+
+\subsection{Motivation}
+
+$\Ys$ is already drawn as an exact block. $Z$ is not: the code visits internal nodes one at
+a time using \eqref{eq:zcond}. On a strongly coupled field that produces very long
+correlation times --- measured effective sample size was $\approx 10$ over $10^4$
+post-burn-in iterations, i.e.\ about one independent draw per $1000$ iterations.
+
+\subsection{The algorithm}
+
+Conditional on $\Ys$ and $\theta$, each clique's internal states form a two-state
+tree-structured hidden Markov model, which admits an \emph{exact} joint draw in time linear
+in the number of nodes.
+
+\paragraph{Upward pass (Felsenstein pruning).} For each node $v$ define the partial
+likelihood of everything observed below $v$:
+\[
+  L_v(s) \;=\; \Pr\bigl(\Ys \text{ in the subtree below } v \given x_v = s\bigr)
+  \;=\;
+  \prod_{u \in \ch(v)}
+  \Bigl(\textstyle\sum_{s'} P_c(t_u)_{s,s'}\, L_u(s')\Bigr),
+\]
+with $L_u(s') = \mathbb{1}[s' = \Ys_u]$ at a leaf, so that a leaf child contributes simply
+$P_c(t_u)_{s,\,\Ys_u}$. Computed in post-order (children before parents). Working in logs,
+each $L_v$ is renormalised by its maximum, which is harmless because only ratios are ever
+used.
+
+\paragraph{Downward pass (backward sampling).} At a root,
+\[
+  \Pr(x_{r} = s \given \Ys) \;\propto\; \pi_c(s)\, L_{r}(s),
+\]
+and thereafter, for an internal node $v$ whose parent has already been sampled,
+\[
+  \Pr\bigl(x_v = s \given x_{\pa(v)},\, \Ys\bigr) \;\propto\; P_c(t_v)_{\,x_{\pa(v)},\,s}\, L_v(s).
+\]
+Traversing in reverse post-order (parents before children) yields a draw from the exact
+joint conditional $p(Z_{\cdot c} \given \Ys, \theta)$.
+
+\paragraph{Cost.} $O(\text{number of edges})$ per clique --- the same order as a single
+site-by-site sweep, but returning an independent draw rather than a highly correlated one.
+The target distribution is unchanged: this is an exact block Gibbs step, not an
+approximation.
+
+Note the upward pass reads only \emph{leaf} states and transition matrices; it never reads
+internal states. The downward pass may therefore overwrite internal states in place.
+
+\subsection{Measured outcome: the block on \texorpdfstring{$Z$}{Z} alone does not help}
+\label{sec:blockresult}
+
+Implemented and compared against the single-site sweep on identical data and seed. Wall
+clock was indistinguishable (467\,s versus 471\,s for $3\times10^4$ iterations), but:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+ & block & single-site\\
+\midrule
+ESS of the field density (second half) & 9 & 9\\
+iterations per independent draw        & 1710 & 1676\\
+field density, second-half mean        & $-27489$ (sd 7210) & $-36660$ (sd 4344)\\
+\texttt{species\_mean\_log\_nu} (true $-0.446$) & $-1.569$ & $-1.186$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two things follow. First, \textbf{the hypothesis that single-site updating of $Z$ was the
+mixing bottleneck was wrong}. Second, the two schemes disagree on the posterior although both
+leave $p(Z \given \Ys,\theta)$ invariant and should therefore share a stationary
+distribution.
+
+\subsection{Verification by exact enumeration}
+\label{sec:enumtest}
+
+The discrepancy above admits two readings: an implementation error, or a correct sampler
+reaching regions the single-site sweep could not. These were separated by direct
+verification.
+
+The algorithm was lifted out of the storage plumbing into a templated free function
+(\texttt{sample\_clique\_states\_exact}), with the tree supplied as a set of callables. The
+production call site binds them to \texttt{TTree}/\texttt{TCurrentState} at no cost, while
+the tests drive the same code from plain vectors.
+
+For a clique small enough to enumerate, the target is computable in closed form:
+\[
+  p\bigl(Z \given \Ys\bigr)
+  \;=\;
+  \frac{\pi_c(x_{r})\prod_{v \ne r} P_c(t_v)_{x_{\pa(v)},\,x_v}}
+       {\sum_{Z'} \pi_c(x'_{r})\prod_{v \ne r} P_c(t_v)_{x'_{\pa(v)},\,x'_v}},
+\]
+summing over all $2^{\lvert\text{internal}\rvert}$ configurations. \texttt{tests/TUpdate\_Z\_Tests.cpp}
+compares this against $2\times10^{5}$ draws on a Monte Carlo $z$-score scale, for a balanced
+tree, a high switching rate, a low switching rate, a chain, and a root-with-one-leaf case
+where the root marginal must equal $\alpha$ exactly. All five pass.
+
+The tests were then checked for power by mutation: transposing the parent-to-child lookup in
+the downward pass fails four of the five, and removing the pruning recursion fails three. (The
+survivor in the first case is the root-only tree, which has no non-root internal node and
+therefore cannot exercise that path.)
+
+\medskip
+\noindent\textbf{Verdict.} The block sampler is correct. The disagreement in
+section~\ref{sec:blockresult} is therefore the \emph{second} reading: better exploration of
+the field brings the chain closer to a target that is still biased by the Phase-1
+pseudo-likelihood (section~\ref{sec:phase2}). The apparently worse $\mu_{\log\nu}$ is that
+bias becoming more visible, not a regression.
+
+\subsection{The right block: \texorpdfstring{$(\Ys, Z)$}{(Y,Z)} jointly}
+\label{sec:yzblock}
+
+$\Ys$ was already an exact block and $Z$ now is too, yet nothing changed. This localises the
+problem to the dependence \emph{between} the blocks: a two-block Gibbs sampler mixes slowly
+precisely when its blocks are strongly dependent, and here each is close to a deterministic
+function of the other.
+
+The remedy is to enlarge the block. For a species clique $j$, condition on the \emph{other}
+tree only:
+\begin{equation}
+  p\bigl(\Ys_{\cdot j},\, \Zs_{\cdot j} \given \Zm, \text{data}\bigr)
+  \;\propto\;
+  \underbrace{\pi_j(x_{r})\prod_{v\ne r} P^{\mathrm{s}}_j(t_v)_{x_{\pa(v)},x_v}}
+             _{\text{species-tree factor}}
+  \;\cdot\;
+  \prod_{i=1}^{S}
+  \underbrace{P^{\mathrm{m}}_i(t_j)_{\,\Zm_{i,\pa(j)},\,\Ys_{ij}}\;
+              \Pr\bigl(\text{data}_{ij}\given \Ys_{ij}\bigr)}_{\text{leaf emission}} .
+  \label{eq:yzblock}
+\end{equation}
+
+Equation~\eqref{eq:yzblock} is exactly a two-state tree-structured hidden Markov model
+\emph{with emissions at the leaves}. The recursion of section~\ref{sec:block} therefore
+applies unchanged, except that leaves now carry an emission likelihood instead of a fixed
+state and are sampled along with the internal nodes.
+
+Two properties make this practical:
+\begin{enumerate}[label=(\roman*)]
+  \item Given $\Zm$, distinct species cliques share nothing, so all $M$ of them are mutually
+        independent and can be updated in parallel.
+  \item Both compiled data sources factorise over cells --- LOTUS contributes
+        $\Pr(L_{ij}\given \Ys_{ij})$ and the simple error model
+        $\Pr(D_{ij}\given \Ys_{ij})$ --- so the emission term is a product of per-cell
+        factors, as \eqref{eq:yzblock} requires.
+\end{enumerate}
+
+The resulting scheme alternates two exact block draws,
+$(\Ys, \Zs)\given \Zm$ and $(\Ys, \Zm)\given \Zs$, and attacks the $\Ys$--$Z$ dependence
+directly rather than the within-$Z$ dependence, which has now been measured not to matter.
+
+\subsubsection*{The generalised recursion}
+
+Only one change to section~\ref{sec:block} is needed. Where the leaf states were observed,
+each leaf now carries an \emph{emission likelihood}
+\[
+  e_v(s) \;=\; \Pr\bigl(\text{everything attached to } v \given x_v = s\bigr),
+\]
+and the leaves are drawn along with the internal nodes. The pruning recursion becomes uniform
+across node types, with $e_v \equiv 1$ wherever nothing is emitted:
+\begin{equation}
+  L_v(s) \;=\; e_v(s) \prod_{u \in \ch(v)}
+               \Bigl(\textstyle\sum_{s'} P_c(t_u)_{s,s'}\, L_u(s')\Bigr),
+  \label{eq:emitrec}
+\end{equation}
+so a leaf, having no children, is simply $L_v = e_v$. The downward pass is unchanged except
+that it now visits every node, drawing a leaf from
+$P_c(t_v)_{\,x_{\pa(v)},\,s}\, e_v(s)$.
+
+Comparing \eqref{eq:emitrec} with \eqref{eq:yzblock}, the emission for species leaf $i$ in
+clique $j$ is
+\[
+  e_i(s) \;=\;
+  \underbrace{P^{\mathrm{m}}_i(t_j)_{\,\Zm_{i,\pa(j)},\,s}}_{\text{other tree}}
+  \;\cdot\;
+  \underbrace{\Pr\bigl(L_{ij}\given s\bigr)\,\Pr\bigl(D_{ij}\given s\bigr)}_{\text{data}} .
+\]
+That both data sources factorise over cells is precisely what makes this an emission, rather
+than a term coupling the leaves to one another.
+
+\paragraph{Status.} Implemented as \texttt{sample\_clique\_states\_with\_emissions} and
+verified the same way as section~\ref{sec:enumtest}, but now enumerating the \emph{joint}
+$2^{\lvert\text{nodes}\rvert}$ space rather than only the internal nodes: a balanced tree with
+pseudo-random emissions, a low switching rate, a chain, and a bridge test showing that
+emissions sharp enough to pin the leaves reproduce the Z-only posterior after marginalisation.
+All pass; dropping the emission from the pruning pass fails all four. It is \emph{not} yet the
+production sampler --- see section~\ref{sec:wiring}.
+
+\subsection{What wiring it in still requires}
+\label{sec:wiring}
+
+\begin{enumerate}[label=(\arabic*)]
+  \item A post-order over \emph{all} nodes. The cached order currently filters the leaves out.
+  \item The other tree's parent-state bit per cell, $\Zm_{i,\pa(j)}$ --- a strided walk
+        through $\Zm$, cured by the transposed bit-set of section~\ref{sec:phase2}.
+  \item Per-cell data likelihoods along a \emph{column} of $\Ys$. The two numbers needed are
+        already produced by \texttt{TLotus::calculate\_LL\_update\_Y} and
+        \texttt{TSimpleErrorModel::probabilities\_for\_Y\_update}, but both are fed from a
+        buffer filled along the last dimension, i.e.\ across the grain of the species pass.
+  \item Restructuring \texttt{TMarkovField}: today it sweeps $\Ys$ cell by cell and then $Z$
+        per tree; the joint block replaces both.
+\end{enumerate}
+
+Item (3) is shared with Phase 2 (section~\ref{sec:phase2}), so the two are best built
+together.
+
+%==========================================================================
+\section{Evidence and controls}
+\label{sec:evidence}
+
+The claims above rest on a small number of controlled experiments; they are recorded in
+full in \texttt{CONVERSATION.md}. The most load-bearing:
+
+\begin{description}[style=nextline]
+  \item[Neutral-tree control] Setting the second tree to $\alpha = 0.5$ and $\nu$ above the
+    stationary threshold makes $p_{\mathrm{m}}$ uniform, hence $C$ independent of
+    $\theta_{\mathrm{s}}$. The bias in $\log\nu$ went from $+0.29$ to $-0.012$ and in
+    $\alpha$ from $+0.25$ to $-0.004$. This is what identifies $C(\theta)$ as the culprit
+    rather than, say, finite-sample bias.
+  \item[Burn-in control] Re-simulating the field with $15\times$ more iterations changed the
+    bias by $0.001$, excluding simulation non-convergence.
+  \item[MLE control] A parametric bootstrap on a single-tree CTMC gave a finite-sample bias
+    of $-0.044$, an order of magnitude too small to explain the observation.
+  \item[Pinning ladder] Pinning $\Ys$ and $Z$, then only $\Ys$, then neither, localises the
+    residual bias to the $Z$ feedback loop (section~\ref{sec:phase2}).
+\end{description}
+
+%==========================================================================
+\section{Identifiability notes}
+\label{sec:ident}
+
+\paragraph{Per-clique $\nu$.} From $n$ branches the standard error of $\widehat{\log\nu}$ is
+$\approx 0.53$ at $n = 254$. Simulations with a true spread of $\mathrm{sd} \approx 0.09$
+therefore cannot be recovered: the attainable correlation between truth and estimate is
+$\approx 0.17$. This is a property of the design, not a defect of the code, and it argues
+for sharing $\nu$ across cliques (or making it a function of covariates) rather than
+estimating $M$ separate values.
+
+\paragraph{$\gamma$.} Detection saturates: with $\log(1+\text{papers})$ of order $1.6$, the
+factor $1 - e^{-\gamma o}$ exceeds $0.997$ once $\gamma \gtrsim 5$, so the likelihood is
+flat above that. Simulating at $\gamma = 5$ places the truth inside the flat region. A
+Gamma$(2,4.6)$ prior has mean $\approx 0.43$, which puts detection at $\tfrac12$ for the
+median paper count and negligible mass on the saturated corner.
+
+\paragraph{$\nu$ versus branch lengths.} Only the product $\nu_c t$ enters $P$. Identifiability
+comes solely from the constraint that the mean binned branch length is $1$.
+
+%==========================================================================
+\section{Simulation-side corrections}
+\label{sec:sim}
+
+\paragraph{Variance versus standard deviation.} \texttt{model\_validation/src/params.py} drew
+$\log\nu_c \sim \mathcal{N}(\mu, \texttt{var\_log\_nu})$ by passing the variance to
+\texttt{numpy}'s \texttt{scale} argument, which is the \emph{standard deviation}. The C++
+prior uses $\mathrm{sd} = \sqrt{\mathrm{var}}$. The simulated spread was therefore the square
+root of the intended one, and the reported ``true'' \texttt{var\_log\_nu} was actually a
+standard deviation. Corrected to \texttt{np.sqrt(...)}.
+
+\paragraph{Parameters are drawn from their priors when simulating.} Any parameter not fixed
+from a file is drawn from its prior during \texttt{simulate}, not set to the CLI default.
+Changing a prior therefore changes what gets simulated --- which is desirable (one then
+simulates from the prior one infers under) but shifts the recorded truths between runs.
+
+%==========================================================================
+\section{Status}
+\label{sec:status}
+
+\begin{center}
+\begin{tabular}{llp{6.2cm}}
+\toprule
+Change & Status & Note\\
+\midrule
+\texttt{sqrt} in \texttt{params.py}      & done & Simulator only.\\
+Informative priors on $\gamma$, $\varepsilon$, $\mu_{\log\nu}$ & done &
+  Fixes $\gamma$; the other two are defensible but do not stop the collapse.\\
+Phase 1 pseudo-likelihood (internal nodes) & done & Stops the collapse; removes the
+  coupling bias given a known field.\\
+Block sampling of $Z$                    & done, \textbf{verified} &
+  Correct (section~\ref{sec:enumtest}), but does not improve mixing. Kept: it is exact and
+  free. The old sweep remains available behind \texttt{--single\_site\_Z}.\\
+Joint $(\Ys,Z)$ clique block             & recursion done \& verified, \textbf{not wired} &
+  Section~\ref{sec:yzblock}. The measurement in section~\ref{sec:blockresult} says this, not
+  the $Z$-only block, is where the mixing win is. Remaining work in
+  section~\ref{sec:wiring}.\\
+Phase 2 leaf conditionals                & done, \textbf{on by default} &
+  Cross-tree lookup verified cell by cell. Takes $\Ys$ recovery from $0.68$ to $0.92$ on the
+  full pipeline. One unexplained oddity in the pinned-field regime;
+  section~\ref{sec:phase2status}.\\
+Shared (non per-clique) $\nu, \alpha$    & proposed & Modelling decision;
+  section~\ref{sec:ident}.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
