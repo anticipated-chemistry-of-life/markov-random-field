@@ -64,7 +64,6 @@ cd "$ROOT" && xmake
 ACOL=$(find "$ROOT/build" -name "acol" -not -path "*/obj/*" -type f | head -1)
 
 cd "$SCRIPT_DIR"
-mkdir -p test_out
 # Both data files are always passed: which sources are actually read is decided at compile time
 # by the xmake options 'lotus' and 'simple_data'. Options for a source that is not compiled in
 # are parsed and ignored, so this one script works for every build configuration.
@@ -171,7 +170,6 @@ def main(
     )
     (out_path / "simulate.sh").chmod(0o755)
 
-    (out_path / "test_out").mkdir(exist_ok=True)
     (out_path / "infer_lotus.sh").write_text(
         _infer_script(species_tree_name, molecules_tree_name, out)
     )

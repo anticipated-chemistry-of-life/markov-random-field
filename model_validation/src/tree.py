@@ -170,6 +170,6 @@ class Tree:
             is_leaf = lambda node: self._graph.degree(node) == 1
 
         nodes = [n for n in self._graph.nodes() if is_leaf(n)]
-        papers = [np.random.poisson(4) for _ in nodes]
+        papers = [np.random.poisson(3) + 1 for _ in nodes]
         df = pd.DataFrame({self.tree_name: nodes, "number_of_papers": papers})
-        return df[df["number_of_papers"] > 0].reset_index(drop=True)
+        return df

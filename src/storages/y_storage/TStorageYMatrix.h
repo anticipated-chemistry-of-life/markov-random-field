@@ -321,7 +321,5 @@ public:
 		}
 	};
 
-	[[nodiscard]] StoredCursor stored_cursor() const {
-		return StoredCursor(_mat, _dimensions_Y_space[1]);
-	}
+	[[nodiscard]] StoredCursor stored_cursor() const { return {_mat, _dimensions_Y_space[1]}; }
 };
