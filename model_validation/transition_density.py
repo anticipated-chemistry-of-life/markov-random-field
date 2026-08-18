@@ -115,8 +115,20 @@ def main(scenario_dir: str) -> None:
         raise click.ClickException(f"Missing Y field: {y_path}")
 
     configs = [
-        ("species", "species.txt", "acol_simulated_Z_species.txt", "species", "molecules"),
-        ("molecules", "molecules.txt", "acol_simulated_Z_molecules.txt", "molecules", "species"),
+        (
+            "species",
+            "species.txt",
+            "acol_simulated_Z_species.txt",
+            "species",
+            "molecules",
+        ),
+        (
+            "molecules",
+            "molecules.txt",
+            "acol_simulated_Z_molecules.txt",
+            "molecules",
+            "species",
+        ),
     ]
 
     for tree_name, edge_file, z_file, node_col, clique_col in configs:
