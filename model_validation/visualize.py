@@ -11,6 +11,7 @@ from dictances import cosine as cosine_dist
 from dictances import mae as dict_mae
 from dictances import mse as dict_mse
 from dictances import pearson as dict_pearson
+from scipy.stats import gaussian_kde
 from sklearn.metrics import confusion_matrix, matthews_corrcoef
 
 
@@ -21,6 +22,10 @@ def _load_tsv(path: pathlib.Path) -> pd.DataFrame | None:
 
 
 DIM_COLORS = {"species": "#2196F3", "molecules": "#FF9800", "other": "#9E9E9E"}
+
+# scalar parameters: few enough per run that the posterior itself is worth
+# showing, so these are drawn as a trace KDE instead of a true-vs-inferred scatter
+KDE_PTYPES = {"gamma", "epsilon", "epsilon_simple_model", "mean_log_nu", "var_log_nu"}
 
 
 def _param_type(name: str) -> str:
@@ -106,6 +111,58 @@ def _scatter_true_vs_inferred(
     ax.legend(fontsize=8)
 
 
+def _kde_posterior(
+    ax: plt.Axes,
+    names: list[str],
+    true_by_name: dict[str, float],
+    trace: pd.DataFrame,
+    title: str,
+    n_grid: int = 512,
+) -> None:
+    """Posterior KDE of the MCMC trace with a vertical line at the true value."""
+    n_samples = 0
+    for name in names:
+        color = DIM_COLORS[_tree_dim(name)]
+        samples = trace[name].to_numpy(dtype=float)
+        samples = samples[np.isfinite(samples)]
+        true_val = true_by_name[name]
+        n_samples = max(n_samples, len(samples))
+
+        if len(samples) < 2 or np.ptp(samples) == 0.0:
+            # parameter was held fixed (update = 0): no density to estimate
+            ax.axvline(
+                samples[0] if len(samples) else np.nan,
+                color=color,
+                linewidth=2,
+                label=f"{name} (fixed)",
+            )
+        else:
+            kde = gaussian_kde(samples)
+            lo = min(samples.min(), true_val)
+            hi = max(samples.max(), true_val)
+            margin = (hi - lo) * 0.1 or 0.1
+            grid = np.linspace(lo - margin, hi + margin, n_grid)
+            density = kde(grid)
+            ax.plot(
+                grid, density, color=color, linewidth=1.8, label=f"{name} posterior"
+            )
+            ax.fill_between(grid, density, color=color, alpha=0.2)
+
+        ax.axvline(
+            true_val,
+            color=color,
+            linestyle="--",
+            linewidth=1.5,
+            label=f"{name} true = {true_val:.4g}",
+        )
+
+    ax.set_xlabel("Value")
+    ax.set_ylabel("Posterior density")
+    ax.set_ylim(bottom=0)
+    ax.set_title(f"{title} (n={n_samples} samples)")
+    ax.legend(fontsize=8)
+
+
 def _load_y_file(path: pathlib.Path) -> dict[int, float] | None:
     if not path.exists():
         return None
@@ -125,7 +182,6 @@ def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
     return {
         "MAE": dict_mae(true_dict, pred_dict),
         "MSE": dict_mse(true_dict, pred_dict),
-        "Pearson r (distance)": dict_pearson(true_dict, pred_dict),
         "Cosine similarity": 1.0 - cosine_dist(true_dict, pred_dict),
     }
 
@@ -281,18 +337,25 @@ def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # --- load inferred values ---
-    inferred_df = _load_tsv(base / "test_out" / "acol_meanVar.txt")
+    inferred_df = _load_tsv(base / "acol_meanVar.txt")
     if inferred_df is None:
         raise click.ClickException(
-            f"No inference output at {base / 'test_out' / 'acol_meanVar.txt'}. "
-            "Run inference first."
+            f"No inference output at {base / 'acol_meanVar.txt'}. Run inference first."
         )
     inferred_df.columns = pd.Index(["name", "post_mean", "post_var"])
     inferred_df["post_sd"] = np.sqrt(inferred_df["post_var"].clip(lower=0))
 
+    # --- load the MCMC trace (posterior samples of the scalar parameters) ---
+    trace_df = _load_tsv(base / "acol_trace.txt")
+    if trace_df is None:
+        click.echo(
+            f"No trace at {base / 'acol_trace.txt'}: "
+            "falling back to scatter plots for the scalar parameters."
+        )
+
     # --- load true values: acol_simulated.txt is primary, input file is fallback ---
-    true_df = _load_tsv(base / "acol_simulated.txt")
-    fallback_df = _load_tsv(base / "acol_input_simulated.txt")
+    true_df = _load_tsv(base.parent / "acol_simulated.txt")
+    fallback_df = _load_tsv(base.parent / "acol_input_simulated.txt")
     if true_df is None and fallback_df is None:
         raise click.ClickException("No true-value file found. Run simulation first.")
     if true_df is None:
@@ -335,13 +398,28 @@ def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> 
 
     for ax_idx, ptype in enumerate(types_present):
         subset = merged[merged["ptype"] == ptype]
+        title = ptype.replace("_", " ").title()
+        traced = (
+            [n for n in subset["name"] if n in trace_df.columns]
+            if trace_df is not None and ptype in KDE_PTYPES
+            else []
+        )
+        if traced:
+            _kde_posterior(
+                axes_flat[ax_idx],
+                traced,
+                dict(zip(subset["name"], subset["true_value"])),
+                trace_df,
+                title=title,
+            )
+            continue
         _scatter_true_vs_inferred(
             axes_flat[ax_idx],
             subset["name"].tolist(),
             subset["true_value"].to_numpy(dtype=float),
             subset["post_mean"].to_numpy(dtype=float),
             subset["post_sd"].to_numpy(dtype=float),
-            title=ptype.replace("_", " ").title(),
+            title=title,
         )
 
     for ax in axes_flat[len(types_present) :]:
@@ -359,9 +437,9 @@ def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> 
     plt.close(fig)
 
     # --- Y distribution comparison ---
-    sim_y = _load_y_file(base / "acol_simulated_Y.txt")
-    sim_state = _load_y_state(base / "acol_simulated_Y.txt")
-    post_y = _load_y_file(base / "test_out" / "acol_Y_posterior.txt")
+    sim_y = _load_y_file(base.parent / "acol_simulated_Y.txt")
+    sim_state = _load_y_state(base.parent / "acol_simulated_Y.txt")
+    post_y = _load_y_file(base / "acol_Y_posterior.txt")
     if sim_y is not None and sim_state is not None and post_y is not None:
         y_true, y_pred = _binarize_y(sim_state, post_y, y_threshold)
         cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
