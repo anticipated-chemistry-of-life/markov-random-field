@@ -23,7 +23,7 @@ public:
 
 	static inline bool WRITE_BRANCH_LENGTHS = false;
 
-	static inline double EPSILON = 0.001;
+	static inline double EPSILON = 0.01;
 
 	static inline size_t BRANCH_LENGTHS_BINS = 100;
 
@@ -36,6 +36,9 @@ public:
 	static inline std::string LOTUS_FILENAME = "lotus.tsv";
 
 	static inline std::string SIMPLE_DATA_FILENAME = "simple_data.tsv";
+
+	/// Whether to skip the leaves in the update of alpha and log nu
+	static inline bool SKIP_LEAVES_IN_ALPHA_UPDATE = false;
 
 	/// Error rate of the simple error model: the probability that a cell of the observed matrix D
 	/// reports the opposite of the latent state Y. Used as the simulated truth during simulation
@@ -90,6 +93,8 @@ public:
 		WRITE_JOINT_LOG_PROB_DENSITY = params.exists("write_joint_log_prob_density");
 
 		WRITE_BRANCH_LENGTHS = params.exists("write_branch_lengths");
+
+		SKIP_LEAVES_IN_ALPHA_UPDATE = params.exists("skip_leaves_in_alpha_nu_update");
 
 		EPSILON = params.get<double>("epsilon", EPSILON);
 

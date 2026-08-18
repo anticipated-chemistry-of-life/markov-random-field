@@ -168,6 +168,13 @@ private:
 			const auto &node   = _nodes[i];
 			bool state_of_node = current_state.get(i);
 
+			// TODO: given that the leaf state is also related to the other tree, this might create
+			// a bias. We skip the leaves which will remove about half the nodes for a binary tree.
+			// This is a small test to see the influence of that removal or not.
+			if (ProgramOptions::SKIP_LEAVES_IN_ALPHA_UPDATE) {
+				if (node.is_leaf()) continue;
+			}
+
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
 			if (!node.is_root()) {
