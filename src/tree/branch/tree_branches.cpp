@@ -211,7 +211,7 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 			new_bin = binned_branch_lengths[idx] + 1;
 		} else {
 			// Decrease bin index
-			if (binned_branch_lengths[idx] == 0) { continue; }
+			if (binned_branch_lengths.at(idx) == 0) { continue; }
 			new_bin = binned_branch_lengths[idx] - 1;
 		}
 		sum_index_branches += (new_bin - binned_branch_lengths[idx]);
