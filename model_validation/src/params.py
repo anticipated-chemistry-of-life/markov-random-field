@@ -62,7 +62,7 @@ class ParameterGenerator:
         value = (
             mean_log_nu
             if mean_log_nu is not None
-            else float(np.random.normal(-0.5, 0.1))
+            else float(np.random.normal(-1.5, 0.1))
         )
         self._mean_log_nu = pd.DataFrame(
             {
