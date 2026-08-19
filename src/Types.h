@@ -22,11 +22,12 @@
 
 class TTree; // forward declaration to avoid circular inclusion
 
-// Which sources of information are compiled in? These are independent switches (xmake options
-// 'lotus' and 'simple_data'), so a build can use either, both, or -- once MS data is wired up --
-// all three. Note that these constants are only for static_asserts and for logging: members and
-// member functions of a data source must be guarded with #ifdef, not with `if constexpr`, because
-// a discarded `if constexpr` branch still has to name-resolve.
+// Which sources of information are compiled in? These are independent switches (the cmake options
+// LOTUS and SIMPLE_DATA, i.e. the letters 'l' and 's' passed to `just build`), so a build can use
+// either, both, or -- once MS data is wired up -- all three. Note that these constants are only
+// for static_asserts and for logging: members and member functions of a data source must be
+// guarded with #ifdef, not with `if constexpr`, because a discarded `if constexpr` branch still
+// has to name-resolve.
 #ifdef USE_LOTUS
 constexpr static bool UseLotus = true;
 #else
@@ -41,7 +42,8 @@ constexpr static bool UseSimpleErrorModel = false;
 
 static_assert(UseLotus || UseSimpleErrorModel,
               "No source of data was compiled in: Y could not be informed by anything. Configure "
-              "the build with at least one of 'xmake f --lotus=y' or 'xmake f --simple_data=y'.");
+              "the build with at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON, i.e. pass 'l' "
+              "and/or 's' to `just build`.");
 
 // Parameter types
 using TypeGamma                    = coretools::StrictlyPositive;

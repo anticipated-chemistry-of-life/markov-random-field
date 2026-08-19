@@ -9,6 +9,10 @@ coretools_cmake/
 genometools/
 stattools_cmake/
 
+# Checked out by FetchContent (see CMakeLists.txt), not by git
+coretools/
+stattools/
+
 # TNode artifact files
 node_modules/
 dist/
@@ -61,6 +65,5 @@ tests/test_data/ott_taxonomy.tsv
 documentation/
 inference_test/
 inference_test_small/
-.xmake/
 CLAUDE.md
 .rtk/
