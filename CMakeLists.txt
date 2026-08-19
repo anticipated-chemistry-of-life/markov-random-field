@@ -28,8 +28,8 @@ endif()
 # combination is valid except LOTUS=OFF and SIMPLE_DATA=OFF, which Types.h
 # rejects with a static_assert (Y would not be informed by anything).
 #
-# The justfile drives these with single letters: l -> LOTUS, s -> SIMPLE_DATA,
-# m -> USE_MS_DATA (see `just --list`).
+# The justfile drives these with single letters: l -> LOTUS, s -> SIMPLE_DATA, m
+# -> USE_MS_DATA (see `just --list`).
 # =============================================================================
 
 option(LOTUS "Compile in the LOTUS data source" ON)
@@ -67,15 +67,13 @@ FetchContent_Declare(
   coretools
   GIT_REPOSITORY https://bitbucket.org/wegmannlab/coretools.git
   GIT_TAG master
-  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/coretools"
-  SYSTEM)
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/coretools" SYSTEM)
 
 FetchContent_Declare(
   stattools
   GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
   GIT_TAG master
-  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stattools"
-  SYSTEM)
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stattools" SYSTEM)
 
 FetchContent_MakeAvailable(coretools stattools)
 
@@ -86,7 +84,7 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_Declare(
     nlohmann_json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
-    SYSTEM)
+        SYSTEM)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
@@ -110,8 +108,9 @@ endif()
 # here: coretools links them PUBLIC, so they reach us through the coretools
 # target, exactly as they did through xmake's `{public = true}` packages.
 # Looking armadillo up again is not merely redundant -- coretools builds its own
-# vendored copy from coretools/arma, so find_package would put a second, unrelated
-# armadillo on the link line while the headers come from the vendored one.
+# vendored copy from coretools/arma, so find_package would put a second,
+# unrelated armadillo on the link line while the headers come from the vendored
+# one.
 
 # src/ntfy/TNtfyNotifier.h builds httplib with CPPHTTPLIB_OPENSSL_SUPPORT.
 find_package(OpenSSL REQUIRED)
@@ -148,15 +147,11 @@ set(ACOL_WARNINGS
 # compiled against.
 function(acol_add_common_sources target)
   target_sources(${target} PRIVATE ${ACOL_SOURCES} ${ACOL_HEADERS})
-  target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_include_directories(${target}
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(
-    ${target}
-    PRIVATE coretools
-            stattools
-            OpenSSL::SSL
-            OpenSSL::Crypto
-            nlohmann_json::nlohmann_json
-            stduuid)
+    ${target} PRIVATE coretools stattools OpenSSL::SSL OpenSSL::Crypto
+                      nlohmann_json::nlohmann_json stduuid)
   target_compile_features(${target} PRIVATE cxx_std_20)
   set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
 
@@ -219,7 +214,8 @@ if(BUILD_TESTING)
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
   target_link_libraries("${PROJECT_NAME}_unitTests" PRIVATE GTest::gtest_main
                                                             GTest::gmock_main)
-  target_compile_definitions("${PROJECT_NAME}_unitTests" PRIVATE CHECK_INTERVALS)
+  target_compile_definitions("${PROJECT_NAME}_unitTests"
+                             PRIVATE CHECK_INTERVALS)
   target_compile_options("${PROJECT_NAME}_unitTests" PRIVATE -Wall -Wextra)
 
   add_test(NAME "${PROJECT_NAME}_unitTests" COMMAND "${PROJECT_NAME}_unitTests")
