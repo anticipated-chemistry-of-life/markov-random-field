@@ -18,8 +18,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 ROOT="$SCRIPT_DIR/../.."
 
-cd "$ROOT" && xmake
-ACOL=$(find "$ROOT/build" -name "acol" -not -path "*/obj/*" -type f | head -1)
+# Both data sources are compiled in by default: simulate writes a lotus and a simple-data file,
+# and infer reads whichever of them the build actually knows about.
+MODE="${{ACOL_MODE:-release}}"
+FLAGS="${{ACOL_DATA_FLAGS:-ls}}"
+
+cd "$ROOT"
+just build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
 
 cd "$SCRIPT_DIR"
 # --out is required: without it coretools registers an empty 'out', so the simulated files would
@@ -60,12 +66,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 ROOT="$SCRIPT_DIR/../.."
 
-cd "$ROOT" && xmake
-ACOL=$(find "$ROOT/build" -name "acol" -not -path "*/obj/*" -type f | head -1)
+# Both data sources are compiled in by default: simulate writes a lotus and a simple-data file,
+# and infer reads whichever of them the build actually knows about.
+MODE="${{ACOL_MODE:-release}}"
+FLAGS="${{ACOL_DATA_FLAGS:-ls}}"
+
+cd "$ROOT"
+just build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
 
 cd "$SCRIPT_DIR"
 # Both data files are always passed: which sources are actually read is decided at compile time
-# by the xmake options 'lotus' and 'simple_data'. Options for a source that is not compiled in
+# by the cmake options LOTUS and SIMPLE_DATA. Options for a source that is not compiled in
 # are parsed and ignored, so this one script works for every build configuration.
 "$ACOL" infer \\
     --out ./test_out/acol \\
