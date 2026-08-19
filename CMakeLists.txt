@@ -1,102 +1,226 @@
 cmake_minimum_required(VERSION 3.30)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
+
+project(
+  acol
+  VERSION 0.1
+  LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Project
-project(acol LANGUAGES CXX)
+# Nothing here uses C++20 modules. Without this, CMake + Ninja run a module
+# dependency scan on every .cpp and fail on toolchains that ship no
+# clang-scan-deps (the conda-forge clang, for one).
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-# Executable
-add_executable(${PROJECT_NAME} main.cpp)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE
+      Release
+      CACHE STRING "Build type" FORCE)
+endif()
 
-file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS src/* tests/integrationtests/*)
+# =============================================================================
+# Options
+#
+# Which sources of information to compile in? These are independent: any
+# combination is valid except LOTUS=OFF and SIMPLE_DATA=OFF, which Types.h
+# rejects with a static_assert (Y would not be informed by anything).
+#
+# The justfile drives these with single letters: l -> LOTUS, s -> SIMPLE_DATA,
+# m -> USE_MS_DATA (see `just --list`).
+# =============================================================================
 
-# Download coretools and stattools
+option(LOTUS "Compile in the LOTUS data source" ON)
+option(SIMPLE_DATA "Compile in the simple error model data source" ON)
+option(USE_MS_DATA "Compile in the mass spec data source" OFF)
+option(BUILD_TESTING "Configure the acol_unitTests target" ON)
+
+if(NOT LOTUS AND NOT SIMPLE_DATA)
+  message(
+    FATAL_ERROR
+      "No source of data was compiled in: Y could not be informed by anything. "
+      "Configure with at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON (or 'just build l')."
+  )
+endif()
+
+message(
+  STATUS
+    "acol data sources: LOTUS=${LOTUS} SIMPLE_DATA=${SIMPLE_DATA} USE_MS_DATA=${USE_MS_DATA}"
+)
+
+# =============================================================================
+# Dependencies
+# =============================================================================
+
 include(FetchContent)
+
+# SOURCE_DIR points into the source tree (not the build tree) so that the debug
+# and release build directories share a single checkout.
+#
+# SYSTEM makes the fetched targets hand their include directories to us as
+# -isystem. Without it the strict warning set below is applied to the headers of
+# armadillo, fmt and friends -- which xmake never did, because it pulls those in
+# as packages -- and -Wformat=2 -Werror fails the build inside armadillo_bits.
 FetchContent_Declare(
   coretools
   GIT_REPOSITORY https://bitbucket.org/wegmannlab/coretools.git
   GIT_TAG master
-  SOURCE_DIR "${CMAKE_SOURCE_DIR}/coretools_cmake")
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/coretools"
+  SYSTEM)
 
 FetchContent_Declare(
   stattools
   GIT_REPOSITORY https://bitbucket.org/wegmannlab/stattools.git
   GIT_TAG master
-  SOURCE_DIR "${CMAKE_SOURCE_DIR}/stattools_cmake")
+  SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stattools"
+  SYSTEM)
 
 FetchContent_MakeAvailable(coretools stattools)
 
-find_package(OpenMP REQUIRED)
-if(OpenMP_CXX_FOUND)
-  target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
+# Header-only helpers used by src/ntfy. Prefer an installed copy (the conda
+# environment ships nlohmann_json), otherwise fetch them.
+find_package(nlohmann_json 3.11 QUIET)
+if(NOT nlohmann_json_FOUND)
+  FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    SYSTEM)
+  FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
-# Which sources of information to compile in? These are independent: any
-# combination is valid except all-off, which Types.h rejects with a
-# static_assert. Defaults mirror xmake.lua.
-option(LOTUS "Compile in the LOTUS data source" ON)
-if(LOTUS)
-  message("Using LOTUS data (run 'cmake -DLOTUS=OFF ..' to change)")
-  # add compile definition to source files (everything behind -D will be
-  # replaced with bool)
-  add_definitions(-DUSE_LOTUS)
-else()
-  message("Not using LOTUS data (run 'cmake -DLOTUS=ON ..' to change)")
+find_package(stduuid QUIET)
+if(NOT stduuid_FOUND)
+  set(UUID_BUILD_TESTS
+      OFF
+      CACHE BOOL "" FORCE)
+  set(UUID_SYSTEM_GENERATOR
+      OFF
+      CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    stduuid
+    GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+    GIT_TAG v1.2.3
+    SYSTEM)
+  FetchContent_MakeAvailable(stduuid)
 endif()
 
-option(SIMPLE_DATA "Compile in the simple error model data source" OFF)
-if(SIMPLE_DATA)
-  message(
-    "Using simple error model data (run 'cmake -DSIMPLE_DATA=OFF ..' to change)"
-  )
-  add_definitions(-DUSE_SIMPLE_ERROR_MODEL)
-else()
-  message(
-    "Not using simple error model data (run 'cmake -DSIMPLE_DATA=ON ..' to change)"
-  )
-endif()
+# armadillo, fast_float, fmt, zlib and OpenMP are deliberately not searched for
+# here: coretools links them PUBLIC, so they reach us through the coretools
+# target, exactly as they did through xmake's `{public = true}` packages.
+# Looking armadillo up again is not merely redundant -- coretools builds its own
+# vendored copy from coretools/arma, so find_package would put a second, unrelated
+# armadillo on the link line while the headers come from the vendored one.
 
-target_sources(${PROJECT_NAME} PRIVATE ${CORE_SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE src)
-target_link_libraries(
-  ${PROJECT_NAME} PRIVATE coretools stattools ${ZLIB_LIBRARIES}
-                          ${ARMADILLO_LIBRARIES})
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_EXTENSIONS OFF)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
+# src/ntfy/TNtfyNotifier.h builds httplib with CPPHTTPLIB_OPENSSL_SUPPORT.
+find_package(OpenSSL REQUIRED)
+
+# =============================================================================
+# Sources
+# =============================================================================
+
+file(GLOB_RECURSE ACOL_SOURCES CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE ACOL_HEADERS CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+file(GLOB_RECURSE ACOL_TEST_SOURCES CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
+
+# -Wreturn-local-addr is GCC-only; clang spells it -Wreturn-stack-address and
+# would reject the unknown name under -Werror.
+set(ACOL_WARNINGS
+    -Wall
+    -Wextra
+    -Werror
+    -Wpedantic
+    -Wuninitialized
+    -Warray-bounds
+    -Wnull-dereference
+    -Wdouble-promotion
+    -Wformat=2
+    -Wundef
+    $<$<CXX_COMPILER_ID:GNU>:-Wreturn-local-addr>)
+
+# Everything src/**.cpp needs, regardless of which binary it ends up in. The
+# unit tests recompile src/ rather than linking a shared object library because
+# they add CHECK_INTERVALS, which changes the coretools headers the sources are
+# compiled against.
+function(acol_add_common_sources target)
+  target_sources(${target} PRIVATE ${ACOL_SOURCES} ${ACOL_HEADERS})
+  target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(
+    ${target}
+    PRIVATE coretools
+            stattools
+            OpenSSL::SSL
+            OpenSSL::Crypto
+            nlohmann_json::nlohmann_json
+            stduuid)
+  target_compile_features(${target} PRIVATE cxx_std_20)
+  set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
+
+  if(LOTUS)
+    target_compile_definitions(${target} PRIVATE USE_LOTUS)
+  endif()
+  if(SIMPLE_DATA)
+    target_compile_definitions(${target} PRIVATE USE_SIMPLE_ERROR_MODEL)
+  endif()
+  if(USE_MS_DATA)
+    target_compile_definitions(${target} PRIVATE USE_MS_DATA)
+  endif()
+
+  # httplib reads the trust store from the macOS keychain when built against
+  # OpenSSL.
+  if(APPLE)
+    target_link_libraries(${target} PRIVATE "-framework CoreFoundation"
+                                            "-framework Security")
+  endif()
+endfunction()
+
+# =============================================================================
+# Main executable
+# =============================================================================
+
+add_executable(${PROJECT_NAME} main.cpp)
+acol_add_common_sources(${PROJECT_NAME})
 target_compile_definitions(${PROJECT_NAME} PRIVATE DEVTOOLS DEV_LOCATION)
+target_compile_options(${PROJECT_NAME} PRIVATE ${ACOL_WARNINGS})
 
-# Test
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)
-  add_executable("${PROJECT_NAME}_unitTests" EXCLUDE_FROM_ALL)
+# =============================================================================
+# Unit tests
+#
+# EXCLUDE_FROM_ALL: `just build` only builds acol, `just test` asks for this
+# target explicitly.
+# =============================================================================
 
-  file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/*)
+if(BUILD_TESTING)
+  enable_testing()
 
-  include(FetchContent)
+  set(gtest_force_shared_crt
+      ON
+      CACHE BOOL "" FORCE)
+  set(gtest_disable_pthreads
+      ON
+      CACHE BOOL "" FORCE)
+  set(INSTALL_GTEST
+      OFF
+      CACHE BOOL "" FORCE)
   FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG main)
   FetchContent_MakeAvailable(googletest)
 
-  set(gtest_force_shared_crt
-      ON
-      CACHE BOOL "" FORCE)
-  option(gtest_disable_pthreads "Disable uses of pthreads in gtest." ON)
-
-  target_sources("${PROJECT_NAME}_unitTests" PRIVATE ${CORE_SOURCES}
-                                                     ${TEST_SOURCES})
-  target_include_directories("${PROJECT_NAME}_unitTests" PRIVATE tests src)
-  target_link_libraries("${PROJECT_NAME}_unitTests"
-                        PRIVATE coretools stattools gtest_main gmock_main)
-  target_compile_definitions("${PROJECT_NAME}_unitTests"
-                             PRIVATE CHECK_INTERVALS)
-  target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-  set_target_properties(${PROJECT_NAME} PROPERTIES CXX_EXTENSIONS OFF)
+  add_executable("${PROJECT_NAME}_unitTests" EXCLUDE_FROM_ALL
+                 ${ACOL_TEST_SOURCES})
+  acol_add_common_sources("${PROJECT_NAME}_unitTests")
+  target_include_directories("${PROJECT_NAME}_unitTests"
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+  target_link_libraries("${PROJECT_NAME}_unitTests" PRIVATE GTest::gtest_main
+                                                            GTest::gmock_main)
+  target_compile_definitions("${PROJECT_NAME}_unitTests" PRIVATE CHECK_INTERVALS)
   target_compile_options("${PROJECT_NAME}_unitTests" PRIVATE -Wall -Wextra)
+
+  add_test(NAME "${PROJECT_NAME}_unitTests" COMMAND "${PROJECT_NAME}_unitTests")
 endif()
