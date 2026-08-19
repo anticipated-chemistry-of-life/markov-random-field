@@ -7,7 +7,7 @@ the micromamba environment for you. Install the two prerequisites once:
 
 ```bash
 brew install just          # or: cargo install just
-"${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+"${SHELL}" <(curl -L micro.mamba.pm)
 ```
 
 Then clone the repo and create the build environment:
@@ -48,11 +48,11 @@ is the same as running `./acol --out results/acol --numThreads all` from a relea
 Which sources of information get compiled in is a compile-time decision. Pass any combination of
 these letters right after the build mode:
 
-| letter | cmake option        | data source             |
-| ------ | ------------------- | ----------------------- |
-| `l`    | `-DLOTUS=ON`        | LOTUS data              |
-| `s`    | `-DSIMPLE_DATA=ON`  | simple error model data |
-| `m`    | `-DUSE_MS_DATA=ON`  | mass spec data          |
+| letter | cmake option       | data source             |
+| ------ | ------------------ | ----------------------- |
+| `l`    | `-DLOTUS=ON`       | LOTUS data              |
+| `s`    | `-DSIMPLE_DATA=ON` | simple error model data |
+| `m`    | `-DUSE_MS_DATA=ON` | mass spec data          |
 
 The default is `ls`. At least one of `l` and `s` is required — with neither, nothing informs `Y` and
 `src/Types.h` fails a `static_assert`.
