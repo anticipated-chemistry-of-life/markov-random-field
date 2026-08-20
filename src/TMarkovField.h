@@ -354,8 +354,11 @@ private:
 			}
 		}
 
+		// Sequential on purpose: each tree's nu/alpha update reads the *other* trees' Z, alpha, nu
+		// and branch lengths (for the leaf terms of its pseudo-likelihood), so they must be frozen
+		// while it runs. Parallelism lives inside each call, over that tree's cliques.
 		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y);
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y, _trees);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {

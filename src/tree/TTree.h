@@ -123,6 +123,96 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
+	/// @brief Fills, for one clique of this tree, the other trees' contribution to the full
+	/// conditional of each of this tree's leaves.
+	///
+	/// A leaf is a cell of Y, so its Markov blanket spans *every* tree: its parent here and its
+	/// parent in each other tree. Those other-tree terms do not depend on this tree's nu/alpha and
+	/// so cancel from the numerator of the conditional -- but they sit inside the normalisation,
+	/// where they do not cancel. Dropping them and normalising a leaf against this tree alone is
+	/// measurably worse than leaving leaves out entirely.
+	///
+	/// Safe to call from the parallel clique loop: TMarkovField::_update_all_Z walks the trees
+	/// sequentially, so every other tree's Z, alpha, nu and branch lengths are frozen while this
+	/// one runs. Note the resulting sweep asymmetry: the first tree sees the others in their
+	/// previous-iteration state, the last sees them already moved. That is normal for a Gibbs
+	/// sweep.
+	///
+	/// The loop below accumulates over all other trees, but the index arithmetic assumes there are
+	/// exactly two (as does IndexArray, which is std::array<size_t, NUMBER_OF_TREES> with
+	/// NUMBER_OF_TREES == 2): with more trees a clique index no longer identifies a single leaf of
+	/// a single other tree, and both `other->get_node_index_from_leaf_index(c)` and
+	/// _index_in_leaves_space() would need to decompose `c` into a multi-index first.
+	void _fill_other_tree_leaf_term(size_t c, const std::vector<std::unique_ptr<TTree>> &all_trees,
+	                                std::vector<std::array<double, 2>> &out,
+	                                std::vector<uint8_t> &scratch_state,
+	                                std::vector<uint8_t> &scratch_exists,
+	                                std::vector<size_t> &scratch_index) const {
+		const size_t n_leaves = get_number_of_leaves();
+		out.assign(n_leaves, {0.0, 0.0});
+
+		for (const auto &other : all_trees) {
+			if (other->get_dimension() == _dimension) { continue; }
+			const auto &other_Z = other->get_Z();
+
+			// This clique corresponds to leaf `c` of the other tree; we need the state of that
+			// leaf's parent there. Roots are included in _internal_nodes, so this is also valid
+			// when the parent is a root (which is always the case for grass and star trees).
+			const size_t other_leaf   = other->get_node_index_from_leaf_index(c);
+			const size_t other_parent = other->get_node(other_leaf).parent_index_in_tree();
+			const auto bin            = other->get_binned_branch_length(other_leaf);
+
+			// Start index and stride in the *other* tree's Z space. The stride is derived from the
+			// storage rather than recomputed: the other tree's own dimension is replaced by its
+			// internal-node count there, so this is NOT TClique::get_increment() (which is built
+			// from leaf counts and would be off by the number of roots).
+			IndexArray index{};
+			index[other->get_dimension()] = other->get_index_within_internal_nodes(other_parent);
+			index[_dimension]             = 0;
+			const size_t start            = other_Z.get_linear_index_in_Z_space(index);
+			index[_dimension]             = 1;
+			const size_t stride           = other_Z.get_linear_index_in_Z_space(index) - start;
+			index[_dimension]             = 0;
+
+			other_Z.fill_current_state(index, n_leaves, stride, scratch_state, scratch_exists,
+			                           scratch_index);
+
+			for (size_t k = 0; k < n_leaves; ++k) {
+				// A wrong start index or stride reads a valid-but-wrong cell, which shows up as a
+				// plausible alpha rather than a crash -- so check it against a direct lookup.
+				// Guarded by noDebug rather than left to DEBUG_ASSERT alone: the macro compiles the
+				// check away but its argument is still an ordinary function argument, so without
+				// this the extra lookups would run in release too.
+				if constexpr (!coretools::noDebug) {
+					IndexArray direct{};
+					direct[other->get_dimension()] =
+					    other->get_index_within_internal_nodes(other_parent);
+					direct[_dimension] = k;
+					DEBUG_ASSERT(scratch_index[k] == other_Z.get_linear_index_in_Z_space(direct));
+					DEBUG_ASSERT((bool)scratch_state[k] == other_Z.is_one(scratch_index[k]));
+				}
+
+				const bool parent_state = scratch_state[k];
+				// Always the current matrices: the other tree's try matrices are leftovers from
+				// its own last proposal.
+				const auto &matrix =
+				    other->get_clique(_index_in_leaves_space(k, c)).get_matrix<false>(bin);
+				out[k][0] += std::log(matrix(parent_state, 0));
+				out[k][1] += std::log(matrix(parent_state, 1));
+			}
+		}
+	}
+
+	/// @brief Index in leaves space of this tree's leaf `k` within clique `c`.
+	[[nodiscard]] IndexArray _index_in_leaves_space(size_t k, size_t c) const {
+		IndexArray index{};
+		index[_dimension] = k;
+		for (size_t d = 0; d < index.size(); ++d) {
+			if (d != _dimension) { index[d] = c; }
+		}
+		return index;
+	}
+
 	/// @brief Stable log(p / (p + q)) given log p and log q. Returns a *log* probability (<= 0),
 	/// so it must be summed into a plain double and never added to a TSumLogProbability, which
 	/// multiplies probabilities together and would turn a negative log into a NaN.
@@ -141,17 +231,19 @@ private:
 	/// which is what we sum here instead (a pseudo-likelihood).
 	///
 	/// Only the factors containing this node survive that cancellation, i.e. its Markov blanket:
-	/// the edge from its parent (or the stationary distribution at a root), plus one edge per
-	/// child. We evaluate their sum with the node set to 0 and to 1, take the entry matching the
-	/// observed state, and subtract the normalisation over the two states. That normalisation is
-	/// the whole point: it is rebuilt from the *proposed* nu/alpha, so it moves when they move.
-	/// Each edge is therefore counted twice, once from the child and once from the parent; that is
-	/// expected for a composite likelihood and must not be "fixed".
+	/// the edge from its parent (or the stationary distribution at a root), one edge per child,
+	/// and -- for a leaf, which is a cell of Y and therefore belongs to every tree -- the edge
+	/// from its parent in each other tree. We evaluate their sum with the node set to 0 and to 1,
+	/// take the entry matching the observed state, and subtract the normalisation over the two
+	/// states. That normalisation is the whole point: it is rebuilt from the *proposed* nu/alpha,
+	/// so it moves when they move. Each edge is therefore counted twice, once from the child and
+	/// once from the parent; that is expected for a composite likelihood and must not be "fixed".
 	template<bool UseTryMatrix>
-	[[nodiscard]] double _log_conditional(const TNode &node, size_t index_in_tree,
-	                                      const TClique &clique, const TCurrentState &current_state,
-	                                      std::optional<size_t> branch_len_bin,
-	                                      double alpha) const {
+	[[nodiscard]] double
+	_log_conditional(const TNode &node, size_t index_in_tree, const TClique &clique,
+	                 const TCurrentState &current_state, std::optional<size_t> branch_len_bin,
+	                 double alpha,
+	                 const std::vector<std::array<double, 2>> &other_tree_term) const {
 		std::array<coretools::TSumLogProbability, 2> log_prob;
 
 		// (1) the term from above: the edge from the parent, or the stationary distribution
@@ -170,15 +262,26 @@ private:
 		    node.children_indices_in_tree(), current_state, log_prob, _binned_branch_lengths,
 		    _leaves_and_internal_nodes_without_roots_indices);
 
-		// (3) pick the observed state, then divide by the normalisation
-		const double log_prob_0 = log_prob[0].getSum();
-		const double log_prob_1 = log_prob[1].getSum();
+		double log_prob_0 = log_prob[0].getSum();
+		double log_prob_1 = log_prob[1].getSum();
+
+		// (3) for a leaf: the edge from its parent in every other tree. These are already logs, so
+		// they are added here rather than through TSumLogProbability::add(), which multiplies
+		// probabilities and would turn a negative log into a NaN.
+		if (node.is_leaf()) {
+			const auto &term = other_tree_term[_leafIndices[index_in_tree]];
+			log_prob_0 += term[0];
+			log_prob_1 += term[1];
+		}
+
+		// (4) pick the observed state, then divide by the normalisation
 		if (current_state.get(index_in_tree)) { return _log_normalized(log_prob_1, log_prob_0); }
 		return _log_normalized(log_prob_0, log_prob_1);
 	}
 
 	template<bool IsAlpha, typename TypeParam>
-	void _update_nu_or_alpha(const TCurrentState &current_state, size_t c, TypeParam *param) {
+	void _update_nu_or_alpha(const TCurrentState &current_state, size_t c, TypeParam *param,
+	                         const std::vector<std::array<double, 2>> &other_tree_term) {
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
@@ -211,11 +314,6 @@ private:
 		for (size_t i = 0; i < _nodes.size(); ++i) {
 			const auto &node = _nodes[i];
 
-			// A leaf is a cell of Y, so its Markov blanket spans *both* trees: its parent here and
-			// its parent in the other tree. We only hold this tree's state. Leaves still enter
-			// through step (2) of the conditional of their parent, so no edge of the tree is lost.
-			if (node.is_leaf()) { continue; }
-
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
 			if (!node.is_root()) {
@@ -225,10 +323,10 @@ private:
 				branch_len_bin = std::nullopt;
 			}
 
-			LL_old +=
-			    _log_conditional<false>(node, i, clique, current_state, branch_len_bin, alpha_old);
-			LL_new +=
-			    _log_conditional<true>(node, i, clique, current_state, branch_len_bin, alpha_new);
+			LL_old += _log_conditional<false>(node, i, clique, current_state, branch_len_bin,
+			                                  alpha_old, other_tree_term);
+			LL_new += _log_conditional<true>(node, i, clique, current_state, branch_len_bin,
+			                                 alpha_new, other_tree_term);
 		}
 
 		// calculate Hastings ratio
@@ -267,6 +365,9 @@ public:
 	~TTree() override;
 
 	[[nodiscard]] size_t size() const { return _nodes.size(); };
+
+	/// @return The dimension this tree occupies in the multi-dimensional Y and Z spaces.
+	[[nodiscard]] size_t get_dimension() const { return _dimension; }
 
 	/** Get node by its id
 	 * @param Id: the id of the node
@@ -375,7 +476,8 @@ public:
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _nodes[index].get_id(); }
 
 	template<bool IsSimulation, bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYMatrix &Y) {
+	void update_Z_and_nus_and_alphas_and_branch_lengths(
+	    const TStorageYMatrix &Y, const std::vector<std::unique_ptr<TTree>> &all_trees) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
@@ -389,7 +491,7 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
+    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert, all_trees)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
@@ -403,8 +505,17 @@ public:
 
 			// update nu and alpha
 			if constexpr (!IsSimulation) {
-				_update_nu_or_alpha<true>(current_state, i, _alpha_c);
-				_update_nu_or_alpha<false>(current_state, i, _log_nu_c);
+				// Declared inside the loop body so each thread owns its own buffers; the other
+				// trees are only read, so nothing here needs synchronising.
+				std::vector<std::array<double, 2>> other_tree_term;
+				std::vector<uint8_t> scratch_state;
+				std::vector<uint8_t> scratch_exists;
+				std::vector<size_t> scratch_index;
+				_fill_other_tree_leaf_term(i, all_trees, other_tree_term, scratch_state,
+				                           scratch_exists, scratch_index);
+
+				_update_nu_or_alpha<true>(current_state, i, _alpha_c, other_tree_term);
+				_update_nu_or_alpha<false>(current_state, i, _log_nu_c, other_tree_term);
 
 				// add to likelihood ratio for branch length
 				_add_to_LL_branch_lengths(i, current_state, log_sum_local, pairs);
