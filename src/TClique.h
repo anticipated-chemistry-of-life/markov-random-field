@@ -228,14 +228,6 @@ private:
 	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
 	                           const TTree *tree) const;
 
-	/// @brief Calculates the log probability of a node to its children
-	template<bool UseTry>
-	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log,
-	    const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
-
 	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
 	/// that Z is stuck in a state and cannot change.
 	/// @param node_index The index of the internal node we want to set
@@ -269,6 +261,32 @@ public:
 	static double get_stationary_probability(bool state, double alpha) {
 		if (state) { return alpha; }
 		return 1.0 - alpha;
+	}
+
+	/// @brief Adds, for both possible states of a node, the log probability of that node's
+	/// children given that state. Templated on UseTry so that the same code can score the current
+	/// and the proposed rate matrices.
+	/// Note: this takes the children indices rather than (index_in_tree, tree) so that the
+	/// definition can live in this header -- TClique.h cannot include TTree.h, and TTree needs to
+	/// instantiate this for both UseTry = false and UseTry = true.
+	template<bool UseTry>
+	void calculate_log_prob_node_to_children(
+	    const std::vector<size_t> &children_indices_in_tree, const TCurrentState &current_state,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log,
+	    const TypeParamBinBranches *binned_branch_lengths,
+	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
+		for (const auto &child_index : children_indices_in_tree) {
+			// Note: need to take old value of branch length because new values were proposed before
+			// the loop started
+			auto bin_length = binned_branch_lengths->oldValue(
+			    leaves_and_internal_nodes_without_roots_indices[child_index]);
+			const auto &matrix_for_bin = get_matrix<UseTry>(bin_length);
+
+			const bool child_state = current_state.get(child_index);
+			for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
+				sum_log[i].add(matrix_for_bin(i, child_state));
+			}
+		}
 	}
 
 	/// @brief Set the rate parameters for the clique.

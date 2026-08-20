@@ -58,8 +58,8 @@ std::vector<size_t> TClique::update_Z(
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
-		_calculate_log_prob_node_to_children<false>(
-		    index_in_tree, tree, current_state, sum_log, binned_branch_lengths,
+		calculate_log_prob_node_to_children<false>(
+		    node.children_indices_in_tree(), current_state, sum_log, binned_branch_lengths,
 		    leaves_and_internal_nodes_without_roots_indices);
 
 		// sample new state and update Z accordingly
@@ -154,9 +154,9 @@ void TClique::_set_Z_to_MLE(
     std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
-	_calculate_log_prob_node_to_children<false>(node_index, tree, current_state, sum_log,
-	                                            binned_branch_lengths,
-	                                            leaves_and_internal_nodes_without_roots_indices);
+	calculate_log_prob_node_to_children<false>(
+	    tree->get_node(node_index).children_indices_in_tree(), current_state, sum_log,
+	    binned_branch_lengths, leaves_and_internal_nodes_without_roots_indices);
 
 	// sample new state and update Z accordingly
 	const double log_prob_0 = sum_log[0].getSum();
@@ -171,27 +171,6 @@ void TClique::_calculate_log_prob_root(double stationary_0,
                                        std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	sum_log[0].add(stationary_0);
 	sum_log[1].add(1.0 - stationary_0);
-}
-
-template<bool UseTry>
-void TClique::_calculate_log_prob_node_to_children(
-    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-    std::array<coretools::TSumLogProbability, 2> &sum_log,
-    const TypeParamBinBranches *binned_branch_lengths,
-    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
-	const auto &node = tree->get_node(index_in_tree);
-	for (const auto &child_index : node.children_indices_in_tree()) {
-		// Note: need to take old value of branch length because new values were proposed before the
-		// loop started
-		auto bin_length = binned_branch_lengths->oldValue(
-		    leaves_and_internal_nodes_without_roots_indices[child_index]);
-		const auto &matrix_for_bin = get_matrix<UseTry>(bin_length);
-
-		const bool child_state = current_state.get(child_index);
-		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			sum_log[i].add(matrix_for_bin(i, child_state));
-		}
-	}
 }
 
 void TClique::update_counter_leaves_state_1(bool new_state, bool old_state) {

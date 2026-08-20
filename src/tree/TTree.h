@@ -20,6 +20,8 @@
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/node.h"
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -121,19 +123,58 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
+	/// @brief Stable log(p / (p + q)) given log p and log q. Returns a *log* probability (<= 0),
+	/// so it must be summed into a plain double and never added to a TSumLogProbability, which
+	/// multiplies probabilities together and would turn a negative log into a NaN.
+	[[nodiscard]] static double _log_normalized(double log_chosen, double log_other) {
+		const double d = log_other - log_chosen;
+		if (d > 0.0) { return -(d + std::log1p(std::exp(-d))); }
+		return -std::log1p(std::exp(d));
+	}
+
+	/// @brief Log of the full conditional p(state of this node | all other nodes), for one node.
+	///
+	/// The model is a Markov random field: p(Z_this, Z_other, Y) = f_this * f_other / C(theta).
+	/// C(theta) depends on nu and alpha, so scoring a proposal with the raw product f_this alone
+	/// (which is what this code used to do) makes the estimator inconsistent and biases both nu
+	/// and alpha downwards. C(theta) is intractable, but it cancels out of every *conditional*,
+	/// which is what we sum here instead (a pseudo-likelihood).
+	///
+	/// Only the factors containing this node survive that cancellation, i.e. its Markov blanket:
+	/// the edge from its parent (or the stationary distribution at a root), plus one edge per
+	/// child. We evaluate their sum with the node set to 0 and to 1, take the entry matching the
+	/// observed state, and subtract the normalisation over the two states. That normalisation is
+	/// the whole point: it is rebuilt from the *proposed* nu/alpha, so it moves when they move.
+	/// Each edge is therefore counted twice, once from the child and once from the parent; that is
+	/// expected for a composite likelihood and must not be "fixed".
 	template<bool UseTryMatrix>
-	void _compute_LL_old_and_new_nu_or_alpha(const TNode &node, size_t index_in_tree,
-	                                         const TClique &clique, bool state_of_node,
-	                                         coretools::TSumLogProbability &LL,
-	                                         const TCurrentState &current_state,
-	                                         std::optional<size_t> branch_len_bin, double alpha) {
+	[[nodiscard]] double _log_conditional(const TNode &node, size_t index_in_tree,
+	                                      const TClique &clique, const TCurrentState &current_state,
+	                                      std::optional<size_t> branch_len_bin,
+	                                      double alpha) const {
+		std::array<coretools::TSumLogProbability, 2> log_prob;
+
+		// (1) the term from above: the edge from the parent, or the stationary distribution
 		if (node.is_root()) {
-			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
+			log_prob[0].add(TClique::get_stationary_probability(false, alpha));
+			log_prob[1].add(TClique::get_stationary_probability(true, alpha));
 		} else {
-			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
-			    index_in_tree, this, branch_len_bin.value(), current_state);
-			LL.add(prob);
+			const auto &matrix      = clique.get_matrix<UseTryMatrix>(branch_len_bin.value());
+			const bool parent_state = current_state.get(node.parent_index_in_tree());
+			log_prob[0].add(matrix(parent_state, 0));
+			log_prob[1].add(matrix(parent_state, 1));
 		}
+
+		// (2) the terms from below: one edge per child
+		clique.calculate_log_prob_node_to_children<UseTryMatrix>(
+		    node.children_indices_in_tree(), current_state, log_prob, _binned_branch_lengths,
+		    _leaves_and_internal_nodes_without_roots_indices);
+
+		// (3) pick the observed state, then divide by the normalisation
+		const double log_prob_0 = log_prob[0].getSum();
+		const double log_prob_1 = log_prob[1].getSum();
+		if (current_state.get(index_in_tree)) { return _log_normalized(log_prob_1, log_prob_0); }
+		return _log_normalized(log_prob_0, log_prob_1);
 	}
 
 	template<bool IsAlpha, typename TypeParam>
@@ -141,39 +182,39 @@ private:
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
-		// calculate LL for old mu
-		// No need to change Lambda (rate matrix), just go over entire tree and calculate
-		// probabilities
-		double old_value;
+		// The alpha to score each proposal against: for an alpha update these are the old and the
+		// proposed value, for a nu update the current alpha is used for both and only the rate
+		// matrices differ. No need to change Lambda (rate matrix) beyond that, just go over the
+		// tree and sum the conditionals.
+		double alpha_old;
+		double alpha_new;
 		double new_value;
 		if constexpr (IsAlpha) {
-			old_value = param->oldValue(c);
-			new_value = param->value(c);
-		} else {
-			old_value = _nu_c[c];
-			new_value = std::exp(param->value(c));
-		}
-
-		coretools::TSumLogProbability LL_old;
-		coretools::TSumLogProbability LL_new;
-		if constexpr (IsAlpha) {
+			alpha_old = param->oldValue(c);
+			alpha_new = param->value(c);
+			new_value = alpha_new;
 			_cliques[c].update_lambda(new_value, _nu_c[c]);
 		} else {
-			_cliques[c].update_lambda(_alpha_c->value(c), new_value);
+			alpha_old = _alpha_c->value(c);
+			alpha_new = alpha_old;
+			new_value = std::exp(param->value(c));
+			_cliques[c].update_lambda(alpha_old, new_value);
 		}
+
+		// Plain doubles: _log_conditional already returns logs, so feeding them to a
+		// TSumLogProbability (which multiplies probabilities) would produce a NaN.
+		double LL_old = 0.0;
+		double LL_new = 0.0;
 
 		const auto &clique = _cliques[c];
 		std::optional<size_t> branch_len_bin;
 		for (size_t i = 0; i < _nodes.size(); ++i) {
-			const auto &node   = _nodes[i];
-			bool state_of_node = current_state.get(i);
+			const auto &node = _nodes[i];
 
-			// TODO: given that the leaf state is also related to the other tree, this might create
-			// a bias. We skip the leaves which will remove about half the nodes for a binary tree.
-			// This is a small test to see the influence of that removal or not.
-			if (ProgramOptions::SKIP_LEAVES_IN_ALPHA_UPDATE) {
-				if (node.is_leaf()) continue;
-			}
+			// A leaf is a cell of Y, so its Markov blanket spans *both* trees: its parent here and
+			// its parent in the other tree. We only hold this tree's state. Leaves still enter
+			// through step (2) of the conditional of their parent, so no edge of the tree is lost.
+			if (node.is_leaf()) { continue; }
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
@@ -184,24 +225,14 @@ private:
 				branch_len_bin = std::nullopt;
 			}
 
-			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           old_value);
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin, new_value);
-			} else {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           _alpha_c->value(c));
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin,
-				                                          _alpha_c->value(c));
-			}
+			LL_old +=
+			    _log_conditional<false>(node, i, clique, current_state, branch_len_bin, alpha_old);
+			LL_new +=
+			    _log_conditional<true>(node, i, clique, current_state, branch_len_bin, alpha_new);
 		}
 
 		// calculate Hastings ratio
-		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
+		const double LLRatio       = LL_new - LL_old;
 		const double logPriorRatio = param->getLogDensityRatio(c);
 		const double logH          = LLRatio + logPriorRatio;
 
