@@ -229,6 +229,7 @@ private:
 	                           const TTree *tree) const;
 
 	/// @brief Calculates the log probability of a node to its children
+	template<bool UseTry>
 	void _calculate_log_prob_node_to_children(
 	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log,
