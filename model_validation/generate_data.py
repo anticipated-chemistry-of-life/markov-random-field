@@ -80,7 +80,8 @@ cd "$SCRIPT_DIR"
 # by the cmake options LOTUS and SIMPLE_DATA. Options for a source that is not compiled in
 # are parsed and ignored, so this one script works for every build configuration.
 "$ACOL" infer \\
-    --out ./test_out/acol \\
+    --out ./infer_all/acol \\
+    --iterations 5000 \\
     --tree_species {species_tree_name}.txt \\
     --tree_molecules {molecules_tree_name}.txt \\
     --lotus acol_simulated_lotus.tsv \\
