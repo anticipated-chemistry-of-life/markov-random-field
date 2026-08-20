@@ -76,7 +76,7 @@ class ParameterGenerator:
         value = (
             var_log_nu
             if var_log_nu is not None
-            else float(np.random.uniform(0.05, 0.1))
+            else float(np.random.uniform(0.005, 0.01))
         )
         self._var_log_nu = pd.DataFrame(
             {
