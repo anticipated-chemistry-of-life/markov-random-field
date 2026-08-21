@@ -16,8 +16,22 @@ void TTree::_initialize_grid_branch_lengths() {
 	// calculate Delta
 	_delta = 2.0 / ((double)_number_of_bins + 1.0);
 
+	// bin k stands for the branch length at the *center* of the bin: the transition matrices are
+	// built as exp(Lambda * Delta * (k + 0.5)) (see TMatrices::_fill_matrices), so Delta * (k + 0.5)
+	// is the branch length bin k actually represents in the likelihood.
 	_grid_branch_lengths.resize(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) { _grid_branch_lengths[k] = _delta * (double)k; }
+	for (size_t k = 0; k < _number_of_bins; ++k) {
+		_grid_branch_lengths[k] = _delta * ((double)k + 0.5);
+	}
+}
+
+size_t TTree::_get_bin_branch_length(double branch_length) const {
+	// bin k covers [k * Delta, (k + 1) * Delta) and is represented by its center
+	// _grid_branch_lengths[k] = Delta * (k + 0.5); the bin whose center is closest to branch_length
+	// is therefore floor(branch_length / Delta), clamped to the grid.
+	if (branch_length <= 0.0) { return 0; }
+	const auto bin = static_cast<size_t>(branch_length / _delta);
+	return std::min(bin, _number_of_bins - 1);
 }
 
 stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
@@ -128,7 +142,7 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 		// translate bin into actual branch lengths
 		std::vector<double> vals(_binned_branch_lengths->size());
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-			vals[i] = (_delta * (_binned_branch_lengths->value(i) + 0.5));
+			vals[i] = _grid_branch_lengths[_binned_branch_lengths->value(i)];
 		}
 
 		// normalize such that the average branch length is 1
@@ -164,36 +178,10 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 	size_t sum_index_branches = 0;
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
 		if (exclude_root && _nodes[i].is_root()) { continue; }
-		// find bin
-		auto it = std::lower_bound(_grid_branch_lengths.begin(), _grid_branch_lengths.end(),
-		                           branch_lengths[i]);
-
-		if (it == _grid_branch_lengths.end()) {
-			// last bin
-			binned_branch_lengths.push_back(_grid_branch_lengths.size() - 1);
-			sum_index_branches += _grid_branch_lengths.size() - 1;
-		} else {
-			// take the distance between the lower bin and the value and the higher bin and the
-			// value and then we take the one that is closer to the value
-
-			auto it_next = it + 1;
-
-			if (it_next == _grid_branch_lengths.end()) {
-				// last bin
-				binned_branch_lengths.push_back(std::distance(_grid_branch_lengths.begin(), it));
-				sum_index_branches += _grid_branch_lengths.size() - 1;
-			} else if (std::abs(branch_lengths[i] - *it) < std::abs(branch_lengths[i] - *it_next)) {
-				// take the lower bin
-				auto index = std::distance(_grid_branch_lengths.begin(), it);
-				binned_branch_lengths.push_back(index);
-				sum_index_branches += index;
-			} else {
-				// take the higher bin
-				auto index = std::distance(_grid_branch_lengths.begin(), it_next);
-				binned_branch_lengths.push_back(index);
-				sum_index_branches += index;
-			}
-		}
+		// find the bin whose center is closest to the branch length
+		const size_t index = _get_bin_branch_length(branch_lengths[i]);
+		binned_branch_lengths.push_back(index);
+		sum_index_branches += index;
 	}
 
 	// if total branch length is smaller than one, we randomly sample some branch lengths and
@@ -223,7 +211,7 @@ std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch
 
 void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
 	_initialize_grid_branch_lengths();
-	// normalize such that they sum to one
+	// normalize such that the average branch length is equal to 1.
 
 	double sum = 0.0;
 	int count  = 0;

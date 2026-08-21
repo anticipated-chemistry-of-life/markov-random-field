@@ -93,6 +93,7 @@ private:
 	void _set_initial_branch_lengths(bool is_simulation);
 	[[nodiscard]] std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths,
 	                                                      bool exclude_root) const;
+	[[nodiscard]] size_t _get_bin_branch_length(double branch_length) const;
 	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths();
 	void _initialize_Z(IndexArray num_leaves_per_tree);
