@@ -105,7 +105,7 @@ using SpecMeanLogNu =
                          PriorOnMeanLogNu>;
 
 // Var Nu
-using PriorOnVarLogNu = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
+using PriorOnVarLogNu = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
 using SpecVarLogNu =
     stattools::ParamSpec<TypeVarLogNu, stattools::Hash<coretools::toHash("var_log_nu")>,
                          PriorOnVarLogNu>;

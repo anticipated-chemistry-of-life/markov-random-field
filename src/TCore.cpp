@@ -29,7 +29,8 @@ void TModel::_create_tree(size_t dimension, const std::string &filename,
 
 	// create var log nu
 	_var_log_nu.push_back(std::make_unique<stattools::TParameter<SpecVarLogNu, PriorOnLogNu>>(
-	    tree_name + "_var_log_nu", &_prior_on_var_log_nu, stattools::TParameterDefinition{prefix}));
+	    tree_name + "_var_log_nu", &_prior_on_var_log_nu,
+	    stattools::TParameterDefinition{prefix, ProgramOptions::FIXED_PRIOR_ON_VAR_LOG_NU}));
 
 	// create prior on log nu
 	_prior_on_log_nu.push_back(
