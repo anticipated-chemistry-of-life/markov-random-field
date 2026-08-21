@@ -37,7 +37,7 @@ cd "$SCRIPT_DIR"
     --tree_molecules {molecules_tree_name}.txt \\
     --species_paper_counts {species_tree_name}_papers.txt \\
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
-    --num_iterations 2000 \\
+    --iterations 1 \\
     --species_var_log_nu acol_input_simulated.txt \\
     --species_mean_log_nu acol_input_simulated.txt \\
     --species_alpha acol_input_simulated.txt \\
@@ -90,7 +90,8 @@ cd "$SCRIPT_DIR"
     --molecules_paper_counts {molecules_tree_name}_papers.txt \\
     --numThreads all \\
     --writeBurnin \\
-    --write_joint_log_prob_density
+    --write_joint_log_prob_density \\
+;
 """
 
 
