@@ -432,9 +432,7 @@ public:
 	void MCMCHasFinished();
 	void oneBurninHasFinished();
 
-	static size_t get_num_iterations_simulation() {
-		return coretools::instances::parameters().get("num_iterations", 5000);
-	}
+	static size_t get_num_iterations_simulation() { return ProgramOptions::NUM_ITERATIONS; }
 };
 
 #endif // ACOL_TMARKOVFIELD_H

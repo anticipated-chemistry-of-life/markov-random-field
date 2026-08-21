@@ -69,6 +69,8 @@ public:
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
+	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0,2.0";
+
 	static inline size_t NUM_ITERATIONS = 20000;
 
 	static void parse() {
