@@ -47,7 +47,7 @@ class ParameterGenerator:
         if binned_branch_length is not None:
             values = [int(binned_branch_length)] * n
         else:
-            values = np.random.randint(0, 100, size=n).tolist()
+            values = np.random.randint(0, 10, size=n).tolist()
         self._binned_branch_lengths = pd.DataFrame(
             {
                 "name": [
@@ -112,7 +112,7 @@ class ParameterGenerator:
         if alpha is not None:
             values = [alpha] * n
         else:
-            values = np.random.beta(2, 2, size=n).tolist()
+            values = np.random.beta(0.5, 0.5, size=n).tolist()
         self._alpha = pd.DataFrame(
             {
                 "name": [
