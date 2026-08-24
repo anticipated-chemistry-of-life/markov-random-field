@@ -301,7 +301,10 @@ void TLotus::simulate_L_from_Y(const TStorageYMatrix &Y) {
 		} else {
 			// When we don't collapse, the dimensions of Y equal the dimensions of Lotus, so we can
 			// look up the state of Y directly (a missing cell reads as 0).
-			x = Y.is_one(i);
+			//
+			// Given that we ran an MCMC on Y, it can happen that a Y with a low probability
+			// becomes 1. We want to avoid this during simulations and set Y to the MLE.
+			x = Y.get_fraction_of_ones(i) > 0.5;
 		}
 		const double proba =
 		    _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);

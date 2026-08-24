@@ -81,7 +81,8 @@ void TSimpleErrorModel::simulate_D_from_Y(const TStorageYMatrix &Y) {
 	for (size_t i = 0; i < _total_cells; ++i) {
 		// Only ones are stored; an absent cell reads as 0, which is exactly the encoding the
 		// sparse output file uses.
-		if (simple_error_model::draw_D_given_Y(Y.is_one(i), eps)) { _D.insert_one(i); }
+		bool y_state = Y.get_fraction_of_ones(i) > 0.5;
+		if (simple_error_model::draw_D_given_Y(y_state, eps)) { _D.insert_one(i); }
 	}
 
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);

@@ -7,11 +7,11 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import PowerNorm
 from dictances import cosine as cosine_dist
 from dictances import mae as dict_mae
 from dictances import mse as dict_mse
 from dictances import pearson as dict_pearson
+from matplotlib.colors import PowerNorm
 from scipy.stats import gaussian_kde
 from sklearn.metrics import confusion_matrix, matthews_corrcoef
 
@@ -336,7 +336,7 @@ def _load_y_state(path: pathlib.Path) -> dict[int, int] | None:
     if not path.exists():
         return None
     df = pd.read_csv(path, sep="\t")
-    return dict(zip(df["position"], df["Y_state"].astype(int)))
+    return dict(zip(df["position"], (df["fraction_of_one"].values > 0.5).astype(int)))
 
 
 def _compute_y_metrics(true_dict: dict, pred_dict: dict) -> dict[str, float]:
