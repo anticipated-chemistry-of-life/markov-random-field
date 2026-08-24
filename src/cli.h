@@ -25,7 +25,7 @@ public:
 
 	static inline double EPSILON = 0.001;
 
-	static inline size_t BRANCH_LENGTHS_BINS = 100;
+	static inline size_t BRANCH_LENGTHS_BINS = 10;
 
 	static inline size_t SHEET_SIZE_K = static_cast<size_t>(1e7);
 
