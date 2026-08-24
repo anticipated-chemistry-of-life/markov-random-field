@@ -20,5 +20,12 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.uv.workspace]
 members = ["single_root", "convergence_bigger_tree", "balanced_tree"]

@@ -3,3 +3,60 @@ This directory shows a couple of tests to validate the MRF model. See [here](htt
 - In the [single root](./single_root) directory, the species tree has a single root and only leaves that are directly linked to the root.
 - In the [balanced tree](./balanced_tree) directory, the species tree has a single root and always two children per node.
 - In the [convergence_bigger_tree](./convergence_bigger_tree) directory, the species and the molecules tree are bit more complex. This directory was used to check if the model converges with a bigger tree and if it did, after how many iterations.
+
+## Independent-field validation
+
+`simulate_independent.py` samples the field from a Python reference implementation
+that shares no code with the C++ binary, so a disagreement between them is a bug
+in one of the two. The reference draws one pass down the species tree — root from
+the stationary distribution, then every node given its parent — with no molecules
+tree involved at all. The molecules dimension is then pinned neutral so the C++
+model reduces to exactly that process; see
+[ADR-0001](../docs/adr/0001-neutralise-molecules-dimension-for-validation.md).
+
+```bash
+uv run python simulate_independent.py --seed 42     # writes a scenario directory
+cd independent_y_s255_m255_seed42
+
+bash check_neutrality_invariant.sh                  # run this first
+
+bash rung1_pin_field_and_states.sh                  # then each rung in order
+uv run python validate_independent.py . rung1_pin_field_and_states
+```
+
+Run the rungs in order and stop at the first failure. Each pins strictly less
+than the one before, so a failure localises the fault: rung 1 pins the field and
+both trees' internal states and is close to closed form; rung 2 adds the Z Gibbs
+sweep; rung 3 infers everything from observations, against the simple error model
+alone, then LOTUS alone, then both.
+
+Rung 1 is also the empirical ceiling. Its scores are what the looser rungs should
+be judged against, which is why `validate_independent.py` reports rather than
+gates by default — pass `--gates rung1_.../validation_summary.json` to score a
+later rung against it.
+
+Separately, `replicates.sh` runs the C++ simulator under the same parameters and
+`compare_fields.py` compares both against the analytic prediction. That tests the
+simulator; the rungs test inference.
+
+### Things that will bite you
+
+- **The branch-length budget is conserved.** Bins must sum to
+  `n_branches * n_bins / 2`, enforced once at startup and preserved by every
+  proposal thereafter, which only ever moves +1 on one branch and -1 on another.
+  Branch lengths summing to anything else are *unreachable*, not merely unlikely.
+- **Initial-value files are dispatched by filename.** A `name`/`value` file is
+  only matched up by parameter name when the filename contains `trace`,
+  `simulated`, `meanVar`, `statePosteriors` or `posteriorMode`. Otherwise it must
+  be a bare one-column file of exactly the right length. Renaming
+  `simulated_pinned_molecules.txt` breaks every run script.
+- **Paper counts are log-transformed on read.** Research effort uses
+  `log(count + 1)`, not the raw count (`TTree::get_paper_counts`). Simulating
+  LOTUS data from raw counts is indistinguishable from an inference bug.
+- **`--numThreads all` is not reproducible.** Two identical invocations under the
+  same `--fixedSeed` give posterior means differing by ~0.2 posterior standard
+  deviations. Any test that compares runs exactly must pass `--numThreads 1`;
+  `check_neutrality_invariant.sh` does.
+- **"internal nodes" means two different things.** The startup log line counts
+  internal nodes *excluding* roots, while `get_number_of_internal_nodes()` — the
+  one that sizes the Z dimension — *includes* them.
