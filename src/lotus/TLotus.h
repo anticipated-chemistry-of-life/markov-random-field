@@ -20,6 +20,7 @@
 #include "TCurrentState.h"
 #include "cli.h"
 #include "constants.h"
+#include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/y_storage/TStorageYMatrix.h"
@@ -27,6 +28,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,15 +45,14 @@ private:
 	// data
 	TStorageYMatrix _L;
 
-	/// The occurences is the log(count + 1) of the paper counts
-	std::vector<std::vector<double>> _occurrence_counters;
+	/// Raw publication counts per (kept dimension, leaf). Constant data; the log transform and the
+	/// detection rates are applied by the reporting model.
+	std::vector<std::vector<size_t>> _paper_counts;
 
-	/// Memoized per-(kept dimension, leaf) research-effort factor: 1 - exp(-gamma_i * occ_i[leaf]).
-	/// Both gamma (changes only on a gamma MCMC move) and the occurrence counts (constant data) are
-	/// invariant across a whole Y sweep, so we precompute this table whenever gamma changes; the
-	/// per-cell hot path (_calculate_research_effort) then becomes a product of table lookups with
-	/// no exp() and no gamma-parameter access. See _refresh_research_effort_factor.
-	std::vector<std::vector<double>> _research_effort_factor;
+	/// The per-cell emission, memoized against the current gamma and error rate. Rebuilt as a whole
+	/// value whenever either parameter moves, so there is nothing to refresh in place and nothing
+	/// to revert.
+	std::optional<lotus_math::TReportingModel> _reporting_model;
 
 	// how to collapse
 	TCollapser _collapser;
@@ -68,21 +69,16 @@ private:
 	TCurrentState _tmp_state_along_last_dim;
 
 	// private functions
-	[[nodiscard]] double
-	_calculate_research_effort(const IndexArray &index_in_collapsed_space) const;
-	/// Recompute _research_effort_factor from the current gamma values. Call whenever gamma
-	/// changes.
-	void _refresh_research_effort_factor();
-	[[nodiscard]] double
-	_calculate_probability_of_L_given_x(bool x, bool L,
-	                                    const IndexArray &index_in_collapsed_space) const;
-	[[nodiscard]] double
-	_calculate_probability_of_L_given_x(bool x, bool L,
-	                                    size_t linear_index_in_collapsed_space) const;
+	/// Gather the raw paper counts of every kept dimension. Both the inference path and the
+	/// simulation path need this, and neither can do it before the collapser is initialized.
+	void _gather_paper_counts();
+	/// Build a reporting model from the current gamma and error rate.
+	[[nodiscard]] lotus_math::TReportingModel _build_reporting_model() const;
+	[[nodiscard]] const lotus_math::TReportingModel &_reporting() const {
+		return _reporting_model.value();
+	}
 	[[nodiscard]] double
 	_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatrix &Y) const;
-
-	[[nodiscard]] double _return_error_rate(bool L) const;
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
@@ -109,13 +105,12 @@ public:
 	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }
 
 	// --- MCMC moves on gamma / epsilon ---
-	// Both recompute the full LOTUS likelihood: gamma and epsilon enter every cell. The revert
-	// functions restore the cached likelihood when stattools rejects a proposal.
+	// Both recompute the full LOTUS likelihood: gamma and epsilon enter every cell. Each builds a
+	// candidate reporting model and installs it; on rejection the candidate is simply dropped, so
+	// the only thing to restore is the cached likelihood.
 
-	[[nodiscard]] double ll_ratio_after_gamma_move(const TStorageYMatrix &Y);
-	void revert_gamma_move();
-	[[nodiscard]] double ll_ratio_after_error_rate_move(const TStorageYMatrix &Y);
-	void revert_error_rate_move();
+	[[nodiscard]] double ll_ratio_after_parameter_move(const TStorageYMatrix &Y);
+	void revert_parameter_move();
 
 	// --- simulation ---
 

@@ -1,7 +1,7 @@
 //
 // Created by madleina on 03.03.25.
 //
-#include "TLotus.h"
+#include "lotus/TLotus.h"
 
 #ifdef USE_LOTUS
 
@@ -48,11 +48,7 @@ void TLotus::load_from_file(const std::string &filename) {
 	// initialize the size of L
 	_L.initialize(1, len_per_dimension_lotus);
 
-	_occurrence_counters.resize(
-	    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
-	}
+	_gather_paper_counts();
 
 	IndexArray index_in_collapsed_space{};
 	for (; !file.empty(); file.popFront()) {
@@ -130,30 +126,29 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
 	// new Y = 0 -> x_is_one_for_Y_0 will always be false here (because of the previous
 	// if-statement) new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
-		prob[i] = _calculate_probability_of_L_given_x(
-		    i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state), index_in_collapsed_space);
+		prob[i] = _reporting().probability(i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state),
+		                                   index_in_collapsed_space);
 	}
 }
 
-double TLotus::ll_ratio_after_gamma_move(const TStorageYMatrix &Y) {
-	_oldLL = _curLL;                           // store current likelihood
-	_refresh_research_effort_factor();         // gamma was just proposed -> rebuild the factors
-	_curLL = calculate_log_likelihood_of_L(Y); // calculate likelihood of new gamma
+double TLotus::ll_ratio_after_parameter_move(const TStorageYMatrix &Y) {
+	// One function for both gamma and the error rate: the reporting model is built from both, so a
+	// move on either replaces it wholesale. Rebuilding the factor table on an error-rate move is
+	// strictly redundant -- the factors depend only on gamma -- but it is one exp() per leaf
+	// against a likelihood sweep over the whole container space, and it buys a single code path
+	// with no parameter-specific state.
+	_oldLL           = _curLL;
+	_reporting_model = _build_reporting_model();
+	_curLL           = calculate_log_likelihood_of_L(Y);
 	return _curLL - _oldLL;
 }
 
-void TLotus::revert_gamma_move() {
-	_curLL = _oldLL;                   // reset
-	_refresh_research_effort_factor(); // gamma was reverted -> resync the factors
+void TLotus::revert_parameter_move() {
+	// The candidate model is simply dropped: stattools has already restored the parameter, so the
+	// next build reads the old value. Only the cached likelihood has to be put back by hand.
+	_curLL           = _oldLL;
+	_reporting_model = _build_reporting_model();
 }
-
-double TLotus::ll_ratio_after_error_rate_move(const TStorageYMatrix &Y) {
-	_oldLL = _curLL;                           // store current likelihood
-	_curLL = calculate_log_likelihood_of_L(Y); // calculate likelihood of new error rate
-	return _curLL - _oldLL;
-}
-
-void TLotus::revert_error_rate_move() { _curLL = _oldLL; }
 
 void TLotus::guess_initial_values(const TStorageYMatrix &Y) {
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
@@ -161,60 +156,25 @@ void TLotus::guess_initial_values(const TStorageYMatrix &Y) {
 	}
 	_error_rate->set(ProgramOptions::EPSILON);
 
-	_refresh_research_effort_factor(); // gamma just set -> sync the memoized factors before the LL
+	_reporting_model = _build_reporting_model(); // parameters just set -> build before the LL
 
 	// initialize _curLL
 	_curLL = calculate_log_likelihood_of_L(Y);
 	_oldLL = _curLL;
 }
 
-void TLotus::_refresh_research_effort_factor() {
-	// Recompute the memoized research-effort factors from the current gamma values. Called whenever
-	// gamma changes (init, accepted/rejected gamma moves, simulation), so the per-cell hot path
-	// never has to call exp() or touch the gamma parameter storage.
-	_research_effort_factor.resize(_occurrence_counters.size());
-	for (size_t i = 0; i < _occurrence_counters.size(); ++i) {
-		const double gamma = (double)_gamma->value(i);
-		const auto &occ    = _occurrence_counters[i];
-		auto &factor       = _research_effort_factor[i];
-		factor.resize(occ.size());
-		for (size_t leaf = 0; leaf < occ.size(); ++leaf) {
-			factor[leaf] = 1.0 - std::exp(-gamma * occ[leaf]);
-		}
+void TLotus::_gather_paper_counts() {
+	// for example, size is 2 if keep molecules and species
+	_paper_counts.resize(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
+		_paper_counts[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
 	}
 }
 
-double TLotus::_calculate_research_effort(const IndexArray &index_in_collapsed_space) const {
-	// _research_effort_factor[i][leaf] caches 1 - exp(-gamma_i * occ_i[leaf]) (see
-	// _refresh_research_effort_factor), so this collapses to a product of table lookups.
-	double prod = 1.0;
-	for (size_t i = 0; i < _research_effort_factor.size(); ++i) {
-		prod *= _research_effort_factor[i][index_in_collapsed_space[i]];
-	}
-	return prod;
-}
-
-double TLotus::_return_error_rate(bool L) const {
-	if (L) { return _error_rate->value(); }
-	return 1.0 - _error_rate->value();
-}
-
-double
-TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
-                                            const IndexArray &index_in_collapsed_space) const {
-	if (x && L) { return _calculate_research_effort(index_in_collapsed_space); }
-	if (x) { return 1.0 - _calculate_research_effort(index_in_collapsed_space); }
-	return _return_error_rate(L);
-}
-
-double TLotus::_calculate_probability_of_L_given_x(bool x, bool L,
-                                                   size_t linear_index_in_collapsed_space) const {
-	if (!x) {
-		// result is independent of position — no index conversion needed
-		return _return_error_rate(L);
-	}
-	const auto index_in_L_space = _L.get_multi_dimensional_index(linear_index_in_collapsed_space);
-	return _calculate_probability_of_L_given_x(x, L, index_in_L_space);
+lotus_math::TReportingModel TLotus::_build_reporting_model() const {
+	std::vector<double> gammas(_collapser.num_dim_to_keep());
+	for (size_t i = 0; i < gammas.size(); ++i) { gammas[i] = (double)_gamma->value(i); }
+	return {gammas, (double)_error_rate->value(), _paper_counts};
 }
 
 double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatrix &Y) const {
@@ -245,13 +205,19 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatri
 			l_cur.advance();
 		}
 
-		sum_log.add(_calculate_probability_of_L_given_x(state_of_Y, state_of_L, i));
+		// Only a present cell needs its position; for an absent one the answer is the same
+		// everywhere, so the linear-to-multidimensional conversion is skipped entirely.
+		if (state_of_Y) {
+			sum_log.add(
+			    _reporting().probability(true, state_of_L, _L.get_multi_dimensional_index(i)));
+		} else {
+			sum_log.add(_reporting().probability_absent(state_of_L));
+		}
 		++n_visited;
 	}
 
 	// Every remaining cell is (Y = 0, L = 0): a single constant, position-independent term.
-	const double p_absent =
-	    _calculate_probability_of_L_given_x(false, false, static_cast<size_t>(0));
+	const double p_absent = _reporting().probability_absent(false);
 	return sum_log.getSum() + static_cast<double>(total - n_visited) * std::log(p_absent);
 }
 
@@ -283,13 +249,9 @@ void TLotus::prepare_for_simulation(TDataModel *box) {
 
 	// 2025.06.16 after discussion of last week with Dan, we should be able to also simuate and
 	// provide the number of papers prior to the simulation.
-	_occurrence_counters.resize(
-	    _collapser.num_dim_to_keep()); // for example, size is 2 if keep molecules and species
-	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		_occurrence_counters[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
-	}
+	_gather_paper_counts();
 
-	_refresh_research_effort_factor(); // gamma + counts ready -> sync factors before simulating L
+	_reporting_model = _build_reporting_model(); // counts + parameters ready -> ready to simulate L
 }
 
 void TLotus::simulate_L_from_Y(const TStorageYMatrix &Y) {
@@ -303,8 +265,7 @@ void TLotus::simulate_L_from_Y(const TStorageYMatrix &Y) {
 			// look up the state of Y directly (a missing cell reads as 0).
 			x = Y.is_one(i);
 		}
-		const double proba =
-		    _calculate_probability_of_L_given_x(x, true, multi_dim_index_in_L_space);
+		const double proba = _reporting().probability(x, true, multi_dim_index_in_L_space);
 		const coretools::Probability p(proba);
 		if (coretools::instances::randomGenerator().pickOneOfTwo(p)) { _L.insert_one(i); }
 	}

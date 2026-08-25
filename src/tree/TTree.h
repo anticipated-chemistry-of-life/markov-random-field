@@ -473,7 +473,11 @@ public:
 		_Z.insert_in_Z(indices_to_insert);
 	};
 
-	[[nodiscard]] std::vector<double> get_paper_counts() const {
+	/// Raw publication counts per leaf, exactly as the file states them. The `log(count + 1)` that
+	/// research effort consumes is applied by `lotus_math::TReportingModel`, not here: CONTEXT.md
+	/// makes the raw count the input to research effort, and a getter that quietly returned logs
+	/// was a documented trap in the validation harness.
+	[[nodiscard]] std::vector<size_t> get_paper_counts() const {
 		std::string parameter_name = get_tree_name() + "_paper_counts";
 		if (!coretools::instances::parameters().exists(parameter_name)) {
 			throw coretools::TUserError("Parameter '", parameter_name,
@@ -490,7 +494,7 @@ public:
 		}
 
 		// now we initilise the vector of paper counts. The entries should only be leaves
-		std::vector<double> paper_counts(get_number_of_leaves(), 0.0);
+		std::vector<size_t> paper_counts(get_number_of_leaves(), 0);
 
 		for (; !file.empty(); file.popFront()) {
 			const std::string leaf_name = std::string(file.get(0));
@@ -507,7 +511,7 @@ public:
 				                            paper_counts.size(), ".");
 			}
 
-			paper_counts[leaf_index] = std::log(count + 1);
+			paper_counts[leaf_index] = count;
 		}
 
 		return paper_counts;

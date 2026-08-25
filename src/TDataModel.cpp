@@ -109,19 +109,19 @@ void TDataModel::update_markov_field() { _markov_field.update(*this, _mrf_update
 
 #ifdef USE_LOTUS
 double TDataModel::calculateLLRatio(TLotus::TypeParamGamma *, size_t /*Index*/) {
-	return _lotus.ll_ratio_after_gamma_move(_markov_field.get_Y_matrix());
+	return _lotus.ll_ratio_after_parameter_move(_markov_field.get_Y_matrix());
 }
 
 double TDataModel::calculateLLRatio(TLotus::TypeParamErrorRate *, size_t /*Index*/) {
-	return _lotus.ll_ratio_after_error_rate_move(_markov_field.get_Y_matrix());
+	return _lotus.ll_ratio_after_parameter_move(_markov_field.get_Y_matrix());
 }
 
 void TDataModel::updateTempVals(TLotus::TypeParamGamma *, size_t /*Index*/, bool Accepted) {
-	if (!Accepted) { _lotus.revert_gamma_move(); }
+	if (!Accepted) { _lotus.revert_parameter_move(); }
 }
 
 void TDataModel::updateTempVals(TLotus::TypeParamErrorRate *, size_t /*Index*/, bool Accepted) {
-	if (!Accepted) { _lotus.revert_error_rate_move(); }
+	if (!Accepted) { _lotus.revert_parameter_move(); }
 }
 #endif
 

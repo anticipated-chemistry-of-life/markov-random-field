@@ -9,10 +9,13 @@ observed.
 
 **LOTUS.** A record is reported for a present pair with probability equal to the
 research effort spent on it, and for an absent pair with probability
-`error_rate` (`TLotus::_calculate_probability_of_L_given_x`, src/TLotus.cpp:202).
-Research effort is a product across the kept dimensions of
-`1 - exp(-gamma_i * papers_i[leaf])` (src/TLotus.cpp:171). Both trees are kept by
-default, so both need paper counts.
+`error_rate` (`lotus_math::TReportingModel::probability`,
+src/lotus/TLotusMath.h). Research effort is a product across the kept dimensions
+of `1 - exp(-gamma_i * log(papers_i[leaf] + 1))`. Both trees are kept by default,
+so both need paper counts.
+
+Note the C++ carries one gamma *per kept dimension*; this module takes a single
+scalar and uses it for both, which is the special case the scenarios simulate.
 """
 
 from __future__ import annotations
@@ -28,11 +31,14 @@ def sample_paper_counts(rng: np.random.Generator, n_leaves: int) -> np.ndarray:
 def occurrence_count(papers: np.ndarray) -> np.ndarray:
     """The paper counts as the C++ actually uses them: `log(count + 1)`.
 
-    `TTree::get_paper_counts` applies this transform when reading the file
-    (src/tree/TTree.h:517), so research effort is driven by the log count, not
-    the raw one. Using raw counts here would make the simulated LOTUS data
-    inconsistent with the likelihood being fitted, which is indistinguishable
-    from an inference bug.
+    `lotus_math::occurrence_count` applies this transform (src/lotus/TLotusMath.h),
+    so research effort is driven by the log count, not the raw one. Using raw
+    counts here would make the simulated LOTUS data inconsistent with the
+    likelihood being fitted, which is indistinguishable from an inference bug.
+
+    The transform used to live in `TTree::get_paper_counts`, which meant that
+    getter returned something other than paper counts. It now returns the raw
+    counts the file states.
     """
     return np.log(np.asarray(papers, dtype=float) + 1.0)
 
