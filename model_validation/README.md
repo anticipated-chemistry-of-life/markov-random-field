@@ -39,6 +39,26 @@ Separately, `replicates.sh` runs the C++ simulator under the same parameters and
 `compare_fields.py` compares both against the analytic prediction. That tests the
 simulator; the rungs test inference.
 
+### What the rungs cannot see
+
+Pinning the molecules dimension neutral is what makes an independent reference
+possible, and it also makes an entire class of faults invisible. `log_nu`
+drifting downward on a doubly balanced tree is one of them.
+
+`diagnose_normaliser.py` covers that case by shrinking the field until every
+configuration can be enumerated, so the quantity the rungs cannot reach — the
+normalising constant of the two-tree product — can be computed exactly rather
+than estimated:
+
+```bash
+uv run python diagnose_normaliser.py
+```
+
+It reports where the C++'s objective peaks against where the correctly
+normalised one does, for a molecules dimension swept from neutral to strongly
+non-neutral, and then reproduces the drift as an MCMC and removes it. See
+[ADR-0002](../docs/adr/0002-the-two-tree-product-is-unnormalised.md).
+
 ### Remarks
 
 - **The branch-length budget is conserved.** Bins must sum to

@@ -28,6 +28,10 @@ _Avoid_: rate, mu, lambda
 A tree dimension whose parameters are pinned so that every transition matrix row is exactly (0.5, 0.5), making that tree contribute a constant factor to every field conditional. A neutral dimension cannot influence the field.
 _Avoid_: disabled tree, ignored dimension, flat tree
 
+**Field normalising constant**:
+The sum, over every possible field, of the product of the two trees' field likelihoods. Written `C`. It depends on both trees' parameters, and omitting it from an acceptance ratio biases those parameters toward small nu. It is a constant only when one dimension is neutral. See ADR-0002.
+_Avoid_: partition function, Z (that is the internal state), evidence
+
 ## Branch lengths
 
 **Bin**:
