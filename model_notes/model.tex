@@ -91,13 +91,64 @@ $\alpha_c \in (0,1)$ the generator is
 The stationary distribution is $(1-\alpha_c,\ \alpha_c)$, so $\alpha_c$ is the long-run
 probability of state $1$ and $\nu_c$ sets how fast a branch forgets its parent.
 
+\subsubsection*{Why $e^{\Lambda_c t}$ has a closed form}
+\label{sec:closedform}
+
+The exponential above is written out rather than computed, and it is worth recording why that
+is possible, because the code relies on it: \texttt{TTransitionGrid} evaluates the expression
+directly and links no matrix-exponential routine at all.
+
+Two facts pin the eigenvalues of $\Lambda_c$. First, every generator has rows summing to zero
+--- that is what conservation of probability means --- so $\Lambda_c \mathbf{1} = 0$ and
+$\lambda_1 = 0$ is always an eigenvalue, with the constant vector as its eigenvector. Second, a
+$2 \times 2$ matrix has exactly two eigenvalues, and they sum to the trace:
+\[
+  \operatorname{tr} \Lambda_c
+  \;=\; \nu_c\bigl(-\alpha_c - (1-\alpha_c)\bigr)
+  \;=\; -\nu_c ,
+  \qquad\text{hence}\qquad
+  \lambda_2 = -\nu_c .
+\]
+(Equivalently $\det \Lambda_c = 0$, which forces one eigenvalue to vanish.)
+
+With two distinct eigenvalues the exponential is a two-term expression in $t$,
+\[
+  e^{\Lambda_c t} \;=\; A\,e^{\lambda_1 t} + B\,e^{\lambda_2 t}
+  \;=\; A + B\,e^{-\nu_c t},
+\]
+with $A$ and $B$ independent of $t$. Two limits fix them. At $t = 0$ the exponential is the
+identity, so $A + B = I$; as $t \to \infty$ it tends to the stationary matrix $\Pi_c$ whose
+rows are both $(1-\alpha_c,\ \alpha_c)$, while $e^{-\nu_c t} \to 0$, so $A = \Pi_c$. Therefore
+\begin{equation}
+  P_c(t) \;=\; \Pi_c + \bigl(I - \Pi_c\bigr) e^{-\nu_c t},
+  \label{eq:closedform}
+\end{equation}
+which is the matrix displayed above, entry by entry.
+
+The economy is worth being explicit about: a general $e^{\Lambda t}$ needs an algorithm ---
+scaling-and-squaring with a Pad\'e approximant, say --- that sums a series. Here a single
+\emph{scalar} exponential $e^{-\nu_c t}$ suffices, and $\Pi_c$ and $I - \Pi_c$ are constants.
+
+This is a property of the \emph{number of states}, not of this model. Every generator
+contributes the eigenvalue $0$; a two-state generator has only one eigenvalue left over, and
+the trace determines it. So every two-state chain admits \eqref{eq:closedform}. From three
+states upward the remaining eigenvalues are roots of a cubic or higher, may be complex or
+repeated, and a numerical routine is generally needed again.
+
 Branch lengths are discretised onto a grid of $K$ bins. With
 $\delta = 2/(K+1)$, bin $k$ represents length $\delta\,(k + \tfrac12)$, and the code builds
 the bin matrices by the recursion
 $P^{(0)} = e^{\Lambda_c \delta/2}$, $P^{(k)} = P^{(k-1)} e^{\Lambda_c \delta}$
-(\texttt{TMatrices::\_fill\_matrices}). The bin indices are constrained so that the mean
+(\texttt{TTransitionGrid}). The bin indices are constrained so that the mean
 branch length is $1$, which is what makes $\nu_c$ identifiable at all: only the product
 $\nu_c t$ enters $P$.
+
+Note that \eqref{eq:closedform} is applied only to the two base matrices, at $\delta/2$ and at
+$\delta$; the rest of the grid is still reached by the recursion above, and \emph{not} by
+evaluating \eqref{eq:closedform} at each $\delta\,(k+\tfrac12)$ in turn. That is deliberate.
+The independent Python reference used for validation does evaluate per bin, so the two
+implementations reach the same matrices by different routes and a discretisation error in
+either one is exposed rather than mirrored. See \texttt{docs/adr/0003}.
 
 For a single tree, writing $x_v$ for the state at node $v$, $\pa(v)$ for its parent and
 $t_v$ for the length of the branch above it, the factor is
