@@ -10,9 +10,10 @@
 // Branches are only ever bins, so what the likelihood actually needs is one transition matrix per
 // bin. This module holds exactly those, plus the stationary distribution the roots are drawn from.
 //
-// The grid is built by *recursion*, not by evaluating the closed form at each bin's centre:
-// `P_0 = expm(Lambda * Delta / 2)`, then `P_k = P_{k-1} * expm(Lambda * Delta)`. That divergence
-// from the Python reference is deliberate; see docs/adr/0003.
+// The grid is built by *recursion*, not by evaluating each bin's own branch length: the closed form
+// is used exactly twice, for `P_0 = expm(Lambda * Delta / 2)` and the step `expm(Lambda * Delta)`,
+// and then `P_k = P_{k-1} * step`. That divergence from the Python reference, which does evaluate
+// per bin, is deliberate and load-bearing; see docs/adr/0003 before simplifying it away.
 //
 // A grid is immutable: it is a value derived from (alpha, nu, bins) and nothing else. A Metropolis
 // proposal builds a second one and the caller keeps whichever it accepts, which is why there is no
@@ -24,8 +25,8 @@
 
 #include "TBinGrid.h"
 
-#include <armadillo>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -50,8 +51,12 @@ private:
 	std::vector<std::array<double, 4>> _matrices;
 	double _alpha = 0.0;
 
-	static std::array<double, 4> from_arma(const arma::mat &matrix) {
-		return {matrix(0, 0), matrix(0, 1), matrix(1, 0), matrix(1, 1)};
+	/// `expm(Lambda * t)` in closed form. The generator has eigenvalues 0 and -nu, so its
+	/// exponential collapses to a single decay term and needs no numerical routine.
+	static std::array<double, 4> transition(double alpha, double nu, double t) {
+		const double decay = std::exp(-nu * t);
+		return {1.0 - alpha + alpha * decay, alpha * (1.0 - decay), (1.0 - alpha) * (1.0 - decay),
+		        alpha + (1.0 - alpha) * decay};
 	}
 
 	/// Rows sum to 1, so only the first column is multiplied out and the second is the remainder.
@@ -74,17 +79,13 @@ public:
 			return;
 		}
 
-		arma::mat lambda(2, 2);
-		lambda(0, 0) = (-alpha) * nu;
-		lambda(0, 1) = alpha * nu;
-		lambda(1, 0) = (1.0 - alpha) * nu;
-		lambda(1, 1) = (alpha - 1.0) * nu;
-
 		const double delta = bins.delta();
 		// The first bin is half a step in, since bin k stands for the length at its centre.
-		_matrices[0]       = from_arma(arma::expmat(lambda * delta / 2.0));
+		_matrices[0]       = transition(alpha, nu, delta / 2.0);
 		// Step matrix is also called matrix alpha in the supplementary notes.
-		const auto step    = from_arma(arma::expmat(lambda * delta));
+		const auto step    = transition(alpha, nu, delta);
+		// Only the two base matrices are evaluated directly; the rest of the grid is walked by
+		// repeated multiplication. See docs/adr/0003 for why this is not a loop over `transition`.
 		for (size_t k = 1; k < _matrices.size(); ++k) {
 			_matrices[k] = product(_matrices[k - 1], step);
 		}

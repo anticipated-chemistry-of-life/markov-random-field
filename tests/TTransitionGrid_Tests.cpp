@@ -8,6 +8,7 @@
 #include "process/TTransitionGrid.h"
 #include "gtest/gtest.h"
 
+#include <armadillo>
 #include <cmath>
 #include <vector>
 
@@ -18,15 +19,23 @@ constexpr size_t N_BINS = 10;
 const std::vector<double> ALPHAS = {0.05, 0.3, 0.5, 0.72, 0.95};
 const std::vector<double> NUS    = {0.05, 0.6, 3.0};
 
-/// P(child = to | parent = from) after time `t`, derived from the matrix exponential of the
-/// generator rather than from the grid recursion. This is the oracle the implementation is checked
-/// against, and it is deliberately the *other* route to the same number.
-double closed_form(double alpha, double nu, double t, bool from, bool to) {
-	const double decay = std::exp(-nu * t);
-	if (!from && !to) { return 1.0 - alpha + alpha * decay; }
-	if (!from && to) { return alpha * (1.0 - decay); }
-	if (from && !to) { return (1.0 - alpha) * (1.0 - decay); }
-	return alpha + (1.0 - alpha) * decay;
+/// P(child = to | parent = from) after time `t`, from a *numerical* matrix exponential of the
+/// generator.
+///
+/// This is deliberately the other route to the same number: TTransitionGrid evaluates the closed
+/// form and walks the grid by multiplication, while this calls armadillo's expmat at `t` directly.
+/// Keeping expmat here rather than in the implementation is what preserves the cross-check after
+/// the closed-form swap -- had both sides used the same formula, the comparison would be vacuous.
+double numerical_expm(double alpha, double nu, double t, bool from, bool to) {
+	arma::mat generator(2, 2);
+	generator(0, 0) = (-alpha) * nu;
+	generator(0, 1) = alpha * nu;
+	generator(1, 0) = (1.0 - alpha) * nu;
+	generator(1, 1) = (alpha - 1.0) * nu;
+
+	// expmat returns a lazy expression; materialise it before indexing.
+	const arma::mat exponential = arma::expmat(generator * t);
+	return exponential(static_cast<arma::uword>(from), static_cast<arma::uword>(to));
 }
 
 } // namespace
@@ -85,9 +94,10 @@ TEST(TransitionGrid, a_long_branch_forgets_the_parent) {
 // The grid against an independent route to the same numbers
 // --------------------------------------------------------------------------
 
-TEST(TransitionGrid, the_recursion_matches_the_closed_form_at_every_bin_centre) {
-	// The grid is built by walking up the bins by repeated multiplication, never by evaluating the
-	// closed form -- see docs/adr/0003. The two must nonetheless agree, and this is what says so.
+TEST(TransitionGrid, the_recursion_matches_a_numerical_matrix_exponential_at_every_bin_centre) {
+	// The grid reaches bin k by multiplying its way up from bin 0, never by evaluating anything at
+	// bin k's own branch length -- see docs/adr/0003. The two routes must nonetheless agree, and
+	// this is what says so.
 	const TBinGrid bins(N_BINS);
 	for (const double alpha : ALPHAS) {
 		for (const double nu : NUS) {
@@ -97,7 +107,7 @@ TEST(TransitionGrid, the_recursion_matches_the_closed_form_at_every_bin_centre) 
 				for (const bool from : {false, true}) {
 					for (const bool to : {false, true}) {
 						EXPECT_NEAR(grid.probability(bin, from, to),
-						            closed_form(alpha, nu, t, from, to), 1e-12)
+						            numerical_expm(alpha, nu, t, from, to), 1e-12)
 						    << "alpha " << alpha << " nu " << nu << " bin " << bin << " from "
 						    << from << " to " << to;
 					}
