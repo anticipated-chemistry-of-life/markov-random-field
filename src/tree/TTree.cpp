@@ -96,7 +96,7 @@ void TTree::guessInitialValues() {
 		_log_nu_c->set(c, log_nu_init);
 		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
+		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 	}
 
 	_set_initial_branch_lengths(false);
@@ -117,7 +117,7 @@ void TTree::_simulateUnderPrior(Storage *) {
 	_set_initial_branch_lengths(true);
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_lambda(_alpha_c->value(c), _nu_c[c]);
+		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 	}
 }
 
@@ -156,7 +156,7 @@ void TTree::simulate_Z(size_t tree_index) {
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
-		double proba_root = TClique::get_stationary_probability(true, _alpha_c->value(c));
+		double proba_root = clique.transition_grid().stationary(true);
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS

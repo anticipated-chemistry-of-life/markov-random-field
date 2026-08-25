@@ -124,17 +124,19 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
-	template<bool UseTryMatrix>
+	/// One node's contribution to a clique's log-likelihood under `process`. Called twice per
+	/// node, once with the clique's current grid and once with the proposal's candidate.
 	void _compute_LL_old_and_new_nu_or_alpha(const TNode &node, size_t index_in_tree,
 	                                         const TClique &clique, bool state_of_node,
 	                                         coretools::TSumLogProbability &LL,
 	                                         const TCurrentState &current_state,
-	                                         std::optional<size_t> branch_len_bin, double alpha) {
+	                                         std::optional<size_t> branch_len_bin,
+	                                         const TTransitionGrid &process) const {
 		if (node.is_root()) {
-			LL.add(TClique::get_stationary_probability(state_of_node, alpha));
+			LL.add(process.stationary(state_of_node));
 		} else {
-			double prob = clique.calculate_prob_to_parent<UseTryMatrix>(
-			    index_in_tree, this, branch_len_bin.value(), current_state);
+			double prob = clique.calculate_prob_to_parent(
+			    index_in_tree, this, branch_len_bin.value(), current_state, process);
 			LL.add(prob);
 		}
 	}
@@ -144,56 +146,44 @@ private:
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
-		// calculate LL for old mu
-		// No need to change Lambda (rate matrix), just go over entire tree and calculate
-		// probabilities
-		double old_value;
 		double new_value;
 		if constexpr (IsAlpha) {
-			old_value = param->oldValue(c);
 			new_value = param->value(c);
 		} else {
-			old_value = _nu_c[c];
 			new_value = std::exp(param->value(c));
 		}
 
+		// No need to mutate anything: the candidate is a second grid built from the proposed value,
+		// and the clique keeps whichever of the two is accepted. The old value is not read back
+		// from the parameter either -- the clique's current grid still carries it.
+		const auto &clique              = _cliques[c];
+		const auto &current             = clique.transition_grid();
+		const TTransitionGrid candidate = [&] {
+			if constexpr (IsAlpha) {
+				return TTransitionGrid(new_value, _nu_c[c], _grid());
+			} else {
+				return TTransitionGrid(_alpha_c->value(c), new_value, _grid());
+			}
+		}();
+
 		coretools::TSumLogProbability LL_old;
 		coretools::TSumLogProbability LL_new;
-		if constexpr (IsAlpha) {
-			_cliques[c].update_lambda(new_value, _nu_c[c]);
-		} else {
-			_cliques[c].update_lambda(_alpha_c->value(c), new_value);
-		}
-
-		const auto &clique = _cliques[c];
-		std::optional<size_t> branch_len_bin;
 		for (size_t i = 0; i < _nodes.size(); ++i) {
 			const auto &node   = _nodes[i];
 			bool state_of_node = current_state.get(i);
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
+			std::optional<size_t> branch_len_bin;
 			if (!node.is_root()) {
 				branch_len_bin = _binned_branch_lengths->oldValue(
 				    _leaves_and_internal_nodes_without_roots_indices[i]);
-			} else {
-				branch_len_bin = std::nullopt;
 			}
 
-			if constexpr (IsAlpha) {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           old_value);
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin, new_value);
-			} else {
-				_compute_LL_old_and_new_nu_or_alpha<false>(node, i, clique, state_of_node, LL_old,
-				                                           current_state, branch_len_bin,
-				                                           _alpha_c->value(c));
-				_compute_LL_old_and_new_nu_or_alpha<true>(node, i, clique, state_of_node, LL_new,
-				                                          current_state, branch_len_bin,
-				                                          _alpha_c->value(c));
-			}
+			_compute_LL_old_and_new_nu_or_alpha(node, i, clique, state_of_node, LL_old,
+			                                    current_state, branch_len_bin, current);
+			_compute_LL_old_and_new_nu_or_alpha(node, i, clique, state_of_node, LL_new,
+			                                    current_state, branch_len_bin, candidate);
 		}
 
 		// calculate Hastings ratio
@@ -204,7 +194,7 @@ private:
 		// accept or reject
 		bool accepted = param->acceptOrReject(logH, coretools::TRange(c));
 		if (accepted) {
-			_cliques[c].accept_update_mu();
+			_cliques[c].set_transition_grid(candidate);
 			if constexpr (!IsAlpha) { _nu_c[c] = new_value; }
 		}
 	}
@@ -362,8 +352,8 @@ public:
 			// update Z
 			if constexpr (!FixZ) {
 				indices_to_insert[i] = _cliques[i].update_Z(
-				    _joint_log_prob_density, current_state, _Z, this, _alpha_c->value(i),
-				    _binned_branch_lengths, _leaves_and_internal_nodes_without_roots_indices);
+				    _joint_log_prob_density, current_state, _Z, this, _binned_branch_lengths,
+				    _leaves_and_internal_nodes_without_roots_indices);
 			}
 
 			// update nu and alpha

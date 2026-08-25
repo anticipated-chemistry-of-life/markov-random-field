@@ -24,6 +24,10 @@ _Avoid_: prevalence, base rate, pi
 The switching rate of the two-state continuous-time process running along a tree's branches. One value per clique, carried in log space.
 _Avoid_: rate, mu, lambda
 
+**Transition grid**:
+One clique's two-state process discretised onto the bin grid: one transition matrix per bin, plus the stationary distribution its roots are drawn from. Built from an alpha, a nu and a bin grid, and immutable — a Metropolis proposal builds a second grid rather than mutating the first, so there is no "try" state. `TTransitionGrid`, `src/process/`.
+_Avoid_: transition matrices, lambda matrices, clique process, try matrix
+
 **Neutral dimension**:
 A tree dimension whose parameters are pinned so that every transition matrix row is exactly (0.5, 0.5), making that tree contribute a constant factor to every field conditional. A neutral dimension cannot influence the field.
 _Avoid_: disabled tree, ignored dimension, flat tree

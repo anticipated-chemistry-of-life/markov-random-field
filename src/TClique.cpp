@@ -13,8 +13,6 @@
 #include <unordered_set>
 #include <vector>
 
-double TMatrices::_delta;
-
 TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_dimension,
                  size_t n_nodes, size_t increment) {
 	_start_index_in_leaves_space = start_index_in_leaves_space;
@@ -34,11 +32,11 @@ TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TSto
 
 std::vector<size_t> TClique::update_Z(
     std::vector<double> &joint_prob_density, TCurrentState &current_state, TStorageZMatrix &Z,
-    const TTree *tree, TypeAlpha alpha, const TypeParamBinBranches *binned_branch_lengths,
+    const TTree *tree, const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
-	const double stationary_0 = get_stationary_probability(false, alpha);
+	const double stationary_0 = transition_grid().stationary(false);
 
 	for (const auto index_in_tree : tree->get_internal_nodes()) {
 		// prepare log probabilities for the two possible states
@@ -178,16 +176,16 @@ void TClique::_calculate_log_prob_node_to_children(
     std::array<coretools::TSumLogProbability, 2> &sum_log,
     const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
-	const auto &node = tree->get_node(index_in_tree);
+	const auto &node    = tree->get_node(index_in_tree);
+	const auto &process = transition_grid();
 	for (const auto &child_index : node.children_indices_in_tree()) {
 		// Note: need to take old value of branch length because new values were proposed before the
 		// loop started
 		auto bin_length = binned_branch_lengths->oldValue(
 		    leaves_and_internal_nodes_without_roots_indices[child_index]);
-		const auto &matrix_for_bin = _cur_matrices[bin_length];
-		const bool child_state     = current_state.get(child_index);
+		const bool child_state = current_state.get(child_index);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			sum_log[i].add(matrix_for_bin(i, child_state));
+			sum_log[i].add(process.probability(bin_length, i, child_state));
 		}
 	}
 }

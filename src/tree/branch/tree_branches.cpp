@@ -60,15 +60,19 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 	const size_t index_in_tree =
 	    _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
 
+	// Both lengths are scored under the clique's current process: this move proposes a branch
+	// length, not a parameter, so the transition grid is the same on either side of the ratio.
+	const auto &process = clique.transition_grid();
+
 	// calculate probability of parent to node for old branch length
-	double prob_old = clique.calculate_prob_to_parent<false>(
+	double prob_old = clique.calculate_prob_to_parent(
 	    index_in_tree, this, _binned_branch_lengths->oldValue(index_in_binned_branch_length),
-	    current_state);
+	    current_state, process);
 
 	// calculate probability of parent to node for new branch length
-	double prob_new = clique.calculate_prob_to_parent<false>(
+	double prob_new = clique.calculate_prob_to_parent(
 	    index_in_tree, this, _binned_branch_lengths->value(index_in_binned_branch_length),
-	    current_state);
+	    current_state, process);
 
 	return prob_new / prob_old;
 }
