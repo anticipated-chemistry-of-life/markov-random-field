@@ -296,12 +296,17 @@ def test_initial_value_filenames_keep_their_reader_marker():
 
 def test_neutral_pinning_covers_every_molecules_parameter():
     """Leaving one free would let a meaningless chain wander into the traces."""
-    pinned = {flag.lstrip("-").split(".")[0]
-              for flag in scenario._PIN_MOLECULES.split()
-              if flag.startswith("--molecules_")}
+    pinned = {
+        flag.lstrip("-").split(".")[0]
+        for flag in scenario._PIN_MOLECULES.split()
+        if flag.startswith("--molecules_")
+    }
     assert pinned == {
-        "molecules_alpha", "molecules_log_nu", "molecules_mean_log_nu",
-        "molecules_var_log_nu", "molecules_branch_lengths",
+        "molecules_alpha",
+        "molecules_log_nu",
+        "molecules_mean_log_nu",
+        "molecules_var_log_nu",
+        "molecules_branch_lengths",
     }
 
 
@@ -310,8 +315,10 @@ def test_research_effort_uses_log_paper_counts():
     papers = np.array([0, 1, 3, 9])
     gamma = 1.1
     expected = 1.0 - np.exp(-gamma * np.log(papers + 1.0))
-    assert np.allclose(research_effort(papers, np.array([3]), gamma)[:, 0],
-                       expected * (1.0 - np.exp(-gamma * np.log(4.0))))
+    assert np.allclose(
+        research_effort(papers, np.array([3]), gamma)[:, 0],
+        expected * (1.0 - np.exp(-gamma * np.log(4.0))),
+    )
 
 
 def test_a_leaf_with_no_papers_is_never_reported():

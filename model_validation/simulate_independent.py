@@ -19,26 +19,63 @@ from src.independent.scenario import RUNGS, ScenarioConfig, build_scenario
 
 @click.command()
 @click.option("--seed", type=int, default=42, show_default=True)
-@click.option("--number_of_species", type=int, default=255, show_default=True,
-              help="Nodes in the species tree (2^k - 1).")
-@click.option("--number_of_molecules", type=int, default=255, show_default=True,
-              help="Nodes in the molecules tree (2^k - 1).")
+@click.option(
+    "--number_of_species",
+    type=int,
+    default=255,
+    show_default=True,
+    help="Nodes in the species tree (2^k - 1).",
+)
+@click.option(
+    "--number_of_molecules",
+    type=int,
+    default=255,
+    show_default=True,
+    help="Nodes in the molecules tree (2^k - 1).",
+)
 @click.option("--mean_log_nu", type=float, default=-0.5, show_default=True)
-@click.option("--var_log_nu", type=float, default=0.25, show_default=True,
-              help="Variance, not standard deviation.")
-@click.option("--epsilon", type=float, default=0.05, show_default=True,
-              help="Simple error model per-cell flip probability.")
+@click.option(
+    "--var_log_nu",
+    type=float,
+    default=0.25,
+    show_default=True,
+    help="Variance, not standard deviation.",
+)
+@click.option(
+    "--epsilon",
+    type=float,
+    default=0.05,
+    show_default=True,
+    help="Simple error model per-cell flip probability.",
+)
 @click.option("--gamma", type=float, default=1.1, show_default=True)
-@click.option("--error_rate", type=float, default=0.001, show_default=True,
-              help="LOTUS probability of a record for an absent pair.")
+@click.option(
+    "--error_rate",
+    type=float,
+    default=0.001,
+    show_default=True,
+    help="LOTUS probability of a record for an absent pair.",
+)
 @click.option("--iterations", type=int, default=10_000, show_default=True)
-@click.option("--burnin", type=int, default=1_000, show_default=True,
-              help="Iterations per burn-in round.")
+@click.option(
+    "--burnin",
+    type=int,
+    default=1_000,
+    show_default=True,
+    help="Iterations per burn-in round.",
+)
 @click.option("--n_burnin_rounds", type=int, default=10, show_default=True)
-@click.option("--true_branch_lengths", is_flag=True,
-              help="Start the chain on the true branch lengths instead of flat ones.")
-@click.option("--out", type=click.Path(), default=None,
-              help="Output directory (default: independent_y_s<n>_m<n>_seed<seed>).")
+@click.option(
+    "--true_branch_lengths",
+    is_flag=True,
+    help="Start the chain on the true branch lengths instead of flat ones.",
+)
+@click.option(
+    "--out",
+    type=click.Path(),
+    default=None,
+    help="Output directory (default: independent_y_s<n>_m<n>_seed<seed>).",
+)
 def main(out: str | None, **kwargs) -> None:
     """Write a complete scenario: truth, observations, and per-rung run scripts."""
     config = ScenarioConfig(
@@ -82,8 +119,10 @@ def main(out: str | None, **kwargs) -> None:
     click.echo("\nRun in order, stopping at the first failure:")
     click.echo(f"  bash {path}/check_neutrality_invariant.sh")
     for name, _, _, _ in RUNGS:
-        click.echo(f"  bash {path}/{name}.sh && "
-                   f"uv run python validate_independent.py {path} {name}")
+        click.echo(
+            f"  bash {path}/{name}.sh && "
+            f"uv run python validate_independent.py {path} {name}"
+        )
 
 
 if __name__ == "__main__":

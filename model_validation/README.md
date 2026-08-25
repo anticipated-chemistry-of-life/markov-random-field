@@ -39,12 +39,12 @@ Separately, `replicates.sh` runs the C++ simulator under the same parameters and
 `compare_fields.py` compares both against the analytic prediction. That tests the
 simulator; the rungs test inference.
 
-### Things that will bite you
+### Remarks
 
 - **The branch-length budget is conserved.** Bins must sum to
   `n_branches * n_bins / 2`, enforced once at startup and preserved by every
   proposal thereafter, which only ever moves +1 on one branch and -1 on another.
-  Branch lengths summing to anything else are *unreachable*, not merely unlikely.
+  Branch lengths summing to anything else are _unreachable_, not merely unlikely.
 - **Initial-value files are dispatched by filename.** A `name`/`value` file is
   only matched up by parameter name when the filename contains `trace`,
   `simulated`, `meanVar`, `statePosteriors` or `posteriorMode`. Otherwise it must
@@ -58,5 +58,5 @@ simulator; the rungs test inference.
   deviations. Any test that compares runs exactly must pass `--numThreads 1`;
   `check_neutrality_invariant.sh` does.
 - **"internal nodes" means two different things.** The startup log line counts
-  internal nodes *excluding* roots, while `get_number_of_internal_nodes()` — the
-  one that sizes the Z dimension — *includes* them.
+  internal nodes _excluding_ roots, while `get_number_of_internal_nodes()` — the
+  one that sizes the Z dimension — _includes_ them.

@@ -107,7 +107,9 @@ def _coverage(trace: pd.DataFrame, truth: dict[str, float], prefix: str) -> dict
         "coverage": float(inside.mean()),
         "rmse": float(np.sqrt(np.mean((mean - actual) ** 2))),
         "bias": float(np.mean(mean - actual)),
-        "correlation": float(np.corrcoef(mean, actual)[0, 1]) if len(names) > 2 else None,
+        "correlation": float(np.corrcoef(mean, actual)[0, 1])
+        if len(names) > 2
+        else None,
         "moved": float(np.mean([trace[n].nunique() > 1 for n in names])),
     }
 
@@ -225,8 +227,12 @@ def _apply_gates(summary: dict, gates_path: pathlib.Path) -> bool:
 @click.command()
 @click.argument("scenario_dir", type=click.Path(exists=True, file_okay=False))
 @click.argument("rung")
-@click.option("--gates", type=click.Path(exists=True), default=None,
-              help="A previous rung's summary JSON to score this one against.")
+@click.option(
+    "--gates",
+    type=click.Path(exists=True),
+    default=None,
+    help="A previous rung's summary JSON to score this one against.",
+)
 def main(scenario_dir: str, rung: str, gates: str | None) -> None:
     """Score RUNG's output inside SCENARIO_DIR against the simulated truth."""
     base = pathlib.Path(scenario_dir)

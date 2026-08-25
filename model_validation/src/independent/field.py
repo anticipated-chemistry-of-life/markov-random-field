@@ -142,9 +142,7 @@ def sample_states(
     if len(nus) != n_cliques:
         raise ValueError("alphas and nus must have one entry per clique.")
     if len(bins) != tree.n_branches:
-        raise ValueError(
-            f"Expected {tree.n_branches} branch lengths, got {len(bins)}."
-        )
+        raise ValueError(f"Expected {tree.n_branches} branch lengths, got {len(bins)}.")
 
     # p_one[c, k, parent] = P(child = 1 | parent, clique c, bin k)
     matrices = transition_matrices(alphas, nus, grid_branch_lengths(n_bins))

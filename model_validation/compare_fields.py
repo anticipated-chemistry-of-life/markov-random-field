@@ -94,9 +94,7 @@ def _sibling_observed(
     for offset, (left, right, _, _) in enumerate(pairs):
         n_cliques = fields[0].shape[1]
         slot = slice(offset * n_cliques, (offset + 1) * n_cliques)
-        observed[slot] = np.mean(
-            [f[left] != f[right] for f in fields], axis=0
-        )
+        observed[slot] = np.mean([f[left] != f[right] for f in fields], axis=0)
 
     order = np.argsort(predicted)
     groups = np.array_split(order, N_DECILES)
@@ -167,7 +165,7 @@ def main(scenario_dir: str, replicates: int) -> None:
         deviation = observed - alphas
         click.echo(
             f"  {label:<10} max |observed - alpha| {np.abs(deviation).max():.4f}   "
-            f"mean {deviation.mean():+.4f}   corr {np.corrcoef(observed, alphas)[0,1]:.4f}"
+            f"mean {deviation.mean():+.4f}   corr {np.corrcoef(observed, alphas)[0, 1]:.4f}"
         )
         summary[f"presence_{label}"] = {
             "max_abs_deviation": float(np.abs(deviation).max()),

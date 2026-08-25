@@ -82,8 +82,7 @@ def write_field(
     n_molecule_leaves = molecules.n_leaves
     if field.shape != (species.n_leaves, n_molecule_leaves):
         raise ValueError(
-            f"Field is {field.shape}, expected "
-            f"{(species.n_leaves, n_molecule_leaves)}."
+            f"Field is {field.shape}, expected {(species.n_leaves, n_molecule_leaves)}."
         )
 
     flat = field.reshape(-1).astype(np.int8)

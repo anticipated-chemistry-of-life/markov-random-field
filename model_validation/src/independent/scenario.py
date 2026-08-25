@@ -40,8 +40,13 @@ DEFAULT_REPLICATES = 20
 # The `simulated` substring in both names is required by stattools' filename-
 # driven reader dispatch; see the comment in `build_scenario`. `test_independent`
 # asserts it, so a rename fails in Python rather than mysteriously in C++.
-INITIAL_VALUE_MARKERS = ("trace", "simulated", "meanVar", "statePosteriors",
-                         "posteriorMode")
+INITIAL_VALUE_MARKERS = (
+    "trace",
+    "simulated",
+    "meanVar",
+    "statePosteriors",
+    "posteriorMode",
+)
 PINNED_MOLECULES = "simulated_pinned_molecules.txt"
 SIMULATE_PARAMETERS = "simulated_parameters.txt"
 
@@ -109,7 +114,9 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
             f"threshold ({F.STATIONARY_NU_THRESHOLD}); the molecules dimension "
             "would not be neutral and the whole scenario would be invalid."
         )
-    molecule_internal_states = rng.random((species.n_leaves, molecules.n_internals)) < 0.5
+    molecule_internal_states = (
+        rng.random((species.n_leaves, molecules.n_internals)) < 0.5
+    )
     # A second, unrelated draw. Under neutrality the species posteriors must not
     # be able to tell these two apart; `check_neutrality_invariant.sh` checks it.
     molecule_internal_states_alt = (
@@ -122,7 +129,11 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
     molecule_papers = sample_paper_counts(rng, molecules.n_leaves)
     simple_data = simulate_simple_error(rng, latent_field, config.epsilon)
     lotus = simulate_lotus(
-        rng, latent_field, species_papers, molecule_papers, config.gamma,
+        rng,
+        latent_field,
+        species_papers,
+        molecule_papers,
+        config.gamma,
         config.error_rate,
     )
 
@@ -140,7 +151,9 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         out / "species_papers.txt", "species", species.leaf_names(), species_papers
     )
     io.write_paper_counts(
-        out / "molecules_papers.txt", "molecules", molecules.leaf_names(),
+        out / "molecules_papers.txt",
+        "molecules",
+        molecules.leaf_names(),
         molecule_papers,
     )
 
@@ -173,16 +186,23 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         out / "simulated_Z_species.txt", species_internal_states, species, molecules, 0
     )
     io.write_internal_states(
-        out / "simulated_Z_molecules.txt", molecule_internal_states, species,
-        molecules, 1,
+        out / "simulated_Z_molecules.txt",
+        molecule_internal_states,
+        species,
+        molecules,
+        1,
     )
     io.write_internal_states(
-        out / "simulated_Z_molecules_alt.txt", molecule_internal_states_alt, species,
-        molecules, 1,
+        out / "simulated_Z_molecules_alt.txt",
+        molecule_internal_states_alt,
+        species,
+        molecules,
+        1,
     )
     io.write_observations(out / "simulated_lotus.tsv", lotus, species, molecules)
-    io.write_observations(out / "simulated_simple_data.tsv", simple_data, species,
-                          molecules)
+    io.write_observations(
+        out / "simulated_simple_data.tsv", simple_data, species, molecules
+    )
 
     meta = {
         "seed": config.seed,
@@ -315,9 +335,7 @@ def _infer_command(
         f"    --numThreads {threads} \\\n"
         f"    --writeBurnin \\\n"
         f"    --write_joint_log_prob_density \\\n"
-        f"    {_PIN_MOLECULES}"
-        + (f" \\\n    {extra}" if extra else "")
-        + "\n"
+        f"    {_PIN_MOLECULES}" + (f" \\\n    {extra}" if extra else "") + "\n"
     )
 
 
@@ -379,8 +397,7 @@ def _write_scripts(out: pathlib.Path, config: ScenarioConfig) -> None:
 
     replicates = out / "replicates.sh"
     replicates.write_text(
-        _PREAMBLE.format(flags="s")
-        + f'N="${{1:-{DEFAULT_REPLICATES}}}"\n'
+        _PREAMBLE.format(flags="s") + f'N="${{1:-{DEFAULT_REPLICATES}}}"\n'
         'for i in $(seq 1 "$N"); do\n'
         '  mkdir -p "replicates/cpp_$i"\n'
         '  "$ACOL" simulate \\\n'
@@ -392,11 +409,13 @@ def _write_scripts(out: pathlib.Path, config: ScenarioConfig) -> None:
         "      --epsilon_simple_model 0.5 \\\n"
         "      --numThreads all --write_Y --write_Z \\\n"
         '      --fixedSeed "$((1000 + i))" \\\n'
-        "      " + " \\\n      ".join(
+        "      "
+        + " \\\n      ".join(
             f"--{tree}_{p} {SIMULATE_PARAMETERS}"
             for tree in ("species", "molecules")
             for p in ("branch_lengths", "mean_log_nu", "var_log_nu", "log_nu", "alpha")
-        ) + "\n"
+        )
+        + "\n"
         "done\n"
         "\n"
         'echo "Now: uv run python compare_fields.py . --replicates $N"\n'
