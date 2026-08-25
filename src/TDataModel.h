@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "TLotus.h"
+#include "lotus/TLotus.h"
 #include "TMarkovField.h"
 #include "Types.h"
 #include "ntfy/TNtfyNotifier.h"
