@@ -118,6 +118,54 @@ TEST(TransitionGrid, the_recursion_matches_a_numerical_matrix_exponential_at_eve
 }
 
 // --------------------------------------------------------------------------
+// Characterisation
+// --------------------------------------------------------------------------
+
+TEST(TransitionGrid, the_grid_still_produces_the_values_it_was_extracted_with) {
+	// Frozen output of the grid as it stood when TTransitionGrid was pulled out of TClique, at the
+	// 1e-12 tolerance the closed-form swap was accepted under.
+	//
+	// The property tests above say the grid is *a* correct two-state process. This says it is the
+	// *same* one as before, which is a different claim: a change to the bin-centre offset or to
+	// Delta = 2 / (n_bins + 1) would keep every property intact while moving every number. Only
+	// P(child = 1 | parent = 0) is stored -- rows sum to 1 and the stationary identity fixes the
+	// other row, so this one column pins the whole grid.
+	struct TCase {
+		double alpha;
+		double nu;
+		std::array<double, N_BINS> zero_to_one;
+	};
+
+	const std::vector<TCase> cases = {
+	    {0.3,
+	     0.6,
+	     {0.015925360119753394, 0.045284786560594203, 0.071609883990938039, 0.095214253651003,
+	      0.11637908574794986, 0.13535650917179232, 0.15237259501448408, 0.16763004967200512,
+	      0.18131062961138589, 0.19357730656890382}},
+	    {0.72,
+	     3.0,
+	     {0.17186372157825092, 0.40231211921281163, 0.53587500486256756, 0.61328515223698543,
+	      0.65815039221272897, 0.68415331077513786, 0.69922403755892049, 0.70795870344830125,
+	      0.71302112607022905, 0.7159551962599271}},
+	    {0.05,
+	     0.05,
+	     {0.0002267569800781577, 0.00067719048037584439, 0.0011235476873504568,
+	      0.0015658654902814817, 0.0020041804446109257, 0.0024385287749646434,
+	      0.0028689463781460534, 0.0032954688261028764, 0.0037181313688671169,
+	      0.0041369689374679552}},
+	};
+
+	const TBinGrid bins(N_BINS);
+	for (const auto &one : cases) {
+		const TTransitionGrid grid(one.alpha, one.nu, bins);
+		for (size_t bin = 0; bin < N_BINS; ++bin) {
+			EXPECT_NEAR(grid.probability(bin, false, true), one.zero_to_one[bin], 1e-12)
+			    << "alpha " << one.alpha << " nu " << one.nu << " bin " << bin;
+		}
+	}
+}
+
+// --------------------------------------------------------------------------
 // Neutrality (ADR-0001)
 // --------------------------------------------------------------------------
 
