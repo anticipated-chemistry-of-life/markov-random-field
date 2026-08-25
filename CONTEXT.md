@@ -46,6 +46,10 @@ _Avoid_: bin midpoint, branch length
 The total of a tree's bins, which is fixed at `n_branches · n_bins / 2` and conserved for the lifetime of a chain. Equivalent to requiring the mean grid branch length to be exactly 1. A set of branch lengths that misses the budget is unreachable, not merely improbable.
 _Avoid_: branch length sum, normalisation constraint
 
+**Bin grid**:
+One tree's bin↔length correspondence: the bin width, the grid branch length each bin stands for, the branch-length budget their sum must hit, and the ±1 step that conserves it. A pure function of `n_bins` — it knows nothing of the tree's topology, of the parameters, or of the random generator, which is what lets it be tested without running a chain. `TBinGrid`, `src/process/`.
+_Avoid_: branch-length grid, binning, discretisation
+
 ## Observations
 
 **LOTUS record**:

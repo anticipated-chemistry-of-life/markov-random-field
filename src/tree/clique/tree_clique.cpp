@@ -54,7 +54,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 		// get start index of each clique in leaves space
 		auto start_index_in_leaves_space = coretools::getSubscriptsAsArray(i, _dimension_cliques);
 		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
-		_cliques.back().initialize(_delta, _number_of_bins);
+		_cliques.back().initialize(get_delta(), get_number_of_bins());
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;

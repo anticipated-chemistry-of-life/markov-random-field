@@ -30,7 +30,7 @@ STATIONARY_NU_THRESHOLD = 25.0
 
 
 def delta(n_bins: int = N_BINS) -> float:
-    """Bin width. `_initialize_grid_branch_lengths`, tree_branches.cpp:17."""
+    """Bin width. `TBinGrid`'s constructor, src/process/TBinGrid.h."""
     return 2.0 / (n_bins + 1.0)
 
 
@@ -65,9 +65,10 @@ def transition_matrices(
 def branch_length_budget(n_branches: int, n_bins: int = N_BINS) -> int:
     """The total of a tree's bins, which the MCMC conserves for life.
 
-    `_bin_branch_lengths` forces this total at startup (tree_branches.cpp:191),
-    and every proposal thereafter moves +1 on one branch and -1 on another
-    (tree_branches.cpp:46-47). Bins summing to anything else are unreachable.
+    `TBinGrid::bins_from_lengths` forces this total at startup and
+    `TBinGrid::step_direction` moves +1 on one branch and -1 on another for
+    every proposal thereafter (src/process/TBinGrid.h). Bins summing to
+    anything else are unreachable.
     """
     return n_branches * n_bins // 2
 
@@ -104,7 +105,7 @@ def sample_binned_branch_lengths(
 
 
 def bin_from_length(length: float, n_bins: int = N_BINS) -> int:
-    """Replica of `TTree::_get_bin_branch_length` (tree_branches.cpp:28)."""
+    """Replica of `TBinGrid::bin_from_length` (src/process/TBinGrid.h)."""
     if length <= 0.0:
         return 0
     return min(int(length / delta(n_bins)), n_bins - 1)
@@ -113,7 +114,7 @@ def bin_from_length(length: float, n_bins: int = N_BINS) -> int:
 def bins_from_tree_lengths(lengths: np.ndarray, n_bins: int = N_BINS) -> np.ndarray:
     """Replica of the C++ read path: normalise to mean 1, then bin.
 
-    Mirrors `_bin_branch_lengths_from_tree` (tree_branches.cpp:212) *without* the
+    Mirrors `TBinGrid::bins_from_lengths` (src/process/TBinGrid.h) *without* the
     trailing repair, so tests can check that writing grid centres round-trips
     back to the bins that produced them.
     """

@@ -16,6 +16,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "omp.h"
+#include "process/TBinGrid.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
@@ -60,12 +61,14 @@ private:
 	// dimension of the tree
 	size_t _dimension;
 
-	// For binning branch lengths
-	double _delta          = 0.0;
-	size_t _number_of_bins = 0;
-	std::vector<double> _grid_branch_lengths;
+	// For binning branch lengths. The grid is set once by _initialize_grid_branch_lengths, during
+	// _load_from_file; every use goes through _grid(), which throws rather than reading a
+	// half-built grid if that ever stops being true.
+	std::optional<TBinGrid> _bin_grid;
 	std::vector<size_t> _binned_branch_lengths_from_tree;
 	TypeParamBinBranches *_binned_branch_lengths = nullptr;
+
+	[[nodiscard]] const TBinGrid &_grid() const { return _bin_grid.value(); }
 
 	// cliques
 	std::vector<TClique> _cliques;
@@ -93,8 +96,7 @@ private:
 	void _set_initial_branch_lengths(bool is_simulation);
 	[[nodiscard]] std::vector<size_t> _bin_branch_lengths(const std::vector<double> &branch_lengths,
 	                                                      bool exclude_root) const;
-	[[nodiscard]] size_t _get_bin_branch_length(double branch_length) const;
-	void _bin_branch_lengths_from_tree(std::vector<double> &branch_lengths);
+	void _bin_branch_lengths_from_tree(const std::vector<double> &branch_lengths);
 	void _initialize_grid_branch_lengths();
 	void _initialize_Z(IndexArray num_leaves_per_tree);
 	void _initialize_cliques(const IndexArray &num_leaves_per_tree,
@@ -327,8 +329,8 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	[[nodiscard]] double get_delta() const { return _delta; }
-	[[nodiscard]] size_t get_number_of_bins() const { return _number_of_bins; }
+	[[nodiscard]] double get_delta() const { return _grid().delta(); }
+	[[nodiscard]] size_t get_number_of_bins() const { return _grid().n_bins(); }
 	std::vector<TClique> &get_cliques();
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);
@@ -451,8 +453,9 @@ public:
 			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() +
 			                                           "_branch_length_grid.txt",
 			                                       header_branch_len, "\t");
-			for (size_t i = 0; i < _grid_branch_lengths.size(); ++i) {
-				branch_len_file.writeln(i, _grid_branch_lengths[i]);
+			const auto &grid_branch_lengths = _grid().grid_branch_lengths();
+			for (size_t i = 0; i < grid_branch_lengths.size(); ++i) {
+				branch_len_file.writeln(i, grid_branch_lengths[i]);
 			}
 		}
 	}

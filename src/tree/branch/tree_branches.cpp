@@ -3,35 +3,21 @@
 
 void TTree::_initialize_grid_branch_lengths() {
 	// read a, b and K from command-line
-	_number_of_bins = ProgramOptions::BRANCH_LENGTHS_BINS;
+	const size_t number_of_bins = ProgramOptions::BRANCH_LENGTHS_BINS;
 
 	const size_t max_type =
 	    std::numeric_limits<coretools::underlyingType<TypeBinnedBranchLengths>::type>::max();
-	if (_number_of_bins >= max_type) {
-		throw coretools::TUserError("More bins (", _number_of_bins, ") required than type allows (",
+	if (number_of_bins >= max_type) {
+		throw coretools::TUserError("More bins (", number_of_bins, ") required than type allows (",
 		                            max_type, ")! Please decrease n_bins or change type of bins.");
 	}
-	TypeBinnedBranchLengths::setMax(_number_of_bins - 1);
+	// The one piece of the grid that cannot live in TBinGrid: this configures a stattools type, so
+	// it is global rather than per-grid. TBinGrid carries its own n_bins instead of reading these
+	// bounds back out, which is what removes the "initialize the grid first" ordering constraint
+	// that used to be implicit in every proposal.
+	TypeBinnedBranchLengths::setMax(number_of_bins - 1);
 
-	// calculate Delta
-	_delta = 2.0 / ((double)_number_of_bins + 1.0);
-
-	// bin k stands for the branch length at the *center* of the bin: the transition matrices are
-	// built as exp(Lambda * Delta * (k + 0.5)) (see TMatrices::_fill_matrices), so Delta * (k + 0.5)
-	// is the branch length bin k actually represents in the likelihood.
-	_grid_branch_lengths.resize(_number_of_bins);
-	for (size_t k = 0; k < _number_of_bins; ++k) {
-		_grid_branch_lengths[k] = _delta * ((double)k + 0.5);
-	}
-}
-
-size_t TTree::_get_bin_branch_length(double branch_length) const {
-	// bin k covers [k * Delta, (k + 1) * Delta) and is represented by its center
-	// _grid_branch_lengths[k] = Delta * (k + 0.5); the bin whose center is closest to branch_length
-	// is therefore floor(branch_length / Delta), clamped to the grid.
-	if (branch_length <= 0.0) { return 0; }
-	const auto bin = static_cast<size_t>(branch_length / _delta);
-	return std::min(bin, _number_of_bins - 1);
+	_bin_grid.emplace(number_of_bins);
 }
 
 stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
@@ -48,39 +34,21 @@ void TTree::_propose_new_branch_lengths(size_t p1, size_t p2, int val) {
 }
 
 void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs) {
-	for (size_t p = 0; p < pairs.length(); ++p) {
-		auto [p1, p2] = pairs.getIndexPair(p);
+	const auto &grid = _grid();
 
-		const bool both_at_min =
-		    _binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::min() &&
-		    _binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::min();
-		const bool both_at_max =
-		    _binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::max() &&
-		    _binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::max();
-		if (both_at_min || both_at_max) {
-			// can not do update, both are at boundary
-			_propose_new_branch_lengths(p1, p2, 0);
-		} else if (_binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::min()) {
-			// p1 is at minimum (at the left-most position) -> can only go to the right
-			_propose_new_branch_lengths(p1, p2, 1);
-		} else if (_binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::min()) {
-			// p2 is at minimum (at the left-most position) -> can only go to the right
-			_propose_new_branch_lengths(p1, p2, -1);
-		} else if (_binned_branch_lengths->value(p1) == TypeBinnedBranchLengths::max()) {
-			// p1 is at maximum (at the right-most position) -> can only go to the left
-			_propose_new_branch_lengths(p1, p2, -1);
-		} else if (_binned_branch_lengths->value(p2) == TypeBinnedBranchLengths::max()) {
-			// p2 is at maximum (at the right-most position) -> can only go to the left
-			_propose_new_branch_lengths(p1, p2, 1);
-		} else {
-			// we can choose to go left or right
-			bool left = coretools::instances::randomGenerator().pickOneOfTwo(coretools::P(0.5));
-			if (left) {
-				_propose_new_branch_lengths(p1, p2, -1);
-			} else {
-				_propose_new_branch_lengths(p1, p2, 1);
-			}
-		}
+	for (size_t p = 0; p < pairs.length(); ++p) {
+		auto [p1, p2]       = pairs.getIndexPair(p);
+		const size_t first  = static_cast<size_t>(_binned_branch_lengths->value(p1));
+		const size_t second = static_cast<size_t>(_binned_branch_lengths->value(p2));
+
+		// Short-circuit on purpose: the coin is drawn only when the direction is actually free. At
+		// a boundary the direction is forced, and drawing anyway would consume a random number and
+		// shift the whole chain.
+		const bool decrease =
+		    grid.step_is_free(first, second) &&
+		    coretools::instances::randomGenerator().pickOneOfTwo(coretools::P(0.5));
+
+		_propose_new_branch_lengths(p1, p2, grid.step_direction(first, second, decrease));
 	}
 };
 
@@ -142,14 +110,11 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 		// translate bin into actual branch lengths
 		std::vector<double> vals(_binned_branch_lengths->size());
 		for (size_t i = 0; i < _binned_branch_lengths->size(); ++i) {
-			vals[i] = _grid_branch_lengths[_binned_branch_lengths->value(i)];
+			vals[i] = _grid().grid_branch_length(_binned_branch_lengths->value(i));
 		}
 
-		// normalize such that the average branch length is 1
-		double average = std::reduce(vals.begin(), vals.end(), 0.0) / (double)vals.size();
-		for (double &val : vals) { val = val / average; }
-
-		// translate back to bin
+		// translate back to bin (_bin_branch_lengths normalizes to mean 1 on the way). These are
+		// already branch-space values, so nothing needs excluding.
 		auto binned_branch_lengths = _bin_branch_lengths(vals, false);
 
 		// set these values (hack stattools to pretend initial values are not fixed)
@@ -172,60 +137,23 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 
 std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths,
                                                bool exclude_root) const {
-	std::vector<size_t> binned_branch_lengths;
-	binned_branch_lengths.reserve(get_number_of_nodes() - get_number_of_roots());
-
-	size_t sum_index_branches = 0;
+	// Which entries are roots is topology, so the filtering happens here. TBinGrid only ever sees
+	// branch-space lengths, all strictly positive -- which is the same set either way, since
+	// _add_parent writes 0.0 for a root and the reader rejects every other non-positive length.
+	std::vector<double> lengths_of_branches;
+	lengths_of_branches.reserve(get_number_of_nodes() - get_number_of_roots());
 	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
 		if (exclude_root && _nodes[i].is_root()) { continue; }
-		// find the bin whose center is closest to the branch length
-		const size_t index = _get_bin_branch_length(branch_lengths[i]);
-		binned_branch_lengths.push_back(index);
-		sum_index_branches += index;
+		lengths_of_branches.push_back(branch_lengths[i]);
 	}
 
-	// if total branch length is smaller than one, we randomly sample some branch lengths and
-	// increase them of one until we get a total branch length of one Adjust total_branch_length to
-	// exactly 1.0
-	size_t number_of_branches = get_number_of_nodes() - get_number_of_roots();
-	size_t goal               = (number_of_branches * _number_of_bins) / 2;
-	while (sum_index_branches != goal) {
-		auto idx = coretools::instances::randomGenerator().getRand<size_t>(
-		    0, binned_branch_lengths.size() - 1);
-		size_t new_bin;
-		if (sum_index_branches < goal) {
-			// Increase bin index
-			if (binned_branch_lengths[idx] >= _grid_branch_lengths.size() - 1) { continue; }
-			new_bin = binned_branch_lengths[idx] + 1;
-		} else {
-			// Decrease bin index
-			if (binned_branch_lengths.at(idx) == 0) { continue; }
-			new_bin = binned_branch_lengths[idx] - 1;
-		}
-		sum_index_branches += (new_bin - binned_branch_lengths[idx]);
-		binned_branch_lengths[idx] = new_bin;
-	}
-
-	return binned_branch_lengths;
+	// Normalizes to mean 1, bins, then walks the result onto the branch-length budget.
+	return _grid().bins_from_lengths(lengths_of_branches, [](size_t n) {
+		return coretools::instances::randomGenerator().getRand<size_t>(0, n - 1);
+	});
 }
 
-void TTree::_bin_branch_lengths_from_tree(std::vector<double> &branch_lengths) {
+void TTree::_bin_branch_lengths_from_tree(const std::vector<double> &branch_lengths) {
 	_initialize_grid_branch_lengths();
-	// normalize such that the average branch length is equal to 1.
-
-	double sum = 0.0;
-	int count  = 0;
-	for (const double &branch_length : branch_lengths) {
-		if (branch_length <= 0.0) { continue; }
-		sum += branch_length;
-		++count;
-	}
-	double average = sum / (double)count;
-
-	for (double &branch_length : branch_lengths) {
-		if (branch_length <= 0.0) { continue; }
-		branch_length = branch_length / average;
-	}
-
 	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
 };
