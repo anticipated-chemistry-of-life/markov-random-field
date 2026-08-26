@@ -20,7 +20,11 @@ MANIFEST="$SCRIPT_DIR/rung1_pre_split.sha256"
 "$SCRIPT_DIR/run_rung1.sh" >/dev/null
 
 cd "$OUT"
-hashes() { find . -type f ! -name 'acol.log' | sort | xargs shasum -a 256; }
+# LC_ALL=C, not the ambient locale: collation differs between locales, so a manifest recorded
+# under a UTF-8 locale and checked under LC_ALL=C (the default in most CI containers, and under
+# `env -i`) diffs as FAIL with every hash identical -- the exact false alarm this gate exists to
+# rule out. -print0/-0 for the same reason applied to whitespace in names.
+hashes() { find . -type f ! -name 'acol.log' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256; }
 
 if [[ "${1-}" == "--record" ]]; then
     hashes > "$MANIFEST"
