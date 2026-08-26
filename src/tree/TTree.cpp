@@ -4,6 +4,7 @@
 
 #include "TTree.h"
 #include "TClique.h"
+#include "tree/io/read_Z.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
@@ -56,7 +57,7 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 		num_leaves_per_tree[i] = all_trees[i]->get_number_of_leaves();
 	}
 
-	_initialize_Z(num_leaves_per_tree);
+	_initialize_Z(num_leaves_per_tree, all_trees);
 	_initialize_cliques(num_leaves_per_tree, all_trees);
 }
 
@@ -119,26 +120,16 @@ void TTree::_simulateUnderPrior(Storage *) {
 	}
 }
 
-void TTree::_initialize_Z(IndexArray num_leaves_per_tree) {
+void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
+                          const std::vector<std::unique_ptr<TTree>> &all_trees) {
 	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
 
 	_Z.initialize_dimensions(num_leaves_per_tree);
 
-	std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
+	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
-		std::string filename = coretools::instances::parameters().get(set_Z_cli_command);
-		coretools::TInputFile file(filename, coretools::FileType::Header);
-
-		if (file.numCols() != 4) {
-			throw coretools::TUserError("The file for setting Z must have 4 columns ! ");
-		}
-		// read each line of the file
-		for (; !file.empty(); file.popFront()) {
-			auto linear_index_in_Z_space = file.get<uint32_t>(2);
-			bool state                   = file.get<bool>(3);
-			if (state) { _Z.insert_one(linear_index_in_Z_space); }
-		}
-		return;
+		read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z, all_trees,
+		                 _dimension);
 	}
 }
 
