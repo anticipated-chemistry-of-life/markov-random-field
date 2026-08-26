@@ -87,9 +87,10 @@ non-neutral, and then reproduces the drift as an MCMC and removes it. See
   `simulated`, `meanVar`, `statePosteriors` or `posteriorMode`. Otherwise it must
   be a bare one-column file of exactly the right length. Renaming
   `simulated_pinned_molecules.txt` breaks every run script.
-- **Paper counts are log-transformed on read.** Research effort uses
-  `log(count + 1)`, not the raw count (`TTree::get_paper_counts`). Simulating
-  LOTUS data from raw counts is indistinguishable from an inference bug.
+- **Research effort is driven by log paper counts, not raw ones.** The counts
+  are read raw (`read_paper_counts` in `src/lotus/paper_counts.cpp`) and the
+  `log(count + 1)` is applied by `lotus_math::TReportingModel`. Simulating LOTUS
+  data from raw counts is indistinguishable from an inference bug.
 - **`--numThreads all` is not reproducible.** Two identical invocations under the
   same `--fixedSeed` give posterior means differing by ~0.2 posterior standard
   deviations. Any test that compares runs exactly must pass `--numThreads 1`;

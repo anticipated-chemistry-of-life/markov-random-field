@@ -42,6 +42,14 @@ void read_Z_from_file(const std::string &filename, TStorageZMatrix &Z,
 		                            expected_columns, " columns, but has ", file.numCols(), " !");
 	}
 
+	// A cell index is a fixed-size IndexArray, so more trees than it holds would run the fill loop
+	// below past its end. The rest of the sweep makes the same assumption -- this is a guard on it,
+	// not a limit this reader imposes.
+	if (trees.size() != NUMBER_OF_TREES) {
+		throw coretools::TDevError("read_Z_from_file was given ", trees.size(),
+		                           " trees, but a cell index holds ", NUMBER_OF_TREES, ".");
+	}
+
 	const size_t state_column = trees.size() + 1;
 	for (; !file.empty(); file.popFront()) {
 		// An absent cell reads as state 0, so a row saying 0 says nothing this loop has to act on.

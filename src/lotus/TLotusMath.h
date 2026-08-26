@@ -17,11 +17,10 @@
 // depends on where it sits. That asymmetry is the whole point of the source: a missing record for a
 // well-studied pair is evidence of absence, and for an unstudied pair it is evidence of nothing.
 //
-// The transform `log(count + 1)` lives here rather than in the tree loader, because CONTEXT.md
-// makes the raw publication count the input to research effort. Applying it while reading the file
-// produced a `get_paper_counts()` that returned something other than paper counts, which the
-// validation harness records as a trap: simulating LOTUS data from raw counts is indistinguishable
-// from an inference bug.
+// The transform `log(count + 1)` lives here rather than in the reader, because CONTEXT.md makes
+// the raw publication count the input to research effort. Applying it while reading the file gave
+// a reader that returned something other than paper counts, which the validation harness records
+// as a trap: simulating LOTUS data from raw counts is indistinguishable from an inference bug.
 //
 // A grid is immutable. It is a value derived from (gammas, error rate, paper counts), so a
 // Metropolis proposal on gamma builds a second one and the caller keeps whichever it accepts; there

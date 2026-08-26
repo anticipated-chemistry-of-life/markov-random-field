@@ -31,7 +31,7 @@ TReportingModel two_dimensions(double gamma_a, double gamma_b, double error_rate
 TEST(LotusMath, research_effort_uses_log_paper_counts_not_raw_ones) {
 	// The trap the validation README calls out: driving research effort from raw counts is
 	// indistinguishable from an inference bug. log(count + 1) is the transform, and it now lives
-	// here rather than inside TTree::get_paper_counts.
+	// here rather than in whatever reads the counts off disk.
 	// A small gamma keeps both routes away from saturation, where they would agree at ~1 whatever
 	// the transform: 40 papers give 0.17 through the log and 0.86 through the raw count.
 	const double gamma = 0.05;

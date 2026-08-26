@@ -36,9 +36,9 @@ def occurrence_count(papers: np.ndarray) -> np.ndarray:
     counts here would make the simulated LOTUS data inconsistent with the
     likelihood being fitted, which is indistinguishable from an inference bug.
 
-    The transform used to live in `TTree::get_paper_counts`, which meant that
-    getter returned something other than paper counts. It now returns the raw
-    counts the file states.
+    The transform used to be applied while reading the counts off disk, which
+    meant the reader returned something other than paper counts. It returns the
+    raw counts the file states now.
     """
     return np.log(np.asarray(papers, dtype=float) + 1.0)
 
