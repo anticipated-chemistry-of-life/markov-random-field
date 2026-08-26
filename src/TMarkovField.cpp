@@ -14,6 +14,7 @@
 #include "coretools/algorithms.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "tree/TTree.h"
+#include "tree/io/write_Z.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -326,8 +327,9 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	if (ProgramOptions::WRITE_Z) {
 		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 			const auto &tree = _trees[tree_idx];
-			tree->write_Z_to_file<true>(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt",
-			                            _trees, tree_idx);
+			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", *tree,
+			                _trees, tree_idx, /*write_full_Z =*/true);
+			if (ProgramOptions::WRITE_BRANCH_LENGTHS) { write_branch_length_grid(*tree); }
 		}
 	}
 }
