@@ -91,7 +91,8 @@ private:
 	_bin_branch_lengths(const std::vector<double> &branch_lengths) const;
 	void _bin_branch_lengths_from_tree();
 	void _initialize_grid_branch_lengths();
-	void _initialize_Z(IndexArray num_leaves_per_tree);
+	void _initialize_Z(IndexArray num_leaves_per_tree,
+	                   const std::vector<std::unique_ptr<TTree>> &all_trees);
 	void _initialize_cliques(const IndexArray &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	/// @brief Load tree from file
@@ -356,73 +357,13 @@ public:
 
 	[[nodiscard]] const std::string &get_tree_name() const { return _tree_name; }
 
-	void simulate_Z(size_t tree_index);
-
-	template<bool WriteFullZ>
-	void write_Z_to_file(const std::string &filename, std::vector<std::unique_ptr<TTree>> &trees,
-	                     size_t dimension_number_of_tree) const {
-		std::vector<std::string> header;
-		header.reserve(trees.size());
-		for (const auto &tree : trees) { header.push_back(tree->get_tree_name()); }
-		header.emplace_back("position");
-		header.emplace_back("Z_state");
-
-		if constexpr (WriteFullZ) {
-			std::array<size_t, 2> line{};
-			coretools::TOutputFile file(filename, header, "\t");
-			for (size_t i = 0; i < _Z.total_size_of_container_space(); ++i) {
-				// a missing cell reads as state 0, so a direct point lookup covers both cases
-				line                = {i, _Z.is_one(i)};
-				auto multidim_index = _Z.get_multi_dimensional_index(i);
-				std::vector<std::string> node_names;
-				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
-					if (idx == dimension_number_of_tree) {
-						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(
-						    multidim_index[idx]);
-						node_names.push_back(trees[idx]->get_node_id(node_idx));
-					} else {
-						size_t node_idx =
-						    trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
-						node_names.push_back(trees[idx]->get_node_id(node_idx));
-					};
-				};
-				file.writeln(node_names, line);
-			}
-		} else {
-			std::array<size_t, 2> line{};
-			coretools::TOutputFile file(filename, header, "\t");
-			// iterate only the stored (non-default) cells, in ascending linear-index order
-			for (const auto &[linear_index_in_Z_space, storage] : _Z.get_stored_entries()) {
-				const auto state    = storage.is_one();
-				line                = {linear_index_in_Z_space, state};
-				auto multidim_index = _Z.get_multi_dimensional_index(linear_index_in_Z_space);
-				std::vector<std::string> node_names;
-				for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
-					if (idx == dimension_number_of_tree) {
-						size_t node_idx = trees[idx]->get_node_index_from_internal_nodes_index(
-						    multidim_index[idx]);
-						node_names.push_back(trees[idx]->get_node_id(node_idx));
-					} else {
-						size_t node_idx =
-						    trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
-						node_names.push_back(trees[idx]->get_node_id(node_idx));
-					};
-				};
-				file.writeln(node_names, line);
-			}
-		}
-
-		if (ProgramOptions::WRITE_BRANCH_LENGTHS) {
-			std::vector<std::string> header_branch_len = {"grid_position", "branch_length"};
-			coretools::TOutputFile branch_len_file("acol_simulated_" + get_tree_name() +
-			                                           "_branch_length_grid.txt",
-			                                       header_branch_len, "\t");
-			const auto &grid_branch_lengths = _grid().grid_branch_lengths();
-			for (size_t i = 0; i < grid_branch_lengths.size(); ++i) {
-				branch_len_file.writeln(i, grid_branch_lengths[i]);
-			}
-		}
+	/// The branch length each bin stands for. A stored branch is only ever a bin index, so this is
+	/// what turns one back into a length.
+	[[nodiscard]] const std::vector<double> &grid_branch_lengths() const {
+		return _grid().grid_branch_lengths();
 	}
+
+	void simulate_Z(size_t tree_index);
 
 	[[nodiscard]] double get_complete_joint_density() const {
 		return coretools::containerSum(_joint_log_prob_density);
@@ -446,49 +387,5 @@ public:
 
 		_Z.insert_in_Z(indices_to_insert);
 	};
-
-	/// Raw publication counts per leaf, exactly as the file states them. The `log(count + 1)` that
-	/// research effort consumes is applied by `lotus_math::TReportingModel`, not here: CONTEXT.md
-	/// makes the raw count the input to research effort, and a getter that quietly returned logs
-	/// was a documented trap in the validation harness.
-	[[nodiscard]] std::vector<size_t> get_paper_counts() const {
-		std::string parameter_name = get_tree_name() + "_paper_counts";
-		if (!coretools::instances::parameters().exists(parameter_name)) {
-			throw coretools::TUserError("Parameter '", parameter_name,
-			                            "' not found. Please provide it.");
-		}
-
-		const auto filename = coretools::instances::parameters().get<std::string>(parameter_name);
-		coretools::TInputFile file(filename, coretools::FileType::Header);
-
-		if (file.numCols() != 2) {
-			throw coretools::TUserError("File '", filename,
-			                            "' is expected to have 2 columns, but has ", file.numCols(),
-			                            " !");
-		}
-
-		// now we initilise the vector of paper counts. The entries should only be leaves
-		std::vector<size_t> paper_counts(get_number_of_leaves(), 0);
-
-		for (; !file.empty(); file.popFront()) {
-			const std::string leaf_name = std::string(file.get(0));
-			const auto count            = file.get<size_t>(1);
-
-			// get the node index from the leaf name
-			const size_t node_index = this->get_node_index(leaf_name);
-			if (!isLeaf(node_index)) { throw coretools::TUserError("All nodes should be leaves."); }
-			const size_t leaf_index = this->get_index_within_leaves(node_index);
-
-			if (leaf_index >= paper_counts.size()) {
-				throw coretools::TUserError("Leaf index ", leaf_index,
-				                            " is out of bounds for paper counts vector of size ",
-				                            paper_counts.size(), ".");
-			}
-
-			paper_counts[leaf_index] = count;
-		}
-
-		return paper_counts;
-	}
 };
 #endif // METABOLITE_INFERENCE_TREE_H

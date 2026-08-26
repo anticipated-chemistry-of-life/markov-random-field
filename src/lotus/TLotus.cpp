@@ -13,6 +13,7 @@
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
+#include "lotus/paper_counts.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -167,7 +168,8 @@ void TLotus::_gather_paper_counts() {
 	// for example, size is 2 if keep molecules and species
 	_paper_counts.resize(_collapser.num_dim_to_keep());
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
-		_paper_counts[i] = _trees[_collapser.dim_to_keep(i)]->get_paper_counts();
+		const auto &tree = *_trees[_collapser.dim_to_keep(i)];
+		_paper_counts[i] = read_paper_counts(tree.get_tree_name(), tree.phylogeny());
 	}
 }
 
