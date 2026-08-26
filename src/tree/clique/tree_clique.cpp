@@ -49,7 +49,8 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 		// The transition grid is not installed here: it needs alpha and nu, which stattools has not
 		// drawn yet. TTree::guessInitialValues does it, and asking a clique for its grid before
 		// then throws instead of reading the zero-filled matrices this used to leave behind.
-		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
+		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _topology().n_nodes(),
+		                      increment);
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;

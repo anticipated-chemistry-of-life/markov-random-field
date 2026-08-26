@@ -41,8 +41,7 @@ std::vector<size_t> TClique::update_Z(
 	for (const auto index_in_tree : tree->get_internal_nodes()) {
 		// prepare log probabilities for the two possible states
 		std::array<coretools::TSumLogProbability, 2> sum_log;
-		const auto &node = tree->get_node(index_in_tree);
-		if (node.is_root()) { // calculate stationary
+		if (tree->is_root(index_in_tree)) { // calculate stationary
 			_calculate_log_prob_root(stationary_0, sum_log);
 		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
 			// note: for compatibility with update of Y, we need to pass
@@ -123,7 +122,7 @@ std::vector<size_t> TClique::initialize_Z_from_children(
 		for (auto it = remaining.begin(); it != remaining.end();) {
 			const size_t node_index = *it;
 			bool ready              = true;
-			for (size_t child_index : tree->get_node(node_index).children_indices_in_tree()) {
+			for (size_t child_index : tree->children_of(node_index)) {
 				if (!was_initilized[child_index]) {
 					ready = false;
 					break;
@@ -176,9 +175,8 @@ void TClique::_calculate_log_prob_node_to_children(
     std::array<coretools::TSumLogProbability, 2> &sum_log,
     const TypeParamBinBranches *binned_branch_lengths,
     const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const {
-	const auto &node    = tree->get_node(index_in_tree);
 	const auto &process = transition_grid();
-	for (const auto &child_index : node.children_indices_in_tree()) {
+	for (const auto &child_index : tree->children_of(index_in_tree)) {
 		// Note: need to take old value of branch length because new values were proposed before the
 		// loop started
 		auto bin_length = binned_branch_lengths->oldValue(
@@ -210,7 +208,5 @@ bool sample(double log_prob_0, double log_prob_1) {
 }
 
 size_t TClique::_get_parent_index(size_t index_in_tree, const TTree *tree) {
-	const auto &node                  = tree->get_node(index_in_tree);
-	const size_t parent_index_in_tree = node.parent_index_in_tree();
-	return parent_index_in_tree;
+	return tree->parent_of(index_in_tree);
 }

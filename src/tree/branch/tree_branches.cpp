@@ -21,7 +21,7 @@ void TTree::_initialize_grid_branch_lengths() {
 }
 
 stattools::TPairIndexSampler TTree::_build_pairs_branch_lengths() const {
-	const size_t num_branches = _nodes.size() - get_number_of_roots();
+	const size_t num_branches = _topology().n_branches();
 	stattools::TPairIndexSampler sampler(num_branches);
 	sampler.sampleIndices();
 
@@ -57,8 +57,7 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
                                                         const TCurrentState &current_state) const {
 	// translate index in binned branch length vector (of size leaves + internal nodes without
 	// roots) to index in nodes
-	const size_t index_in_tree =
-	    _leaves_and_internal_nodes_without_roots[index_in_binned_branch_length];
+	const size_t index_in_tree = _topology().branches()[index_in_binned_branch_length];
 
 	// Both lengths are scored under the clique's current process: this move proposes a branch
 	// length, not a parameter, so the transition grid is the same on either side of the ratio.
@@ -119,7 +118,7 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 
 		// translate back to bin (_bin_branch_lengths normalizes to mean 1 on the way). These are
 		// already branch-space values, so nothing needs excluding.
-		auto binned_branch_lengths = _bin_branch_lengths(vals, false);
+		auto binned_branch_lengths = _bin_branch_lengths(vals);
 
 		// set these values (hack stattools to pretend initial values are not fixed)
 		_binned_branch_lengths->fixInitialization(false);
@@ -139,25 +138,17 @@ void TTree::_set_initial_branch_lengths(bool is_simulation) {
 	}
 }
 
-std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths,
-                                               bool exclude_root) const {
-	// Which entries are roots is topology, so the filtering happens here. TBinGrid only ever sees
-	// branch-space lengths, all strictly positive -- which is the same set either way, since
-	// _add_parent writes 0.0 for a root and the reader rejects every other non-positive length.
-	std::vector<double> lengths_of_branches;
-	lengths_of_branches.reserve(get_number_of_nodes() - get_number_of_roots());
-	for (size_t i = 0; i < branch_lengths.size(); ++i) { // loop over all nodes
-		if (exclude_root && _nodes[i].is_root()) { continue; }
-		lengths_of_branches.push_back(branch_lengths[i]);
-	}
-
+/// Branch-space lengths in, bins out. Roots never appear: a phylogeny holds one length per branch,
+/// so there is nothing left to filter -- which is what removes the exclude_root flag this used to
+/// need, and with it the question of which index space the caller was in.
+std::vector<size_t> TTree::_bin_branch_lengths(const std::vector<double> &branch_lengths) const {
 	// Normalizes to mean 1, bins, then walks the result onto the branch-length budget.
-	return _grid().bins_from_lengths(lengths_of_branches, [](size_t n) {
+	return _grid().bins_from_lengths(branch_lengths, [](size_t n) {
 		return coretools::instances::randomGenerator().getRand<size_t>(0, n - 1);
 	});
 }
 
-void TTree::_bin_branch_lengths_from_tree(const std::vector<double> &branch_lengths) {
+void TTree::_bin_branch_lengths_from_tree() {
 	_initialize_grid_branch_lengths();
-	_binned_branch_lengths_from_tree = _bin_branch_lengths(branch_lengths, true);
+	_binned_branch_lengths_from_tree = _bin_branch_lengths(_topology().branch_lengths());
 };
