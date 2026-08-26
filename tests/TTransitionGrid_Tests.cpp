@@ -16,7 +16,7 @@ namespace {
 
 constexpr size_t N_BINS = 10;
 
-const std::vector<double> ALPHAS = {0.05, 0.3, 0.5, 0.72, 0.95};
+const std::vector<double> ALPHAS = {0.0, 0.0001, 0.05, 0.3, 0.5, 0.72, 0.95};
 const std::vector<double> NUS    = {0.05, 0.6, 3.0};
 
 /// P(child = to | parent = from) after time `t`, from a *numerical* matrix exponential of the
@@ -36,6 +36,17 @@ double numerical_expm(double alpha, double nu, double t, bool from, bool to) {
 	// expmat returns a lazy expression; materialise it before indexing.
 	const arma::mat exponential = arma::expmat(generator * t);
 	return exponential(static_cast<arma::uword>(from), static_cast<arma::uword>(to));
+}
+
+double closed_form_expm(double alpha, double nu, double t, bool from, bool to) {
+	const double exp_nu_t = std::exp(-nu * t);
+	arma::mat generator(2, 2);
+	generator(0, 0) = 1.0 - alpha * (1.0 - exp_nu_t);
+	generator(0, 1) = alpha * (1.0 - exp_nu_t);
+	generator(1, 0) = (1.0 - alpha) * (1.0 - exp_nu_t);
+	generator(1, 1) = alpha - alpha * exp_nu_t + exp_nu_t;
+
+	return generator(static_cast<arma::uword>(from), static_cast<arma::uword>(to));
 }
 
 } // namespace
@@ -117,6 +128,23 @@ TEST(TransitionGrid, the_recursion_matches_a_numerical_matrix_exponential_at_eve
 	}
 }
 
+TEST(TransitionGrid, close_form_vs_numerical) {
+	const std::vector<double> branch_lengths = {0.0, 0.1, 0.2, 0.3, 0.5, 0.9, 1.5, 100.0};
+	for (const double alpha : ALPHAS) {
+		for (const double nu : NUS) {
+			for (const double t : branch_lengths) {
+				for (const bool from : {false, true}) {
+					for (const bool to : {false, true}) {
+						EXPECT_NEAR(closed_form_expm(alpha, nu, t, from, to),
+						            numerical_expm(alpha, nu, t, from, to), 1e-12)
+						    << "alpha " << alpha << " nu " << nu << " branch " << t << " from "
+						    << from << " to " << to;
+					}
+				}
+			}
+		}
+	}
+}
 // --------------------------------------------------------------------------
 // Characterisation
 // --------------------------------------------------------------------------
