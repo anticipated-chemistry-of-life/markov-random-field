@@ -9,9 +9,9 @@
 #include "Types.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
-#include "process/TTransitionGrid.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
+#include "tree/branch/TTransitionGrid.h"
 #include <cstddef>
 #include <optional>
 #include <utility>

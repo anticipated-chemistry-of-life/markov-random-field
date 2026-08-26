@@ -4,8 +4,8 @@
 // Python reference derives the same quantities from the closed form; these ask the shipped code
 // directly, which until TTransitionGrid was pulled out of TClique took a full MCMC run to reach.
 
-#include "process/TBinGrid.h"
-#include "process/TTransitionGrid.h"
+#include "tree/branch/TBinGrid.h"
+#include "tree/branch/TTransitionGrid.h"
 #include "gtest/gtest.h"
 
 #include <armadillo>

@@ -4,7 +4,7 @@
 // the Python reference. Both implementations have to satisfy them, and until TBinGrid was pulled
 // out of TTree only the Python one could be asked.
 
-#include "process/TBinGrid.h"
+#include "tree/branch/TBinGrid.h"
 #include "gtest/gtest.h"
 
 #include <numeric>

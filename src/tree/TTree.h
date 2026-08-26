@@ -16,10 +16,10 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "omp.h"
-#include "process/TBinGrid.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
+#include "tree/branch/TBinGrid.h"
 #include "tree/node.h"
 #include <cstddef>
 #include <optional>
