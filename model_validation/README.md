@@ -35,6 +35,23 @@ be judged against, which is why `validate_independent.py` reports rather than
 gates by default — pass `--gates rung1_.../validation_summary.json` to score a
 later rung against it.
 
+`visualize.py` plots a rung's inference output against the truth. Its filename
+options default to what the C++ binary writes for a scenario simulated by that
+same binary; an independent scenario names its simulation output differently, so
+it passes them. Run it from `model_validation/`:
+
+```bash
+uv run python visualize.py independent_y_s255_m255_seed42/rung3_from_data_ls \
+    --true-values simulated_parameters.txt \
+    --true-branch-lengths simulated_parameters.txt \
+    --true-y simulated_Y.txt
+```
+
+`simulated_parameters.txt` covers both trees, which is why it also serves as the
+pooled `--true-branch-lengths` file — a value without a `{tree}` placeholder is
+shared by every tree. It carries no `gamma` or `epsilon`, so those get no panel;
+`--true-scalar name=value` supplies a truth that no file holds, where one applies.
+
 Separately, `replicates.sh` runs the C++ simulator under the same parameters and
 `compare_fields.py` compares both against the analytic prediction. That tests the
 simulator; the rungs test inference.

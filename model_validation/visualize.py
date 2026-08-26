@@ -2,6 +2,7 @@
 
 import pathlib
 import re
+from dataclasses import dataclass
 
 import click
 import matplotlib.pyplot as plt
@@ -27,6 +28,29 @@ DIM_COLORS = {"species": "#2196F3", "molecules": "#FF9800", "other": "#9E9E9E"}
 # scalar parameters: few enough per run that the posterior itself is worth
 # showing, so these are drawn as a trace KDE instead of a true-vs-inferred scatter
 KDE_PTYPES = {"gamma", "epsilon", "epsilon_simple_model", "mean_log_nu", "var_log_nu"}
+
+# the parameter types that get a panel, in the order the panels are laid out;
+# anything classifying outside this list is never drawn
+PLOT_ORDER = (
+    "gamma",
+    "epsilon",
+    "epsilon_simple_model",
+    "alpha",
+    "log_nu",
+    "mean_log_nu",
+    "var_log_nu",
+    "branch_lengths",
+)
+
+# The names below are what the C++ binary writes when it is run the way
+# s_balanced_255_m_grass_200 was; other scenarios name their files differently,
+# so each one is a CLI option and these are only its default.
+DEFAULT_RUN_PREFIX = "acol"
+DEFAULT_TRUE_VALUES = ("acol_input_simulated.txt", "acol_simulated.txt")
+DEFAULT_TRUE_BRANCH_LENGTHS = "acol_{tree}_simulated.txt"
+DEFAULT_TRUE_Y = "acol_simulated_Y.txt"
+
+STATE_POSTERIORS_SUFFIX = "_statePosteriors.txt"
 
 
 def _param_type(name: str) -> str:
@@ -57,6 +81,172 @@ def _tree_dim(name: str) -> str:
     if name.startswith("molecules_") or name == "gamma_molecules":
         return "molecules"
     return "other"
+
+
+@dataclass(frozen=True)
+class ResolvedInputs:
+    """Every file the run reads, resolved and checked before anything renders."""
+
+    mean_var: pathlib.Path
+    trace: pathlib.Path
+    y_posterior: pathlib.Path
+    true_values: tuple[pathlib.Path, ...]
+    true_y: pathlib.Path
+    true_scalars: dict[str, float]
+    # (tree, its statePosteriors file, its true-bin file), trees without a
+    # true-bin file already dropped
+    branch_truth: tuple[tuple[str, pathlib.Path, pathlib.Path], ...]
+
+
+def _is_explicit(ctx: click.Context, name: str) -> bool:
+    """Whether the option was typed on the command line rather than defaulted."""
+    return ctx.get_parameter_source(name) is click.core.ParameterSource.COMMANDLINE
+
+
+def _require_existing(paths: list[pathlib.Path], option: str) -> None:
+    """A path named on the command line must exist: a typo is a failure, not a skip."""
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        raise click.ClickException(
+            f"{option}: no such file: " + ", ".join(str(p) for p in missing)
+        )
+
+
+def _parse_true_scalars(
+    ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
+) -> dict[str, float]:
+    scalars: dict[str, float] = {}
+    for item in value:
+        name, sep, raw = item.partition("=")
+        if not sep or not name:
+            raise click.BadParameter(
+                f"expected name=value, got {item!r}", ctx=ctx, param=param
+            )
+        try:
+            scalars[name] = float(raw)
+        except ValueError:
+            raise click.BadParameter(
+                f"{name}: {raw!r} is not a number", ctx=ctx, param=param
+            ) from None
+    return scalars
+
+
+def _resolve_inputs(
+    ctx: click.Context,
+    base: pathlib.Path,
+    run_prefix: str,
+    truth_dir: str | None,
+    true_values: tuple[str, ...],
+    true_branch_lengths: str,
+    true_y: str,
+    true_scalars: dict[str, float],
+) -> ResolvedInputs:
+    """Resolve the filename options against the run and truth directories.
+
+    Everything is checked here rather than at the point of use, so a mistyped
+    path fails before the first figure is drawn. A path named on the command line
+    must exist; a defaulted one keeps the behaviour it had when the name was
+    hardcoded, which is mandatory for the inference output and skipped with a
+    message for the rest.
+    """
+    truth_root = pathlib.Path(truth_dir) if truth_dir is not None else base.parent
+    if _is_explicit(ctx, "truth_dir") and not truth_root.is_dir():
+        raise click.ClickException(f"--truth-dir: no such directory: {truth_root}")
+
+    def under_truth(name: str) -> pathlib.Path:
+        path = pathlib.Path(name)
+        return path if path.is_absolute() else truth_root / path
+
+    mean_var = base / f"{run_prefix}_meanVar.txt"
+    if not mean_var.exists():
+        raise click.ClickException(
+            f"No inference output at {mean_var}. Run inference first."
+        )
+
+    value_paths = [under_truth(name) for name in true_values]
+    if _is_explicit(ctx, "true_values"):
+        _require_existing(value_paths, "--true-values")
+
+    y_path = under_truth(true_y)
+    if _is_explicit(ctx, "true_y"):
+        _require_existing([y_path], "--true-y")
+
+    # the prefix may carry a directory part, but the tree name is read off the
+    # file's own name, so strip it back to the stem before slicing
+    stem = pathlib.PurePath(run_prefix).name
+    found: list[tuple[str, pathlib.Path, pathlib.Path]] = []
+    missing: list[pathlib.Path] = []
+    for state_file in sorted(base.glob(f"{run_prefix}_*{STATE_POSTERIORS_SUFFIX}")):
+        tree = state_file.name[len(stem) + 1 : -len(STATE_POSTERIORS_SUFFIX)]
+        # a template without {tree} names one pooled file covering every tree
+        truth = under_truth(true_branch_lengths.replace("{tree}", tree))
+        if truth.exists():
+            found.append((tree, state_file, truth))
+        else:
+            missing.append(truth)
+    if missing and _is_explicit(ctx, "true_branch_lengths"):
+        _require_existing(missing, "--true-branch-lengths")
+
+    return ResolvedInputs(
+        mean_var=mean_var,
+        trace=base / f"{run_prefix}_trace.txt",
+        y_posterior=base / f"{run_prefix}_Y_posterior.txt",
+        true_values=tuple(value_paths),
+        true_y=y_path,
+        true_scalars=true_scalars,
+        branch_truth=tuple(found),
+    )
+
+
+def _load_true_values(
+    paths: tuple[pathlib.Path, ...],
+    scalars: dict[str, float],
+    known_names: set[str],
+) -> pd.DataFrame:
+    """The true value of every parameter, layered across files then overridden.
+
+    Files are applied in the order given and the last one to carry a name wins,
+    which is how the default pair keeps `acol_simulated.txt` ahead of the
+    `acol_input_simulated.txt` fallback. A --true-scalar outranks every file: it
+    exists to supply a truth that no file holds, or to correct one that does.
+    """
+    frames: list[pd.DataFrame] = []
+    for path in paths:
+        frame = _load_tsv(path)
+        if frame is None:
+            continue
+        frame.columns = pd.Index(["name", "true_value"])
+        frames.append(frame)
+
+    if not frames:
+        tried = ", ".join(str(p) for p in paths)
+        raise click.ClickException(
+            f"No true-value file found (tried: {tried}). Run simulation first."
+        )
+
+    true_df = pd.concat(frames).drop_duplicates("name", keep="last")
+    true_df["true_value"] = pd.to_numeric(true_df["true_value"], errors="coerce")
+
+    for name in scalars:
+        # the flag's whole point is to put a value on a plot, so a name that
+        # would silently vanish before reaching one is an error, not a no-op
+        if name not in known_names:
+            raise click.ClickException(
+                f"--true-scalar {name}: not a parameter in the inference output."
+            )
+        if _param_type(name) not in PLOT_ORDER:
+            raise click.ClickException(
+                f"--true-scalar {name}: classifies as "
+                f"{_param_type(name)!r}, which is never plotted."
+            )
+
+    if scalars:
+        injected = pd.DataFrame(
+            {"name": list(scalars), "true_value": list(scalars.values())}
+        )
+        true_df = pd.concat([true_df, injected]).drop_duplicates("name", keep="last")
+
+    return true_df.reset_index(drop=True)
 
 
 def _scatter_true_vs_inferred(
@@ -179,21 +369,21 @@ def _hpd_inclusion_level(probs: np.ndarray, true_bins: np.ndarray) -> np.ndarray
 
 
 def _load_branch_lengths(
-    base: pathlib.Path,
+    branch_truth: tuple[tuple[str, pathlib.Path, pathlib.Path], ...],
 ) -> tuple[pd.DataFrame, np.ndarray] | None:
     """Per-branch true bin and posterior over bins, pooled across all trees.
 
     Branch lengths are discrete, so inference reports a distribution over bins in
-    acol_<tree>_statePosteriors.txt rather than a mean/variance in acol_meanVar.txt;
-    the true bins likewise live in per-tree acol_<tree>_simulated.txt files.
+    the per-tree statePosteriors file rather than a mean/variance in the meanVar
+    file; the true bins come from whichever file --true-branch-lengths resolved to
+    for that tree, which may be one pooled file shared by all of them.
     """
     names: list[str] = []
     true_bins: list[int] = []
     posteriors: list[np.ndarray] = []
 
-    for state_file in sorted(base.glob("acol_*_statePosteriors.txt")):
-        tree = state_file.name[len("acol_") : -len("_statePosteriors.txt")]
-        true_df = _load_tsv(base.parent / f"acol_{tree}_simulated.txt")
+    for _tree, state_file, truth_file in branch_truth:
+        true_df = _load_tsv(truth_file)
         if true_df is None:
             continue
         true_df.columns = pd.Index(["name", "true_bin"])
@@ -469,7 +659,7 @@ def _logistic_y(
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.12, 1.12)
     ax.set_xlabel("Predicted P(Y=1)")
-    ax.set_ylabel("True Y (acol_simulated_Y.txt)")
+    ax.set_ylabel("True Y")
     ax.set_title(f"Y calibration (n={len(y_true)})")
     ax.legend(fontsize=8, loc="center right")
 
@@ -494,57 +684,101 @@ def _logistic_y(
     show_default=True,
     help="P(Y=1) cutoff used to binarize the posterior for the confusion matrix / MCC.",
 )
-def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> None:
+@click.option(
+    "--run-prefix",
+    default=DEFAULT_RUN_PREFIX,
+    show_default=True,
+    help="Filename stem of the inference output in <scenario_dir>, i.e. whatever "
+    "was passed to the binary's --out.",
+)
+@click.option(
+    "--truth-dir",
+    type=click.Path(),
+    default=None,
+    help="Directory holding the simulation output that the truth options name "
+    "(default: <scenario_dir>/..).",
+)
+@click.option(
+    "--true-values",
+    multiple=True,
+    default=DEFAULT_TRUE_VALUES,
+    show_default=True,
+    help="True parameter values, under --truth-dir. Repeatable: files are layered "
+    "in the order given and the last one to carry a name wins.",
+)
+@click.option(
+    "--true-branch-lengths",
+    default=DEFAULT_TRUE_BRANCH_LENGTHS,
+    show_default=True,
+    help="True branch-length bins, under --truth-dir. {tree} expands to each tree "
+    "found; a name without it is one pooled file shared by every tree.",
+)
+@click.option(
+    "--true-y",
+    default=DEFAULT_TRUE_Y,
+    show_default=True,
+    help="True simulated Y, under --truth-dir.",
+)
+@click.option(
+    "--true-scalar",
+    "true_scalars",
+    multiple=True,
+    callback=_parse_true_scalars,
+    metavar="NAME=VALUE",
+    help="True value for a parameter no truth file holds. Repeatable; outranks "
+    "the files. Errors if NAME is not an inferred parameter that gets a panel.",
+)
+@click.pass_context
+def main(
+    ctx: click.Context,
+    scenario_dir: str,
+    out: str | None,
+    show: bool,
+    y_threshold: float,
+    run_prefix: str,
+    truth_dir: str | None,
+    true_values: tuple[str, ...],
+    true_branch_lengths: str,
+    true_y: str,
+    true_scalars: dict[str, float],
+) -> None:
     base = pathlib.Path(scenario_dir)
+    inputs = _resolve_inputs(
+        ctx,
+        base,
+        run_prefix,
+        truth_dir,
+        true_values,
+        true_branch_lengths,
+        true_y,
+        true_scalars,
+    )
     out_dir = pathlib.Path(out) if out else base / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- load inferred values ---
-    inferred_df = _load_tsv(base / "acol_meanVar.txt")
-    if inferred_df is None:
-        raise click.ClickException(
-            f"No inference output at {base / 'acol_meanVar.txt'}. Run inference first."
-        )
+    # --- load inferred values (_resolve_inputs already checked the file is there) ---
+    inferred_df = _load_tsv(inputs.mean_var)
+    assert inferred_df is not None
     inferred_df.columns = pd.Index(["name", "post_mean", "post_var"])
     inferred_df["post_sd"] = np.sqrt(inferred_df["post_var"].clip(lower=0))
 
     # --- load the MCMC trace (posterior samples of the scalar parameters) ---
-    trace_df = _load_tsv(base / "acol_trace.txt")
+    trace_df = _load_tsv(inputs.trace)
     if trace_df is None:
         click.echo(
-            f"No trace at {base / 'acol_trace.txt'}: "
+            f"No trace at {inputs.trace}: "
             "falling back to scatter plots for the scalar parameters."
         )
 
-    # --- load true values: acol_simulated.txt is primary, input file is fallback ---
-    true_df = _load_tsv(base.parent / "acol_simulated.txt")
-    fallback_df = _load_tsv(base.parent / "acol_input_simulated.txt")
-    if true_df is None and fallback_df is None:
-        raise click.ClickException("No true-value file found. Run simulation first.")
-    if true_df is None:
-        true_df = fallback_df
-    elif fallback_df is not None:
-        # merge: simulated takes priority, input fills in anything missing
-        true_df = pd.concat([fallback_df, true_df]).drop_duplicates("name", keep="last")
-
-    true_df.columns = pd.Index(["name", "true_value"])
-    true_df["true_value"] = pd.to_numeric(true_df["true_value"], errors="coerce")
+    true_df = _load_true_values(
+        inputs.true_values, inputs.true_scalars, set(inferred_df["name"])
+    )
 
     # --- merge and classify ---
     merged = inferred_df.merge(true_df, on="name", how="inner")
     merged["ptype"] = merged["name"].apply(_param_type)
 
-    plot_order = [
-        "gamma",
-        "epsilon",
-        "epsilon_simple_model",
-        "alpha",
-        "log_nu",
-        "mean_log_nu",
-        "var_log_nu",
-        "branch_lengths",
-    ]
-    types_present = [pt for pt in plot_order if (merged["ptype"] == pt).any()]
+    types_present = [pt for pt in PLOT_ORDER if (merged["ptype"] == pt).any()]
 
     if not types_present:
         click.echo(
@@ -600,10 +834,15 @@ def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> 
     plt.close(fig)
 
     # --- Y distribution comparison ---
-    sim_y = _load_y_file(base.parent / "acol_simulated_Y.txt")
-    sim_state = _load_y_state(base.parent / "acol_simulated_Y.txt")
-    post_y = _load_y_file(base / "acol_Y_posterior.txt")
+    sim_y = _load_y_file(inputs.true_y)
+    sim_state = _load_y_state(inputs.true_y)
+    post_y = _load_y_file(inputs.y_posterior)
     if sim_y is not None and sim_state is not None and post_y is not None:
+        if sim_y and set(sim_y.values()) <= {0.0, 1.0}:
+            click.echo(
+                f"Note: fraction_of_one in {inputs.true_y} is binary, so the "
+                "distance metrics restate the classification metrics beside them."
+            )
         y_true, y_pred = _binarize_y(sim_state, post_y, y_threshold)
         cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
         sections = {
@@ -628,15 +867,15 @@ def main(scenario_dir: str, out: str | None, show: bool, y_threshold: float) -> 
         plt.close(fig_y)
     else:
         click.echo(
-            "Skipping Y comparison: missing acol_simulated_Y.txt or acol_Y_posterior.txt."
+            f"Skipping Y comparison: missing {inputs.true_y} or {inputs.y_posterior}."
         )
 
     # --- branch length posteriors vs true bins ---
-    branch_data = _load_branch_lengths(base)
+    branch_data = _load_branch_lengths(inputs.branch_truth)
     if branch_data is None:
         click.echo(
-            "Skipping branch lengths: no acol_<tree>_statePosteriors.txt in "
-            f"{base} matched an acol_<tree>_simulated.txt in {base.parent}."
+            f"Skipping branch lengths: no {run_prefix}_<tree>"
+            f"{STATE_POSTERIORS_SUFFIX} in {base} matched a true-bin file."
         )
     else:
         branches, branch_probs = branch_data
