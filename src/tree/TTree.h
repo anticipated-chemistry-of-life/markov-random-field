@@ -324,7 +324,7 @@ public:
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
-			auto current_state  = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state  = _cliques[i].create_current_state(Y, _Z, _topology());
 			// update Z
 			if constexpr (!FixZ) {
 				indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state,
@@ -379,7 +379,7 @@ public:
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto current_state   = _cliques[i].create_current_state(Y, _Z, *this);
+			auto current_state   = _cliques[i].create_current_state(Y, _Z, _topology());
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
 			    current_state, _Z, this, _binned_branch_lengths,
 			    _topology().branch_index_by_node());

@@ -140,7 +140,7 @@ void TTree::simulate_Z(size_t tree_index) {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
-		TCurrentState current_state(*this, clique.get_increment(), get_number_of_leaves(),
+		TCurrentState current_state(_topology(), clique.get_increment(), get_number_of_leaves(),
 		                            get_number_of_internal_nodes());
 
 		// we sample the roots

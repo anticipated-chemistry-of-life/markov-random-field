@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+class TPhylogeny;
 class TTree;
 
 /** Class representing a clique in our model. A clique is defined as having a set of nodes that are
@@ -114,8 +115,10 @@ public:
 	    const TypeParamBinBranches *binned_branch_lengths,
 	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
 
+	/// A state container sized for `topology` and filled from this clique's start index. The
+	/// topology is all it takes: nothing here needs a parameter or a clique.
 	TCurrentState create_current_state(const TStorageYMatrix &Y, const TStorageZMatrix &Z,
-	                                   const TTree &tree);
+	                                   const TPhylogeny &topology);
 
 	/// @brief Return the number of nodes in the clique
 	/// @return Return the number of nodes in the clique

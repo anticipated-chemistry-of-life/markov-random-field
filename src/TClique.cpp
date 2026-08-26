@@ -22,9 +22,9 @@ TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_
 }
 
 TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TStorageZMatrix &Z,
-                                            const TTree &tree) {
-	TCurrentState current_state(tree, this->_increment, tree.get_number_of_leaves(),
-	                            tree.get_number_of_internal_nodes());
+                                            const TPhylogeny &topology) {
+	TCurrentState current_state(topology, this->_increment, topology.n_leaves(),
+	                            topology.n_internal_nodes());
 	current_state.fill(_start_index_in_leaves_space, Y, Z);
 
 	return current_state;

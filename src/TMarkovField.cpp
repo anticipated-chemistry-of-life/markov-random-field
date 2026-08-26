@@ -18,11 +18,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
                            std::string _prefix)
-    : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(*_trees.back().get(), 1) {
+    : _trees(Trees), _prefix(std::move(_prefix)), _clique_last_dim(_trees.back()->phylogeny(), 1) {
 	using namespace coretools::instances;
 
 	// find molecule and species dimensions; construct mass spec data if both trees are present
@@ -50,7 +51,7 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	// create sheets: one per dimension except the last dimension
 	_sheets.reserve(_trees.size() - 1);
 	for (size_t i = 0; i < _trees.size() - 1; ++i) {
-		_sheets.emplace_back(i, *_trees[i].get(), *_trees.back().get());
+		_sheets.emplace_back(i, _trees[i]->phylogeny(), _trees.back()->phylogeny());
 	}
 
 	// initialize Y
@@ -77,8 +78,11 @@ void TMarkovField::_update_sheets(bool first, IndexArray &start_index_in_leaves_
                                   IndexArray &previous_ix, size_t K_cur_sheet) {
 	for (size_t j = 0; j < _sheets.size(); ++j) {
 		if (first || _need_to_update_sheet(j, start_index_in_leaves_space, previous_ix)) {
-			// first iteration or different index than before -> re-compute sheet
-			_sheets[j].fill(start_index_in_leaves_space, K_cur_sheet, _Y);
+			// first iteration or different index than before -> re-compute sheet.
+			// A sheet fills from the internal state of its own dimension; as_const because every
+			// thread of the team runs this, and none of them may take the mutable overload.
+			_sheets[j].fill(start_index_in_leaves_space, K_cur_sheet, _Y,
+			                std::as_const(*_trees[j]).get_Z());
 		}
 	}
 }
@@ -348,7 +352,7 @@ void TMarkovField::_simulate_Y() {
 		for (size_t dim = 0; dim < _trees.size(); ++dim) {
 			// get relevant clique
 			const auto &clique = _trees[dim]->get_clique(multidim_index_in_Y);
-			TCurrentState current_state(*_trees[dim].get(), clique.get_increment(),
+			TCurrentState current_state(_trees[dim]->phylogeny(), clique.get_increment(),
 			                            _trees[dim]->get_number_of_leaves(),
 			                            _trees[dim]->get_number_of_internal_nodes());
 			// translate index in leaves to the index in tree

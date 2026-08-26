@@ -4,17 +4,17 @@
 
 #include "TCurrentState.h"
 #include "constants.h"
-#include "tree/TTree.h"
+#include "tree/TPhylogeny.h"
 
 //-----------------------------------
 // TCurrentState
 //-----------------------------------
 
-TCurrentState::TCurrentState(const TTree &tree, size_t increment)
-    : _increment(increment), _tree(tree) {}
-TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y,
+TCurrentState::TCurrentState(const TPhylogeny &topology, size_t increment)
+    : _increment(increment), _topology(topology) {}
+TCurrentState::TCurrentState(const TPhylogeny &topology, size_t increment, size_t size_of_Y,
                              size_t size_of_Z)
-    : _increment(increment), _tree(tree) {
+    : _increment(increment), _topology(topology) {
 	_current_state_Y.resize(size_of_Y, false);
 	_exists_in_Y.resize(size_of_Y, false);
 	_index_in_TStorageYMatrix.resize(size_of_Y);
@@ -26,9 +26,9 @@ TCurrentState::TCurrentState(const TTree &tree, size_t increment, size_t size_of
 
 void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
                          const TStorageZMatrix &Z) {
-	fill_Y(start_index_in_leaves_space, _tree.get_number_of_leaves(),
+	fill_Y(start_index_in_leaves_space, _topology.n_leaves(),
 	       Y); // parse all Y (all leaves)
-	fill_Z(start_index_in_leaves_space, _tree.get_number_of_internal_nodes(),
+	fill_Z(start_index_in_leaves_space, _topology.n_internal_nodes(),
 	       Z); // parse all Z (all internal nodes)
 }
 
@@ -67,10 +67,10 @@ void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t
 bool TCurrentState::get(size_t index_in_tree) const { return get(index_in_tree, 0, 0); }
 
 bool TCurrentState::get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const {
-	if (_tree.isLeaf(index_in_tree)) {
-		return get_Y(_tree.get_index_within_leaves(index_in_tree) - offset_leaves);
+	if (_topology.is_leaf(index_in_tree)) {
+		return get_Y(_topology.leaf_index(index_in_tree) - offset_leaves);
 	}
-	return get_Z(_tree.get_index_within_internal_nodes(index_in_tree) - offset_internals);
+	return get_Z(_topology.internal_index(index_in_tree) - offset_internals);
 }
 
 bool TCurrentState::get_Y(size_t ix) const { return _current_state_Y[ix]; }
@@ -78,10 +78,10 @@ bool TCurrentState::get_Y(size_t ix) const { return _current_state_Y[ix]; }
 bool TCurrentState::get_Z(size_t ix) const { return _current_state_Z[ix]; }
 
 void TCurrentState::set(size_t index_in_tree, bool value) {
-	if (_tree.isLeaf(index_in_tree)) {
-		_current_state_Y[_tree.get_index_within_leaves(index_in_tree)] = value;
+	if (_topology.is_leaf(index_in_tree)) {
+		_current_state_Y[_topology.leaf_index(index_in_tree)] = value;
 	} else {
-		_current_state_Z[_tree.get_index_within_internal_nodes(index_in_tree)] = value;
+		_current_state_Z[_topology.internal_index(index_in_tree)] = value;
 	}
 }
 
@@ -90,17 +90,17 @@ void TCurrentState::set_Y(size_t index_in_leaves, bool value) {
 }
 
 size_t TCurrentState::get_index_in_TStorageVector(size_t index_in_tree) const {
-	if (_tree.isLeaf(index_in_tree)) {
-		return _index_in_TStorageYMatrix[_tree.get_index_within_leaves(index_in_tree)];
+	if (_topology.is_leaf(index_in_tree)) {
+		return _index_in_TStorageYMatrix[_topology.leaf_index(index_in_tree)];
 	}
-	return _index_in_TStorageZMatrix[_tree.get_index_within_internal_nodes(index_in_tree)];
+	return _index_in_TStorageZMatrix[_topology.internal_index(index_in_tree)];
 }
 
 bool TCurrentState::exists_in_TStorageVector(size_t index_in_tree) const {
-	if (_tree.isLeaf(index_in_tree)) {
-		return _exists_in_Y[_tree.get_index_within_leaves(index_in_tree)];
+	if (_topology.is_leaf(index_in_tree)) {
+		return _exists_in_Y[_topology.leaf_index(index_in_tree)];
 	}
-	return _exists_in_Z[_tree.get_index_within_internal_nodes(index_in_tree)];
+	return _exists_in_Z[_topology.internal_index(index_in_tree)];
 }
 
 std::tuple<bool, bool, size_t>
@@ -114,19 +114,19 @@ TCurrentState::get_state_exist_ix_TStorageYMatrix(size_t index_in_leaves) const 
 //-----------------------------------
 // TSheet
 //-----------------------------------
-TSheet::TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim)
-    : _dim_ix(dim_ix), _tree(tree), _tree_last_dim(tree_last_dim) {
+TSheet::TSheet(size_t dim_ix, const TPhylogeny &topology, const TPhylogeny &topology_last_dim)
+    : _dim_ix(dim_ix), _topology(topology), _topology_last_dim(topology_last_dim) {
 
 	// create vector of current states that make up the sheet
 	constexpr static size_t increment = 1; // always 1, since we move along the last dimension
-	_cur_states.reserve(_tree.get_number_of_nodes());
-	for (size_t i = 0; i < _tree.get_number_of_nodes(); ++i) {
-		_cur_states.emplace_back(_tree_last_dim, increment);
+	_cur_states.reserve(_topology.n_nodes());
+	for (size_t i = 0; i < _topology.n_nodes(); ++i) {
+		_cur_states.emplace_back(_topology_last_dim, increment);
 	}
 }
 
-void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K,
-                  const TStorageYMatrix &Y) {
+void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y,
+                  const TStorageZMatrix &Z) {
 	// Worksharing fill: this runs on the team created in TMarkovField::_update_all_Y (all threads
 	// call it), so we use `omp for`/`omp single` rather than spawning our own team. If ever called
 	// outside a parallel region the constructs are orphaned and execute sequentially, which is also
@@ -137,26 +137,25 @@ void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K,
 	{ _start_ix_in_leaves_space_last_dim = start_index_in_leaves_space.back(); }
 
 #pragma omp for schedule(static)
-	for (size_t i = 0; i < _tree.get_number_of_nodes();
+	for (size_t i = 0; i < _topology.n_nodes();
 	     ++i) { // loop over all nodes along current dimension
 		IndexArray local_start_index_in_leaves_space =
 		    start_index_in_leaves_space; // thread-local copy
 
-		if (_tree.isLeaf(
+		if (_topology.is_leaf(
 		        i)) { // only fill Y (ignore Z along last dimensions, not needed when updating)
-			local_start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_leaves(i);
+			local_start_index_in_leaves_space[_dim_ix] = _topology.leaf_index(i);
 			_cur_states[i].fill_Y_along_last_dim(local_start_index_in_leaves_space, K, Y);
 		} else {
 			// get start index: leaf space in all dimensions except _dim_ix, for which we use the
 			// internal node index
-			local_start_index_in_leaves_space[_dim_ix] = _tree.get_index_within_internal_nodes(i);
+			local_start_index_in_leaves_space[_dim_ix] = _topology.internal_index(i);
 			// fill Z. There are as many Z as there are leaves along the last dimension
 			// use z of your own dimension for filling
 			// Note: we do not need to fill Y here, as there are no Y when the node(i) is internal
 			// Note: this will not fill nodes that are not part of Z, i.e. which are internal in the
 			// last dimension
-			_cur_states[i].fill_Z_along_last_dim(local_start_index_in_leaves_space, K,
-			                                     _tree.get_Z());
+			_cur_states[i].fill_Z_along_last_dim(local_start_index_in_leaves_space, K, Z);
 		}
 	}
 }
@@ -165,7 +164,7 @@ bool TSheet::get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_
 	// calculate index in Y or Z: leaf index in last dimension, relative to start index
 	const size_t ix = leaf_index_in_tree_of_last_dim - _start_ix_in_leaves_space_last_dim;
 
-	if (_tree.isLeaf(node_index_in_tree_of_dim)) {
+	if (_topology.is_leaf(node_index_in_tree_of_dim)) {
 		// leaf in all dimensions -> return Y
 		return _cur_states[node_index_in_tree_of_dim].get_Y(ix);
 	}

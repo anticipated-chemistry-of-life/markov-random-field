@@ -23,7 +23,7 @@
 TLotus::TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
                TypeParamErrorRate *error_rate)
     : _trees(trees), _collapser(trees), _gamma(gamma), _error_rate(error_rate),
-      _tmp_state_along_last_dim(*trees.back().get(), 1) {}
+      _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
 
 void TLotus::initialize(TDataModel *box, bool simulate) {
 	if (!simulate) { load_from_file(get_filename_lotus()); }

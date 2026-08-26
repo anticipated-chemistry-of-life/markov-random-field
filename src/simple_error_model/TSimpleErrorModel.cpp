@@ -16,7 +16,7 @@
 
 TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees,
                                      TypeParamEpsilon *epsilon)
-    : _trees(trees), _epsilon(epsilon), _tmp_state_along_last_dim(*trees.back().get(), 1) {}
+    : _trees(trees), _epsilon(epsilon), _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
 
 void TSimpleErrorModel::initialize_storage() {
 	// D lives in the same space as Y: one dimension per tree, sized by that tree's leaf count.
