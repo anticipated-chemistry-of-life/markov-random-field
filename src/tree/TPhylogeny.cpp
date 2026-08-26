@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
 size_t TPhylogeny::index_of(const std::string &id) const {
@@ -16,87 +17,75 @@ size_t TPhylogeny::index_of(const std::string &id) const {
 	return it->second;
 }
 
-namespace {
-
-/// Every node reaches a node with no parent within n_nodes steps, or it sits on a cycle.
-///
-/// Each node has at most one parent -- the builder rejects a second one -- so a component either
-/// hangs below a root or contains exactly one cycle. Walking up is therefore enough, and it can
-/// name the node it got stuck on, which "there is no root" cannot.
-void reject_cycles(const std::vector<size_t> &parents, const std::vector<std::string> &ids) {
-	const size_t n = parents.size();
-	for (size_t start = 0; start < n; ++start) {
-		size_t node = start;
-		for (size_t steps = 0; steps <= n; ++steps) {
-			if (parents[node] == TPhylogeny::NO_PARENT) { break; }
-			node = parents[node];
-			if (steps == n) {
-				throw coretools::TUserError("Node '", ids[start],
-				                            "' sits on a cycle: following its parents never "
-				                            "reaches a root.");
-			}
-		}
-	}
+void TPhylogeny::_throw_no_branch(size_t node) const {
+	throw coretools::TDevError("Node '", _ids[node],
+	                           "' is a root: it has no branch, and therefore no branch length.");
 }
 
-} // namespace
-
-TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
+/// Everything that can be done while edges arrive one at a time, split from the whole-tree
+/// post-processing that needs them all. That split is what lets read_phylogeny stream a file
+/// instead of materialising its edges: a taxonomy of a few million rows would otherwise sit in
+/// memory in full, in string form, next to the tree it is being turned into.
+struct TPhylogenyBuilder {
 	TPhylogeny tree;
 
-	// Children are collected per node and flattened into CSR at the end: the incremental walk below
-	// does not know a node's degree until every edge has been seen.
+	// Children are collected per node and flattened into CSR by finish(): an incremental walk does
+	// not know a node's degree until every edge has been seen.
 	std::vector<std::vector<size_t>> children_of;
-	std::vector<double>
-	    length_by_node; // parallel to nodes; a root's entry stays 0.0 and is dropped
+	// Parallel to nodes; a root's entry stays 0.0 and is dropped by finish().
+	std::vector<double> length_by_node;
 
-	auto add_node = [&](const std::string &id, size_t parent, double length) {
+	size_t add_node(const std::string &id, size_t parent, double length) {
 		tree._ids.push_back(id);
 		tree._parents.push_back(parent);
 		children_of.emplace_back();
 		length_by_node.push_back(length);
 		tree._index_by_id[id] = tree._ids.size() - 1;
 		return tree._ids.size() - 1;
-	};
-
-	for (const auto &edge : edges) {
-		if (edge.child == edge.parent) {
-			throw coretools::TUserError("Node '", edge.child,
-			                            "' can not be parent of itself ! Got ", edge.child,
-			                            "for the child and ", edge.parent, " for the parent.");
-		}
-		if (edge.branch_length <= 0.0) {
-			throw coretools::TUserError(
-			    "You can't have a negative branch length or equal to 0.0 !");
-		}
-
-		const bool has_child  = tree.contains(edge.child);
-		const bool has_parent = tree.contains(edge.parent);
-
-		if (!has_child && !has_parent) {
-			const size_t parent_ix = add_node(edge.parent, TPhylogeny::NO_PARENT, 0.0);
-			const size_t child_ix  = add_node(edge.child, parent_ix, edge.branch_length);
-			children_of[parent_ix].push_back(child_ix);
-		} else if (!has_child) {
-			const size_t parent_ix = tree._index_by_id.at(edge.parent);
-			const size_t child_ix  = add_node(edge.child, parent_ix, edge.branch_length);
-			children_of[parent_ix].push_back(child_ix);
-		} else {
-			// The child already exists, so it may only be adopted if nothing has claimed it yet.
-			const size_t child_ix = tree._index_by_id.at(edge.child);
-			if (tree._parents[child_ix] != TPhylogeny::NO_PARENT) {
-				throw coretools::TUserError(
-				    "Node: '", edge.child,
-				    "' has already a parent in the tree. Adding an other parent is not allowed !");
-			}
-			const size_t parent_ix = has_parent ? tree._index_by_id.at(edge.parent)
-			                                    : add_node(edge.parent, TPhylogeny::NO_PARENT, 0.0);
-			tree._parents[child_ix]  = parent_ix;
-			length_by_node[child_ix] = edge.branch_length;
-			children_of[parent_ix].push_back(child_ix);
-		}
 	}
 
+	void add_edge(const std::string &child, const std::string &parent, double branch_length);
+	TPhylogeny finish();
+};
+
+void TPhylogenyBuilder::add_edge(const std::string &child, const std::string &parent,
+                                 double branch_length) {
+	if (child == parent) {
+		throw coretools::TUserError("Node '", child, "' can not be parent of itself ! Got ", child,
+		                            "for the child and ", parent, " for the parent.");
+	}
+	if (branch_length <= 0.0) {
+		throw coretools::TUserError("You can't have a negative branch length or equal to 0.0 !");
+	}
+
+	const bool has_child  = tree.contains(child);
+	const bool has_parent = tree.contains(parent);
+
+	if (!has_child && !has_parent) {
+		const size_t parent_ix = add_node(parent, TPhylogeny::NO_PARENT, 0.0);
+		const size_t child_ix  = add_node(child, parent_ix, branch_length);
+		children_of[parent_ix].push_back(child_ix);
+	} else if (!has_child) {
+		const size_t parent_ix = tree._index_by_id.at(parent);
+		const size_t child_ix  = add_node(child, parent_ix, branch_length);
+		children_of[parent_ix].push_back(child_ix);
+	} else {
+		// The child already exists, so it may only be adopted if nothing has claimed it yet.
+		const size_t child_ix = tree._index_by_id.at(child);
+		if (tree._parents[child_ix] != TPhylogeny::NO_PARENT) {
+			throw coretools::TUserError(
+			    "Node: '", child,
+			    "' has already a parent in the tree. Adding an other parent is not allowed !");
+		}
+		const size_t parent_ix   = has_parent ? tree._index_by_id.at(parent)
+		                                      : add_node(parent, TPhylogeny::NO_PARENT, 0.0);
+		tree._parents[child_ix]  = parent_ix;
+		length_by_node[child_ix] = branch_length;
+		children_of[parent_ix].push_back(child_ix);
+	}
+}
+
+TPhylogeny TPhylogenyBuilder::finish() {
 	const size_t n = tree._ids.size();
 
 	// Flatten children into CSR so that is_leaf and children_of answer without a pointer chase.
@@ -108,8 +97,6 @@ TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
 	for (const auto &kids : children_of) {
 		tree._children.insert(tree._children.end(), kids.begin(), kids.end());
 	}
-
-	reject_cycles(tree._parents, tree._ids);
 
 	// Classify. The order here is the order the category lists carry, and it is load-bearing:
 	// branch index is an index into _branches, which downstream code indexes branch lengths by.
@@ -150,9 +137,10 @@ TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
 		}
 	}
 
-	// Reachability. Cycles are already rejected and every node has at most one parent, so this
-	// cannot fail today -- it is asserted because it is a post-condition callers rely on, not
-	// because a known input reaches it.
+	// Reachability, which doubles as the cycle check. Every node has at most one parent, so
+	// walking up from an unreachable node can only end on a cycle: had it ended on a node without
+	// a parent, that node is a root and the walk was a path down from one. So there is nothing a
+	// separate cycle pass would catch that this does not, and this is O(n) rather than O(n*depth).
 	std::vector<bool> seen(n, false);
 	std::queue<size_t> pending;
 	for (const size_t root : tree._roots) {
@@ -175,7 +163,8 @@ TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
 		for (size_t i = 0; i < n; ++i) {
 			if (!seen[i]) {
 				throw coretools::TUserError("Node '", tree._ids[i],
-				                            "' is not reachable from any root.");
+				                            "' sits on or below a cycle: following its parents "
+				                            "never reaches a root.");
 			}
 		}
 	}
@@ -187,7 +176,15 @@ TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
 		tree._branch_lengths.push_back(length_by_node[node]);
 	}
 
-	return tree;
+	return std::move(tree);
+}
+
+TPhylogeny build_phylogeny(const std::vector<TEdge> &edges) {
+	TPhylogenyBuilder builder;
+	for (const auto &edge : edges) {
+		builder.add_edge(edge.child, edge.parent, edge.branch_length);
+	}
+	return builder.finish();
 }
 
 TPhylogeny read_phylogeny(const std::string &filename) {
@@ -197,10 +194,11 @@ TPhylogeny read_phylogeny(const std::string &filename) {
 		                            file.numCols(), " !");
 	}
 
-	std::vector<TEdge> edges;
+	// One edge at a time, never a vector of them: the strings die at the end of each iteration.
+	TPhylogenyBuilder builder;
 	for (; !file.empty(); file.popFront()) {
-		edges.push_back({std::string(file.get(0)), std::string(file.get(1)), file.get<double>(2)});
+		builder.add_edge(std::string(file.get(0)), std::string(file.get(1)), file.get<double>(2));
 	}
 
-	return build_phylogeny(edges);
+	return builder.finish();
 }

@@ -2,13 +2,14 @@
 
 The C++ assigns every node an index by *file appearance order*, with no sort:
 reading each `child<TAB>parent` row, it appends the parent first if unseen, then
-the child (`src/tree/io/load_from_file.cpp:6,13`). Three separate orderings are
-then derived from that node order, and the Python must agree with all three or
-every downstream file is silently misaligned:
+the child (`TPhylogenyBuilder::add_edge` in `src/tree/TPhylogeny.cpp`).
+Three separate orderings are then derived from that node order, and the Python
+must agree with all three or every downstream file is silently misaligned:
 
 - **leaf order**: leaf nodes, in node order. Indexes the field's dimensions.
 - **internal order**: non-leaf nodes *including roots*, in node order
-  (`load_from_file.cpp:114-116`). Indexes the internal-state dimension.
+  (the classification loop in `TPhylogenyBuilder::finish`). Indexes the
+  internal-state dimension.
 - **branch order**: non-root nodes, in node order. Indexes branch lengths.
 
 Note the two easy mistakes: "internal" includes roots, and "branch" interleaves

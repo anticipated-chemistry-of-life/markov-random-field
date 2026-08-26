@@ -15,10 +15,12 @@
 #include "gtest/gtest.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -46,30 +48,35 @@ template<typename F> void expect_user_error(F &&f) {
 // -------------------------------------------------------------------------
 
 TEST(Phylogeny, rejects_a_node_that_is_its_own_parent) {
-	expect_user_error([&] { build_phylogeny({edge("a", "a")}); });
+	expect_user_error([&] { static_cast<void>(build_phylogeny({edge("a", "a")})); });
 }
 
 TEST(Phylogeny, rejects_a_zero_or_negative_branch_length) {
-	expect_user_error([&] { build_phylogeny({edge("a", "root", 0.0)}); });
-	expect_user_error([&] { build_phylogeny({edge("a", "root", -1.0)}); });
+	expect_user_error([&] { static_cast<void>(build_phylogeny({edge("a", "root", 0.0)})); });
+	expect_user_error([&] { static_cast<void>(build_phylogeny({edge("a", "root", -1.0)})); });
 }
 
 TEST(Phylogeny, rejects_a_node_claimed_as_a_child_twice) {
-	expect_user_error([&] { build_phylogeny({edge("child", "first"), edge("child", "second")}); });
+	expect_user_error([&] {
+		static_cast<void>(build_phylogeny({edge("child", "first"), edge("child", "second")}));
+	});
 }
 
 TEST(Phylogeny, rejects_a_cycle) {
 	// Two edges that between them leave every node with a parent: a -> b -> a.
-	expect_user_error([&] { build_phylogeny({edge("a", "b"), edge("b", "a")}); });
+	expect_user_error(
+	    [&] { static_cast<void>(build_phylogeny({edge("a", "b"), edge("b", "a")})); });
 }
 
 TEST(Phylogeny, rejects_a_longer_cycle) {
-	expect_user_error([&] { build_phylogeny({edge("a", "b"), edge("b", "c"), edge("c", "a")}); });
+	expect_user_error([&] {
+		static_cast<void>(build_phylogeny({edge("a", "b"), edge("b", "c"), edge("c", "a")}));
+	});
 }
 
 TEST(Phylogeny, rejects_an_empty_edge_list) {
 	// No nodes at all means no root, which is the first post-condition to fail.
-	expect_user_error([&] { build_phylogeny({}); });
+	expect_user_error([&] { static_cast<void>(build_phylogeny({})); });
 }
 
 TEST(Phylogeny, accepts_a_forest_with_several_roots) {
@@ -175,9 +182,18 @@ private:
 	std::filesystem::path _path;
 
 public:
-	TTempFile(const std::string &name, const std::string &content)
-	    : _path(std::filesystem::temp_directory_path() / name) {
+	TTempFile(const std::string &name, const std::string &content) {
+		// A per-process salt and a counter, because two test binaries running side by side would
+		// otherwise write the same path and read each other's content.
+		static const auto salt = std::to_string(std::random_device{}());
+		static std::atomic<unsigned> counter{0};
+		_path = std::filesystem::temp_directory_path() /
+		        ("acol_" + salt + "_" + std::to_string(counter++) + "_" + name);
 		std::ofstream out(_path);
+		// Without this, a test that could not write its own fixture reads an absent file, the
+		// reader throws, and the test passes for entirely the wrong reason. gtest assertions are
+		// not usable in a constructor, so this throws instead.
+		if (!out.is_open()) { throw std::runtime_error("could not create temp file " + path()); }
 		out << content;
 	}
 	~TTempFile() {

@@ -18,6 +18,7 @@ struct TEdge {
 };
 
 class TPhylogeny;
+struct TPhylogenyBuilder;
 
 /// Turn an edge list into a validated phylogeny. The only way to build one.
 ///
@@ -69,7 +70,12 @@ private:
 	std::vector<size_t> _branch_index;
 
 	TPhylogeny() = default;
-	friend TPhylogeny build_phylogeny(const std::vector<TEdge> &edges);
+	/// The only thing that may fill one in. Both build_phylogeny and read_phylogeny go through it,
+	/// which is what lets read_phylogeny stream a file rather than materialise its edges first.
+	friend struct TPhylogenyBuilder;
+
+	/// Out of line so that this header stays free of the error machinery.
+	[[noreturn]] void _throw_no_branch(size_t node) const;
 
 public:
 	[[nodiscard]] size_t n_nodes() const { return _ids.size(); }
@@ -98,9 +104,10 @@ public:
 	[[nodiscard]] size_t internal_index(size_t node) const { return _internal_index[node]; }
 	[[nodiscard]] size_t branch_index(size_t node) const { return _branch_index[node]; }
 
-	/// The branch below `node`, exactly as the file stated it. Undefined for a root, which has no
-	/// branch; ask is_root first.
+	/// The branch below `node`, exactly as the file stated it. Throws a dev error for a root,
+	/// which has no branch; ask is_root first.
 	[[nodiscard]] double branch_length_of(size_t node) const {
+		if (_branch_index[node] == NOT_IN_SPACE) { _throw_no_branch(node); }
 		return _branch_lengths[_branch_index[node]];
 	}
 	[[nodiscard]] const std::vector<double> &branch_lengths() const { return _branch_lengths; }
