@@ -51,12 +51,10 @@ private:
 	std::vector<size_t> _internal_nodes_without_roots;
 	std::vector<size_t> _leaves_and_internal_nodes_without_roots;
 
-	// The four vectors below have size _nodes.size()
+	// The three vectors below have size _nodes.size()
 	std::vector<size_t> _leafIndices;
-	std::vector<size_t> _rootIndices;
 	std::vector<size_t> _internalIndices;
 	std::vector<size_t> _leaves_and_internal_nodes_without_roots_indices;
-	std::vector<size_t> _internalIndicesWithoutRoots;
 
 	// dimension of the tree
 	size_t _dimension;
@@ -242,11 +240,6 @@ public:
 	 */
 	[[nodiscard]] size_t get_node_index(const std::string &Id) const;
 
-	/** Gives the number of roots within the tree
-	 * @return the number of roots
-	 */
-	[[nodiscard]] size_t number_of_roots() const { return _roots.size(); }
-
 	/** Method to get all the leaves of the tree.
 	 * @return Returns a vector of length equal to the number of leaves in the tree. Each
 	 * element of the vector is the index of the leaf node within the tree.
@@ -290,12 +283,6 @@ public:
 	 */
 	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _roots; }
 	[[nodiscard]] const std::vector<size_t> &get_internal_nodes() const { return _internal_nodes; }
-	[[nodiscard]] const std::vector<size_t> &get_internal_indicies() const {
-		return _internalIndices;
-	}
-	[[nodiscard]] const std::vector<size_t> &get_internal_nodes_without_roots() const {
-		return _internal_nodes_without_roots;
-	}
 
 	/** Checks whether a node is in the tree
 	 * @param node_id: the id of the node
@@ -304,10 +291,6 @@ public:
 	[[nodiscard]] bool in_tree(const std::string &node_id) const {
 		return _node_map.find(node_id) != _node_map.end();
 	};
-
-	[[nodiscard]] std::vector<size_t> get_all_binned_branch_lengths_from_tree() const {
-		return _binned_branch_lengths_from_tree;
-	}
 
 	// stattools stuff
 	[[nodiscard]] std::string name() const override;
@@ -319,8 +302,6 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	[[nodiscard]] double get_delta() const { return _grid().delta(); }
-	[[nodiscard]] size_t get_number_of_bins() const { return _grid().n_bins(); }
 	std::vector<TClique> &get_cliques();
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);

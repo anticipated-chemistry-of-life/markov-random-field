@@ -1,6 +1,7 @@
 #include "../TTree.h"
 #include "constants.h"
 #include "coretools/algorithms.h"
+#include <utility>
 
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
 
@@ -18,16 +19,8 @@ const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const 
 }
 
 TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) {
-	size_t ix_clique = 0;
-	size_t stride    = 1;
-
-	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
-		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
-		ix_clique += idx * stride;
-		stride *= _dimension_cliques[i];
-	}
-
-	return _cliques[ix_clique];
+	// One copy of the stride arithmetic: the const overload above is the implementation.
+	return const_cast<TClique &>(std::as_const(*this).get_clique(index_in_leaves_space));
 }
 
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,

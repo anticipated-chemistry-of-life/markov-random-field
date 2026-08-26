@@ -99,9 +99,7 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 
 	// identify roots and leaves
 	this->_leafIndices.resize(_nodes.size(), -1);
-	this->_rootIndices.resize(_nodes.size(), -1);
 	this->_internalIndices.resize(_nodes.size(), -1);
-	this->_internalIndicesWithoutRoots.resize(_nodes.size(), -1);
 	this->_leaves_and_internal_nodes_without_roots_indices.resize(_nodes.size(), -1);
 	for (auto it = _nodes.begin(); it != _nodes.end(); ++it) {
 		if (it->is_leaf()) {
@@ -115,11 +113,8 @@ void TTree::_load_from_file(const std::string &filename, const std::string &tree
 			this->_internalIndices[it - _nodes.begin()] = _internal_nodes.size();
 			this->_internal_nodes.push_back(it - _nodes.begin());
 			if (it->is_root()) {
-				_rootIndices[it - _nodes.begin()] = _roots.size();
 				_roots.push_back(it - _nodes.begin());
 			} else if (it->is_internal_node()) {
-				_internalIndicesWithoutRoots[it - _nodes.begin()] =
-				    _internal_nodes_without_roots.size();
 				_internal_nodes_without_roots.push_back(it - _nodes.begin());
 
 				this->_leaves_and_internal_nodes_without_roots_indices[it - _nodes.begin()] =
