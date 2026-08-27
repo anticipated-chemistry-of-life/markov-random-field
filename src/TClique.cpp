@@ -10,7 +10,6 @@
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/TTree.h"
 #include <cstddef>
-#include <unordered_set>
 #include <vector>
 
 TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_dimension,
@@ -102,36 +101,15 @@ std::vector<size_t> TClique::initialize_Z_from_children(TCurrentState &current_s
 
 	// initialise vector that will insert the Z not in parallel
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
-	std::unordered_set<size_t> remaining;
-	std::vector<int> was_initilized(tree->get_number_of_nodes(), false);
-	for (size_t leaf_index : tree->get_leaf_nodes()) { was_initilized[leaf_index] = true; }
 
-	// start with the leaves
-	for (size_t internal_node_index : tree->get_internal_nodes()) {
-		remaining.insert(internal_node_index);
-	}
-
-	// bottom-up update of Z
-	while (!remaining.empty()) {
-		for (auto it = remaining.begin(); it != remaining.end();) {
-			const size_t node_index = *it;
-			bool ready              = true;
-			for (size_t child_index : tree->children_of(node_index)) {
-				if (!was_initilized[child_index]) {
-					ready = false;
-					break;
-				}
-			}
-
-			if (ready) {
-				_set_Z_to_MLE(node_index, current_state, Z, tree,
-				              linear_indices_in_Z_space_to_insert);
-				was_initilized[node_index] = true;
-				it                         = remaining.erase(it);
-			} else {
-				++it;
-			}
-		}
+	// Bottom-up update of Z, as one forward walk. The internal nodes are stored as the non-root
+	// block in post-order followed by the roots (ADR-0004), so every node's children are already
+	// done by the time it comes up -- leaves before all of them, and each parent after its own
+	// children. This used to be a fixed-point loop re-sweeping a set of not-yet-ready nodes until
+	// none remained, which is quadratic in the worst case because nothing about the storage order
+	// guaranteed anything.
+	for (const size_t node_index : tree->get_internal_nodes()) {
+		_set_Z_to_MLE(node_index, current_state, Z, tree, linear_indices_in_Z_space_to_insert);
 	}
 
 	return linear_indices_in_Z_space_to_insert;
