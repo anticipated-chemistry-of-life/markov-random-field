@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -42,33 +43,27 @@ struct TPhylogenyBuilder;
 /// non-root nodes in post-order, then all roots, with file order preserved inside the leaf block
 /// and the root block. So a node's index alone says what kind of node it is, and a child's index
 /// is always below its parent's. See ADR-0004.
+///
+/// That is why every question about which category a node belongs to, and about its index within
+/// that category, is arithmetic here rather than a lookup: the whole of it derives from three
+/// numbers -- the node count, the leaf count and the root count. The arithmetic stays behind named
+/// methods rather than being written out at call sites, so that the layout has exactly one home.
 class TPhylogeny {
 public:
 	/// The parent of a root. Never a valid node index.
-	static constexpr size_t NO_PARENT    = std::numeric_limits<size_t>::max();
-	/// Returned when a node has no index in the space asked for -- a leaf has no internal-node
-	/// index, a root has no branch index.
-	static constexpr size_t NOT_IN_SPACE = std::numeric_limits<size_t>::max();
+	static constexpr size_t NO_PARENT = std::numeric_limits<size_t>::max();
 
 private:
 	std::vector<std::string> _ids;
 	std::vector<size_t> _parents;        // NO_PARENT for a root
 	std::vector<size_t> _child_offsets;  // CSR, size n_nodes + 1
 	std::vector<size_t> _children;       // CSR, flat
-	std::vector<double> _branch_lengths; // one per branch, in branch order
+	std::vector<double> _branch_lengths; // one per non-root node, indexed by that node
 	std::unordered_map<std::string, size_t> _index_by_id;
 
-	// Category lists, each in ascending node order.
-	std::vector<size_t> _leaves;
-	std::vector<size_t> _roots;
-	std::vector<size_t> _internal_nodes; // roots included
-	std::vector<size_t> _internal_nodes_without_roots;
-	std::vector<size_t> _branches; // every non-root node: the node its branch hangs below
-
-	// Maps back into those lists, each of size n_nodes, NOT_IN_SPACE where inapplicable.
-	std::vector<size_t> _leaf_index;
-	std::vector<size_t> _internal_index;
-	std::vector<size_t> _branch_index;
+	// The layout, in full: with the node count these decide every category and every index space.
+	size_t _n_leaves = 0;
+	size_t _n_roots  = 0;
 
 	TPhylogeny() = default;
 	/// The only thing that may fill one in. Both build_phylogeny and read_phylogeny go through it,
@@ -80,10 +75,13 @@ private:
 
 public:
 	[[nodiscard]] size_t n_nodes() const { return _ids.size(); }
-	[[nodiscard]] size_t n_leaves() const { return _leaves.size(); }
-	[[nodiscard]] size_t n_roots() const { return _roots.size(); }
-	[[nodiscard]] size_t n_branches() const { return _branches.size(); }
-	[[nodiscard]] size_t n_internal_nodes() const { return _internal_nodes.size(); }
+	[[nodiscard]] size_t n_leaves() const { return _n_leaves; }
+	[[nodiscard]] size_t n_roots() const { return _n_roots; }
+	/// Every node except a root has exactly one branch, and the non-root nodes are the first two
+	/// blocks -- so this is also the index one past the last branch, and the first root.
+	[[nodiscard]] size_t n_branches() const { return n_nodes() - _n_roots; }
+	/// Roots included, as ever: an internal node is any node with a child.
+	[[nodiscard]] size_t n_internal_nodes() const { return n_nodes() - _n_leaves; }
 
 	[[nodiscard]] const std::string &id_of(size_t node) const { return _ids[node]; }
 	[[nodiscard]] bool contains(const std::string &id) const { return _index_by_id.count(id) > 0; }
@@ -96,30 +94,37 @@ public:
 		        _child_offsets[node + 1] - _child_offsets[node]};
 	}
 
-	[[nodiscard]] bool is_leaf(size_t node) const {
-		return _child_offsets[node + 1] == _child_offsets[node];
-	}
-	[[nodiscard]] bool is_root(size_t node) const { return _parents[node] == NO_PARENT; }
+	/// Leaves are the first block, so this is a comparison and not a look at the node's children.
+	/// It is the most frequently asked question in the sweep.
+	[[nodiscard]] bool is_leaf(size_t node) const { return node < _n_leaves; }
+	/// Roots are the last block.
+	[[nodiscard]] bool is_root(size_t node) const { return node >= n_branches(); }
 
-	[[nodiscard]] size_t leaf_index(size_t node) const { return _leaf_index[node]; }
-	[[nodiscard]] size_t internal_index(size_t node) const { return _internal_index[node]; }
-	[[nodiscard]] size_t branch_index(size_t node) const { return _branch_index[node]; }
+	/// A leaf's index in leaf space is its node index. Meaningless for a non-leaf.
+	[[nodiscard]] size_t leaf_index(size_t node) const { return node; }
+	/// An internal node's index in internal-node space. Meaningless for a leaf.
+	[[nodiscard]] size_t internal_index(size_t node) const { return node - _n_leaves; }
+	/// A branch is identified by the node it hangs below, and that node's index is its index in
+	/// branch space. Meaningless for a root, which has no branch.
+	[[nodiscard]] size_t branch_index(size_t node) const { return node; }
 
 	/// The branch below `node`, exactly as the file stated it. Throws a dev error for a root,
 	/// which has no branch; ask is_root first.
 	[[nodiscard]] double branch_length_of(size_t node) const {
-		if (_branch_index[node] == NOT_IN_SPACE) { _throw_no_branch(node); }
-		return _branch_lengths[_branch_index[node]];
+		if (is_root(node)) { _throw_no_branch(node); }
+		return _branch_lengths[node];
 	}
 	[[nodiscard]] const std::vector<double> &branch_lengths() const { return _branch_lengths; }
 
-	[[nodiscard]] const std::vector<size_t> &leaves() const { return _leaves; }
-	[[nodiscard]] const std::vector<size_t> &roots() const { return _roots; }
-	[[nodiscard]] const std::vector<size_t> &internal_nodes() const { return _internal_nodes; }
-	[[nodiscard]] const std::vector<size_t> &internal_nodes_without_roots() const {
-		return _internal_nodes_without_roots;
+	// Each category is a contiguous block, so a category is a range of node indices rather than a
+	// list of them.
+	[[nodiscard]] auto leaves() const { return std::views::iota(size_t{0}, _n_leaves); }
+	[[nodiscard]] auto roots() const { return std::views::iota(n_branches(), n_nodes()); }
+	[[nodiscard]] auto internal_nodes() const { return std::views::iota(_n_leaves, n_nodes()); }
+	[[nodiscard]] auto internal_nodes_without_roots() const {
+		return std::views::iota(_n_leaves, n_branches());
 	}
-	[[nodiscard]] const std::vector<size_t> &branches() const { return _branches; }
+	[[nodiscard]] auto branches() const { return std::views::iota(size_t{0}, n_branches()); }
 };
 
 #endif // ACOL_TPHYLOGENY_H

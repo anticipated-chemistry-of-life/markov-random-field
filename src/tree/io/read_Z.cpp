@@ -17,15 +17,14 @@ size_t index_in_dimension(const TTree &tree, const std::string &node_name, bool 
 		                            tree.get_tree_name(), "'.");
 	}
 
-	const size_t node  = topology.index_of(node_name);
-	const size_t index = internal_space ? topology.internal_index(node) : topology.leaf_index(node);
-	if (index == TPhylogeny::NOT_IN_SPACE) {
+	const size_t node = topology.index_of(node_name);
+	if (topology.is_leaf(node) == internal_space) {
 		throw coretools::TUserError(
 		    "Node '", node_name, "' of tree '", tree.get_tree_name(), "' is ",
 		    internal_space ? "a leaf, but this column holds internal nodes."
 		                   : "an internal node, but this column holds leaves.");
 	}
-	return index;
+	return internal_space ? topology.internal_index(node) : topology.leaf_index(node);
 }
 
 } // namespace

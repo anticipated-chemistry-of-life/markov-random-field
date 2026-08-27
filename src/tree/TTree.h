@@ -229,12 +229,6 @@ public:
 		return _topology().index_of(Id);
 	}
 
-	/** Method to get all the leaves of the tree.
-	 * @return Returns a vector of length equal to the number of leaves in the tree. Each
-	 * element of the vector is the index of the leaf node within the tree.
-	 */
-	[[nodiscard]] const std::vector<size_t> &get_leaf_nodes() const { return _topology().leaves(); }
-
 	/** @return the number of leaves in the tree
 	 */
 	[[nodiscard]] size_t get_number_of_leaves() const { return _topology().n_leaves(); }
@@ -245,8 +239,8 @@ public:
 	[[nodiscard]] size_t get_number_of_roots() const { return _topology().n_roots(); }
 
 	/** @param node_index: the index of the node within the tree
-	 * @return The index of the node within the leaves vector (which is smaller than the total
-	 * number of nodes in the tree). If the node is not a leaf, the function will return -1.
+	 * @return The index of the node in leaf space. Meaningless if the node is not a leaf; the node
+	 * index alone says whether it is one.
 	 */
 	[[nodiscard]] size_t get_index_within_leaves(size_t node_index) const {
 		return _topology().leaf_index(node_index);
@@ -262,20 +256,17 @@ public:
 	}
 
 	/** @param node_index: the index of the node within the tree
-	 * @return The index of the node within the internal nodes vector (which is smaller than the
-	 * total number of nodes in the tree). If the node is not an internal node, the function
-	 * will return -1.
+	 * @return The index of the node in internal-node space. Meaningless if the node is a leaf; the
+	 * node index alone says whether it is one.
 	 */
 	[[nodiscard]] size_t get_index_within_internal_nodes(size_t node_index) const {
 		return _topology().internal_index(node_index);
 	}
 
-	/** @return The root nodes of the tree
+	/** @return The root nodes of the tree, as the range of node indices they occupy
 	 */
-	[[nodiscard]] const std::vector<size_t> &get_root_nodes() const { return _topology().roots(); }
-	[[nodiscard]] const std::vector<size_t> &get_internal_nodes() const {
-		return _topology().internal_nodes();
-	}
+	[[nodiscard]] auto get_root_nodes() const { return _topology().roots(); }
+	[[nodiscard]] auto get_internal_nodes() const { return _topology().internal_nodes(); }
 
 	/** Checks whether a node is in the tree
 	 * @param node_id: the id of the node

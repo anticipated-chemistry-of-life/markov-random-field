@@ -166,10 +166,10 @@ TEST(PhylogenyGolden, index_spaces) {
 	EXPECT_EQ(tree.internal_index(tree.index_of("fish")), 4u);
 	EXPECT_EQ(tree.branch_index(tree.index_of("mammal")), 7u);
 
-	// A node has no index in a space it does not belong to.
-	EXPECT_EQ(tree.internal_index(tree.index_of("chimp")), TPhylogeny::NOT_IN_SPACE);
-	EXPECT_EQ(tree.leaf_index(tree.index_of("mammal")), TPhylogeny::NOT_IN_SPACE);
-	EXPECT_EQ(tree.branch_index(tree.index_of("animal")), TPhylogeny::NOT_IN_SPACE);
+	// Whether a node belongs to a space at all is a question about its index, asked separately.
+	EXPECT_FALSE(tree.is_leaf(tree.index_of("mammal")));
+	EXPECT_TRUE(tree.is_leaf(tree.index_of("chimp")));
+	EXPECT_TRUE(tree.is_root(tree.index_of("animal")));
 }
 
 TEST(PhylogenyGolden, unknown_node_is_an_error) {
@@ -299,10 +299,9 @@ void check_invariants(const TPhylogeny &tree) {
 			    << "node " << i << " is not among its parent's children";
 		}
 
-		// A node has an index in a space exactly when it belongs to it.
-		EXPECT_EQ(tree.leaf_index(i) != TPhylogeny::NOT_IN_SPACE, tree.is_leaf(i));
-		EXPECT_EQ(tree.internal_index(i) != TPhylogeny::NOT_IN_SPACE, !tree.is_leaf(i));
-		EXPECT_EQ(tree.branch_index(i) != TPhylogeny::NOT_IN_SPACE, !tree.is_root(i));
+		// Category membership is decided by the index, and by nothing stored alongside it.
+		EXPECT_EQ(tree.is_leaf(i), i < tree.n_leaves());
+		EXPECT_EQ(tree.is_root(i), i >= tree.n_branches());
 	}
 
 	// -- the canonical ordering (ADR-0004) ---------------------------------

@@ -9,6 +9,12 @@
 #include <utility>
 #include <vector>
 
+namespace {
+/// "no index yet", while the permutation is being worked out. Local: a finished TPhylogeny has no
+/// such state, because every node has an index in every space it belongs to and none in any other.
+constexpr size_t UNASSIGNED = std::numeric_limits<size_t>::max();
+} // namespace
+
 size_t TPhylogeny::index_of(const std::string &id) const {
 	auto it = _index_by_id.find(id);
 	if (it == _index_by_id.end()) {
@@ -167,7 +173,7 @@ void TPhylogenyBuilder::_reject_a_non_forest() const {
 /// visited in the order the file introduced them.
 std::vector<size_t> TPhylogenyBuilder::_canonical_order() const {
 	const size_t n = tree._ids.size();
-	std::vector<size_t> new_of_old(n, TPhylogeny::NOT_IN_SPACE);
+	std::vector<size_t> new_of_old(n, UNASSIGNED);
 
 	size_t n_roots   = 0;
 	size_t next_leaf = 0;
@@ -207,7 +213,7 @@ std::vector<size_t> TPhylogenyBuilder::_canonical_order() const {
 	// what the walk visits. Checked anyway, because a permutation with a hole in it would show up
 	// far from here as a node silently overwriting another.
 	for (size_t i = 0; i < n; ++i) {
-		if (new_of_old[i] == TPhylogeny::NOT_IN_SPACE) {
+		if (new_of_old[i] == UNASSIGNED) {
 			throw coretools::TDevError("Node '", tree._ids[i], "' was left out of the node order.");
 		}
 	}
@@ -256,37 +262,26 @@ void TPhylogenyBuilder::_assemble() {
 		tree._children.insert(tree._children.end(), kids.begin(), kids.end());
 	}
 
-	// Classify. Ascending node order, so each category list comes out as the contiguous block the
-	// canonical ordering put it in, and each map back into one is arithmetic on the node index --
-	// which is what the next ticket deletes these vectors in favour of.
-	tree._leaf_index.assign(n, TPhylogeny::NOT_IN_SPACE);
-	tree._internal_index.assign(n, TPhylogeny::NOT_IN_SPACE);
-	tree._branch_index.assign(n, TPhylogeny::NOT_IN_SPACE);
+	// The whole classification, now that the blocks are contiguous: count them.
 	for (size_t i = 0; i < n; ++i) {
-		if (tree.is_leaf(i)) {
-			tree._leaf_index[i] = tree._leaves.size();
-			tree._leaves.push_back(i);
-		} else {
-			tree._internal_index[i] = tree._internal_nodes.size();
-			tree._internal_nodes.push_back(i);
-			if (tree.is_root(i)) {
-				tree._roots.push_back(i);
-			} else {
-				tree._internal_nodes_without_roots.push_back(i);
-			}
-		}
-		if (!tree.is_root(i)) {
-			tree._branch_index[i] = tree._branches.size();
-			tree._branches.push_back(i);
+		if (is_leaf(i)) { ++tree._n_leaves; }
+		if (is_root(i)) { ++tree._n_roots; }
+	}
+
+	// The layout invariant, stated once here so that every accessor may assume it. A permutation
+	// that got this wrong would not fail here, it would hand out a plausible-looking index
+	// somewhere far away -- so it is worth one linear pass to find out at construction.
+	for (size_t i = 0; i < n; ++i) {
+		if (is_leaf(i) != (i < tree._n_leaves) || is_root(i) != (i >= n - tree._n_roots)) {
+			throw coretools::TDevError("Node '", tree._ids[i], "' at index ", i,
+			                           " is not in the block its index says it is in.");
 		}
 	}
 
-	// One length per branch, in branch order: a root has no branch, so its entry is dropped here
-	// rather than carried around as a zero.
-	tree._branch_lengths.reserve(tree._branches.size());
-	for (const size_t node : tree._branches) {
-		tree._branch_lengths.push_back(length_by_node[node]);
-	}
+	// One length per branch, indexed by the node the branch hangs below -- which is the first
+	// `n - n_roots` nodes. A root has no branch, so its entry is dropped here rather than carried
+	// around as a zero.
+	tree._branch_lengths.assign(length_by_node.begin(), length_by_node.end() - tree._n_roots);
 }
 
 TPhylogeny TPhylogenyBuilder::finish() {
