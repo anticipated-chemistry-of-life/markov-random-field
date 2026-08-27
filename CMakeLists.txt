@@ -214,8 +214,10 @@ if(BUILD_TESTING)
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
   target_link_libraries("${PROJECT_NAME}_unitTests" PRIVATE GTest::gtest_main
                                                             GTest::gmock_main)
-  target_compile_definitions("${PROJECT_NAME}_unitTests"
-                             PRIVATE CHECK_INTERVALS)
+  target_compile_definitions(
+    "${PROJECT_NAME}_unitTests"
+    PRIVATE CHECK_INTERVALS
+            ACOL_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/test_data")
   target_compile_options("${PROJECT_NAME}_unitTests" PRIVATE -Wall -Wextra)
 
   add_test(NAME "${PROJECT_NAME}_unitTests" COMMAND "${PROJECT_NAME}_unitTests")

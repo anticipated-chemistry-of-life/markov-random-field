@@ -1,6 +1,7 @@
 #include "../TTree.h"
 #include "constants.h"
 #include "coretools/algorithms.h"
+#include <utility>
 
 std::vector<TClique> &TTree::get_cliques() { return _cliques; }
 
@@ -18,16 +19,8 @@ const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const 
 }
 
 TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) {
-	size_t ix_clique = 0;
-	size_t stride    = 1;
-
-	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
-		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
-		ix_clique += idx * stride;
-		stride *= _dimension_cliques[i];
-	}
-
-	return _cliques[ix_clique];
+	// One copy of the stride arithmetic: the const overload above is the implementation.
+	return const_cast<TClique &>(std::as_const(*this).get_clique(index_in_leaves_space));
 }
 
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
@@ -53,8 +46,11 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	for (size_t i = 0; i < n_cliques; ++i) {
 		// get start index of each clique in leaves space
 		auto start_index_in_leaves_space = coretools::getSubscriptsAsArray(i, _dimension_cliques);
-		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _nodes.size(), increment);
-		_cliques.back().initialize(_delta, _number_of_bins);
+		// The transition grid is not installed here: it needs alpha and nu, which stattools has not
+		// drawn yet. TTree::guessInitialValues does it, and asking a clique for its grid before
+		// then throws instead of reading the zero-filled matrices this used to leave behind.
+		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _topology().n_nodes(),
+		                      increment);
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;
@@ -70,6 +66,5 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 }
 
 void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
-	clique.initialize(this->get_delta(), this->get_number_of_bins());
-	clique.set_lambda(_alpha_c->value(c), _nu_c[c]);
+	clique.set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 };

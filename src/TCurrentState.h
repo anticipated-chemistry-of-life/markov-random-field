@@ -12,7 +12,7 @@
 #include <tuple>
 #include <vector>
 
-class TTree; // forward declaration (was previously pulled in via smart_binary_search.h)
+class TPhylogeny; // only the topology is needed: no parameters, no cliques, no field
 
 //-----------------------------------
 // TCurrentState
@@ -32,13 +32,13 @@ private:
 	// Linear index in Z space of each parsed cell (Z is now a TSparseMatrix, like Y).
 	std::vector<size_t> _index_in_TStorageZMatrix;
 
-	// increment and tree
+	// increment and topology
 	size_t _increment;
-	const TTree &_tree;
+	const TPhylogeny &_topology;
 
 public:
-	TCurrentState(const TTree &tree, size_t increment);
-	TCurrentState(const TTree &tree, size_t increment, size_t size_of_Y, size_t size_of_Z);
+	TCurrentState(const TPhylogeny &topology, size_t increment);
+	TCurrentState(const TPhylogeny &topology, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
 	void fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
 	          const TStorageZMatrix &Z);
@@ -75,10 +75,10 @@ private:
 	// dimension along which sheet runs (can be any except last dimension, as this one is covered by
 	// K)
 	size_t _dim_ix;
-	// tree of dimension corresponding to _dim_ix
-	const TTree &_tree;
-	// tree of last dimension
-	const TTree &_tree_last_dim;
+	// topology of the dimension corresponding to _dim_ix
+	const TPhylogeny &_topology;
+	// topology of the last dimension
+	const TPhylogeny &_topology_last_dim;
 
 	size_t _start_ix_in_leaves_space_last_dim = 0;
 
@@ -87,10 +87,13 @@ private:
 	std::vector<TCurrentState> _cur_states;
 
 public:
-	TSheet(size_t dim_ix, const TTree &tree, const TTree &tree_last_dim);
+	TSheet(size_t dim_ix, const TPhylogeny &topology, const TPhylogeny &topology_last_dim);
 	~TSheet() = default;
 
-	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y);
+	/// `Z` is the internal state of the dimension this sheet runs along, passed in the same way as
+	/// the field rather than reached for through a tree.
+	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y,
+	          const TStorageZMatrix &Z);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);

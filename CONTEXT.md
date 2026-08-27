@@ -1,0 +1,99 @@
+# Metabolite Inference
+
+A Markov random field over which molecules occur in which species. Two phylogenies — one of species, one of molecules — jointly constrain a latent binary presence matrix, which is observed only indirectly through noisy literature and assay data.
+
+## The trees
+
+**Tree**:
+One of the two phylogenies the field is defined over, one of species and one of molecules. A tree may have more than one root; each root's subtree is drawn independently, with the root's own state taken from the stationary distribution rather than from a parent.
+_Avoid_: forest, taxonomy, hierarchy
+
+**Node**:
+One vertex of a tree.
+_Avoid_: vertex, taxon
+
+**Leaf**:
+A node with no children. Leaves are the only nodes the observed data may reference: the field, LOTUS records and simple error model data are all indexed in leaf space.
+_Avoid_: tip, terminal
+
+**Root**:
+A node with no parent. A tree may have several. A root has no branch, and therefore no branch length; its state comes from the stationary distribution instead of from a parent.
+_Avoid_: ancestor, origin
+
+**Internal node**:
+A node with at least one child, roots included. Internal nodes are exactly the nodes that carry an internal state, which is why `Z` is indexed in internal-node space.
+_Avoid_: ancestral node, non-leaf
+
+**Branch**:
+The edge from a node to its parent, identified by that child node. Every node except a root has exactly one, so a tree has `n_nodes - n_roots` branches — the count the branch-length budget is built from.
+_Avoid_: edge, leaves and internal nodes without roots
+
+## The latent field
+
+**Field**:
+The latent binary matrix recording, for every (species leaf, molecule leaf) pair, whether that molecule occurs in that species. Written `Y`.
+_Avoid_: presence matrix, occurrence matrix, Y-space
+
+**Internal state**:
+The latent binary state of a non-leaf node of one tree, replicated across every clique of that tree. Written `Z`.
+_Avoid_: ancestral state, hidden state
+
+**Clique**:
+A set of nodes that vary along exactly one tree's dimension while every other dimension is fixed at a leaf. Cliques belong to a tree: a species-tree clique is identified by a *molecule* leaf, and vice versa.
+_Avoid_: slice, column, replicate
+
+**Alpha**:
+The stationary probability that a node in a given clique is in state 1. One value per clique.
+_Avoid_: prevalence, base rate, pi
+
+**Nu**:
+The switching rate of the two-state continuous-time process running along a tree's branches. One value per clique, carried in log space.
+_Avoid_: rate, mu, lambda
+
+**Transition grid**:
+One clique's two-state process discretised onto the bin grid: one transition matrix per bin, plus the stationary distribution its roots are drawn from. Built from an alpha, a nu and a bin grid, and immutable — a Metropolis proposal builds a second grid rather than mutating the first, so there is no "try" state. `TTransitionGrid`, `src/tree/branch/`.
+_Avoid_: transition matrices, lambda matrices, clique process, try matrix
+
+**Neutral dimension**:
+A tree dimension whose parameters are pinned so that every transition matrix row is exactly (0.5, 0.5), making that tree contribute a constant factor to every field conditional. A neutral dimension cannot influence the field.
+_Avoid_: disabled tree, ignored dimension, flat tree
+
+**Field normalising constant**:
+The sum, over every possible field, of the product of the two trees' field likelihoods. Written `C`. It depends on both trees' parameters, and omitting it from an acceptance ratio biases those parameters toward small nu. It is a constant only when one dimension is neutral. See ADR-0002.
+_Avoid_: partition function, Z (that is the internal state), evidence
+
+## Branch lengths
+
+**Bin**:
+The discrete index, in `0 … n_bins-1`, standing for a branch's length. Branch lengths are never continuous in the model; they are only ever bins.
+_Avoid_: branch index, discretised length
+
+**Grid branch length**:
+The continuous length a bin represents, taken at the bin's centre.
+_Avoid_: bin midpoint, branch length
+
+**Branch-length budget**:
+The total of a tree's bins, which is fixed at `n_branches · n_bins / 2` and conserved for the lifetime of a chain. Equivalent to requiring the mean grid branch length to be exactly 1. A set of branch lengths that misses the budget is unreachable, not merely improbable.
+_Avoid_: branch length sum, normalisation constraint
+
+**Bin grid**:
+One tree's bin↔length correspondence: the bin width, the grid branch length each bin stands for, the branch-length budget their sum must hit, and the ±1 step that conserves it. A pure function of `n_bins` — it knows nothing of the tree's topology, of the parameters, or of the random generator, which is what lets it be tested without running a chain. `TBinGrid`, `src/tree/branch/`.
+_Avoid_: branch-length grid, binning, discretisation
+
+## Observations
+
+**LOTUS record**:
+An observed (species, molecule) occurrence reported in the literature. Written `L`. Absence of a record is uninformative wherever research effort is low.
+_Avoid_: citation, literature record, observation
+
+**Research effort**:
+How thoroughly a (species, molecule) pair has been looked for. Determines whether a missing LOTUS record means "absent" or "unstudied". One factor per kept dimension, multiplied together: `1 - exp(-gamma_i · log(count_i + 1))`, where `count_i` is the paper count of the leaf the pair occupies in dimension `i`. Note there is **one gamma per kept dimension**, not one overall — the independent reference simulates with a single scalar for both trees, which is a special case, not the model.
+_Avoid_: coverage, sampling effort, detection probability
+
+**Paper count**:
+The number of publications covering a leaf. The sole input to research effort.
+_Avoid_: occurrence counter, citation count
+
+**Simple error model data**:
+An observation of the field in which every cell is independently misreported with a fixed probability. Written `D`. Unlike a LOTUS record, it is dense: every cell is observed.
+_Avoid_: noisy Y, simple data, flipped field
