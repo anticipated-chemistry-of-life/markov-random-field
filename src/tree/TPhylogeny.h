@@ -38,9 +38,10 @@ struct TPhylogenyBuilder;
 /// command-line options -- which is exactly what lets it be built inside a unit test. TTree adds
 /// the parameters and the MCMC moves over them.
 ///
-/// Nodes are addressed by index. In this phase the indices are in file-insertion order, so the
-/// category lists and the maps back into them are what make them usable; a later phase orders the
-/// nodes so that those maps become arithmetic.
+/// Nodes are addressed by index, and stored in canonical order: all leaves, then all internal
+/// non-root nodes in post-order, then all roots, with file order preserved inside the leaf block
+/// and the root block. So a node's index alone says what kind of node it is, and a child's index
+/// is always below its parent's. See ADR-0004.
 class TPhylogeny {
 public:
 	/// The parent of a root. Never a valid node index.

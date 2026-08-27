@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the rung-1 pinned scenario into $SCENARIO/rung1_pre_split, single-threaded.
+# Runs the rung-1 pinned scenario into $SCENARIO/rung1_gate, single-threaded.
 #
 # Single-threaded is not a preference, it is what makes the run reproducible.
 # coretools' TRandomGenerator is `static thread_local`, so every thread owns its
@@ -26,9 +26,9 @@ just build "$MODE" "$FLAGS"
 ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
 
 cd "$SCENARIO"
-rm -rf rung1_pre_split && mkdir -p rung1_pre_split
+rm -rf rung1_gate && mkdir -p rung1_gate
 "$ACOL" infer \
-    --out ./rung1_pre_split/acol \
+    --out ./rung1_gate/acol \
     --tree_species species.txt \
     --tree_molecules molecules.txt \
     --species_paper_counts species_papers.txt \

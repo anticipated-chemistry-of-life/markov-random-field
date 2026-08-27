@@ -44,8 +44,20 @@ struct TPhylogenyBuilder {
 		return tree._ids.size() - 1;
 	}
 
+	// While building, the CSR is not there yet, so these answer from what is.
+	[[nodiscard]] bool is_leaf(size_t node) const { return children_of[node].empty(); }
+	[[nodiscard]] bool is_root(size_t node) const {
+		return tree._parents[node] == TPhylogeny::NO_PARENT;
+	}
+
 	void add_edge(const std::string &child, const std::string &parent, double branch_length);
 	TPhylogeny finish();
+
+private:
+	void _reject_a_non_forest() const;
+	[[nodiscard]] std::vector<size_t> _canonical_order() const;
+	void _permute(const std::vector<size_t> &new_of_old);
+	void _assemble();
 };
 
 void TPhylogenyBuilder::add_edge(const std::string &child, const std::string &parent,
@@ -85,7 +97,153 @@ void TPhylogenyBuilder::add_edge(const std::string &child, const std::string &pa
 	}
 }
 
-TPhylogeny TPhylogenyBuilder::finish() {
+/// The forest post-conditions, checked before anything is derived from the topology. They come
+/// first because the canonical ordering below is a walk down from the roots: on a tree that is not
+/// a forest that walk does not reach every node, and would leave nodes without an index rather
+/// than reporting what is actually wrong with the file.
+void TPhylogenyBuilder::_reject_a_non_forest() const {
+	const size_t n = tree._ids.size();
+
+	std::vector<size_t> roots;
+	bool has_a_leaf = false;
+	for (size_t i = 0; i < n; ++i) {
+		if (is_root(i)) { roots.push_back(i); }
+		has_a_leaf = has_a_leaf || is_leaf(i);
+	}
+
+	if (roots.empty()) {
+		throw coretools::TUserError("The tree has no root: every node has a parent.");
+	}
+	if (!has_a_leaf) {
+		throw coretools::TUserError("The tree has no leaf: every node has a child.");
+	}
+	for (const size_t root : roots) {
+		if (is_leaf(root)) {
+			throw coretools::TUserError(
+			    "Node '", tree._ids[root],
+			    "' is both a root and a leaf: it has no parent and no children. A root must have "
+			    "at least one child.");
+		}
+	}
+
+	// Reachability, which doubles as the cycle check. Every node has at most one parent, so
+	// walking up from an unreachable node can only end on a cycle: had it ended on a node without
+	// a parent, that node is a root and the walk was a path down from one. So there is nothing a
+	// separate cycle pass would catch that this does not, and this is O(n) rather than O(n*depth).
+	std::vector<bool> seen(n, false);
+	std::queue<size_t> pending;
+	for (const size_t root : roots) {
+		seen[root] = true;
+		pending.push(root);
+	}
+	size_t reached = roots.size();
+	while (!pending.empty()) {
+		const size_t node = pending.front();
+		pending.pop();
+		for (const size_t child : children_of[node]) {
+			if (!seen[child]) {
+				seen[child] = true;
+				++reached;
+				pending.push(child);
+			}
+		}
+	}
+	if (reached != n) {
+		for (size_t i = 0; i < n; ++i) {
+			if (!seen[i]) {
+				throw coretools::TUserError("Node '", tree._ids[i],
+				                            "' sits on or below a cycle: following its parents "
+				                            "never reaches a root.");
+			}
+		}
+	}
+}
+
+/// Where each node ends up: `new_of_old[old_index]` is the node's index in the canonical order --
+/// leaves, then internal non-root nodes in post-order, then roots. See ADR-0004 for why.
+///
+/// File order survives inside the leaf and root blocks because both are filled by an ascending
+/// walk over the nodes as built, and inside the middle block because each node's children are
+/// visited in the order the file introduced them.
+std::vector<size_t> TPhylogenyBuilder::_canonical_order() const {
+	const size_t n = tree._ids.size();
+	std::vector<size_t> new_of_old(n, TPhylogeny::NOT_IN_SPACE);
+
+	size_t n_roots   = 0;
+	size_t next_leaf = 0;
+	for (size_t i = 0; i < n; ++i) {
+		if (is_leaf(i)) {
+			new_of_old[i] = next_leaf++;
+		} else if (is_root(i)) {
+			++n_roots;
+		}
+	}
+	size_t next_internal = next_leaf;
+	size_t next_root     = n - n_roots;
+
+	// Post-order, iteratively: a taxonomy is deep enough that a recursive walk is a stack overflow
+	// waiting to happen. The second element is how many of the node's children have been pushed.
+	std::vector<std::pair<size_t, size_t>> stack;
+	for (size_t root = 0; root < n; ++root) {
+		if (!is_root(root)) { continue; }
+		stack.emplace_back(root, 0);
+		while (!stack.empty()) {
+			auto &[node, next_child] = stack.back();
+			if (next_child < children_of[node].size()) {
+				const size_t child = children_of[node][next_child];
+				++next_child;
+				// A leaf already has its index and no descendants, so it never goes on the stack.
+				if (!is_leaf(child)) { stack.emplace_back(child, 0); }
+				continue; // emplace_back may have moved the vector: re-take the reference.
+			}
+			// Every child is done, so this is the post-visit.
+			new_of_old[node] = is_root(node) ? next_root++ : next_internal++;
+			stack.pop_back();
+		}
+	}
+
+	// Total by construction: every leaf was numbered by the scan above, and _reject_a_non_forest
+	// has already established that every other node is reachable from a root, which is exactly
+	// what the walk visits. Checked anyway, because a permutation with a hole in it would show up
+	// far from here as a node silently overwriting another.
+	for (size_t i = 0; i < n; ++i) {
+		if (new_of_old[i] == TPhylogeny::NOT_IN_SPACE) {
+			throw coretools::TDevError("Node '", tree._ids[i], "' was left out of the node order.");
+		}
+	}
+	return new_of_old;
+}
+
+/// Move every node to where `_canonical_order` put it. This is the one place the ordering is
+/// applied: everything above builds in file order and knows nothing about it.
+void TPhylogenyBuilder::_permute(const std::vector<size_t> &new_of_old) {
+	const size_t n = tree._ids.size();
+
+	std::vector<std::string> ids(n);
+	std::vector<size_t> parents(n);
+	std::vector<std::vector<size_t>> kids(n);
+	std::vector<double> lengths(n);
+	for (size_t old = 0; old < n; ++old) {
+		const size_t at = new_of_old[old];
+		ids[at]         = std::move(tree._ids[old]);
+		parents[at]     = is_root(old) ? TPhylogeny::NO_PARENT : new_of_old[tree._parents[old]];
+		kids[at]        = std::move(children_of[old]);
+		lengths[at]     = length_by_node[old];
+		for (size_t &child : kids[at]) { child = new_of_old[child]; }
+	}
+
+	// The ids themselves did not change, so the map is renumbered rather than rebuilt: rehashing
+	// every node name is the expensive part, and none of the keys moved.
+	for (auto &[id, index] : tree._index_by_id) { index = new_of_old[index]; }
+
+	tree._ids      = std::move(ids);
+	tree._parents  = std::move(parents);
+	children_of    = std::move(kids);
+	length_by_node = std::move(lengths);
+}
+
+/// Derive everything a TPhylogeny answers from the node order it now has.
+void TPhylogenyBuilder::_assemble() {
 	const size_t n = tree._ids.size();
 
 	// Flatten children into CSR so that is_leaf and children_of answer without a pointer chase.
@@ -98,8 +256,9 @@ TPhylogeny TPhylogenyBuilder::finish() {
 		tree._children.insert(tree._children.end(), kids.begin(), kids.end());
 	}
 
-	// Classify. The order here is the order the category lists carry, and it is load-bearing:
-	// branch index is an index into _branches, which downstream code indexes branch lengths by.
+	// Classify. Ascending node order, so each category list comes out as the contiguous block the
+	// canonical ordering put it in, and each map back into one is arithmetic on the node index --
+	// which is what the next ticket deletes these vectors in favour of.
 	tree._leaf_index.assign(n, TPhylogeny::NOT_IN_SPACE);
 	tree._internal_index.assign(n, TPhylogeny::NOT_IN_SPACE);
 	tree._branch_index.assign(n, TPhylogeny::NOT_IN_SPACE);
@@ -122,60 +281,18 @@ TPhylogeny TPhylogenyBuilder::finish() {
 		}
 	}
 
-	if (tree._roots.empty()) {
-		throw coretools::TUserError("The tree has no root: every node has a parent.");
-	}
-	if (tree._leaves.empty()) {
-		throw coretools::TUserError("The tree has no leaf: every node has a child.");
-	}
-	for (const size_t root : tree._roots) {
-		if (tree.is_leaf(root)) {
-			throw coretools::TUserError(
-			    "Node '", tree._ids[root],
-			    "' is both a root and a leaf: it has no parent and no children. A root must have "
-			    "at least one child.");
-		}
-	}
-
-	// Reachability, which doubles as the cycle check. Every node has at most one parent, so
-	// walking up from an unreachable node can only end on a cycle: had it ended on a node without
-	// a parent, that node is a root and the walk was a path down from one. So there is nothing a
-	// separate cycle pass would catch that this does not, and this is O(n) rather than O(n*depth).
-	std::vector<bool> seen(n, false);
-	std::queue<size_t> pending;
-	for (const size_t root : tree._roots) {
-		seen[root] = true;
-		pending.push(root);
-	}
-	size_t reached = tree._roots.size();
-	while (!pending.empty()) {
-		const size_t node = pending.front();
-		pending.pop();
-		for (const size_t child : tree.children_of(node)) {
-			if (!seen[child]) {
-				seen[child] = true;
-				++reached;
-				pending.push(child);
-			}
-		}
-	}
-	if (reached != n) {
-		for (size_t i = 0; i < n; ++i) {
-			if (!seen[i]) {
-				throw coretools::TUserError("Node '", tree._ids[i],
-				                            "' sits on or below a cycle: following its parents "
-				                            "never reaches a root.");
-			}
-		}
-	}
-
 	// One length per branch, in branch order: a root has no branch, so its entry is dropped here
 	// rather than carried around as a zero.
 	tree._branch_lengths.reserve(tree._branches.size());
 	for (const size_t node : tree._branches) {
 		tree._branch_lengths.push_back(length_by_node[node]);
 	}
+}
 
+TPhylogeny TPhylogenyBuilder::finish() {
+	_reject_a_non_forest();
+	_permute(_canonical_order());
+	_assemble();
 	return std::move(tree);
 }
 

@@ -5,6 +5,8 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
+from .independent.indexing import build_tree_index
+
 
 class TreeType(Enum):
     grass = "grass"
@@ -114,31 +116,22 @@ class Tree:
     def _compute_node_ordering(
         self,
     ) -> tuple[list[str], set[str], list[str], list[str]]:
-        """Simulate C++ node-order when reading the tree file.
+        """The C++ node order for this tree.
 
         Returns (all_nodes_ordered, roots_set, leaf_names, non_root_node_names).
+
+        Deferred to `indexing.build_tree_index` rather than worked out here. This
+        used to be a second, independent transcription of the ordering, which was
+        defensible while the ordering was "the order the file lists them in"; now
+        that it is leaves, then internal non-root nodes in post-order, then roots
+        (ADR-0004), two hand-written post-order walks would only be two things to
+        keep in step. The ordering keeps one home on this side too.
         """
         df = self.to_dataframe()
-        node_order: list[str] = []
-        node_set: set[str] = set()
-        is_child: set[str] = set()
-        is_parent: set[str] = set()
-
-        for _, row in df.iterrows():
-            child, parent = str(row["child"]), str(row["parent"])
-            is_child.add(child)
-            is_parent.add(parent)
-            if parent not in node_set:
-                node_order.append(parent)
-                node_set.add(parent)
-            if child not in node_set:
-                node_order.append(child)
-                node_set.add(child)
-
-        roots = is_parent - is_child
-        leaves = [n for n in node_order if n in is_child and n not in is_parent]
-        non_root_nodes = [n for n in node_order if n not in roots]
-        return node_order, roots, leaves, non_root_nodes
+        edges = list(zip(df["child"].astype(str), df["parent"].astype(str)))
+        index = build_tree_index(edges)
+        roots = {index.names[n] for n in range(index.n_nodes) if index.parent[n] < 0}
+        return index.names, roots, index.leaf_names(), index.branch_names()
 
     def get_leaf_names_in_cpp_order(self) -> list[str]:
         """Leaf names in the order the C++ inference binary sees them."""

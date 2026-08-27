@@ -147,11 +147,48 @@ def test_flat_lengths_bin_to_the_middle():
 
 
 @pytest.mark.parametrize("n_nodes", [7, 15, 255])
-def test_ordering_matches_the_existing_replica(n_nodes):
-    tree = Tree(n_nodes, TreeType.balanced, "species")
-    index = build_tree_index(edges_of(tree))
-    assert index.leaf_names() == tree.get_leaf_names_in_cpp_order()
-    assert index.branch_names() == tree.get_non_root_node_names_in_cpp_order()
+def test_the_three_blocks_partition_the_nodes(n_nodes):
+    """Leaves, then internal non-root nodes, then roots -- and nothing else."""
+    index = build_tree_index(edges_of(Tree(n_nodes, TreeType.balanced, "species")))
+    n = index.n_nodes
+    n_roots = int(np.sum(index.parent < 0))
+    has_child = set(int(p) for p in index.parent if p >= 0)
+
+    for node in range(n):
+        is_leaf = node not in has_child
+        assert is_leaf == (node < index.n_leaves), f"leaf block at {node}"
+        assert (index.parent[node] < 0) == (node >= n - n_roots), f"root at {node}"
+    for node in range(index.n_leaves, n - n_roots):
+        assert index.parent[node] >= 0 and node in has_child
+
+
+@pytest.mark.parametrize("n_nodes", [7, 15, 255])
+def test_index_spaces_are_arithmetic(n_nodes):
+    index = build_tree_index(edges_of(Tree(n_nodes, TreeType.balanced, "species")))
+    n_roots = int(np.sum(index.parent < 0))
+    assert index.leaves.tolist() == list(range(index.n_leaves))
+    assert index.internals.tolist() == list(range(index.n_leaves, index.n_nodes))
+    assert index.branch_nodes.tolist() == list(range(index.n_nodes - n_roots))
+    n_branches = index.n_nodes - n_roots
+    assert index.branch_of_node.tolist() == list(range(n_branches)) + [-1] * n_roots
+
+
+def test_the_leaf_block_keeps_file_order():
+    """A reordered tree file must give a correspondingly reordered output, not an
+    unrelated one -- so within a block, first-appearance order survives."""
+    tree = Tree(255, TreeType.balanced, "species")
+    edges = edges_of(tree)
+    index = build_tree_index(edges)
+
+    appearance: list[str] = []
+    for child, parent in edges:
+        for name in (parent, child):
+            if name not in appearance:
+                appearance.append(name)
+    rank = {name: i for i, name in enumerate(appearance)}
+
+    leaf_ranks = [rank[name] for name in index.leaf_names()]
+    assert leaf_ranks == sorted(leaf_ranks)
 
 
 def test_internal_nodes_include_the_root():
@@ -165,10 +202,12 @@ def test_internal_nodes_include_the_root():
     assert roots[0] in set(index.internals.tolist())
 
 
-def test_every_parent_precedes_its_child():
+def test_every_child_precedes_its_parent():
+    """The post-order guarantee, stated as the property the sampler relies on."""
     index = build_tree_index(edges_of(Tree(255, TreeType.balanced, "species")))
     for node in range(index.n_nodes):
-        assert index.parent[node] < node
+        if index.parent[node] >= 0:
+            assert index.parent[node] > node
 
 
 # --------------------------------------------------------------------------

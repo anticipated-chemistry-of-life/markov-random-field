@@ -1,21 +1,37 @@
-# Phase-1 acceptance baseline
+# Acceptance baseline for the rung-1 run
 
-Phase 1 of the TTree split (issue #10) is defined as behaviour-preserving: every
-ticket in it must leave the model's output byte-identical. This directory holds
-the baseline that claim is measured against.
-
-## Usage
+Some changes to the model are supposed to leave its output alone, bit for bit.
+This directory holds the baseline that claim is measured against: a SHA-256 per
+output file of the rung-1 pinned run.
 
 ```bash
 ./verify_rung1.sh          # rebuild, rerun, compare against the manifest
+./verify_rung1.sh --record # establish a new baseline
 ```
 
-Run it after every commit in phase 1, not once at the end. Nine changes verified
-together tell you that something broke; nine verified one at a time tell you
-which.
+Run it after every commit in a behaviour-preserving stretch of work, not once at
+the end. Nine changes verified together tell you that something broke; nine
+verified one at a time tell you which.
 
-`--record` rewrites the manifest. It is for establishing a new baseline, and
-must not be used during phase 1 -- the point is that the manifest does not move.
+`--record` is for the commit that deliberately moves the output, and for nothing
+else -- during a behaviour-preserving stretch the whole point is that the
+manifest does not move.
+
+## What the manifests are
+
+- **`rung1_canonical_order.sha256`** is the live one, and what `verify_rung1.sh`
+  checks. It was recorded at the commit that put nodes in canonical order
+  (ADR-0004), which is the last change that was *meant* to move the output.
+- **`rung1_pre_split.sha256`** is the phase-1 record: the `TTree` split (#10) was
+  defined as behaviour-preserving and every one of its nine commits was checked
+  against this. It is kept as the evidence for that claim and is no longer
+  checked by anything. Reproducing it needs the pre-split node ordering on
+  *both* sides -- the binary and `src/independent/indexing.py`, which generates
+  the scenario -- so it cannot be re-run against today's tree.
+
+That last point generalises: **a manifest is a statement about a binary and a
+scenario together.** The scenario is generated, so a change to the harness that
+generates it invalidates the manifest exactly as surely as a change to the model.
 
 ## What is committed, and what is not
 
@@ -23,9 +39,8 @@ The scenario directory `independent_y_s255_m255_seed42/` is gitignored on purpos
 (`model_validation/.gitignore`), because it is generated. So the ~8.6 MB of run
 output cannot be committed, and `*_trace.txt` is ignored repo-wide besides.
 
-What is committed is `rung1_pre_split.sha256`, a SHA-256 per output file. For a
-byte-identical gate a hash is exactly as strong as the file it stands for, and it
-is about a kilobyte.
+What is committed is the manifest. For a byte-identical gate a hash is exactly as
+strong as the file it stands for, and it is about a kilobyte.
 
 If the scenario directory is missing, regenerate it first:
 
@@ -48,9 +63,10 @@ timings, neither of which say anything about the model.
 
 A consequence worth knowing outside this directory: **a multi-threaded acol run
 is not reproducible from its seed.** That is a property of the harness, not of
-this refactor.
+any one refactor.
 
 ## Scope of the gate
 
 The build is `release` with flags `s` -- the simple error model only. LOTUS is
-compiled out, so anything guarded by `USE_LOTUS` is invisible to this gate.
+compiled out, so anything guarded by `USE_LOTUS` is invisible to this gate. Only
+`infer` is run, so the simulation path is invisible to it too.

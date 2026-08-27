@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
-# Phase-1 acceptance gate: the rung-1 pinned run must stay byte-identical.
+# Acceptance gate: the rung-1 pinned run must stay byte-identical.
 #
 #   ./verify_rung1.sh            rebuild, rerun, compare against the manifest
 #   ./verify_rung1.sh --record   rebuild, rerun, and (re)write the manifest
 #
-# --record is for establishing a new baseline. During phase 1 (extract
-# TPhylogeny) it must not be used: the whole point is that the manifest does not
-# move. Phase 2 changes the chain deliberately and gets a statistical gate
-# instead -- see the ADR on canonical node ordering.
+# --record belongs to the one commit that deliberately moves the output, and to
+# nothing else: during a behaviour-preserving stretch the whole point is that the
+# manifest does not move. The manifest is a statement about a binary *and* a
+# scenario -- the scenario is generated, so changing the harness that generates it
+# invalidates it too. See README.md.
 #
 # acol.log is excluded: it carries a per-run ntfy topic UUID and wall-clock
 # timings, neither of which say anything about the model.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR/../.."
-OUT="$ROOT/model_validation/independent_y_s255_m255_seed42/rung1_pre_split"
-MANIFEST="$SCRIPT_DIR/rung1_pre_split.sha256"
+OUT="$ROOT/model_validation/independent_y_s255_m255_seed42/rung1_gate"
+MANIFEST="$SCRIPT_DIR/rung1_canonical_order.sha256"
 
 "$SCRIPT_DIR/run_rung1.sh" >/dev/null
 

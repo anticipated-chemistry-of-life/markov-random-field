@@ -152,8 +152,10 @@ def sample_states(
     states = np.empty((tree.n_nodes, n_cliques), dtype=bool)
     cliques = np.arange(n_cliques)
 
-    # Node order is topological, so a single forward pass suffices.
-    for node in range(tree.n_nodes):
+    # Post-order storage puts every child below its parent (ADR-0004), so walking
+    # the nodes backwards visits every parent before its children -- one pass, and
+    # no traversal to set up.
+    for node in reversed(range(tree.n_nodes)):
         parent = tree.parent[node]
         if parent < 0:
             probability = alphas

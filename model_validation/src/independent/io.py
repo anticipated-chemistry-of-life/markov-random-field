@@ -16,17 +16,19 @@ dimension varies fastest, which for this model is always the molecules tree:
 
 A tree's own dimension carries *internal* nodes in its Z space and *leaf* nodes
 in the field; the other dimension always carries leaves (`TTree::_initialize_Z`,
-src/tree/TTree.cpp:124). The two node orderings involved are defined in
-`indexing`.
+src/tree/TTree.cpp:123). The node orderings involved are defined in `indexing`.
 
 File shapes, as the C++ readers expect them:
 
 - field: 5 columns, `position Y_state species molecules fraction_of_one`. The
-  reader (`TMarkovField::_read_Y_from_file`, src/TMarkovField.cpp:195) checks the
+  reader (`TMarkovField::_read_Y_from_file`, src/TMarkovField.cpp:200) checks the
   column count but reads only `position` and `Y_state`. Every cell is written,
-  not just the ones.
+  not just the ones. So the field file is addressed purely positionally, and a
+  change to leaf order changes what it means.
 - internal states: 4 columns, `species molecules position Z_state`. The reader
-  (src/tree/TTree.cpp:132) likewise checks for 4 and reads only the last two.
+  (`read_Z_from_file`, src/tree/io/read_Z.cpp:33) checks for 4 and resolves the
+  cell from the two *name* columns, ignoring `position` -- which is what makes a
+  file written before a node reordering still mean what it said (ADR-0004).
 - observations: 2 columns naming one leaf per tree, one row per *positive* cell.
 """
 
