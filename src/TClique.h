@@ -27,8 +27,6 @@ class TTree;
  */
 class TClique {
 private:
-	using TypeParamBinBranches = stattools::TParameter<SpecBinnedBranches, TTree>;
-
 	/// This clique's two-state process, discretised onto the tree's bin grid. Set once the
 	/// parameters exist (TTree::guessInitialValues) and replaced wholesale whenever a proposal on
 	/// alpha or nu is accepted; there is no mutable "try" copy.
@@ -65,9 +63,7 @@ private:
 	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
 	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log,
-	    const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
 	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
 	/// that Z is stuck in a state and cannot change.
@@ -75,12 +71,9 @@ private:
 	/// @param current_state The current state of the clique.
 	/// @param Z the Z vector of that tree (i.e that clique)
 	/// @param tree the tree of interest
-	/// @param binned_branch_lengths the vector of branch length
-	/// @param leaves_and_internal_nodes_without_roots_indices Same as the variable name
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
 	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZMatrix &Z,
-	                   const TTree *tree, const TypeParamBinBranches *binned_branch_lengths,
-	                   const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices,
+	                   const TTree *tree,
 	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
@@ -104,16 +97,12 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<size_t>
-	update_Z(std::vector<double> &joint_prob_density, TCurrentState &current_state,
-	         TStorageZMatrix &Z, const TTree *tree,
-	         const TypeParamBinBranches *binned_branch_lengths,
-	         const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density,
+	                             TCurrentState &current_state, TStorageZMatrix &Z,
+	                             const TTree *tree) const;
 
-	std::vector<size_t> initialize_Z_from_children(
-	    TCurrentState &current_state, TStorageZMatrix &Z, const TTree *tree,
-	    const TypeParamBinBranches *binned_branch_lengths,
-	    const std::vector<size_t> &leaves_and_internal_nodes_without_roots_indices) const;
+	std::vector<size_t> initialize_Z_from_children(TCurrentState &current_state, TStorageZMatrix &Z,
+	                                               const TTree *tree) const;
 
 	/// A state container sized for `topology` and filled from this clique's start index. The
 	/// topology is all it takes: nothing here needs a parameter or a clique.

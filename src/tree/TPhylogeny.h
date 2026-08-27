@@ -120,7 +120,6 @@ public:
 		return _internal_nodes_without_roots;
 	}
 	[[nodiscard]] const std::vector<size_t> &branches() const { return _branches; }
-	[[nodiscard]] const std::vector<size_t> &branch_index_by_node() const { return _branch_index; }
 };
 
 #endif // ACOL_TPHYLOGENY_H

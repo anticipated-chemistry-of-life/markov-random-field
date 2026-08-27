@@ -165,9 +165,7 @@ private:
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
 			std::optional<size_t> branch_len_bin;
-			if (!topology.is_root(i)) {
-				branch_len_bin = _binned_branch_lengths->oldValue(topology.branch_index(i));
-			}
+			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
 
 			_compute_LL_old_and_new_nu_or_alpha(i, clique, state_of_node, LL_old, current_state,
 			                                    branch_len_bin, current);
@@ -327,9 +325,8 @@ public:
 			auto current_state  = _cliques[i].create_current_state(Y, _Z, _topology());
 			// update Z
 			if constexpr (!FixZ) {
-				indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state,
-				                                            _Z, this, _binned_branch_lengths,
-				                                            _topology().branch_index_by_node());
+				indices_to_insert[i] =
+				    _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this);
 			}
 
 			// update nu and alpha
@@ -353,6 +350,15 @@ public:
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
 		return _binned_branch_lengths->value(_topology().branch_index(index_in_tree));
+	}
+
+	/// The bin this branch had before the current round of proposals. The clique sweep needs it
+	/// because branch lengths are proposed before the loop over cliques starts, so `value` inside
+	/// the loop is already the candidate. Exposed here so that a clique can ask the tree rather
+	/// than be handed a pointer to the parameter itself.
+	[[nodiscard]] TypeBinnedBranchLengths
+	get_previous_binned_branch_length(size_t index_in_tree) const {
+		return _binned_branch_lengths->oldValue(_topology().branch_index(index_in_tree));
 	}
 
 	[[nodiscard]] const std::string &get_tree_name() const { return _tree_name; }
@@ -380,9 +386,7 @@ public:
     schedule(dynamic) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto current_state   = _cliques[i].create_current_state(Y, _Z, _topology());
-			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(
-			    current_state, _Z, this, _binned_branch_lengths,
-			    _topology().branch_index_by_node());
+			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(current_state, _Z, this);
 		}
 
 		_Z.insert_in_Z(indices_to_insert);
