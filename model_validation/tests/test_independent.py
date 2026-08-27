@@ -6,11 +6,16 @@ disagreement between them would say nothing about which side is wrong.
 
 from __future__ import annotations
 
+import pathlib
+import tempfile
+
 import numpy as np
+import pandas as pd
 import pytest
 from scipy.linalg import expm
 
 from src.independent import field as F
+from src.independent import io
 from src.independent import scenario
 from src.independent import toy_normaliser as TN
 from src.independent.data import research_effort, simulate_simple_error
@@ -200,6 +205,55 @@ def test_internal_nodes_include_the_root():
     roots = [n for n in range(index.n_nodes) if index.parent[n] < 0]
     assert len(roots) == 1
     assert roots[0] in set(index.internals.tolist())
+
+
+def test_a_tree_file_gives_each_row_its_own_child_s_branch_length():
+    """Rows are in edge order, per-branch arrays are in branch order.
+
+    The two coincided for a balanced tree while node order was file order, and
+    stopped coinciding under canonical order (ADR-0004) -- so writing the lengths
+    positionally would hand every branch someone else's.
+    """
+    tree = Tree(15, TreeType.balanced, "species")
+    edges = edges_of(tree)
+    index = build_tree_index(edges)
+    assert [child for child, _ in edges] != index.branch_names(), (
+        "this fixture no longer distinguishes edge order from branch order"
+    )
+
+    lengths = np.arange(index.n_branches, dtype=float) + 1.0
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "species.txt"
+        io.write_tree(path, edges, index, lengths)
+        frame = pd.read_csv(path, sep="\t")
+
+    expected = dict(zip(index.branch_names(), lengths))
+    for child, length in zip(frame["child"].astype(str), frame["length"]):
+        assert length == expected[child], f"{child} got the wrong branch length"
+
+
+def test_the_true_branch_lengths_option_writes_the_true_branch_lengths():
+    """--true_branch_lengths must start the chain *on* the truth, not on a
+    permutation of it. The truth file is name-keyed, the tree file is not."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "scenario"
+        scenario.build_scenario(
+            out,
+            scenario.ScenarioConfig(
+                n_species_nodes=15, n_molecule_nodes=15, true_branch_lengths=True
+            ),
+        )
+        tree_file = pd.read_csv(out / "species.txt", sep="\t")
+        truth = pd.read_csv(out / "truth_species.txt", sep="\t")
+
+    bin_of = {
+        name.removeprefix("species_branch_lengths_"): int(value)
+        for name, value in zip(truth["name"].astype(str), truth["value"])
+        if name.startswith("species_branch_lengths_")
+    }
+    grid = F.grid_branch_lengths()
+    for child, length in zip(tree_file["child"].astype(str), tree_file["length"]):
+        assert length == pytest.approx(grid[bin_of[child]]), child
 
 
 def test_every_child_precedes_its_parent():

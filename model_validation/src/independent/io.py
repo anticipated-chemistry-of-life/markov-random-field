@@ -43,14 +43,31 @@ from .indexing import TreeIndex
 
 
 def write_tree(
-    path: pathlib.Path, edges: list[tuple[str, str]], lengths: np.ndarray
+    path: pathlib.Path,
+    edges: list[tuple[str, str]],
+    tree: TreeIndex,
+    lengths_in_branch_order: np.ndarray,
 ) -> None:
-    """Write a `child parent length` tree file."""
+    """Write a `child parent length` tree file.
+
+    `lengths_in_branch_order` is indexed the way every other per-branch array in
+    this harness is: by branch index, which is the child node's own index. The
+    file's rows are in *edge* order, which is a different order, so the two are
+    matched by node name rather than by position. They happened to coincide for a
+    networkx-generated balanced tree while node order was file order; under
+    canonical order (ADR-0004) they do not, and lining them up positionally gives
+    every branch someone else's length.
+    """
+    if len(lengths_in_branch_order) != tree.n_branches:
+        raise ValueError(
+            f"Got {len(lengths_in_branch_order)} lengths for {tree.n_branches} branches."
+        )
+    length_of = dict(zip(tree.branch_names(), lengths_in_branch_order))
     pd.DataFrame(
         {
             "child": [c for c, _ in edges],
             "parent": [p for _, p in edges],
-            "length": lengths,
+            "length": [length_of[c] for c, _ in edges],
         }
     ).to_csv(path, sep="\t", index=False)
 

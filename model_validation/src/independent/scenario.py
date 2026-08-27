@@ -143,9 +143,12 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         if config.true_branch_lengths
         else np.full(species.n_branches, 0.2)
     )
-    io.write_tree(out / "species.txt", species_edges, species_lengths)
+    io.write_tree(out / "species.txt", species_edges, species, species_lengths)
     io.write_tree(
-        out / "molecules.txt", molecule_edges, np.full(molecules.n_branches, 0.2)
+        out / "molecules.txt",
+        molecule_edges,
+        molecules,
+        np.full(molecules.n_branches, 0.2),
     )
     io.write_paper_counts(
         out / "species_papers.txt", "species", species.leaf_names(), species_papers
