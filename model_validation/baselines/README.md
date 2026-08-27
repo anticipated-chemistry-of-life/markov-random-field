@@ -1,12 +1,12 @@
-# Acceptance baseline for the rung-1 run
+# Acceptance baseline for the pinned runs
 
 Some changes to the model are supposed to leave its output alone, bit for bit.
 This directory holds the baseline that claim is measured against: a SHA-256 per
-output file of the rung-1 pinned run.
+output file, for each of two pinned runs.
 
 ```bash
-./verify_rung1.sh          # rebuild, rerun, compare against the manifest
-./verify_rung1.sh --record # establish a new baseline
+./verify.sh          # rebuild, rerun both rungs, compare against the manifests
+./verify.sh --record # establish a new baseline
 ```
 
 Run it after every commit in a behaviour-preserving stretch of work, not once at
@@ -15,13 +15,25 @@ verified one at a time tell you which.
 
 `--record` is for the commit that deliberately moves the output, and for nothing
 else -- during a behaviour-preserving stretch the whole point is that the
-manifest does not move.
+manifests do not move.
+
+## Why two rungs
+
+**Rung 1** pins the field and both trees' internal states, so only the parameter
+updates move. It is the tightest run: closest to closed form, and quickest.
+
+**Rung 2** pins the field and infers the internal states, and it is not optional.
+Under rung 1's `--Z.update false` the clique loop skips `TClique::update_Z`
+outright, and under `--set_<tree>_Z` the bottom-up initialisation returns before
+doing anything -- so a rung-1-only gate would pass a change to either of them
+without ever having run it.
 
 ## What the manifests are
 
-- **`rung1_canonical_order.sha256`** is the live one, and what `verify_rung1.sh`
-  checks. It was recorded at the commit that put nodes in canonical order
-  (ADR-0004), which is the last change that was *meant* to move the output.
+- **`rung1_canonical_order.sha256`** and **`rung2_canonical_order.sha256`** are
+  the live ones, and what `verify.sh` checks. Both were recorded at the commit
+  that put nodes in canonical order (ADR-0004), which is the last change that was
+  *meant* to move the output.
 - **`rung1_pre_split.sha256`** is the phase-1 record: the `TTree` split (#10) was
   defined as behaviour-preserving and every one of its nine commits was checked
   against this. It is kept as the evidence for that claim and is no longer

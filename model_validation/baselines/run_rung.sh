@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-# Runs the rung-1 pinned scenario into $SCENARIO/rung1_gate, single-threaded.
+# Runs one pinned rung into $SCENARIO/<rung>_gate, single-threaded.
+#
+#   ./run_rung.sh rung1     field and both trees' internal states pinned
+#   ./run_rung.sh rung2     field pinned, internal states inferred
+#
+# Two rungs, because rung 1 alone does not reach the Z sweep: with --Z.update
+# false the clique loop skips update_Z entirely, and with --set_<tree>_Z the
+# bottom-up initialisation returns before it does anything. Every change to
+# either of those would pass a rung-1-only gate without being run once.
 #
 # Single-threaded is not a preference, it is what makes the run reproducible.
 # coretools' TRandomGenerator is `static thread_local`, so every thread owns its
@@ -8,6 +16,7 @@
 # therefore yields a different chain each time -- verified empirically, the whole
 # species trace diverges. With --numThreads 1 the run is byte-stable.
 set -euo pipefail
+RUNG="${1:?usage: run_rung.sh rung1|rung2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR/../.."
 SCENARIO="$ROOT/model_validation/independent_y_s255_m255_seed42"
@@ -21,14 +30,22 @@ FLAGS="s"
     exit 1
 }
 
+case "$RUNG" in
+    rung1) pinned=(--set_Y simulated_Y.txt --Y.update false
+                   --set_species_Z simulated_Z_species.txt
+                   --set_molecules_Z simulated_Z_molecules.txt --Z.update false) ;;
+    rung2) pinned=(--set_Y simulated_Y.txt --Y.update false) ;;
+    *)     echo "error: unknown rung '$RUNG' (expected rung1 or rung2)" >&2; exit 1 ;;
+esac
+
 cd "$ROOT"
 just build "$MODE" "$FLAGS"
 ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
 
 cd "$SCENARIO"
-rm -rf rung1_gate && mkdir -p rung1_gate
+rm -rf "${RUNG}_gate" && mkdir -p "${RUNG}_gate"
 "$ACOL" infer \
-    --out ./rung1_gate/acol \
+    --out "./${RUNG}_gate/acol" \
     --tree_species species.txt \
     --tree_molecules molecules.txt \
     --species_paper_counts species_papers.txt \
@@ -50,5 +67,4 @@ rm -rf rung1_gate && mkdir -p rung1_gate
     --molecules_var_log_nu simulated_pinned_molecules.txt --molecules_var_log_nu.update false \
     --molecules_log_nu simulated_pinned_molecules.txt --molecules_log_nu.update false \
     --molecules_alpha simulated_pinned_molecules.txt --molecules_alpha.update false \
-    --set_Y simulated_Y.txt --Y.update false \
-    --set_species_Z simulated_Z_species.txt --set_molecules_Z simulated_Z_molecules.txt --Z.update false
+    "${pinned[@]}"
