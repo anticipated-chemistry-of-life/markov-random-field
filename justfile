@@ -39,7 +39,7 @@ conda_env := env('ACOL_ENV', 'acol_env')
 default_flags := env('ACOL_DEFAULT_FLAGS', 'ls')
 
 # Storage backend for the field and the internal state: `sparse` or `dense`
-backend := env('ACOL_BACKEND', 'sparse')
+backend := env('ACOL_BACKEND', 'dense')
 
 [private]
 default:
