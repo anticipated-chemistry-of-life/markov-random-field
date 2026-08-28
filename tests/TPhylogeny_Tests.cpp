@@ -12,6 +12,7 @@
 #include "tree/TPhylogeny.h"
 
 #include "coretools/Main/TError.h"
+#include "phylogeny_generators.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -28,9 +29,7 @@
 
 namespace {
 
-TEdge edge(std::string child, std::string parent, double length = 1.0) {
-	return TEdge{std::move(child), std::move(parent), length};
-}
+using phylo::edge;
 
 /// coretools' user error is a CTAD class template, so it cannot be named in an exception
 /// declaration and EXPECT_THROW cannot be used on it. Catching the err::TError base and asserting
@@ -221,23 +220,6 @@ TEST(PhylogenyReader, rejects_a_file_without_three_columns) {
 // Layer 3: invariants over arbitrary forests
 // -------------------------------------------------------------------------
 
-/// A random forest, as an edge list in arbitrary order. Every root is given a child up front, so
-/// the "a root must have at least one child" post-condition is never the thing under test here.
-std::vector<TEdge> random_forest(std::mt19937_64 &rng, size_t n_nodes, size_t n_roots) {
-	std::vector<TEdge> edges;
-	auto name = [](size_t i) { return "n" + std::to_string(i); };
-
-	// Nodes [0, n_roots) are roots; the next n_roots nodes are one guaranteed child each.
-	for (size_t i = 0; i < n_roots; ++i) { edges.push_back(edge(name(n_roots + i), name(i))); }
-	// Everything after that hangs off a uniformly chosen node that already exists.
-	for (size_t i = 2 * n_roots; i < n_nodes; ++i) {
-		std::uniform_int_distribution<size_t> pick(0, i - 1);
-		edges.push_back(edge(name(i), name(pick(rng))));
-	}
-	std::shuffle(edges.begin(), edges.end(), rng);
-	return edges;
-}
-
 /// The order the nodes were created in, replicating the rule `TPhylogenyBuilder::add_edge`
 /// follows: a new parent is appended before a new child, and a node adopted later keeps the
 /// position it already had. Canonical order permutes the nodes, but preserves this relative order
@@ -373,7 +355,7 @@ TEST(PhylogenyInvariants, hold_for_arbitrary_forests) {
 		std::uniform_int_distribution<size_t> n_nodes_dist(2 * n_roots, 2 * n_roots + 40);
 		const size_t n_nodes = n_nodes_dist(rng);
 
-		const auto edges = random_forest(rng, n_nodes, n_roots);
+		const auto edges = phylo::random_forest(rng, n_nodes, n_roots);
 		const auto tree  = build_phylogeny(edges);
 		ASSERT_EQ(tree.n_nodes(), n_nodes) << "trial " << trial;
 		EXPECT_EQ(tree.n_roots(), n_roots) << "trial " << trial;
@@ -385,11 +367,8 @@ TEST(PhylogenyInvariants, hold_for_arbitrary_forests) {
 
 TEST(PhylogenyInvariants, hold_for_a_deep_unbalanced_chain) {
 	// A chain is the shape a balanced fixture never produces.
-	std::vector<TEdge> edges;
-	for (size_t i = 1; i < 60; ++i) {
-		edges.push_back(edge("n" + std::to_string(i), "n" + std::to_string(i - 1)));
-	}
-	const auto tree = build_phylogeny(edges);
+	const auto edges = phylo::chain(60);
+	const auto tree  = build_phylogeny(edges);
 	EXPECT_EQ(tree.n_roots(), 1u);
 	EXPECT_EQ(tree.n_leaves(), 1u);
 	check_invariants(tree);
@@ -397,9 +376,8 @@ TEST(PhylogenyInvariants, hold_for_a_deep_unbalanced_chain) {
 }
 
 TEST(PhylogenyInvariants, hold_for_a_wide_shallow_star) {
-	std::vector<TEdge> edges;
-	for (size_t i = 1; i < 200; ++i) { edges.push_back(edge("n" + std::to_string(i), "root")); }
-	const auto tree = build_phylogeny(edges);
+	const auto edges = phylo::star(199);
+	const auto tree  = build_phylogeny(edges);
 	EXPECT_EQ(tree.n_roots(), 1u);
 	EXPECT_EQ(tree.n_leaves(), 199u);
 	check_invariants(tree);

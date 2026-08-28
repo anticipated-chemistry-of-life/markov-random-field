@@ -185,9 +185,12 @@ public:
 	///   - linear_index[k]  : the linear index in Y space of that cell.
 	///
 	/// This replaces the binary-search machinery of fill_current_state for Y: because the matrix
-	/// keeps rows and columns sorted, we walk the relevant row/column once (O(nnz in that line)):
-	///   - increment == 1   : the variable dimension is the last one -> walk the matrix row.
-	///   - increment  > 1   : the variable dimension is the first one -> walk the matrix column.
+	/// keeps rows and columns sorted, we walk the relevant row/column once (O(nnz in that line)).
+	/// Which line that is follows from the increment *and* the shape: the increment of a clique
+	/// along the first dimension is the width of a row, which is 1 in a single-column container,
+	/// so the increment alone does not name the dimension.
+	///   - increment == 1, more than one column : the last dimension -> walk the matrix row.
+	///   - otherwise                            : the first dimension -> walk the matrix column.
 	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
 	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
 	                        std::vector<size_t> &linear_index) const {
@@ -198,7 +201,11 @@ public:
 		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions_Y_space);
 		for (size_t k = 0; k < K; ++k) { linear_index[k] = start_linear + k * increment; }
 
-		if (increment == 1) {
+		// The column count is part of the test because a single-column container gives a clique
+		// along either dimension an increment of 1, and only the first dimension can be longer
+		// than one cell there. A container is one column wide whenever the other tree has a
+		// single leaf.
+		if (increment == 1 && _dimensions_Y_space[1] > 1) {
 			// variable dimension is the last one -> a single matrix row, entries sorted by column.
 			const size_t row       = start_index[0];
 			const size_t start_col = start_index[1];

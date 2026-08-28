@@ -104,8 +104,9 @@ public:
 
 	/// Fast current-state fill for a clique of `K` nodes running along one dimension, starting at
 	/// `start_index` (a multi-dimensional index in Z space). Mirror of
-	/// TStorageYMatrix::fill_current_state: walk a single row (increment == 1) or column
-	/// (increment > 1) once. Outputs, for every k in [0, K): the current state, whether the cell is
+	/// TStorageYMatrix::fill_current_state: walk a single row (the last dimension, which an
+	/// increment of 1 names only while there is more than one column) or a single column
+	/// (otherwise) once. Outputs, for every k in [0, K): the current state, whether the cell is
 	/// stored, and its linear index in Z space.
 	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
 	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
@@ -117,7 +118,11 @@ public:
 		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions_in_Z_space);
 		for (size_t k = 0; k < K; ++k) { linear_index[k] = start_linear + k * increment; }
 
-		if (increment == 1) {
+		// The column count is part of the test because a single-column container gives a clique
+		// along either dimension an increment of 1, and only the first dimension can be longer
+		// than one cell there. A container is one column wide whenever the other tree has a
+		// single leaf.
+		if (increment == 1 && _dimensions_in_Z_space[1] > 1) {
 			// variable dimension is the last one -> a single matrix row, entries sorted by column.
 			const size_t row       = start_index[0];
 			const size_t start_col = start_index[1];

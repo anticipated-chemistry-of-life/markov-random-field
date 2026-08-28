@@ -34,7 +34,8 @@ void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TF
 
 void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse, const TFieldStorage &Y) {
-	// along the last dimension -> increment is 1 -> a single matrix row.
+	// along the last dimension -> increment is 1; the storage picks the line to walk from that
+	// and its own shape (see TStorageYMatrix::fill_current_state).
 	// _index_in_Y now holds the linear index in Y space of each parsed cell.
 	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
 	                     _current_state_Y, _exists_in_Y, _index_in_Y);
@@ -43,7 +44,8 @@ void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leave
 void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
                                           size_t num_nodes_to_parse,
                                           const TInternalStateStorage &Z) {
-	// along the last dimension -> increment is 1 -> a single matrix row.
+	// along the last dimension -> increment is 1; the storage picks the line to walk from that
+	// and its own shape (see TStorageZMatrix::fill_current_state).
 	// _index_in_Z now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
 	                     _current_state_Z, _exists_in_Z, _index_in_Z);
@@ -51,7 +53,8 @@ void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leave
 
 void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
                            const TFieldStorage &Y) {
-	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
+	// The storage picks the line to walk from the increment and its own shape (see
+	// TStorageYMatrix::fill_current_state).
 	// _index_in_Y now holds the linear index in Y space of each parsed cell.
 	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
 	                     _current_state_Y, _exists_in_Y, _index_in_Y);
@@ -59,7 +62,8 @@ void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t
 
 void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
                            const TInternalStateStorage &Z) {
-	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
+	// The storage picks the line to walk from the increment and its own shape (see
+	// TStorageZMatrix::fill_current_state).
 	// _index_in_Z now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
 	                     _current_state_Z, _exists_in_Z, _index_in_Z);
