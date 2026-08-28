@@ -401,6 +401,13 @@ private:
 		std::array<size_t, 2> line{};
 		// iterate only the stored (non-default) cells, in ascending linear-index order
 		for (const auto &[linear_index_in_y, storage] : _Y.get_stored_entries()) {
+			// A cell that is not a one now and was never counted a one carries no posterior. Which
+			// cells are *stored* is a property of the backend -- the sparse field holds the cells
+			// it was given, ones and zeros alike, and the dense one holds the whole container
+			// space -- so leaving those cells out is what makes this file say the same thing under
+			// either backend, and it drops no information: every column of such a row is the
+			// default.
+			if (!storage.is_one() && storage.get_counter() == 0) { continue; }
 			line                 = {linear_index_in_y, storage.is_one()};
 			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
 			std::vector<std::string> node_names;

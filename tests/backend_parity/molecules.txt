@@ -1,0 +1,10 @@
+child	parent	length
+molecules_1	molecules_0	0.3
+molecules_2	molecules_0	0.8
+molecules_3	molecules_0	0.55
+molecules_4	molecules_1	0.25
+molecules_5	molecules_1	0.6
+molecules_6	molecules_2	0.4
+molecules_7	molecules_2	0.85
+molecules_8	molecules_3	0.1
+molecules_9	molecules_3	0.7

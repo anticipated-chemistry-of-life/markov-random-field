@@ -1,0 +1,7 @@
+molecules	number_of_papers
+molecules_4	3
+molecules_5	10
+molecules_6	17
+molecules_7	24
+molecules_8	8
+molecules_9	15

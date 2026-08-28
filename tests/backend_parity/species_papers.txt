@@ -1,0 +1,9 @@
+species	number_of_papers
+species_7	3
+species_8	10
+species_9	17
+species_10	24
+species_11	8
+species_12	15
+species_13	22
+species_14	6

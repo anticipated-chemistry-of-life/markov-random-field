@@ -1,0 +1,69 @@
+# The dense-versus-sparse gate, on every push.
+#
+# What keeps the sparse backend from silently rotting is that two binaries built from the same
+# sources, differing only in which storage the alias in src/storages/storage_backend.h selects,
+# produce byte-identical output from the same seed. tests/backend_parity/run.sh is the whole of the
+# check; this file exists to run it.
+#
+# The scale is a pair of trees with eight and six leaves and a few hundred iterations, which takes
+# under a second per chain -- the build is what costs, which is why it runs in debug mode: less to
+# compile than -O3, and the assertions are live.
+name: backend parity
+
+# `push` alone, not `push` plus `pull_request`: the two events carry different refs, so a same-repo
+# pull request would run this twice, and neither run would cancel the other.
+on:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+# The default shell for a `run:` step is `bash -e` without `pipefail`, under which a failed `curl`
+# piped into `tar` or `bash` leaves the step green and the failure surfaces later as something else.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ACOL_MODE: debug
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install just
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+            | bash -s -- --to "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install micromamba
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+            | tar -xj -C "$HOME/.local" bin/micromamba
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "MAMBA_EXE=$HOME/.local/bin/micromamba" >> "$GITHUB_ENV"
+          echo "MAMBA_ROOT_PREFIX=$HOME/micromamba" >> "$GITHUB_ENV"
+
+      # The environment is whatever `just setup` installs, so the key is the recipe that installs
+      # it. A miss costs a few minutes of solving and downloading; a stale hit cannot happen,
+      # because changing the package list changes the justfile.
+      - name: Cache the build environment
+        uses: actions/cache@v4
+        with:
+          path: ~/micromamba
+          key: micromamba-${{ runner.os }}-${{ hashFiles('justfile') }}
+
+      - name: Create the build environment
+        run: just setup
+
+      - name: Dense and sparse must agree byte for byte
+        run: just parity

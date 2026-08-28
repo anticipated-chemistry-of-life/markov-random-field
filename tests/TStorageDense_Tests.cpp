@@ -8,9 +8,9 @@
 #include <vector>
 
 //-----------------------------------
-// TStorageZDense -- the dense internal state, which is the shared state array itself. What is
-// asserted of it here therefore holds of the dense field's state too; the field's own suite below
-// only has to check what the counter adds.
+// TStorageZDense -- the dense internal state, which is the shared state array plus the bulk paths
+// `Z` is asked for by name. What is asserted of the array here therefore holds of the dense field's
+// state too; the field's own suite below only has to check what the counter adds.
 //
 // Tests use a single-row layout {1, N} unless the shape matters, so that the linear index equals
 // the column.

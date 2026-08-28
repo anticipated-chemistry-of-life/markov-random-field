@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 /// The field, dense: a TDenseStateArray for the state, and a counter of the same length beside it.
@@ -41,6 +42,13 @@ public:
 		initialize(n_iterations, dimensions);
 	}
 
+	void initialize(size_t n_iterations, const std::vector<size_t> &dimensions) {
+		if (dimensions.size() != NUMBER_OF_TREES) {
+			throw coretools::TDevError("dimensions must have size NUMBER_OF_TREES");
+		}
+		initialize(n_iterations, IndexArray{dimensions[0], dimensions[1]});
+	}
+
 	void initialize(size_t n_iterations, const IndexArray &dimensions) {
 		// add_to_counter takes the iteration modulo the thinning factor, so it stays at least one
 		// even for a chain with no iterations to thin.
@@ -57,6 +65,9 @@ public:
 	// -- two implementations have to agree on what a cell holds afterwards.
 
 	[[nodiscard]] bool is_one(size_t linear_index) const { return _states.is_one(linear_index); }
+	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
+		return _states.is_one(_states.get_linear_index_in_container_space(multidim_index));
+	}
 	void set_state(size_t linear_index, bool state) { _states.set_state(linear_index, state); }
 
 	void insert_one(size_t linear_index) {
@@ -81,11 +92,25 @@ public:
 	[[nodiscard]] size_t total_size_of_container_space() const {
 		return _states.total_size_of_container_space();
 	}
+	[[nodiscard]] const IndexArray &dimensions() const { return _states.dimensions(); }
 	[[nodiscard]] bool empty() const { return _states.empty(); }
+
+	[[nodiscard]] size_t number_of_ones() const {
+		size_t count = 0;
+		for (size_t i = 0; i < _states.total_size_of_container_space(); ++i) {
+			if (_states.is_one(i)) { ++count; }
+		}
+		return count;
+	}
 
 	[[nodiscard]] size_t
 	get_linear_index_in_container_space(const IndexArray &multidim_index) const {
 		return _states.get_linear_index_in_container_space(multidim_index);
+	}
+	/// The same conversion under the name the sparse field gives it, because that is the name
+	/// production reaches for it by (msms_data.cpp).
+	[[nodiscard]] size_t get_linear_index_in_Y_space(const IndexArray &multidim_index) const {
+		return get_linear_index_in_container_space(multidim_index);
 	}
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index) const {
 		return _states.get_multi_dimensional_index(linear_index);
@@ -128,6 +153,76 @@ public:
 
 	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
 	[[nodiscard]] size_t get_thinning_factor() const { return _thinning_factor; }
+
+	// -- The bulk paths. Deliberately outside the storage concept (see storage_concepts.h): the
+	// -- sampler needs them, but they describe what the model does with a field rather than what
+	// -- makes a field a field, and both implementations still spell them with a `Y` in the name.
+
+	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageYMatrix::insert_in_Y.
+	///
+	/// Every index goes through `insert_one`, counter and all: the sparse form writes a whole new
+	/// entry per index, which starts that cell's counter over, and the two have to leave a cell
+	/// holding the same thing. The sweep only defers a cell it found absent, whose counter is 0
+	/// either way.
+	void insert_in_Y(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		insert_ones_in_batches(*this, linear_indices_to_insert);
+	}
+
+	/// The state of every cell of the container space, in ascending linear-index order.
+	[[nodiscard]] std::vector<uint8_t> get_full_Y_binary_vector() const {
+		return whole_space_states<uint8_t>(*this);
+	}
+
+	/// One cell as the stored-entry walks below report it. The sparse field hands back its packed
+	/// entry type, whose counter is 15 bits; this one is not that type precisely because the dense
+	/// counter is 16, and returning a `TStorageY` would mean either dropping the top bit or
+	/// throwing on a count the dense field is entitled to hold.
+	class TCell {
+		bool _state       = false;
+		uint16_t _counter = 0;
+
+	public:
+		TCell() = default;
+		TCell(bool state, uint16_t counter) : _state(state), _counter(counter) {}
+
+		[[nodiscard]] bool is_one() const { return _state; }
+		[[nodiscard]] uint16_t get_counter() const { return _counter; }
+	};
+
+	/// Every stored cell as (linear index, value), in ascending linear-index order -- which here
+	/// is every cell of the container space, since the dense field stores all of them.
+	[[nodiscard]] std::vector<std::pair<size_t, TCell>> get_stored_entries() const {
+		const size_t total = total_size_of_container_space();
+		std::vector<std::pair<size_t, TCell>> entries;
+		entries.reserve(total);
+		for (size_t i = 0; i < total; ++i) {
+			entries.emplace_back(i, TCell(_states.is_one(i), _counts[i]));
+		}
+		return entries;
+	}
+
+	/// Allocation-free forward walk over the stored cells in ascending linear-index order -- the
+	/// streaming form of get_stored_entries(), and the shape TStorageYMatrix::StoredCursor has, so
+	/// that the merge-joins written against the sparse field (TLotus, the simple error model) read
+	/// the dense one unchanged. They visit more cells here and reach the same answer: a cell the
+	/// sparse field does not store reads as state 0, which is what this one reports for it.
+	class StoredCursor {
+		const TStorageYDense *_field = nullptr;
+		size_t _index                = 0;
+
+	public:
+		StoredCursor() = default;
+		explicit StoredCursor(const TStorageYDense &field) : _field(&field) {}
+
+		[[nodiscard]] bool valid() const {
+			return _field != nullptr && _index < _field->total_size_of_container_space();
+		}
+		[[nodiscard]] size_t linear_index() const { return _index; }
+		[[nodiscard]] bool is_one() const { return _field->is_one(_index); }
+		void advance() { ++_index; }
+	};
+
+	[[nodiscard]] StoredCursor stored_cursor() const { return StoredCursor(*this); }
 };
 
 static_assert(FieldStorage<TStorageYDense>,

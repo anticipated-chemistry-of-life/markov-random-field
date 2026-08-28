@@ -1,0 +1,15 @@
+child	parent	length
+species_1	species_0	0.2
+species_2	species_0	0.7
+species_3	species_1	0.35
+species_4	species_1	0.5
+species_5	species_2	0.15
+species_6	species_2	0.9
+species_7	species_3	0.45
+species_8	species_3	0.2
+species_9	species_4	0.7
+species_10	species_4	0.35
+species_11	species_5	0.5
+species_12	species_5	0.15
+species_13	species_6	0.9
+species_14	species_6	0.45

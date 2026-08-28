@@ -39,17 +39,21 @@ option(BUILD_TESTING "Configure the acol_unitTests target" ON)
 
 # Which implementation backs the field and the internal state. The concepts in
 # src/storages/storage_concepts.h are what make this a choice at all; the
-# aliases in src/storages/storage_backend.h are where it is spent. `sparse` is
-# the only backend today.
+# aliases in src/storages/storage_backend.h are where it is spent.
+#
+# Two binaries built from these same sources, differing only in this value, must
+# produce byte-identical output from the same seed. `just parity` is what checks
+# it (tests/backend_parity/); `dense` is the obviously-correct reference and
+# `sparse` is the path to larger runs.
 set(ACOL_STORAGE_BACKEND
     "sparse"
     CACHE STRING "Storage backend for the field and the internal state")
-set_property(CACHE ACOL_STORAGE_BACKEND PROPERTY STRINGS sparse)
+set_property(CACHE ACOL_STORAGE_BACKEND PROPERTY STRINGS dense sparse)
 
-if(NOT ACOL_STORAGE_BACKEND STREQUAL "sparse")
+if(NOT ACOL_STORAGE_BACKEND MATCHES "^(dense|sparse)$")
   message(
     FATAL_ERROR
-      "Unknown ACOL_STORAGE_BACKEND '${ACOL_STORAGE_BACKEND}'. The only backend today is 'sparse'."
+      "Unknown ACOL_STORAGE_BACKEND '${ACOL_STORAGE_BACKEND}'. The backends are 'dense' and 'sparse'."
   )
 endif()
 

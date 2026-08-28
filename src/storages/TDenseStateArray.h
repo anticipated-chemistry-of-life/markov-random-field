@@ -72,6 +72,10 @@ public:
 		_states[linear_index] = 1;
 	}
 
+	void insert_one(const IndexArray &multidim_index) {
+		insert_one(get_linear_index_in_container_space(multidim_index));
+	}
+
 	void insert_zero(size_t linear_index) {
 		_throw_if_outside_container_space(linear_index);
 		_states[linear_index] = 0;
@@ -83,6 +87,10 @@ public:
 	void remove_zeros() {}
 
 	[[nodiscard]] size_t total_size_of_container_space() const { return _states.size(); }
+
+	/// The size of each dimension of the container space. Two storages are cell-by-cell comparable
+	/// (their linear indices denote the same cell) only if these are equal.
+	[[nodiscard]] const IndexArray &dimensions() const { return _dimensions; }
 
 	[[nodiscard]] bool empty() const {
 		return std::none_of(_states.begin(), _states.end(), [](uint8_t s) { return s != 0; });
@@ -122,3 +130,40 @@ static_assert(BinaryFieldStorage<TDenseStateArray>,
               "The dense state array must satisfy the binary storage interface.");
 static_assert(!FieldStorage<TDenseStateArray>,
               "A state array carries no posterior counter, so it is not a field.");
+
+// -------------------------------------------------------------------------------------------
+// The two bulk paths the dense field and the dense internal state have in common.
+//
+// Each storage has to answer to a name of its own -- `insert_in_Y` beside `insert_in_Z`,
+// `get_full_Y_binary_vector` beside `get_full_Z_binary_vector`, because that is what the sparse
+// implementations are called and what the sampler asks for -- so the shape they share lives here
+// rather than in a member either could inherit.
+// -------------------------------------------------------------------------------------------
+
+/// Writes a one at every index of every batch. The sparse implementations merge the per-thread
+/// batches the sweep hands over and re-sort the matrix once; a dense array has nothing to sort, so
+/// this is the writes and nothing else.
+///
+/// It goes through the storage rather than through its state array because the field's insert does
+/// something the array's does not: it starts the cell's counter over, which is what the sparse
+/// form's whole-new-entry write also does.
+template<BinaryFieldStorage Storage>
+void insert_ones_in_batches(Storage &storage, const std::vector<std::vector<size_t>> &batches) {
+	for (const auto &batch : batches) {
+		for (const size_t linear_index : batch) { storage.insert_one(linear_index); }
+	}
+}
+
+/// The state of every cell of the container space, in ascending linear-index order.
+///
+/// The element type is the caller's because the two sparse implementations disagree on it -- the
+/// field dumps a vector of bytes and the internal state a vector of words -- and a trace line is
+/// written from whatever they return.
+template<typename T, BinaryFieldStorage Storage>
+[[nodiscard]] std::vector<T> whole_space_states(const Storage &storage) {
+	const size_t total = storage.total_size_of_container_space();
+	std::vector<T> states;
+	states.reserve(total);
+	for (size_t i = 0; i < total; ++i) { states.push_back(static_cast<T>(storage.is_one(i))); }
+	return states;
+}

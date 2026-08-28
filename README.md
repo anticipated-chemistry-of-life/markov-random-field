@@ -62,8 +62,8 @@ just build l               # debug, LOTUS only
 just run release lsm --out results/acol --numThreads all
 ```
 
-Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
-so switching back and forth does not trigger a rebuild.
+Each combination gets its own build directory (`build/<mode>-<letters>-<backend>`, e.g.
+`build/release-ls-sparse`), so switching back and forth does not trigger a rebuild.
 
 ### Choosing the storage backend
 
@@ -73,16 +73,25 @@ made by `-DACOL_STORAGE_BACKEND=<name>`. It selects the `using` aliases in
 concepts in `src/storages/storage_concepts.h`, checked with `static_assert` rather than through
 virtual calls, so nothing on a storage access path pays for the choice.
 
-| value    | field                | internal state       |
-| -------- | -------------------- | -------------------- |
-| `sparse` | `TStorageYMatrix`    | `TStorageZMatrix`    |
+| value    | field             | internal state    |
+| -------- | ----------------- | ----------------- |
+| `sparse` | `TStorageYMatrix` | `TStorageZMatrix` |
+| `dense`  | `TStorageYDense`  | `TStorageZDense`  |
 
-`sparse` is the default and, today, the only value; anything else fails at configure time. Unlike
-the data sources this has no `just` letter, because there is nothing yet to switch between:
+`sparse` is the default and is the path to larger runs; `dense` stores the whole container space
+and is the obviously-correct implementation to check the other against. Anything else fails at
+configure time. Unlike the data sources this is not a `just` letter but an environment variable,
+because it is a different kind of choice: the letters change what the program computes, this does
+not.
 
 ```bash
-cmake --preset debug -DACOL_STORAGE_BACKEND=sparse
+ACOL_BACKEND=dense just build release ls    # build/release-ls-dense/acol
+cmake --preset debug -DACOL_STORAGE_BACKEND=dense
 ```
+
+That the two agree is checked, not assumed. `just parity` builds both binaries, runs the same
+simulation and the same chain under each from a fixed seed, and compares every file they write byte
+for byte; it runs in CI on every push. See `tests/backend_parity/`.
 
 Other recipes: `just configure` (configure only), `just bin` / `just dir` (print the binary or build
 directory path), `just shell` (a shell inside the environment), `just clean`, `just distclean`.
@@ -100,4 +109,4 @@ cmake --build build/debug
 ```
 
 The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; `just` sets `ACOL_FLAG_SUFFIX` to
-the data-source letters, and it is empty when you invoke cmake yourself.
+the data-source letters and the storage backend, and it is empty when you invoke cmake yourself.

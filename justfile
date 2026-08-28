@@ -17,8 +17,15 @@
 #     just run release lsm --input file.txt --scalar 0.6
 #
 # is `./acol --input file.txt --scalar 0.6` compiled at -O3 with all three data
-# sources. Every combination gets its own build directory
-# (build/<MODE>-<FLAGS>), so switching back and forth does not force a rebuild.
+# sources.
+#
+# Which storage backs the field and the internal state is a third axis, set by
+# ACOL_BACKEND (`sparse`, the default, or `dense`) rather than by an argument,
+# because it changes no behaviour -- that is what `just parity` checks.
+#
+# Every combination gets its own build directory
+# (build/<MODE>-<FLAGS>-<BACKEND>), so switching back and forth does not force a
+# rebuild.
 #
 # All cmake/compiler/executable invocations run inside the micromamba
 # environment, so there is nothing to activate by hand.
@@ -30,6 +37,9 @@ conda_env := env('ACOL_ENV', 'acol_env')
 
 # Data sources used when the recipe is called without a FLAGS argument
 default_flags := env('ACOL_DEFAULT_FLAGS', 'ls')
+
+# Storage backend for the field and the internal state: `sparse` or `dense`
+backend := env('ACOL_BACKEND', 'sparse')
 
 [private]
 default:
@@ -91,6 +101,10 @@ bin *args:
 dir *args:
     @just _drive dir "$@"
 
+# Build both storage backends and check they produce byte-identical output.
+parity *args:
+    @bash tests/backend_parity/run.sh "$@"
+
 # Open a shell inside the micromamba environment.
 shell:
     @"${MAMBA_EXE:-micromamba}" run -n "{{ conda_env }}" "${SHELL:-bash}"
@@ -133,8 +147,14 @@ _drive action *args:
         exit 1
     fi
 
+    backend="{{ backend }}"
+    case "$backend" in
+        dense|sparse) ;;
+        *) echo "error: ACOL_BACKEND='$backend' is neither 'dense' nor 'sparse'" >&2; exit 1 ;;
+    esac
+
     # Must agree with binaryDir in CMakePresets.json.
-    export ACOL_FLAG_SUFFIX="-${key}"
+    export ACOL_FLAG_SUFFIX="-${key}-${backend}"
     build_dir="build/${mode}${ACOL_FLAG_SUFFIX}"
 
     case "$action" in
@@ -161,7 +181,8 @@ _drive action *args:
     if [[ "$action" == "configure" ]] || ! [[ -f "$cache" ]] \
        || ! grep -qx "LOTUS:BOOL=$lotus" "$cache" \
        || ! grep -qx "SIMPLE_DATA:BOOL=$simple" "$cache" \
-       || ! grep -qx "USE_MS_DATA:BOOL=$ms" "$cache"; then
+       || ! grep -qx "USE_MS_DATA:BOOL=$ms" "$cache" \
+       || ! grep -qx "ACOL_STORAGE_BACKEND:STRING=$backend" "$cache"; then
         # The conda compiler packages export CC/CXX (and the matching sysroot
         # flags) from their activation scripts; fall back to the plain names if
         # they did not.
@@ -172,8 +193,9 @@ _drive action *args:
                     *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
                 esac
             fi
-            exec cmake --preset "$1" -DLOTUS="$2" -DSIMPLE_DATA="$3" -DUSE_MS_DATA="$4"
-        ' _ "$mode" "$lotus" "$simple" "$ms"
+            exec cmake --preset "$1" -DLOTUS="$2" -DSIMPLE_DATA="$3" -DUSE_MS_DATA="$4" \
+                 -DACOL_STORAGE_BACKEND="$5"
+        ' _ "$mode" "$lotus" "$simple" "$ms" "$backend"
     fi
 
     if [[ "$action" != "configure" ]]; then

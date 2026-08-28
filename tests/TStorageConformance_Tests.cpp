@@ -37,6 +37,7 @@
 #include <random>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -568,6 +569,117 @@ TEST(StorageEquivalence, the_fraction_of_ones_survives_a_chain_the_two_thin_diff
 	EXPECT_DOUBLE_EQ(dense.get_fraction_of_ones(1), 0.0);
 	// The counters are what differ, and by exactly the ratio of the two thinning factors.
 	EXPECT_EQ(counter_of(dense, 0), 2 * counter_of(sparse, 0));
+}
+
+// The bulk paths, which the storage concept deliberately leaves out (storage_concepts.h) and
+// which therefore have nothing but this to hold them together: the deferred insert the field sweep
+// commits after its parallel region, and the whole-space dump the per-iteration traces are written
+// from. Both are named after the storage they belong to rather than after what they do, so there
+// is one block per storage here rather than one templated body.
+TEST(StorageEquivalence, the_backends_agree_on_the_bulk_insert_and_the_whole_space_dump) {
+	std::mt19937_64 rng(20260828);
+	for (const auto &shape : generated_shapes()) {
+		const size_t n_cells = shape[0] * shape[1];
+
+		// Batches, not one list: the sweep accumulates one vector per thread and hands them over
+		// together, and a cell may be named by more than one batch.
+		std::uniform_int_distribution<size_t> cell(0, n_cells - 1);
+		std::vector<std::vector<size_t>> batches(3);
+		std::vector<uint8_t> expected(n_cells, 0);
+		for (auto &batch : batches) {
+			for (size_t i = 0; i < 1 + n_cells / 8; ++i) {
+				const size_t linear_index = cell(rng);
+				batch.push_back(linear_index);
+				expected[linear_index] = 1;
+			}
+		}
+
+		TStorageZMatrix sparse_Z(shape);
+		TStorageZDense dense_Z(shape);
+		sparse_Z.insert_in_Z(batches);
+		dense_Z.insert_in_Z(batches);
+		expect_same_cells(sparse_Z, dense_Z, shape);
+		const std::vector<size_t> expected_Z(expected.begin(), expected.end());
+		ASSERT_EQ(sparse_Z.get_full_Z_binary_vector(), expected_Z);
+		ASSERT_EQ(dense_Z.get_full_Z_binary_vector(), expected_Z);
+
+		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
+		TStorageYDense dense_Y(N_ITERATIONS, shape);
+		sparse_Y.insert_in_Y(batches);
+		dense_Y.insert_in_Y(batches);
+		expect_same_cells(sparse_Y, dense_Y, shape);
+		ASSERT_EQ(sparse_Y.get_full_Y_binary_vector(), expected);
+		ASSERT_EQ(dense_Y.get_full_Y_binary_vector(), expected);
+		ASSERT_EQ(sparse_Y.number_of_ones(), dense_Y.number_of_ones());
+		ASSERT_EQ(sparse_Y.dimensions(), dense_Y.dimensions());
+
+		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
+	}
+}
+
+// Which cells a field reports as *stored* is the one place where the two differ and it still
+// reaches a file: the sparse matrix holds the cells it was given, the dense array holds the whole
+// container space, and the posterior field is written by walking that list.
+//
+// What makes the two files agree anyway is that a cell only earns a line when it is a one now or
+// was counted a one at least once (TMarkovField::_write_only_values_in_Y_vector) -- a cell that is
+// neither has every column at its default, and is exactly the kind of cell the two backends
+// disagree about holding. That filter is what this asserts, over a chain rather than over a few
+// writes, because the counter is half of the rule.
+TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_ones) {
+	std::mt19937_64 rng(20260828);
+	size_t n_shapes_where_the_backends_hold_different_cells = 0;
+	for (const auto &shape : generated_shapes()) {
+		const size_t n_cells = shape[0] * shape[1];
+		const auto script    = random_script(rng, n_cells, N_ITERATIONS);
+
+		TStorageYMatrix sparse(N_ITERATIONS, shape);
+		TStorageYDense dense(N_ITERATIONS, shape);
+		TExpectedCells sparse_expected(n_cells);
+		TExpectedCells dense_expected(n_cells);
+		run_chain(sparse, script, sparse_expected);
+		run_chain(dense, script, dense_expected);
+
+		// The two entry types are different -- the sparse field hands out its packed entry, the
+		// dense one a state and a full 16-bit count -- but both answer the two questions the
+		// filter asks, which is the whole of what the writer needs from them.
+		const auto reported = [](const auto &field) {
+			std::vector<std::pair<size_t, bool>> lines;
+			for (const auto &[linear_index, cell] : field.get_stored_entries()) {
+				if (!cell.is_one() && cell.get_counter() == 0) { continue; }
+				lines.emplace_back(linear_index, cell.is_one());
+			}
+			return lines;
+		};
+		ASSERT_EQ(reported(sparse), reported(dense)) << "shape " << shape[0] << "x" << shape[1];
+
+		// The dense field really does report the whole space, and the sparse one a subset of it:
+		// the difference above is a filter doing its job, not two lists that happen to coincide.
+		ASSERT_EQ(dense.get_stored_entries().size(), n_cells);
+		ASSERT_LE(sparse.get_stored_entries().size(), n_cells);
+		if (sparse.get_stored_entries().size() < dense.get_stored_entries().size()) {
+			++n_shapes_where_the_backends_hold_different_cells;
+		}
+
+		// The streaming form has to walk the same cells as the materialised one, since the
+		// likelihoods merge-join through it while the writers iterate the vector.
+		auto cursor = dense.stored_cursor();
+		for (const auto &[linear_index, cell] : dense.get_stored_entries()) {
+			ASSERT_TRUE(cursor.valid()) << "cell " << linear_index;
+			ASSERT_EQ(cursor.linear_index(), linear_index);
+			ASSERT_EQ(cursor.is_one(), cell.is_one()) << "cell " << linear_index;
+			cursor.advance();
+		}
+		ASSERT_FALSE(cursor.valid());
+
+		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
+	}
+
+	// Without this the test would pass just as happily on a script that leaves the two lists
+	// identical, which is the one case in which it proves nothing.
+	EXPECT_GT(n_shapes_where_the_backends_hold_different_cells, 0u)
+	    << "no generated shape left the two backends holding different cells, so the filter was "
+	       "never asked to reconcile anything";
 }
 
 // The one question the two are allowed to answer differently, and the reason they may: a cell
