@@ -291,45 +291,58 @@ public:
 		return entries;
 	}
 
-	/// Allocation-free forward walk over the stored cells in ascending linear-index order
-	/// (row-major: linear = row * nCols + col) -- the streaming form of get_stored_entries().
-	/// Within a row the sparse entries are already column-sorted and rows are visited in order,
-	/// so the linear index increases monotonically. Lets callers merge-join two matrices without
-	/// materializing a vector for either.
-	class StoredCursor {
+	/// Allocation-free forward walk over the cells that are *one*, in ascending linear-index order
+	/// (row-major: linear = row * nCols + col). Within a row the sparse entries are already
+	/// column-sorted and rows are visited in order, so the linear index increases monotonically.
+	/// Lets callers merge-join two fields without materializing a vector for either.
+	///
+	/// The ones, and not the stored cells, because which cells are stored is a property of this
+	/// implementation rather than of the field: this matrix holds the cells it was given, ones and
+	/// zeros alike, where the dense field holds the whole container space. A merge-join that
+	/// visited the stored cells would therefore split its sum between the accumulator and the
+	/// caller's closed-form term differently under the two backends and reach an answer that
+	/// differs in the last bits -- which is enough, through a Metropolis ratio, to send two chains
+	/// from the same seed down different paths. A stored zero contributes exactly what the
+	/// closed-form term contributes for it, so leaving it out changes nothing but the rounding.
+	class OnesCursor {
 		const coretools::TSparseMatrix<TStorageY> *_mat = nullptr;
 		size_t _n_cols                                  = 0;
 		size_t _row                                     = 0;
 		decltype(std::declval<const coretools::TSparseMatrix<TStorageY>>().begin_row(0)) _it{};
 
-		void _skip_empty_rows() {
-			while (_row < _mat->nRows() && _it == _mat->end_row(_row)) {
-				++_row;
-				if (_row < _mat->nRows()) { _it = _mat->begin_row(_row); }
+		/// Leaves the cursor on the next cell that is a one, skipping both exhausted rows and the
+		/// stored cells that hold a zero.
+		void _advance_to_next_one() {
+			while (_row < _mat->nRows()) {
+				if (_it == _mat->end_row(_row)) {
+					++_row;
+					if (_row < _mat->nRows()) { _it = _mat->begin_row(_row); }
+					continue;
+				}
+				if (_it->val.is_one()) { return; }
+				++_it;
 			}
 		}
 
 	public:
-		StoredCursor() = default;
-		StoredCursor(const coretools::TSparseMatrix<TStorageY> &mat, size_t n_cols)
+		OnesCursor() = default;
+		OnesCursor(const coretools::TSparseMatrix<TStorageY> &mat, size_t n_cols)
 		    : _mat(&mat), _n_cols(n_cols) {
 			if (_mat->nRows() > 0) {
 				_it = _mat->begin_row(0);
-				_skip_empty_rows();
+				_advance_to_next_one();
 			}
 		}
 
 		[[nodiscard]] bool valid() const { return _mat != nullptr && _row < _mat->nRows(); }
 		[[nodiscard]] size_t linear_index() const { return _row * _n_cols + _it->index; }
-		[[nodiscard]] bool is_one() const { return _it->val.is_one(); }
-		[[nodiscard]] const TStorageY &value() const { return _it->val; }
 		void advance() {
 			++_it;
-			_skip_empty_rows();
+			_advance_to_next_one();
 		}
 	};
 
-	[[nodiscard]] StoredCursor stored_cursor() const { return {_mat, _dimensions_Y_space[1]}; }
+	[[nodiscard]] OnesCursor ones_cursor() const { return {_mat, _dimensions_Y_space[1]}; }
 };
 
 static_assert(FieldStorage<TStorageYMatrix>,

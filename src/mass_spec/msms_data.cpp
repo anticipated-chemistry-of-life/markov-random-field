@@ -216,11 +216,10 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 	const size_t n_molecules      = _molecules_tree->get_number_of_leaves();
 	const TFieldStorage &Y        = _markov_field.get_Y_matrix();
 
-	// Present (Y == 1) molecules grouped by species. Y is sparse, so this is O(nNonZero(Y)); the
-	// streaming cursor walks the stored cells without materializing a vector.
+	// Present (Y == 1) molecules grouped by species. The streaming cursor walks exactly those
+	// without materializing a vector, so this is O(ones(Y)).
 	std::vector<std::vector<uint32_t>> present_per_species(_number_of_species);
-	for (auto cursor = Y.stored_cursor(); cursor.valid(); cursor.advance()) {
-		if (!cursor.is_one()) { continue; }
+	for (auto cursor = Y.ones_cursor(); cursor.valid(); cursor.advance()) {
 		const auto md = Y.get_multi_dimensional_index(cursor.linear_index()); // {species, molecule}
 		present_per_species[md[0]].push_back((uint32_t)md[1]);
 	}

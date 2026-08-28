@@ -71,14 +71,10 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 
 /// Number of cells where Y and D differ.
 ///
-/// A cell absent from a sparse matrix reads as state 0, so cells stored in neither matrix always
-/// agree and need not be visited. The two matrices are merge-joined in ascending linear-index
-/// order (the same technique as TLotus::_calculate_log_likelihood_of_L_no_collapsing), which costs
-/// O(nnz(Y) + nnz(D)) rather than O(total cells).
-///
-/// Note that "stored" and "is one" are different things: a cell can be stored with state 0 (that is
-/// what happens when a one is flipped back to zero before remove_zeros runs), and such a cell
-/// agrees with an absent cell.
+/// A cell that is zero in both always agrees and need not be visited, so the two fields are
+/// merge-joined over their ones in ascending linear-index order (the same technique as
+/// TLotus::_calculate_log_likelihood_of_L_no_collapsing), which costs O(ones(Y) + ones(D)) rather
+/// than O(total cells).
 [[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y, const TFieldStorage &D) {
 	if (Y.dimensions() != D.dimensions()) {
 		throw coretools::TDevError(
@@ -89,8 +85,8 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 	}
 
 	const size_t total = Y.total_size_of_container_space();
-	auto y_cur         = Y.stored_cursor();
-	auto d_cur         = D.stored_cursor();
+	auto y_cur         = Y.ones_cursor();
+	auto d_cur         = D.ones_cursor();
 
 	size_t n_disagree = 0;
 	while (y_cur.valid() || d_cur.valid()) {
@@ -101,11 +97,11 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 		bool state_of_Y = false;
 		bool state_of_D = false;
 		if (yi == i) {
-			state_of_Y = y_cur.is_one();
+			state_of_Y = true; // the cursor yields only ones
 			y_cur.advance();
 		}
 		if (di == i) {
-			state_of_D = d_cur.is_one();
+			state_of_D = true;
 			d_cur.advance();
 		}
 		if (state_of_Y != state_of_D) { ++n_disagree; }

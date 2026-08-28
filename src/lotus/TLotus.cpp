@@ -182,15 +182,20 @@ lotus_math::TReportingModel TLotus::_build_reporting_model() const {
 double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage &Y) const {
 	const size_t total = Y.total_size_of_container_space();
 
-	// Merge-join the two sparse matrices in ascending linear-index order without materializing
-	// their entries. We only need to evaluate cells that are stored in Y and/or L: for every other
-	// cell both states are false, and _calculate_probability_of_L_given_x(false, false, i) is
+	// Merge-join the two fields in ascending linear-index order without materializing their
+	// entries. We only need to evaluate cells that are one in Y and/or L: for every other cell
+	// both states are false, and _calculate_probability_of_L_given_x(false, false, i) is
 	// position-independent, so those collapse into a single bulk term below.
+	//
+	// The ones and not the stored cells, because how the sum splits between the accumulator and
+	// that bulk term has to be a property of the field's contents rather than of which backend is
+	// holding them -- otherwise the same chain reaches answers that differ in the last bits under
+	// the two, which a Metropolis ratio is quite capable of turning into two different chains.
 	coretools::TSumLogProbability sum_log;
-	auto y_cur = Y.stored_cursor();
-	auto l_cur = _L.stored_cursor();
+	auto y_cur = Y.ones_cursor();
+	auto l_cur = _L.ones_cursor();
 
-	size_t n_visited = 0; // distinct linear indices stored in Y and/or L
+	size_t n_visited = 0; // distinct linear indices that are one in Y and/or L
 	while (y_cur.valid() || l_cur.valid()) {
 		const size_t yi = y_cur.valid() ? y_cur.linear_index() : total;
 		const size_t li = l_cur.valid() ? l_cur.linear_index() : total;
@@ -199,11 +204,11 @@ double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage 
 		bool state_of_Y = false;
 		bool state_of_L = false;
 		if (yi == i) {
-			state_of_Y = y_cur.is_one();
+			state_of_Y = true; // the cursor yields only ones
 			y_cur.advance();
 		}
 		if (li == i) {
-			state_of_L = l_cur.is_one();
+			state_of_L = true;
 			l_cur.advance();
 		}
 

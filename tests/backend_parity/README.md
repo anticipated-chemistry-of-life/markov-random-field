@@ -63,10 +63,24 @@ is not reproducible across thread counts even under one backend (issue #38). Wha
 is the multi-batch commit of the sweep's deferred inserts, which one thread never produces;
 `StorageEquivalence` in `tests/TStorageConformance_Tests.cpp` covers that path instead.
 
-Byte-identical is not bit-identical arithmetic. Where a likelihood is summed by merge-joining the
-stored cells (`TLotus::_calculate_log_likelihood_of_L_no_collapsing`, `count_disagreements`), the
-sparse field visits the cells it holds and folds the rest into one closed-form term, while the
-dense field visits every cell. The two compute the same quantity by different summation orders, so
-they can differ in the last bits of a double and still print the same digits. The gate compares
-what is written, which is the thing that has to agree; a divergence that only appears in the last
-bits is not something it can see, and one that grows into the printed digits is.
+## What it caught
+
+The first thing this gate found, on its first CI run, was a real defect -- worth recording, because
+it is the shape of the problem it exists to catch.
+
+`TLotus::_calculate_log_likelihood_of_L_no_collapsing` splits its sum in two: the cells a cursor
+yields, term by term through an accumulator, and every other cell folded into one closed-form
+product. The cursor used to yield the cells the field *stored* -- which is a property of the
+backend, not of the field: the sparse matrix holds the cells it was given, ones and zeros alike,
+and the dense field holds all of them. So the two backends split the same sum differently and
+reached answers about one ULP apart. That difference goes into a Metropolis ratio, which is compared
+against a uniform draw; a few iterations later one chain accepted a move the other rejected, and
+from there they were simply different chains.
+
+The fix was to give the cursor a contract that does not mention the backend: it yields the cells
+that are **one**. Every caller wanted exactly that anyway, a stored zero contributes precisely what
+the closed-form term contributes for it, and the two backends now walk the same cells in the same
+order. See `TStorageYMatrix::OnesCursor`.
+
+The lesson generalises: anything that lets "what this backend happens to store" reach an
+arithmetic result will diverge, and printed precision will hide it right up until it doesn't.

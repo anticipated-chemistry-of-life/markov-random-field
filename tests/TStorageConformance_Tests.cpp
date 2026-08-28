@@ -661,17 +661,6 @@ TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_on
 			++n_shapes_where_the_backends_hold_different_cells;
 		}
 
-		// The streaming form has to walk the same cells as the materialised one, since the
-		// likelihoods merge-join through it while the writers iterate the vector.
-		auto cursor = dense.stored_cursor();
-		for (const auto &[linear_index, cell] : dense.get_stored_entries()) {
-			ASSERT_TRUE(cursor.valid()) << "cell " << linear_index;
-			ASSERT_EQ(cursor.linear_index(), linear_index);
-			ASSERT_EQ(cursor.is_one(), cell.is_one()) << "cell " << linear_index;
-			cursor.advance();
-		}
-		ASSERT_FALSE(cursor.valid());
-
 		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
 	}
 
@@ -680,6 +669,58 @@ TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_on
 	EXPECT_GT(n_shapes_where_the_backends_hold_different_cells, 0u)
 	    << "no generated shape left the two backends holding different cells, so the filter was "
 	       "never asked to reconcile anything";
+}
+
+// The cursor the likelihoods merge-join through has to yield the *same cells in the same order*
+// under both backends, and not merely cells that add up to the same answer.
+//
+// TLotus and the simple error model both split their sum in two: the cells the cursors yield, term
+// by term through an accumulator, and every other cell folded into one closed-form product. Where
+// that split falls decides the rounding, so a cursor that yielded what a backend happens to store
+// -- the cells it was given, for the sparse field; all of them, for the dense one -- would make the
+// same chain reach answers a bit apart under the two. A Metropolis ratio turns that into two
+// different chains a few iterations later, which is exactly how this was found.
+TEST(StorageEquivalence, the_cursor_the_likelihoods_walk_yields_the_same_cells_under_both) {
+	std::mt19937_64 rng(20260828);
+	size_t n_shapes_with_a_stored_zero = 0;
+	for (const auto &shape : generated_shapes()) {
+		const size_t n_cells = shape[0] * shape[1];
+		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
+
+		TStorageYMatrix sparse(N_ITERATIONS, shape);
+		TStorageYDense dense(N_ITERATIONS, shape);
+		TExpectedCells sparse_expected(n_cells);
+		TExpectedCells dense_expected(n_cells);
+		replay(sparse, writes, sparse_expected);
+		replay(dense, writes, dense_expected);
+
+		// What the cursor is supposed to yield, from the expectation rather than from either
+		// field: the cells that are one, in ascending linear-index order.
+		std::vector<size_t> expected_ones;
+		for (size_t i = 0; i < n_cells; ++i) {
+			if (sparse_expected.states[i] != 0) { expected_ones.push_back(i); }
+		}
+
+		const auto walked = [](const auto &field) {
+			std::vector<size_t> indices;
+			for (auto cursor = field.ones_cursor(); cursor.valid(); cursor.advance()) {
+				indices.push_back(cursor.linear_index());
+			}
+			return indices;
+		};
+		ASSERT_EQ(walked(sparse), expected_ones) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_EQ(walked(dense), expected_ones) << "shape " << shape[0] << "x" << shape[1];
+
+		// The sparse field holds cells that are not ones -- otherwise the two would agree here for
+		// no reason worth having, since the interesting case is exactly the cell one backend holds
+		// and the other does not.
+		if (sparse.get_stored_entries().size() > expected_ones.size()) {
+			++n_shapes_with_a_stored_zero;
+		}
+	}
+	EXPECT_GT(n_shapes_with_a_stored_zero, 0u)
+	    << "no generated shape left the sparse field holding a zero, so the cursors were never "
+	       "asked to agree about one";
 }
 
 // The one question the two are allowed to answer differently, and the reason they may: a cell
