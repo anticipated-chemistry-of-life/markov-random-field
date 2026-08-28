@@ -21,7 +21,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Types/probability.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/storage_backend.h"
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -79,8 +79,7 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 /// Note that "stored" and "is one" are different things: a cell can be stored with state 0 (that is
 /// what happens when a one is flipped back to zero before remove_zeros runs), and such a cell
 /// agrees with an absent cell.
-[[nodiscard]] inline size_t count_disagreements(const TStorageYMatrix &Y,
-                                                const TStorageYMatrix &D) {
+[[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y, const TFieldStorage &D) {
 	if (Y.dimensions() != D.dimensions()) {
 		throw coretools::TDevError(
 		    "Cannot compare Y and the simple error model data D: they have different dimensions (Y "

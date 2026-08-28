@@ -4,7 +4,7 @@
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/storage_backend.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -96,8 +96,8 @@ double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
 	std::array<double, 2> log_lik{};
 
 	// avoid heap allocation by using a local index array
-	IndexArray index_in_Y_space      = {0, molecule_idx};
-	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
+	IndexArray index_in_Y_space    = {0, molecule_idx};
+	const TFieldStorage &y_storage = _markov_field.get_Y_matrix();
 	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
 		// if the species has no MS data, skip it
 		if (!_species_has_ms_data.at(species_idx)) { continue; }
@@ -176,9 +176,9 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 		return false;
 	};
 
-	const double cont                = (double)_proba_contamination->value();
-	const TStorageYMatrix &y_storage = _markov_field.get_Y_matrix();
-	auto y_present                   = [&](uint32_t molecule_idx) {
+	const double cont              = (double)_proba_contamination->value();
+	const TFieldStorage &y_storage = _markov_field.get_Y_matrix();
+	auto y_present                 = [&](uint32_t molecule_idx) {
 		return y_storage.is_one(
 		    y_storage.get_linear_index_in_Y_space({species_idx, (size_t)molecule_idx}));
 	};
@@ -214,7 +214,7 @@ double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) cons
 	const double cont             = contamination;
 	const double log_1_minus_cont = std::log(1.0 - cont);
 	const size_t n_molecules      = _molecules_tree->get_number_of_leaves();
-	const TStorageYMatrix &Y      = _markov_field.get_Y_matrix();
+	const TFieldStorage &Y        = _markov_field.get_Y_matrix();
 
 	// Present (Y == 1) molecules grouped by species. Y is sparse, so this is O(nNonZero(Y)); the
 	// streaming cursor walks the stored cells without materializing a vector.

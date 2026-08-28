@@ -23,7 +23,7 @@
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -43,7 +43,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
-	TStorageYMatrix _L;
+	TFieldStorage _L;
 
 	/// Raw publication counts per (kept dimension, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
@@ -77,8 +77,7 @@ private:
 	[[nodiscard]] const lotus_math::TReportingModel &_reporting() const {
 		return _reporting_model.value();
 	}
-	[[nodiscard]] double
-	_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatrix &Y) const;
+	[[nodiscard]] double _calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage &Y) const;
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
@@ -90,9 +89,9 @@ public:
 	/// the box itself.
 	void initialize(TDataModel *box, bool simulate);
 	void load_from_file(const std::string &filename);
-	void guess_initial_values(const TStorageYMatrix &Y);
+	void guess_initial_values(const TFieldStorage &Y);
 
-	[[nodiscard]] double calculate_log_likelihood_of_L(const TStorageYMatrix &Y) const;
+	[[nodiscard]] double calculate_log_likelihood_of_L(const TFieldStorage &Y) const;
 	[[nodiscard]] double cur_LL() const { return _curLL; }
 
 	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
@@ -109,7 +108,7 @@ public:
 	// candidate reporting model and installs it; on rejection the candidate is simply dropped, so
 	// the only thing to restore is the cached likelihood.
 
-	[[nodiscard]] double ll_ratio_after_parameter_move(const TStorageYMatrix &Y);
+	[[nodiscard]] double ll_ratio_after_parameter_move(const TFieldStorage &Y);
 	void revert_parameter_move();
 
 	// --- simulation ---
@@ -118,14 +117,14 @@ public:
 	/// the data should be simulated under. Must run before simulate_L_from_Y.
 	void prepare_for_simulation(TDataModel *box);
 	/// Draws every cell of L given the simulated Y.
-	void simulate_L_from_Y(const TStorageYMatrix &Y);
+	void simulate_L_from_Y(const TFieldStorage &Y);
 	/// Writes the simulated L as <prefix>_simulated_lotus.tsv: a header naming the kept trees, then
 	/// one row of leaf node ids per cell whose state is 1.
 	void write_simulated_L(const std::string &prefix) const;
 
 	// --- accessors ---
 
-	[[nodiscard]] const TStorageYMatrix &get_L() const { return _L; }
+	[[nodiscard]] const TFieldStorage &get_L() const { return _L; }
 	[[nodiscard]] std::vector<std::string> kept_tree_names() const;
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;

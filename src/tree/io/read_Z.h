@@ -4,12 +4,12 @@
 
 #pragma once
 
+#include "storages/storage_backend.h"
 #include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
 
-class TStorageZMatrix;
 class TTree;
 
 /// Read an internal-state file written by write_Z_to_file into `Z`, setting every cell the file
@@ -24,6 +24,6 @@ class TTree;
 /// Throws coretools::TUserError if the file does not have one column per tree plus the index and
 /// the state, if a name is not in the tree its column belongs to, or if a name is in the tree but
 /// in the wrong space: a leaf where the file wants an internal node, or the other way round.
-void read_Z_from_file(const std::string &filename, TStorageZMatrix &Z,
+void read_Z_from_file(const std::string &filename, TInternalStateStorage &Z,
                       const std::vector<std::unique_ptr<TTree>> &trees,
                       size_t dimension_number_of_tree);

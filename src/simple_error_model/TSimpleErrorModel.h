@@ -22,7 +22,7 @@
 #include "Types.h"
 #include "constants.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -39,7 +39,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	/// the observed data, same dimensions as Y
-	TStorageYMatrix _D;
+	TFieldStorage _D;
 
 	/// error rate; owned by TModel, updated by stattools
 	TypeParamEpsilon *_epsilon = nullptr;
@@ -68,7 +68,7 @@ public:
 
 	/// Synchronises the disagreement count with the current Y. Must be called once before the first
 	/// likelihood evaluation, and after anything that changes Y outside of a sweep.
-	void guess_initial_values(const TStorageYMatrix &Y);
+	void guess_initial_values(const TFieldStorage &Y);
 
 	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
 
@@ -105,7 +105,7 @@ public:
 	// --- simulation ---
 
 	/// Draws every cell of D from the corresponding cell of Y at the current error rate.
-	void simulate_D_from_Y(const TStorageYMatrix &Y);
+	void simulate_D_from_Y(const TFieldStorage &Y);
 
 	/// Writes the simulated D as <prefix>_simulated_simple_data.tsv: a header naming every tree,
 	/// then one row of leaf node ids per cell whose state is 1 (same sparse format as the LOTUS
@@ -114,7 +114,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TStorageYMatrix &get_D() const { return _D; }
+	[[nodiscard]] const TFieldStorage &get_D() const { return _D; }
 	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
 };
 

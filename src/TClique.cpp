@@ -6,8 +6,7 @@
 #include "TCurrentState.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
-#include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <vector>
@@ -20,7 +19,7 @@ TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_
 	_increment                   = increment;
 }
 
-TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TStorageZMatrix &Z,
+TCurrentState TClique::create_current_state(const TFieldStorage &Y, const TInternalStateStorage &Z,
                                             const TPhylogeny &topology) {
 	TCurrentState current_state(topology, this->_increment, topology.n_leaves(),
 	                            topology.n_internal_nodes());
@@ -30,7 +29,7 @@ TCurrentState TClique::create_current_state(const TStorageYMatrix &Y, const TSto
 }
 
 std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
-                                      TCurrentState &current_state, TStorageZMatrix &Z,
+                                      TCurrentState &current_state, TInternalStateStorage &Z,
                                       const TTree *tree) const {
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
@@ -71,17 +70,17 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_update_current_state(TStorageZMatrix &Z, TCurrentState &current_state,
+void TClique::_update_current_state(TInternalStateStorage &Z, TCurrentState &current_state,
                                     size_t index_in_tree, bool new_state,
                                     std::vector<size_t> &linear_indices_in_Z_space_to_insert,
                                     const TTree * /*tree*/) const {
 	// The Z slot of current_state holds the linear index in Z space of this node (filled by
-	// TStorageZMatrix::fill_current_state). This mirrors how Y is updated in
+	// TInternalStateStorage::fill_current_state). This mirrors how Y is updated in
 	// TMarkovField::_set_new_Y: in-place state flips for cells that already exist, and deferred
 	// bulk insertion for new cells (so the shared sparse matrix is not reallocated in parallel).
-	const size_t linear_index_in_Z_space = current_state.get_index_in_TStorageVector(index_in_tree);
+	const size_t linear_index_in_Z_space = current_state.get_linear_index_in_storage(index_in_tree);
 	const bool cur_state                 = current_state.get(index_in_tree);
-	const bool exists                    = current_state.exists_in_TStorageVector(index_in_tree);
+	const bool exists                    = current_state.exists_in_storage(index_in_tree);
 
 	if (cur_state && !new_state) { // 1 -> 0: cell exists -> flip state in place
 		Z.set_state(linear_index_in_Z_space, false);
@@ -96,7 +95,7 @@ void TClique::_update_current_state(TStorageZMatrix &Z, TCurrentState &current_s
 }
 
 std::vector<size_t> TClique::initialize_Z_from_children(TCurrentState &current_state,
-                                                        TStorageZMatrix &Z,
+                                                        TInternalStateStorage &Z,
                                                         const TTree *tree) const {
 
 	// initialise vector that will insert the Z not in parallel
@@ -115,8 +114,8 @@ std::vector<size_t> TClique::initialize_Z_from_children(TCurrentState &current_s
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZMatrix &Z,
-                            const TTree *tree,
+void TClique::_set_Z_to_MLE(size_t node_index, TCurrentState &current_state,
+                            TInternalStateStorage &Z, const TTree *tree,
                             std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 

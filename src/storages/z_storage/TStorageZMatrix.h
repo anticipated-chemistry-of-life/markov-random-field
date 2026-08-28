@@ -10,6 +10,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
+#include "storages/storage_concepts.h"
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -182,5 +183,8 @@ public:
 	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
 	[[nodiscard]] size_t size() const { return _mat.nNonZero(); }
 };
+
+static_assert(BinaryFieldStorage<TStorageZMatrix>,
+              "The sparse internal state must satisfy the binary storage interface.");
 
 #endif // TStorageZMatrix_H

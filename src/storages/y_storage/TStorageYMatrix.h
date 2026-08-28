@@ -9,6 +9,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
+#include "storages/storage_concepts.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -323,3 +324,6 @@ public:
 
 	[[nodiscard]] StoredCursor stored_cursor() const { return {_mat, _dimensions_Y_space[1]}; }
 };
+
+static_assert(FieldStorage<TStorageYMatrix>,
+              "The sparse field must satisfy the field storage interface.");

@@ -12,7 +12,7 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include "tree/io/write_Z.h"
 #include <cstddef>
@@ -163,8 +163,8 @@ int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_s
 
 	// get current state, exists and the linear index in Y space of this cell.
 	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable.
-	const auto [cur_state, exists_in_TStorageYMatrix, linear_index_in_Y_space] =
-	    _clique_last_dim.get_state_exist_ix_TStorageYMatrix(leaf_index_in_tree_of_last_dim);
+	const auto [cur_state, exists_in_Y, linear_index_in_Y_space] =
+	    _clique_last_dim.get_state_exist_ix_in_Y(leaf_index_in_tree_of_last_dim);
 
 	// Thread-safety: this runs inside the parallel loop over the last dimension, so all concurrent
 	// calls touch cells of the same matrix row. Flipping the state of an *existing* cell is an
@@ -174,7 +174,7 @@ int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_s
 	if (cur_state && !new_state) { // 1 -> 0: cell exists -> flip state in place
 		_Y.set_state(linear_index_in_Y_space, false);
 	} else if (!cur_state && new_state) { // 0 -> 1
-		if (exists_in_TStorageYMatrix) {  // already stored -> flip state in place
+		if (exists_in_Y) {                // already stored -> flip state in place
 			_Y.set_state(linear_index_in_Y_space, true);
 		} else { // not stored yet -> defer the insert until after the parallel region
 			linear_indices_in_Y_space_to_insert.emplace_back(linear_index_in_Y_space);
@@ -389,7 +389,7 @@ void TMarkovField::MCMCHasFinished() {
 	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
 
-const TStorageYMatrix &TMarkovField::get_Y_matrix() const { return _Y; }
+const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }
 
 double TMarkovField::_calculate_complete_joint_density() {
 

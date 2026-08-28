@@ -59,7 +59,7 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 	coretools::instances::logfile().endIndent();
 }
 
-void TSimpleErrorModel::guess_initial_values(const TStorageYMatrix &Y) {
+void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
 }
 
@@ -70,7 +70,7 @@ void TSimpleErrorModel::fill_tmp_state_along_last_dim(const IndexArray &start_in
 	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, K, _D);
 }
 
-void TSimpleErrorModel::simulate_D_from_Y(const TStorageYMatrix &Y) {
+void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
 	if (Y.dimensions() != _D.dimensions()) {
 		throw coretools::TDevError("Cannot simulate the simple error model data: Y is ",
 		                           Y.dimensions()[0], "x", Y.dimensions()[1], " but D is ",

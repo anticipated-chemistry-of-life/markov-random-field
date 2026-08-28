@@ -86,7 +86,7 @@ TNtfyNotifier::ParamStats TLotus::error_rate_stats() const {
 	return {_error_rate->mean(0), _error_rate->var(0), _error_rate->sd(0)};
 }
 
-double TLotus::calculate_log_likelihood_of_L(const TStorageYMatrix &Y) const {
+double TLotus::calculate_log_likelihood_of_L(const TFieldStorage &Y) const {
 	if (_collapser.do_collapse()) {
 		throw coretools::TDevError("calculate_log_likelihood_of_L: do_collapse() is true. This "
 		                           "part has not been implemented yet.");
@@ -132,7 +132,7 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
 	}
 }
 
-double TLotus::ll_ratio_after_parameter_move(const TStorageYMatrix &Y) {
+double TLotus::ll_ratio_after_parameter_move(const TFieldStorage &Y) {
 	// One function for both gamma and the error rate: the reporting model is built from both, so a
 	// move on either replaces it wholesale. Rebuilding the factor table on an error-rate move is
 	// strictly redundant -- the factors depend only on gamma -- but it is one exp() per leaf
@@ -151,7 +151,7 @@ void TLotus::revert_parameter_move() {
 	_reporting_model = _build_reporting_model();
 }
 
-void TLotus::guess_initial_values(const TStorageYMatrix &Y) {
+void TLotus::guess_initial_values(const TFieldStorage &Y) {
 	for (size_t i = 0; i < _collapser.num_dim_to_keep(); ++i) {
 		_gamma->set(i, ProgramOptions::GAMMA);
 	}
@@ -179,7 +179,7 @@ lotus_math::TReportingModel TLotus::_build_reporting_model() const {
 	return {gammas, (double)_error_rate->value(), _paper_counts};
 }
 
-double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TStorageYMatrix &Y) const {
+double TLotus::_calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage &Y) const {
 	const size_t total = Y.total_size_of_container_space();
 
 	// Merge-join the two sparse matrices in ascending linear-index order without materializing
@@ -256,7 +256,7 @@ void TLotus::prepare_for_simulation(TDataModel *box) {
 	_reporting_model = _build_reporting_model(); // counts + parameters ready -> ready to simulate L
 }
 
-void TLotus::simulate_L_from_Y(const TStorageYMatrix &Y) {
+void TLotus::simulate_L_from_Y(const TFieldStorage &Y) {
 	for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
 		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
 		bool x                                = false;

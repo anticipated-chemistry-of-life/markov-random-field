@@ -1,0 +1,82 @@
+//
+// The interface the sampler needs from a binary storage, written as C++20 concepts.
+//
+
+#pragma once
+
+#include "constants.h"
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+/// The surface the field (`Y`) and the internal state (`Z`) share: a binary state per cell,
+/// the size of the space that state lives in, and the conversion between a linear index and a
+/// multi-dimensional one.
+///
+/// "Field" here is the Markov-random-field sense -- both `Y` and `Z` are binary fields over their
+/// own space -- and not CONTEXT.md's *Field*, which is `Y` alone. That narrower one is what
+/// `FieldStorage` below names, and `Z` deliberately does not satisfy it.
+///
+/// A cell that is not stored reads as state 0, so `is_one` is total over the container space and
+/// there is no "does this cell exist" question on the point-lookup path. `insert_one` and
+/// `insert_zero` are the bounds-checked way in for a cell that may be absent; `set_state` is the
+/// in-place write for one that is already known to be addressable.
+///
+/// `fill_current_state` is here because the current model's sweep asks for a whole clique at once:
+/// for the `K` cells starting at `start_index` and running `increment` apart, it writes the state,
+/// whether the cell is stored, and the linear index of each. It is the one member that exists for
+/// the sampler's convenience rather than to describe the storage, and it is what the model branch
+/// is expected to narrow away.
+///
+/// Deliberately outside the concept: the bulk-insert and whole-space dump paths, which the two
+/// implementations still spell with `Y` and `Z` in their names, and the field-only reporting
+/// accessors. An implementation still has to provide whatever production code calls of those --
+/// the compiler says so -- but they are not part of what makes a storage a storage.
+template<typename T>
+concept BinaryFieldStorage =
+    requires(T &storage, const T &const_storage, size_t linear_index, bool state,
+             const IndexArray &multidim_index, size_t n_cells, size_t increment,
+             std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
+             std::vector<size_t> &linear_indices) {
+	    // State.
+	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
+	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
+	    { storage.insert_one(linear_index) } -> std::same_as<void>;
+	    { storage.insert_zero(linear_index) } -> std::same_as<void>;
+	    { storage.remove_zeros() } -> std::same_as<void>;
+
+	    // Dimensions.
+	    { const_storage.total_size_of_container_space() } -> std::same_as<size_t>;
+	    { const_storage.empty() } -> std::same_as<bool>;
+
+	    // Index conversion.
+	    {
+		    const_storage.get_linear_index_in_container_space(multidim_index)
+	    } -> std::same_as<size_t>;
+	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
+
+	    // One clique's current state, in one call.
+	    {
+		    const_storage.fill_current_state(multidim_index, n_cells, increment, states, exists,
+		                                     linear_indices)
+	    } -> std::same_as<void>;
+    };
+
+/// The field on top of that: every cell also carries how often it was a one, which is what the
+/// posterior fraction of ones is read off at the end of a chain.
+///
+/// The counter is thinned rather than incremented every iteration, because an implementation may
+/// hold it in fewer bits than there are iterations. `add_to_counter` is therefore called with the
+/// iteration and decides for itself whether this one counts; `get_thinning_factor` and
+/// `get_total_counts` expose the arithmetic that decision is made from, and are what turns a raw
+/// count back into a fraction.
+template<typename T>
+concept FieldStorage = BinaryFieldStorage<T> && requires(T &field, const T &const_field,
+                                                         size_t iteration, size_t linear_index) {
+	{ field.add_to_counter(iteration) } -> std::same_as<void>;
+	{ field.reset_counts() } -> std::same_as<void>;
+	{ const_field.get_fraction_of_ones(linear_index) } -> std::same_as<double>;
+	{ const_field.get_total_counts() } -> std::same_as<size_t>;
+	{ const_field.get_thinning_factor() } -> std::same_as<size_t>;
+};

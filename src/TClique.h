@@ -9,8 +9,7 @@
 #include "Types.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
-#include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/branch/TTransitionGrid.h"
 #include <cstddef>
 #include <optional>
@@ -55,7 +54,7 @@ private:
 		}
 	}
 
-	void _update_current_state(TStorageZMatrix &Z, TCurrentState &current_state,
+	void _update_current_state(TInternalStateStorage &Z, TCurrentState &current_state,
 	                           size_t index_in_tree, bool new_state,
 	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
 	                           const TTree *tree) const;
@@ -72,7 +71,7 @@ private:
 	/// @param Z the Z vector of that tree (i.e that clique)
 	/// @param tree the tree of interest
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TStorageZMatrix &Z,
+	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TInternalStateStorage &Z,
 	                   const TTree *tree,
 	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
@@ -98,15 +97,16 @@ public:
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
 	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density,
-	                             TCurrentState &current_state, TStorageZMatrix &Z,
+	                             TCurrentState &current_state, TInternalStateStorage &Z,
 	                             const TTree *tree) const;
 
-	std::vector<size_t> initialize_Z_from_children(TCurrentState &current_state, TStorageZMatrix &Z,
+	std::vector<size_t> initialize_Z_from_children(TCurrentState &current_state,
+	                                               TInternalStateStorage &Z,
 	                                               const TTree *tree) const;
 
 	/// A state container sized for `topology` and filled from this clique's start index. The
 	/// topology is all it takes: nothing here needs a parameter or a clique.
-	TCurrentState create_current_state(const TStorageYMatrix &Y, const TStorageZMatrix &Z,
+	TCurrentState create_current_state(const TFieldStorage &Y, const TInternalStateStorage &Z,
 	                                   const TPhylogeny &topology);
 
 	/// @brief Return the number of nodes in the clique

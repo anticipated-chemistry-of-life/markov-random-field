@@ -65,6 +65,25 @@ just run release lsm --out results/acol --numThreads all
 Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
 so switching back and forth does not trigger a rebuild.
 
+### Choosing the storage backend
+
+Which implementation backs the field and the internal state is likewise a compile-time decision,
+made by `-DACOL_STORAGE_BACKEND=<name>`. It selects the `using` aliases in
+`src/storages/storage_backend.h`; the interface those aliases have to satisfy is the pair of
+concepts in `src/storages/storage_concepts.h`, checked with `static_assert` rather than through
+virtual calls, so nothing on a storage access path pays for the choice.
+
+| value    | field                | internal state       |
+| -------- | -------------------- | -------------------- |
+| `sparse` | `TStorageYMatrix`    | `TStorageZMatrix`    |
+
+`sparse` is the default and, today, the only value; anything else fails at configure time. Unlike
+the data sources this has no `just` letter, because there is nothing yet to switch between:
+
+```bash
+cmake --preset debug -DACOL_STORAGE_BACKEND=sparse
+```
+
 Other recipes: `just configure` (configure only), `just bin` / `just dir` (print the binary or build
 directory path), `just shell` (a shell inside the environment), `just clean`, `just distclean`.
 Run `just` with no arguments for the full list.

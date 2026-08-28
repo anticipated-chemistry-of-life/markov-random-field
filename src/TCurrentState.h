@@ -6,8 +6,7 @@
 #define ACOL_TCURRENTSTATE_H
 
 #include "constants.h"
-#include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/storage_backend.h"
 #include <cstddef>
 #include <tuple>
 #include <vector>
@@ -24,13 +23,13 @@ private:
 	std::vector<uint8_t> _current_state_Y;
 	std::vector<uint8_t> _exists_in_Y;
 	// Linear index in Y space of each parsed cell (the matrix maps it to (row, col)).
-	std::vector<size_t> _index_in_TStorageYMatrix;
+	std::vector<size_t> _index_in_Y;
 
 	// current state of Z
 	std::vector<uint8_t> _current_state_Z;
 	std::vector<uint8_t> _exists_in_Z;
 	// Linear index in Z space of each parsed cell (Z is now a TSparseMatrix, like Y).
-	std::vector<size_t> _index_in_TStorageZMatrix;
+	std::vector<size_t> _index_in_Z;
 
 	// increment and topology
 	size_t _increment;
@@ -40,16 +39,16 @@ public:
 	TCurrentState(const TPhylogeny &topology, size_t increment);
 	TCurrentState(const TPhylogeny &topology, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
-	void fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
-	          const TStorageZMatrix &Z);
+	void fill(const IndexArray &start_index_in_leaves_space, const TFieldStorage &Y,
+	          const TInternalStateStorage &Z);
 	void fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	            const TStorageYMatrix &Y);
+	            const TFieldStorage &Y);
 	void fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	            const TStorageZMatrix &Z);
+	            const TInternalStateStorage &Z);
 	void fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
-	                           size_t num_nodes_to_parse, const TStorageYMatrix &Y);
+	                           size_t num_nodes_to_parse, const TFieldStorage &Y);
 	void fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-	                           size_t num_nodes_to_parse, const TStorageZMatrix &Z);
+	                           size_t num_nodes_to_parse, const TInternalStateStorage &Z);
 
 	bool get(size_t index_in_tree) const;
 	bool get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const;
@@ -60,10 +59,13 @@ public:
 	size_t size_of_Y() const { return _current_state_Y.size(); }
 	size_t size_of_Z() const { return _current_state_Z.size(); }
 
-	size_t get_index_in_TStorageVector(size_t index_in_tree) const;
-	bool exists_in_TStorageVector(size_t index_in_tree) const;
+	/// The linear index of a node's cell, and whether that cell is stored: in the field for a
+	/// leaf, in the internal state for anything else. Which of the two a node lands in is what
+	/// these hide, so a caller updating one node needs no case distinction.
+	size_t get_linear_index_in_storage(size_t index_in_tree) const;
+	bool exists_in_storage(size_t index_in_tree) const;
 
-	std::tuple<bool, bool, size_t> get_state_exist_ix_TStorageYMatrix(size_t index_in_leaves) const;
+	std::tuple<bool, bool, size_t> get_state_exist_ix_in_Y(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -92,15 +94,15 @@ public:
 
 	/// `Z` is the internal state of the dimension this sheet runs along, passed in the same way as
 	/// the field rather than reached for through a tree.
-	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y,
-	          const TStorageZMatrix &Z);
+	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TFieldStorage &Y,
+	          const TInternalStateStorage &Z);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
 	std::tuple<bool, bool, size_t>
-	get_state_exist_ix_TStorageYMatrix(size_t node_index_in_tree_of_dim,
-	                                   size_t leaf_index_in_tree_of_last_dim) const;
+	get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
+	                        size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H

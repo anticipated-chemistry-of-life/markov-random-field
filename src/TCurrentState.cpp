@@ -17,15 +17,15 @@ TCurrentState::TCurrentState(const TPhylogeny &topology, size_t increment, size_
     : _increment(increment), _topology(topology) {
 	_current_state_Y.resize(size_of_Y, false);
 	_exists_in_Y.resize(size_of_Y, false);
-	_index_in_TStorageYMatrix.resize(size_of_Y);
+	_index_in_Y.resize(size_of_Y);
 
 	_current_state_Z.resize(size_of_Z, false);
 	_exists_in_Z.resize(size_of_Z, false);
-	_index_in_TStorageZMatrix.resize(size_of_Z);
+	_index_in_Z.resize(size_of_Z);
 }
 
-void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TStorageYMatrix &Y,
-                         const TStorageZMatrix &Z) {
+void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TFieldStorage &Y,
+                         const TInternalStateStorage &Z) {
 	fill_Y(start_index_in_leaves_space, _topology.n_leaves(),
 	       Y); // parse all Y (all leaves)
 	fill_Z(start_index_in_leaves_space, _topology.n_internal_nodes(),
@@ -33,35 +33,36 @@ void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TS
 }
 
 void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                          size_t num_nodes_to_parse, const TStorageYMatrix &Y) {
+                                          size_t num_nodes_to_parse, const TFieldStorage &Y) {
 	// along the last dimension -> increment is 1 -> a single matrix row.
-	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
+	// _index_in_Y now holds the linear index in Y space of each parsed cell.
 	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
-	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
+	                     _current_state_Y, _exists_in_Y, _index_in_Y);
 }
 
 void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                          size_t num_nodes_to_parse, const TStorageZMatrix &Z) {
+                                          size_t num_nodes_to_parse,
+                                          const TInternalStateStorage &Z) {
 	// along the last dimension -> increment is 1 -> a single matrix row.
-	// _index_in_TStorageZMatrix now holds the linear index in Z space of each parsed cell.
+	// _index_in_Z now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, /*increment=*/1,
-	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZMatrix);
+	                     _current_state_Z, _exists_in_Z, _index_in_Z);
 }
 
 void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-                           const TStorageYMatrix &Y) {
+                           const TFieldStorage &Y) {
 	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
-	// _index_in_TStorageYMatrix now holds the linear index in Y space of each parsed cell.
+	// _index_in_Y now holds the linear index in Y space of each parsed cell.
 	Y.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
-	                     _current_state_Y, _exists_in_Y, _index_in_TStorageYMatrix);
+	                     _current_state_Y, _exists_in_Y, _index_in_Y);
 }
 
 void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-                           const TStorageZMatrix &Z) {
+                           const TInternalStateStorage &Z) {
 	// increment == 1 -> matrix row (along last dim); increment > 1 -> matrix column.
-	// _index_in_TStorageZMatrix now holds the linear index in Z space of each parsed cell.
+	// _index_in_Z now holds the linear index in Z space of each parsed cell.
 	Z.fill_current_state(start_index_in_leaves_space, num_nodes_to_parse, _increment,
-	                     _current_state_Z, _exists_in_Z, _index_in_TStorageZMatrix);
+	                     _current_state_Z, _exists_in_Z, _index_in_Z);
 }
 
 bool TCurrentState::get(size_t index_in_tree) const { return get(index_in_tree, 0, 0); }
@@ -89,14 +90,14 @@ void TCurrentState::set_Y(size_t index_in_leaves, bool value) {
 	_current_state_Y[index_in_leaves] = value;
 }
 
-size_t TCurrentState::get_index_in_TStorageVector(size_t index_in_tree) const {
+size_t TCurrentState::get_linear_index_in_storage(size_t index_in_tree) const {
 	if (_topology.is_leaf(index_in_tree)) {
-		return _index_in_TStorageYMatrix[_topology.leaf_index(index_in_tree)];
+		return _index_in_Y[_topology.leaf_index(index_in_tree)];
 	}
-	return _index_in_TStorageZMatrix[_topology.internal_index(index_in_tree)];
+	return _index_in_Z[_topology.internal_index(index_in_tree)];
 }
 
-bool TCurrentState::exists_in_TStorageVector(size_t index_in_tree) const {
+bool TCurrentState::exists_in_storage(size_t index_in_tree) const {
 	if (_topology.is_leaf(index_in_tree)) {
 		return _exists_in_Y[_topology.leaf_index(index_in_tree)];
 	}
@@ -104,10 +105,10 @@ bool TCurrentState::exists_in_TStorageVector(size_t index_in_tree) const {
 }
 
 std::tuple<bool, bool, size_t>
-TCurrentState::get_state_exist_ix_TStorageYMatrix(size_t index_in_leaves) const {
+TCurrentState::get_state_exist_ix_in_Y(size_t index_in_leaves) const {
 	const bool state  = _current_state_Y[index_in_leaves];
 	const bool exists = _exists_in_Y[index_in_leaves];
-	const size_t ix   = _index_in_TStorageYMatrix[index_in_leaves];
+	const size_t ix   = _index_in_Y[index_in_leaves];
 	return {state, exists, ix};
 }
 
@@ -125,8 +126,8 @@ TSheet::TSheet(size_t dim_ix, const TPhylogeny &topology, const TPhylogeny &topo
 	}
 }
 
-void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K, const TStorageYMatrix &Y,
-                  const TStorageZMatrix &Z) {
+void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K, const TFieldStorage &Y,
+                  const TInternalStateStorage &Z) {
 	// Worksharing fill: this runs on the team created in TMarkovField::_update_all_Y (all threads
 	// call it), so we use `omp for`/`omp single` rather than spawning our own team. If ever called
 	// outside a parallel region the constructs are orphaned and execute sequentially, which is also
@@ -181,9 +182,9 @@ void TSheet::set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_
 }
 
 std::tuple<bool, bool, size_t>
-TSheet::get_state_exist_ix_TStorageYMatrix(size_t node_index_in_tree_of_dim,
-                                           size_t leaf_index_in_tree_of_last_dim) const {
+TSheet::get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
+                                size_t leaf_index_in_tree_of_last_dim) const {
 	// calculate index in Y: leaf index in last dimension, relative to start index
 	const size_t ix = leaf_index_in_tree_of_last_dim - _start_ix_in_leaves_space_last_dim;
-	return _cur_states[node_index_in_tree_of_dim].get_state_exist_ix_TStorageYMatrix(ix);
+	return _cur_states[node_index_in_tree_of_dim].get_state_exist_ix_in_Y(ix);
 }

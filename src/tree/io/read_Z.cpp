@@ -3,7 +3,7 @@
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/TTree.h"
 
@@ -29,7 +29,7 @@ size_t index_in_dimension(const TTree &tree, const std::string &node_name, bool 
 
 } // namespace
 
-void read_Z_from_file(const std::string &filename, TStorageZMatrix &Z,
+void read_Z_from_file(const std::string &filename, TInternalStateStorage &Z,
                       const std::vector<std::unique_ptr<TTree>> &trees,
                       size_t dimension_number_of_tree) {
 	coretools::TInputFile file(filename, coretools::FileType::Header);

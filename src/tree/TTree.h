@@ -17,8 +17,7 @@
 #include "coretools/algorithms.h"
 #include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
 #include <cstddef>
@@ -76,7 +75,7 @@ private:
 	TypeParamAlpha *_alpha_c = nullptr;
 
 	// Set Z
-	TStorageZMatrix _Z;
+	TInternalStateStorage _Z;
 
 	// Joint probability density
 	std::vector<double> _joint_log_prob_density;
@@ -289,13 +288,13 @@ public:
 	std::vector<TClique> &get_cliques();
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);
-	[[nodiscard]] const TStorageZMatrix &get_Z() const;
-	TStorageZMatrix &get_Z();
+	[[nodiscard]] const TInternalStateStorage &get_Z() const;
+	TInternalStateStorage &get_Z();
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
 	template<bool IsSimulation, bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(const TStorageYMatrix &Y) {
+	void update_Z_and_nus_and_alphas_and_branch_lengths(const TFieldStorage &Y) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
@@ -366,7 +365,7 @@ public:
 		return coretools::containerSum(_joint_log_prob_density);
 	}
 
-	void initialize_Z_from_children(const TStorageYMatrix &Y) {
+	void initialize_Z_from_children(const TFieldStorage &Y) {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 

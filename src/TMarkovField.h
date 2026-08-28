@@ -94,7 +94,7 @@ class TMarkovField {
 private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
-	TStorageYMatrix _Y;
+	TFieldStorage _Y;
 	std::string _prefix;
 
 	// stuff for updating Y
@@ -425,7 +425,7 @@ public:
 	void simulate(TDataModel &data_model);
 
 	// get Y
-	[[nodiscard]] const TStorageYMatrix &get_Y_matrix() const;
+	[[nodiscard]] const TFieldStorage &get_Y_matrix() const;
 
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();

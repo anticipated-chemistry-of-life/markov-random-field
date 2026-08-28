@@ -4,7 +4,6 @@
 
 #include "TTree.h"
 #include "TClique.h"
-#include "tree/io/read_Z.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
@@ -13,6 +12,7 @@
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
+#include "tree/io/read_Z.h"
 
 #include <cstddef>
 #include <cstdlib>
@@ -133,8 +133,8 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 	}
 }
 
-const TStorageZMatrix &TTree::get_Z() const { return _Z; };
-TStorageZMatrix &TTree::get_Z() { return _Z; };
+const TInternalStateStorage &TTree::get_Z() const { return _Z; };
+TInternalStateStorage &TTree::get_Z() { return _Z; };
 
 void TTree::simulate_Z(size_t tree_index) {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
