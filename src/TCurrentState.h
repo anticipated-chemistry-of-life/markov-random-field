@@ -36,6 +36,11 @@ private:
 	const TPhylogeny &_topology;
 
 public:
+	/// One increment serves both containers, and that is not an accident worth rediscovering: a
+	/// clique's increment is the product of the leaf counts of the dimensions *after* its own
+	/// (tree/clique/tree_clique.cpp), and a clique's own dimension is never one of those. So the
+	/// only extent that ADR-0005 changed -- the node state's own dimension -- is never a factor in
+	/// it, and the same stride walks the field and the node state alike.
 	TCurrentState(const TPhylogeny &topology, size_t increment);
 	TCurrentState(const TPhylogeny &topology, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
@@ -51,7 +56,6 @@ public:
 	                           size_t num_nodes_to_parse, const TInternalStateStorage &Z);
 
 	bool get(size_t index_in_tree) const;
-	bool get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const;
 	bool get_Y(size_t ix) const;
 	bool get_Z(size_t ix) const;
 	void set(size_t index_in_tree, bool value);
@@ -60,7 +64,7 @@ public:
 	size_t size_of_Z() const { return _current_state_Z.size(); }
 
 	/// The linear index of a node's cell, and whether that cell is stored: in the field for a
-	/// leaf, in the internal state for anything else. Which of the two a node lands in is what
+	/// leaf, in the node state for anything else. Which of the two a node lands in is what
 	/// these hide, so a caller updating one node needs no case distinction.
 	size_t get_linear_index_in_storage(size_t index_in_tree) const;
 	bool exists_in_storage(size_t index_in_tree) const;
@@ -92,7 +96,7 @@ public:
 	TSheet(size_t dim_ix, const TPhylogeny &topology, const TPhylogeny &topology_last_dim);
 	~TSheet() = default;
 
-	/// `Z` is the internal state of the dimension this sheet runs along, passed in the same way as
+	/// `Z` is the node state of the dimension this sheet runs along, passed in the same way as
 	/// the field rather than reached for through a tree.
 	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TFieldStorage &Y,
 	          const TInternalStateStorage &Z);

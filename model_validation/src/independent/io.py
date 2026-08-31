@@ -8,15 +8,19 @@ dimension varies fastest, which for this model is always the molecules tree:
     field (Y)             dims [n_species_leaves,    n_molecule_leaves]
                           linear = species_leaf    * n_molecule_leaves    + molecule_leaf
 
-    species internal (Z)  dims [n_species_internals, n_molecule_leaves]
-                          linear = species_internal * n_molecule_leaves    + molecule_leaf
+    species node state (Z) dims [n_species_nodes,  n_molecule_leaves]
+                          linear = species_node    * n_molecule_leaves   + molecule_leaf
 
-    molecules internal (Z) dims [n_species_leaves,   n_molecule_internals]
-                          linear = species_leaf    * n_molecule_internals + molecule_internal
+    molecules node state (Z) dims [n_species_leaves, n_molecule_nodes]
+                          linear = species_leaf    * n_molecule_nodes    + molecule_node
 
-A tree's own dimension carries *internal* nodes in its Z space and *leaf* nodes
-in the field; the other dimension always carries leaves (`TTree::_initialize_Z`,
-src/tree/TTree.cpp:123). The node orderings involved are defined in `indexing`.
+A tree's own dimension spans *every* node of it, leaves included, since ADR-0005
+(`node_state_dimensions`, src/tree/node_state_shape.h); the other dimension
+always carries leaves. The node orderings involved are defined in `indexing`.
+
+This module still writes only the internal rows, which load correctly because
+resolution is by node name, and leave the leaf rows at zero. Nothing reads those
+rows yet; rebuilding this writer for the new model is issue #42.
 
 File shapes, as the C++ readers expect them:
 
@@ -25,7 +29,7 @@ File shapes, as the C++ readers expect them:
   column count but reads only `position` and `Y_state`. Every cell is written,
   not just the ones. So the field file is addressed purely positionally, and a
   change to leaf order changes what it means.
-- internal states: 4 columns, `species molecules position Z_state`. The reader
+- node states: 4 columns, `species molecules position Z_state`. The reader
   (`read_Z_from_file`, src/tree/io/read_Z.cpp:33) checks for 4 and resolves the
   cell from the two *name* columns, ignoring `position` -- which is what makes a
   file written before a node reordering still mean what it said (ADR-0004).
@@ -127,7 +131,7 @@ def write_internal_states(
     molecules: TreeIndex,
     dimension: int,
 ) -> None:
-    """Write one tree's internal states as the C++ 4-column format.
+    """Write one tree's node states as the C++ 4-column format.
 
     `dimension` is 0 for the species tree and 1 for the molecules tree; that tree
     contributes internal nodes to `states`, the other contributes leaves.

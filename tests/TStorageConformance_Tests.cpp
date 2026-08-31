@@ -29,6 +29,7 @@
 #include "storages/z_storage/TStorageZDense.h"
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/TPhylogeny.h"
+#include "tree/node_state_shape.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -47,29 +48,46 @@ namespace {
 // -------------------------------------------------------------------------
 
 /// The container spaces two trees imply: the field is indexed in leaf space, one dimension per
-/// tree, and each tree's internal state is that same space with its own dimension in
-/// internal-node space instead (TMarkovField::initialize and TTree::_initialize_Z).
+/// tree, and each tree's node state is that same space with its own dimension spanning every node
+/// of that tree instead (TMarkovField::initialize and TTree::_initialize_Z).
+///
+/// The node state reaches its leaves, so its own dimension is n_nodes and not n_internal_nodes.
+/// That is what puts a leaf pair at the same (row, column) in the field and in either node state,
+/// and it is asserted as a property below.
 ///
 /// A storage knows nothing of a tree beyond the size of each dimension, so a shape is all a
 /// storage test needs from one -- and taking it from a real phylogeny rather than from a literal
 /// is what keeps the degenerate cases in: a chain has one leaf, a star has one internal node.
 std::vector<IndexArray> shapes_of(const TPhylogeny &first, const TPhylogeny &second) {
-	return {IndexArray{first.n_leaves(), second.n_leaves()},          // the field
-	        IndexArray{first.n_internal_nodes(), second.n_leaves()},  // the first tree's Z
-	        IndexArray{first.n_leaves(), second.n_internal_nodes()}}; // the second tree's Z
+	const IndexArray field{first.n_leaves(), second.n_leaves()};
+	// through node_state_dimensions, the same function TTree::_initialize_Z sizes the real node
+	// state with -- so changing the rule changes what these tests are asserted over
+	return {field, node_state_dimensions(field, 0, first), node_state_dimensions(field, 1, second)};
 }
 
 /// Every shape the properties below are asserted over: the pairings of four multi-root forests,
 /// a deep chain and a wide star, each pairing taken in both orders because the two dimensions of
 /// a container are not interchangeable -- one is walked as a row and the other as a column.
+/// The forests every shape is taken from. Built once: a phylogeny is immutable, and the tests
+/// below pair each with each, so rebuilding them per pairing would be the same six trees six
+/// times over.
+const std::vector<TPhylogeny> &generated_phylogenies() {
+	static const std::vector<TPhylogeny> trees = [] {
+		std::mt19937_64 rng(20260828);
+		std::vector<TPhylogeny> forests;
+		for (size_t n_roots = 1; n_roots <= 4; ++n_roots) {
+			forests.push_back(
+			    build_phylogeny(phylo::random_forest(rng, 2 * n_roots + 14, n_roots)));
+		}
+		forests.push_back(build_phylogeny(phylo::chain(60))); // one leaf, 59 internal nodes
+		forests.push_back(build_phylogeny(phylo::star(199))); // 199 leaves, one internal node
+		return forests;
+	}();
+	return trees;
+}
+
 std::vector<IndexArray> generated_shapes() {
-	std::mt19937_64 rng(20260828);
-	std::vector<TPhylogeny> trees;
-	for (size_t n_roots = 1; n_roots <= 4; ++n_roots) {
-		trees.push_back(build_phylogeny(phylo::random_forest(rng, 2 * n_roots + 14, n_roots)));
-	}
-	trees.push_back(build_phylogeny(phylo::chain(60))); // one leaf, 59 internal nodes
-	trees.push_back(build_phylogeny(phylo::star(199))); // 199 leaves, one internal node
+	const auto &trees = generated_phylogenies();
 
 	std::vector<IndexArray> shapes;
 	for (const auto &first : trees) {
@@ -243,9 +261,83 @@ public:
 	}
 };
 
+/// One tree pairing, checked through one backend: the coordinates of a leaf pair address the same
+/// cell in the field and in either node state, with nothing converted in between.
+template<typename FieldT, typename NodeStateT>
+void check_the_leaf_block_needs_no_conversion(const TPhylogeny &first, const TPhylogeny &second,
+                                              size_t &n_pairings_with_rows_the_field_lacks) {
+	const auto shapes                 = shapes_of(first, second);
+	const IndexArray field_shape      = shapes[0];
+	const IndexArray node_state_shape = shapes[1]; // the first tree's
+
+	// Checked against the phylogenies rather than against each other: the owning dimension spans
+	// every node of its tree, and the other one stays in leaf space. Comparing the two shapes
+	// would only compare two outputs of one function.
+	ASSERT_EQ(node_state_shape[0], first.n_nodes());
+	ASSERT_EQ(node_state_shape[1], second.n_leaves());
+	ASSERT_EQ(field_shape[0], first.n_leaves());
+	if (node_state_shape[0] > field_shape[0]) { ++n_pairings_with_rows_the_field_lacks; }
+
+	const FieldT field          = make_storage<FieldT>(field_shape);
+	const NodeStateT node_state = make_storage<NodeStateT>(node_state_shape);
+
+	for (size_t leaf = 0; leaf < first.n_leaves(); ++leaf) {
+		// ADR-0004: a leaf's index in leaf space *is* its node index. That is the whole reason
+		// the row needs no arithmetic -- without it this would be a subtraction that changed.
+		ASSERT_TRUE(first.is_leaf(leaf)) << "node " << leaf << " should be a leaf";
+		ASSERT_EQ(first.leaf_index(leaf), leaf) << "leaf " << leaf;
+
+		for (size_t column = 0; column < second.n_leaves(); ++column) {
+			const IndexArray cell{leaf, column};
+			// the same coordinates are addressable in both, and mean the same leaf pair in both
+			const size_t in_field      = field.get_linear_index_in_container_space(cell);
+			const size_t in_node_state = node_state.get_linear_index_in_container_space(cell);
+			ASSERT_EQ(field.get_multi_dimensional_index(in_field), cell);
+			ASSERT_EQ(node_state.get_multi_dimensional_index(in_node_state), cell);
+			// Stronger, and specific to the tree that owns the row dimension: only its *row* count
+			// grew, so the field and its node state have the same column count and a leaf pair
+			// lands on the same linear index in both. Nothing has to be translated, not even the
+			// flat offset.
+			ASSERT_EQ(in_node_state, in_field) << "leaf " << leaf << ", column " << column;
+		}
+	}
+}
+
 template<typename Storage> class StorageConformance : public ::testing::Test {};
 using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
+
+// -------------------------------------------------------------------------
+// The leaf block of a node state is the field, index for index
+// -------------------------------------------------------------------------
+
+TEST(NodeStateLeafBlock,
+     a_leaf_pair_sits_at_the_same_row_and_column_in_the_field_and_the_node_state) {
+	// ADR-0005 extends each tree's node state down to its leaves and leaves the other dimension in
+	// leaf space, so the field and either node state address one leaf pair identically and the
+	// subtract-the-leaf-count conversion disappears rather than getting more complex.
+	//
+	// Over generated forests rather than a fixture, because the shape is what makes this a property
+	// instead of a coincidence: a star has one internal node, so its node state is barely taller
+	// than its field, and a chain has one leaf, so its field is one cell wide.
+	size_t n_pairings_with_rows_the_field_lacks = 0;
+
+	for (const auto &first : generated_phylogenies()) {
+		for (const auto &second : generated_phylogenies()) {
+			ASSERT_NO_FATAL_FAILURE(
+			    (check_the_leaf_block_needs_no_conversion<TStorageYMatrix, TStorageZMatrix>(
+			        first, second, n_pairings_with_rows_the_field_lacks)));
+			ASSERT_NO_FATAL_FAILURE(
+			    (check_the_leaf_block_needs_no_conversion<TStorageYDense, TStorageZDense>(
+			        first, second, n_pairings_with_rows_the_field_lacks)));
+		}
+	}
+
+	// Without this the body above would pass vacuously on a node state that never had rows the
+	// field lacks. Since the shapes come from node_state_dimensions, this guards production's rule
+	// and not a copy of it: revert that rule and this test goes red.
+	EXPECT_GT(n_pairings_with_rows_the_field_lacks, 0u);
+}
 
 TYPED_TEST(StorageConformance, index_conversion_round_trips_over_every_generated_shape) {
 	for (const auto &shape : generated_shapes()) {

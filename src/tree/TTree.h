@@ -232,9 +232,6 @@ public:
 	 */
 	[[nodiscard]] size_t get_number_of_leaves() const { return _topology().n_leaves(); }
 	[[nodiscard]] size_t get_number_of_nodes() const { return _topology().n_nodes(); }
-	[[nodiscard]] size_t get_number_of_internal_nodes() const {
-		return _topology().n_internal_nodes();
-	}
 	[[nodiscard]] size_t get_number_of_roots() const { return _topology().n_roots(); }
 
 	/** @param node_index: the index of the node within the tree
@@ -249,17 +246,6 @@ public:
 	}
 	[[nodiscard]] size_t get_node_index_from_leaf_index(size_t leaf_index) const {
 		return _topology().leaves()[leaf_index];
-	}
-	[[nodiscard]] size_t get_node_index_from_internal_nodes_index(size_t internal_index) const {
-		return _topology().internal_nodes()[internal_index];
-	}
-
-	/** @param node_index: the index of the node within the tree
-	 * @return The index of the node in internal-node space. Meaningless if the node is a leaf; the
-	 * node index alone says whether it is one.
-	 */
-	[[nodiscard]] size_t get_index_within_internal_nodes(size_t node_index) const {
-		return _topology().internal_index(node_index);
 	}
 
 	/** @return The root nodes of the tree, as the range of node indices they occupy

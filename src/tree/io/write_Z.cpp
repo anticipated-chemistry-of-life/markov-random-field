@@ -9,20 +9,16 @@
 
 namespace {
 
-/// The node names of one cell, one per tree: the tree the file belongs to contributes an internal
-/// node, every other tree a leaf. Writing this out once per set of cells is what made the two
-/// write paths look like two different things.
+/// The node names of one cell, one per tree. Writing this out once per set of cells is what made
+/// the two write paths look like two different things.
 std::vector<std::string> node_names_of(const IndexArray &multidim_index,
-                                       const std::vector<std::unique_ptr<TTree>> &trees,
-                                       size_t dimension_number_of_tree) {
+                                       const std::vector<std::unique_ptr<TTree>> &trees) {
 	std::vector<std::string> names;
 	names.reserve(multidim_index.size());
 	for (size_t idx = 0; idx < multidim_index.size(); ++idx) {
-		const size_t node_index =
-		    idx == dimension_number_of_tree
-		        ? trees[idx]->get_node_index_from_internal_nodes_index(multidim_index[idx])
-		        : trees[idx]->get_node_index_from_leaf_index(multidim_index[idx]);
-		names.push_back(trees[idx]->get_node_id(node_index));
+		// Every column holds a node index: this tree's own dimension spans all its nodes, and in
+		// the others a leaf's index in leaf space is its node index (ADR-0004).
+		names.push_back(trees[idx]->get_node_id(multidim_index[idx]));
 	}
 	return names;
 }
@@ -30,8 +26,7 @@ std::vector<std::string> node_names_of(const IndexArray &multidim_index,
 } // namespace
 
 void write_Z_to_file(const std::string &filename, const TTree &tree,
-                     const std::vector<std::unique_ptr<TTree>> &trees,
-                     size_t dimension_number_of_tree, bool write_full_Z) {
+                     const std::vector<std::unique_ptr<TTree>> &trees, bool write_full_Z) {
 	std::vector<std::string> header;
 	header.reserve(trees.size() + 2);
 	for (const auto &t : trees) { header.push_back(t->get_tree_name()); }
@@ -43,8 +38,7 @@ void write_Z_to_file(const std::string &filename, const TTree &tree,
 
 	const auto write_cell = [&](size_t linear_index_in_Z_space, bool state) {
 		const std::array<size_t, 2> line{linear_index_in_Z_space, state};
-		file.writeln(node_names_of(Z.get_multi_dimensional_index(linear_index_in_Z_space), trees,
-		                           dimension_number_of_tree),
+		file.writeln(node_names_of(Z.get_multi_dimensional_index(linear_index_in_Z_space), trees),
 		             line);
 	};
 

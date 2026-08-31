@@ -26,7 +26,7 @@ uv run python validate_independent.py . rung1_pin_field_and_states
 
 Run the rungs in order and stop at the first failure. Each pins strictly less
 than the one before, so a failure localises the fault: rung 1 pins the field and
-both trees' internal states and is close to closed form; rung 2 adds the Z Gibbs
+both trees' node states and is close to closed form; rung 2 adds the Z Gibbs
 sweep; rung 3 infers everything from observations, against the simple error model
 alone, then LOTUS alone, then both.
 
@@ -96,5 +96,6 @@ non-neutral, and then reproduces the drift as an MCMC and removes it. See
   deviations. Any test that compares runs exactly must pass `--numThreads 1`;
   `check_neutrality_invariant.sh` does.
 - **"internal nodes" means two different things.** The startup log line counts
-  internal nodes _excluding_ roots, while `get_number_of_internal_nodes()` — the
-  one that sizes the Z dimension — _includes_ them.
+  internal nodes _excluding_ roots, while `TPhylogeny::n_internal_nodes()`
+  _includes_ them. Neither sizes the node state any more: since ADR-0005 that
+  dimension spans every node of its tree, leaves included.

@@ -18,13 +18,15 @@ size_t index_in_dimension(const TTree &tree, const std::string &node_name, bool 
 	}
 
 	const size_t node = topology.index_of(node_name);
-	if (topology.is_leaf(node) == internal_space) {
-		throw coretools::TUserError(
-		    "Node '", node_name, "' of tree '", tree.get_tree_name(), "' is ",
-		    internal_space ? "a leaf, but this column holds internal nodes."
-		                   : "an internal node, but this column holds leaves.");
+	// The column belonging to this node state's own tree accepts any node of it, leaves included:
+	// the node state now spans them. Every other column indexes a leaf, so it still has to be one.
+	if (!internal_space && !topology.is_leaf(node)) {
+		throw coretools::TUserError("Node '", node_name, "' of tree '", tree.get_tree_name(),
+		                            "' is an internal node, but this column holds leaves.");
 	}
-	return internal_space ? topology.internal_index(node) : topology.leaf_index(node);
+	// Either way the answer is the node index: for a leaf, its index in leaf space is its node
+	// index (ADR-0004), and for this tree's own column the node state is indexed by node.
+	return node;
 }
 
 } // namespace

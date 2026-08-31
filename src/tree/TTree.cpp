@@ -13,6 +13,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
 #include "tree/io/read_Z.h"
+#include "tree/node_state_shape.h"
 
 #include <cstddef>
 #include <cstdlib>
@@ -122,9 +123,10 @@ void TTree::_simulateUnderPrior(Storage *) {
 
 void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
                           const std::vector<std::unique_ptr<TTree>> &all_trees) {
-	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
-
-	_Z.initialize_dimensions(num_leaves_per_tree);
+	// The node state spans every node of this tree, leaves included. The rule lives in
+	// node_state_dimensions so that the storage tests can assert over the shapes production
+	// actually builds rather than over a restatement of them.
+	_Z.initialize_dimensions(node_state_dimensions(num_leaves_per_tree, _dimension, _topology()));
 
 	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
@@ -141,7 +143,7 @@ void TTree::simulate_Z(size_t tree_index) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
 		TCurrentState current_state(_topology(), clique.get_increment(), get_number_of_leaves(),
-		                            get_number_of_internal_nodes());
+		                            get_number_of_nodes());
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
@@ -190,7 +192,7 @@ void TTree::simulate_Z(size_t tree_index) {
 void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
                           size_t node_index_in_tree) {
 	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
-	index_in_leaves_space[tree_index] = this->get_index_within_internal_nodes(node_index_in_tree);
+	index_in_leaves_space[tree_index] = node_index_in_tree;
 	_Z.insert_one(index_in_leaves_space);
 	current_state.set(node_index_in_tree, true);
 }

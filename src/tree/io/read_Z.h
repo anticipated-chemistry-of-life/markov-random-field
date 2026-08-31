@@ -1,5 +1,5 @@
 //
-// Reading a previously written internal state back in.
+// Reading a previously written node state back in.
 //
 
 #pragma once
@@ -12,18 +12,24 @@
 
 class TTree;
 
-/// Read an internal-state file written by write_Z_to_file into `Z`, setting every cell the file
-/// reports as present.
+/// Read a node-state file written by write_Z_to_file into `Z`, setting every cell the file reports
+/// as present.
 ///
 /// Cells are resolved through the leading node-name columns, not through the linear index the
-/// writer also emits: `dimension_number_of_tree` says which column names an internal node and
-/// which name leaves, and the rest is name lookup. That makes such a file portable across any
-/// change to how nodes are numbered, and turns what would otherwise be a silent wrong answer --
-/// an index that still resolves, but to a different node -- into an error.
+/// writer also emits, so such a file is portable across any change to how nodes are numbered and a
+/// stale index becomes an error rather than a silent wrong answer.
+///
+/// `dimension_number_of_tree` says which column belongs to the tree this node state is for. That
+/// column accepts any node of its tree, leaves included, since the node state spans them all
+/// (ADR-0005); every other column indexes a leaf and still has to name one.
+///
+/// A file written under the old model names only internal nodes in its own column. It still loads,
+/// because resolution is by name -- but it leaves every leaf row at zero, which is the migration
+/// ADR-0004's closing consequence describes and #40 has to decide about.
 ///
 /// Throws coretools::TUserError if the file does not have one column per tree plus the index and
-/// the state, if a name is not in the tree its column belongs to, or if a name is in the tree but
-/// in the wrong space: a leaf where the file wants an internal node, or the other way round.
+/// the state, if a name is not in the tree its column belongs to, or if a foreign column names
+/// something other than a leaf.
 void read_Z_from_file(const std::string &filename, TInternalStateStorage &Z,
                       const std::vector<std::unique_ptr<TTree>> &trees,
                       size_t dimension_number_of_tree);

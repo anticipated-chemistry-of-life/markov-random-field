@@ -28,8 +28,8 @@ void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TF
                          const TInternalStateStorage &Z) {
 	fill_Y(start_index_in_leaves_space, _topology.n_leaves(),
 	       Y); // parse all Y (all leaves)
-	fill_Z(start_index_in_leaves_space, _topology.n_internal_nodes(),
-	       Z); // parse all Z (all internal nodes)
+	fill_Z(start_index_in_leaves_space, _topology.n_nodes(),
+	       Z); // parse all Z (every node, leaves included)
 }
 
 void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
@@ -69,13 +69,12 @@ void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t
 	                     _current_state_Z, _exists_in_Z, _index_in_Z);
 }
 
-bool TCurrentState::get(size_t index_in_tree) const { return get(index_in_tree, 0, 0); }
-
-bool TCurrentState::get(size_t index_in_tree, size_t offset_leaves, size_t offset_internals) const {
-	if (_topology.is_leaf(index_in_tree)) {
-		return get_Y(_topology.leaf_index(index_in_tree) - offset_leaves);
-	}
-	return get_Z(_topology.internal_index(index_in_tree) - offset_internals);
+bool TCurrentState::get(size_t index_in_tree) const {
+	// A leaf's state is read from the field and an internal node's from the node state. The node
+	// state now spans the leaves too, but nothing reads those rows yet (ADR-0005), so this still
+	// routes a leaf to the field. Its row there is its node index either way (ADR-0004).
+	if (_topology.is_leaf(index_in_tree)) { return get_Y(_topology.leaf_index(index_in_tree)); }
+	return get_Z(index_in_tree);
 }
 
 bool TCurrentState::get_Y(size_t ix) const { return _current_state_Y[ix]; }
@@ -86,7 +85,7 @@ void TCurrentState::set(size_t index_in_tree, bool value) {
 	if (_topology.is_leaf(index_in_tree)) {
 		_current_state_Y[_topology.leaf_index(index_in_tree)] = value;
 	} else {
-		_current_state_Z[_topology.internal_index(index_in_tree)] = value;
+		_current_state_Z[index_in_tree] = value;
 	}
 }
 
@@ -98,14 +97,14 @@ size_t TCurrentState::get_linear_index_in_storage(size_t index_in_tree) const {
 	if (_topology.is_leaf(index_in_tree)) {
 		return _index_in_Y[_topology.leaf_index(index_in_tree)];
 	}
-	return _index_in_Z[_topology.internal_index(index_in_tree)];
+	return _index_in_Z[index_in_tree];
 }
 
 bool TCurrentState::exists_in_storage(size_t index_in_tree) const {
 	if (_topology.is_leaf(index_in_tree)) {
 		return _exists_in_Y[_topology.leaf_index(index_in_tree)];
 	}
-	return _exists_in_Z[_topology.internal_index(index_in_tree)];
+	return _exists_in_Z[index_in_tree];
 }
 
 std::tuple<bool, bool, size_t>
@@ -152,9 +151,9 @@ void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K, const
 			local_start_index_in_leaves_space[_dim_ix] = _topology.leaf_index(i);
 			_cur_states[i].fill_Y_along_last_dim(local_start_index_in_leaves_space, K, Y);
 		} else {
-			// get start index: leaf space in all dimensions except _dim_ix, for which we use the
-			// internal node index
-			local_start_index_in_leaves_space[_dim_ix] = _topology.internal_index(i);
+			// leaf space in every dimension except _dim_ix, whose node state spans all nodes and
+			// is therefore indexed by the node index itself
+			local_start_index_in_leaves_space[_dim_ix] = i;
 			// fill Z. There are as many Z as there are leaves along the last dimension
 			// use z of your own dimension for filling
 			// Note: we do not need to fill Y here, as there are no Y when the node(i) is internal

@@ -79,7 +79,7 @@ void TMarkovField::_update_sheets(bool first, IndexArray &start_index_in_leaves_
 	for (size_t j = 0; j < _sheets.size(); ++j) {
 		if (first || _need_to_update_sheet(j, start_index_in_leaves_space, previous_ix)) {
 			// first iteration or different index than before -> re-compute sheet.
-			// A sheet fills from the internal state of its own dimension; as_const because every
+			// A sheet fills from the node state of its own dimension; as_const because every
 			// thread of the team runs this, and none of them may take the mutable overload.
 			_sheets[j].fill(start_index_in_leaves_space, K_cur_sheet, _Y,
 			                std::as_const(*_trees[j]).get_Z());
@@ -93,9 +93,8 @@ void TMarkovField::_fill_clique_along_last_dim(IndexArray start_index_in_leaves_
 	_clique_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space,
 	                                       _trees.back()->get_number_of_leaves(), _Y);
 	// fill all Z along last dimension
-	_clique_last_dim.fill_Z_along_last_dim(start_index_in_leaves_space,
-	                                       _trees.back()->get_number_of_internal_nodes(),
-	                                       _trees.back()->get_Z());
+	_clique_last_dim.fill_Z_along_last_dim(
+	    start_index_in_leaves_space, _trees.back()->get_number_of_nodes(), _trees.back()->get_Z());
 }
 
 void TMarkovField::_calculate_log_prob_field(
@@ -309,10 +308,9 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	prog.done();
 	if (ProgramOptions::WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
 	if (ProgramOptions::WRITE_Z) {
-		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
-			const auto &tree = _trees[tree_idx];
+		for (const auto &tree : _trees) {
 			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", *tree,
-			                _trees, tree_idx, /*write_full_Z =*/true);
+			                _trees, /*write_full_Z =*/true);
 			if (ProgramOptions::WRITE_BRANCH_LENGTHS) { write_branch_length_grid(*tree); }
 		}
 	}
@@ -334,7 +332,7 @@ void TMarkovField::_simulate_Y() {
 			const auto &clique = _trees[dim]->get_clique(multidim_index_in_Y);
 			TCurrentState current_state(_trees[dim]->phylogeny(), clique.get_increment(),
 			                            _trees[dim]->get_number_of_leaves(),
-			                            _trees[dim]->get_number_of_internal_nodes());
+			                            _trees[dim]->get_number_of_nodes());
 			// translate index in leaves to the index in tree
 			const size_t index_in_tree =
 			    _trees[dim]->get_node_index_from_leaf_index(multidim_index_in_Y[dim]);
@@ -346,9 +344,7 @@ void TMarkovField::_simulate_Y() {
 			    _trees[dim].get(), 0, current_state, sum_log);
 		}
 		bool y_state = sample(sum_log);
-		if (y_state) {
-			_Y.insert_one(linear_index_in_leaves_space);
-		}
+		if (y_state) { _Y.insert_one(linear_index_in_leaves_space); }
 	}
 }
 

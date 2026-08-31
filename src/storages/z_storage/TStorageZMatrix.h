@@ -15,11 +15,11 @@
 #include <utility>
 #include <vector>
 
-/// There is one TStorageZMatrix per dimension `d`. The dimensions in Z space correspond
-/// to the number of leaves in each dimension except for dimension `d`, where the
-/// dimension is given by the number of internal nodes.
-/// For example, for dimension of interest `d` with number of leaves [2, 3] and 17
-/// internal nodes in dimension `d == 0`, the dimensions in Z space are [17, 3].
+/// There is one TStorageZMatrix per dimension `d`. The dimensions in Z space are the number of
+/// leaves in each dimension except for `d`, which spans every node of its tree -- leaves included
+/// (ADR-0005). For example, with leaf counts [2, 3] and 19 nodes in dimension `d == 0`, the
+/// dimensions in Z space are [19, 3], where the first two rows are the leaves the field also
+/// holds. `node_state_dimensions` in tree/node_state_shape.h is where that rule lives.
 ///
 /// Backed by a coretools::TSparseMatrix<TStorageZ>, mirroring TStorageYMatrix: rows and
 /// columns are kept sorted, so a clique's nodes can be range-walked in O(nnz in that
@@ -190,6 +190,6 @@ public:
 };
 
 static_assert(BinaryFieldStorage<TStorageZMatrix>,
-              "The sparse internal state must satisfy the binary storage interface.");
+              "The sparse node state must satisfy the binary storage interface.");
 
 #endif // TStorageZMatrix_H
