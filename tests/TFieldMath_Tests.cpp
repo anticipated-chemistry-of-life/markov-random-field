@@ -1,10 +1,10 @@
+#include "coretools/Types/probability.h"
 #include "field/TFieldMath.h"
 #include "field/link_backend.h"
 #include "gtest/gtest.h"
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <limits>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -76,6 +76,12 @@ std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
 	}
 	for (auto &w : weight) { w /= total; }
 	return weight;
+}
+
+/// The block takes probabilities by type. The brute force below stays on doubles, so that it
+/// shares as little as possible with the thing it checks.
+std::array<coretools::Probability, 2> as_probabilities(const std::array<double, 2> &pair) {
+	return {coretools::P(pair[0]), coretools::P(pair[1])};
 }
 
 /// A sweep across the open interval the error probability is constrained to.
@@ -368,8 +374,9 @@ TEST(FieldMath_Tests, block_probabilities_match_brute_force_enumeration) {
 	for (const double w : {0.01, 0.1, 0.3, 0.45}) {
 		for (const double p_s : {0.05, 0.5, 0.95}) {
 			for (const double p_m : {0.1, 0.5, 0.8}) {
-				const auto got =
-				    block_probabilities<TLinkPolicy>(p_s, p_m, TErrorProbability(w), lotus, simple_error);
+				const auto got = block_probabilities<TLinkPolicy>(
+				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
+				    as_probabilities(lotus), as_probabilities(simple_error));
 				const auto want = brute_force_block(p_s, p_m, w, lotus, simple_error);
 				for (size_t i = 0; i < 8; ++i) {
 					EXPECT_NEAR(got[i], want[i], 1e-14)
@@ -385,7 +392,9 @@ TEST(FieldMath_Tests, block_probabilities_are_normalised) {
 	const std::array<double, 2> lotus        = {0.9, 0.05};
 	const std::array<double, 2> simple_error = {0.3, 0.7};
 	for (const double w : {0.02, 0.2, 0.49}) {
-		const auto block = block_probabilities<TLinkPolicy>(0.3, 0.6, TErrorProbability(w), lotus, simple_error);
+		const auto block = block_probabilities<TLinkPolicy>(
+		    coretools::P(0.3), coretools::P(0.6), TErrorProbability(w), as_probabilities(lotus),
+		    as_probabilities(simple_error));
 		double sum       = 0.0;
 		for (const double p : block) {
 			EXPECT_GE(p, 0.0) << "omega = " << w;
@@ -402,7 +411,9 @@ TEST(FieldMath_Tests, the_block_reduces_to_the_link_when_the_data_says_nothing) 
 	for (const double w : {0.05, 0.25, 0.4}) {
 		for (const double p_s : {0.2, 0.5, 0.9}) {
 			for (const double p_m : {0.3, 0.7}) {
-				const auto block = block_probabilities<TLinkPolicy>(p_s, p_m, TErrorProbability(w), flat, flat);
+				const auto block = block_probabilities<TLinkPolicy>(
+				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
+				    as_probabilities(flat), as_probabilities(flat));
 				double prob_y_is_one = 0.0;
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
@@ -436,8 +447,9 @@ TEST(FieldMath_Tests, the_block_leaves_the_tree_priors_alone_when_the_data_says_
 	for (const double w : {0.03, 0.2, 0.48}) {
 		for (const double p_s : {0.15, 0.5, 0.85}) {
 			for (const double p_m : {0.25, 0.75}) {
-				const auto block = block_probabilities<TLinkPolicy>(p_s, p_m, TErrorProbability(w),
-				                                                    flat, flat);
+				const auto block = block_probabilities<TLinkPolicy>(
+				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
+				    as_probabilities(flat), as_probabilities(flat));
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
 						const double want = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
@@ -461,7 +473,9 @@ TEST(FieldMath_Tests, the_block_tilts_the_link_by_the_data_odds) {
 	const std::array<double, 2> simple_error = {0.2, 0.9};
 	for (const double w : {0.05, 0.2, 0.45}) {
 		const TErrorProbability omega(w);
-		const auto block = block_probabilities<TLinkPolicy>(0.35, 0.7, omega, lotus, simple_error);
+		const auto block = block_probabilities<TLinkPolicy>(
+		    coretools::P(0.35), coretools::P(0.7), omega, as_probabilities(lotus),
+		    as_probabilities(simple_error));
 		for (const bool z_s : {false, true}) {
 			for (const bool z_m : {false, true}) {
 				const double link = TLinkPolicy::prob_y_is_one(z_s, z_m, omega);
@@ -476,21 +490,17 @@ TEST(FieldMath_Tests, the_block_tilts_the_link_by_the_data_odds) {
 	}
 }
 
-TEST(FieldMath_Tests, the_block_rejects_arguments_that_are_not_probabilities) {
-	const std::array<double, 2> ok = {0.5, 0.5};
-	const TErrorProbability omega(0.1);
-	const double nan = std::numeric_limits<double>::quiet_NaN();
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(1.5, 0.5, omega, ok, ok), std::invalid_argument);
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(-0.1, 0.5, omega, ok, ok), std::invalid_argument);
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(0.5, nan, omega, ok, ok), std::invalid_argument);
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(0.5, 0.5, omega, {1.2, 0.5}, ok),
-	             std::invalid_argument);
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(0.5, 0.5, omega, ok, {0.5, nan}),
-	             std::invalid_argument);
-}
+// There is deliberately no test that the block rejects an argument outside [0, 1]. The arguments
+// are coretools::Probability, so that guarantee belongs to the type and is tested in coretools.
+// It is worth knowing that it holds only under CHECK_INTERVALS, which CMakeLists.txt defines for
+// this test target and not for acol.
 
 TEST(FieldMath_Tests, the_block_rejects_a_configuration_with_no_mass) {
+	// zero is a perfectly good probability, so the type lets this through and the block itself
+	// has to notice that nothing is left to normalise
 	const std::array<double, 2> nothing = {0.0, 0.0};
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(0.5, 0.5, TErrorProbability(0.1), nothing, nothing),
+	EXPECT_THROW(block_probabilities<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5),
+	                                              TErrorProbability(0.1), as_probabilities(nothing),
+	                                              as_probabilities(nothing)),
 	             std::invalid_argument);
 }

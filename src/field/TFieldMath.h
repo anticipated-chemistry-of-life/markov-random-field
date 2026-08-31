@@ -33,6 +33,7 @@
 #pragma once
 
 #include "constants.h"
+#include "coretools/Types/probability.h"
 #include <array>
 #include <cmath>
 #include <concepts>
@@ -53,6 +54,13 @@ namespace field_math {
 /// Constrained to the open interval (0, 0.5). At 0 the link is the deterministic AND and the block
 /// update hits log 0; at or above 0.5 the tree fields are anti-correlated with the field, which is
 /// meaningless as an error model and is a genuine second mode for a sampler to find (ADR-0005).
+///
+/// The check below is written out rather than delegated to one of coretools' interval types, for
+/// two reasons. No such type spells (0, 0.5) -- `ZeroOneOpen` would leave the upper half of the
+/// range unguarded. And coretools checks its intervals only under CHECK_INTERVALS, which
+/// CMakeLists.txt defines for the unit tests and not for acol, so an interval type would stop
+/// checking in exactly the binary that runs the chain. This is a statement about the model, not a
+/// range on an argument, so it holds in every build.
 class TErrorProbability {
 private:
 	double _omega = 0.0;
@@ -90,15 +98,6 @@ inline void check_bucket(size_t bucket, size_t n_buckets) {
 	if (bucket >= n_buckets) {
 		throw std::invalid_argument("There is no bucket " + std::to_string(bucket) +
 		                            "; there are " + std::to_string(n_buckets) + ".");
-	}
-}
-
-/// A probability argument, rejected unless it is one. The `!(p >= 0.0)` form also catches NaN,
-/// which would otherwise sail through every comparison and reach the sampler as a weight.
-inline void check_probability(double p, const char *what) {
-	if (!(p >= 0.0) || !(p <= 1.0)) {
-		throw std::invalid_argument(std::string(what) + " must be a probability in [0, 1], but it is " +
-		                            std::to_string(p) + ".");
 	}
 }
 
@@ -276,30 +275,31 @@ public:
 /// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
 /// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
 template<LinkPolicy Policy>
-[[nodiscard]] std::array<double, 8> block_probabilities(double prob_z_s_is_one,
-                                                        double prob_z_m_is_one,
-                                                        const TErrorProbability &omega,
-                                                        const std::array<double, 2> &lotus,
-                                                        const std::array<double, 2> &simple_error) {
-	check_probability(prob_z_s_is_one, "The species tree's transition probability");
-	check_probability(prob_z_m_is_one, "The molecule tree's transition probability");
-	check_probability(lotus[0], "P(L | Y = 0)");
-	check_probability(lotus[1], "P(L | Y = 1)");
-	check_probability(simple_error[0], "P(D | Y = 0)");
-	check_probability(simple_error[1], "P(D | Y = 1)");
+[[nodiscard]] std::array<double, 8>
+block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
+                    const TErrorProbability &omega,
+                    const std::array<coretools::Probability, 2> &lotus,
+                    const std::array<coretools::Probability, 2> &simple_error) {
+	// These are probabilities by type, so the range check happens where the caller builds the
+	// value, the way TSimpleErrorModelMath.h already does it. Note the bargain: coretools checks
+	// its intervals only under CHECK_INTERVALS, which CMakeLists.txt defines for the unit tests and
+	// not for acol. So this is a development-time guard, and a transition probability outside [0,1]
+	// reaching a release build would still produce a negative weight. Every coretools type in this
+	// codebase makes the same trade.
+	const double p_s = prob_z_s_is_one.get();
+	const double p_m = prob_z_m_is_one.get();
 
 	std::array<double, 8> probability{};
 	double total = 0.0;
 
 	for (const bool z_s : {false, true}) {
 		for (const bool z_m : {false, true}) {
-			const double tree_factor = (z_s ? prob_z_s_is_one : 1.0 - prob_z_s_is_one) *
-			                           (z_m ? prob_z_m_is_one : 1.0 - prob_z_m_is_one);
-			const double link = Policy::prob_y_is_one(z_s, z_m, omega);
+			const double tree_factor = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
+			const double link        = Policy::prob_y_is_one(z_s, z_m, omega);
 			for (const bool y : {false, true}) {
-				const size_t data  = static_cast<size_t>(y);
-				const double weight =
-				    tree_factor * (y ? link : 1.0 - link) * lotus[data] * simple_error[data];
+				const size_t data   = static_cast<size_t>(y);
+				const double weight = tree_factor * (y ? link : 1.0 - link) * lotus[data].get() *
+				                      simple_error[data].get();
 				probability[state_index(y, z_s, z_m)] = weight;
 				total += weight;
 			}
