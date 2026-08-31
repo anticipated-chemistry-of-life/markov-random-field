@@ -82,8 +82,8 @@ public:
 	/// which is the whole reason this is a type and not a double.
 	[[nodiscard]] double for_tree(size_t tree) const {
 		if (tree >= NUMBER_OF_TREES) {
-			throw std::invalid_argument("There is no tree " + std::to_string(tree) + "; there are " +
-			                            std::to_string(NUMBER_OF_TREES) + ".");
+			throw std::invalid_argument("There is no tree " + std::to_string(tree) +
+			                            "; there are " + std::to_string(NUMBER_OF_TREES) + ".");
 		}
 		return _omega;
 	}
@@ -156,18 +156,17 @@ public:
 /// cells, the bucket that cell falls in, and the likelihood of a whole configuration from the
 /// bucket counts alone.
 template<typename T>
-concept LinkPolicy =
-    requires(bool z_s, bool z_m, size_t bucket, const TErrorProbability &omega,
-             const TLinkCounters &counters) {
-	    { T::n_buckets } -> std::convertible_to<size_t>;
-	    // the counters are sized for the link, so a link that bucketed differently would have to
-	    // change TLinkCounters with it rather than silently overflow it
-	    requires T::n_buckets == TLinkCounters::n_buckets;
-	    { T::prob_y_is_one(z_s, z_m, omega) } -> std::same_as<double>;
-	    { T::bucket(z_s, z_m) } -> std::same_as<size_t>;
-	    { T::prob_for_bucket(bucket, omega) } -> std::same_as<double>;
-	    { T::log_likelihood(counters, omega) } -> std::same_as<double>;
-    };
+concept LinkPolicy = requires(bool z_s, bool z_m, size_t bucket, const TErrorProbability &omega,
+                              const TLinkCounters &counters) {
+	{ T::n_buckets } -> std::convertible_to<size_t>;
+	// the counters are sized for the link, so a link that bucketed differently would have to
+	// change TLinkCounters with it rather than silently overflow it
+	requires T::n_buckets == TLinkCounters::n_buckets;
+	{ T::prob_y_is_one(z_s, z_m, omega) } -> std::same_as<double>;
+	{ T::bucket(z_s, z_m) } -> std::same_as<size_t>;
+	{ T::prob_for_bucket(bucket, omega) } -> std::same_as<double>;
+	{ T::log_likelihood(counters, omega) } -> std::same_as<double>;
+};
 
 /// The field is the AND of the two independently corrupted tree fields.
 ///
@@ -201,9 +200,10 @@ public:
 	/// See ADR-0005.
 	[[nodiscard]] static double prob_for_bucket(size_t bucket, const TErrorProbability &omega) {
 		check_bucket(bucket, n_buckets);
-		if (!omega.is_shared()) {
+		if (!field_math::TErrorProbability::is_shared()) {
 			throw std::invalid_argument(
-			    "Bucketing by the number of tree fields in state 1 pools the two mixed cells, which "
+			    "Bucketing by the number of tree fields in state 1 pools the two mixed cells, "
+			    "which "
 			    "is only the same probability while both trees are corrupted at one rate.");
 		}
 		const double w = omega.for_tree(0);
@@ -221,22 +221,22 @@ public:
 	/// both directions, and not where one would guess. `1 - P_k` is *exact* whenever `P_k >= 0.5`
 	/// (Sterbenz), so `log1p` buys nothing for the both-ones bucket; the loss is at the other end,
 	/// where `P_0 = omega^2` is tiny and `1 - P_0` rounds to 1. And `log P_2` formed as
-	/// `log((1 - w) * (1 - w))` loses the squaring's rounding -- 4e-11 relative at `omega = 1e-6` --
-	/// where ADR-0005's observation that `log P_k` is *affine* in `k` gives it exactly.
+	/// `log((1 - w) * (1 - w))` loses the squaring's rounding -- 4e-11 relative at `omega = 1e-6`
+	/// -- where ADR-0005's observation that `log P_k` is *affine* in `k` gives it exactly.
 	///
 	/// So: the logs come from the affine form, and the complements from expansions that subtract
 	/// nothing near-equal -- `1 - P_0 = (1-w)(1+w)`, `1 - P_1 = 1 - w + w^2`, `1 - P_2 = w(2-w)`.
 	[[nodiscard]] static std::array<double, 2> log_prob_for_bucket(size_t bucket,
 	                                                               const TErrorProbability &omega) {
 		check_bucket(bucket, n_buckets);
-		const double w        = omega.for_tree(0);
-		const double log_w    = std::log(w);
+		const double w         = omega.for_tree(0);
+		const double log_w     = std::log(w);
 		const double log_1_m_w = std::log1p(-w);
 
 		switch (bucket) {
-		case 0: return {log_1_m_w + std::log1p(w), 2.0 * log_w};              // 1 - P_0 = (1-w)(1+w)
-		case 1: return {std::log1p(-w + w * w), log_w + log_1_m_w};           // 1 - P_1 = 1 - w + w^2
-		default: return {log_w + std::log1p(1.0 - w), 2.0 * log_1_m_w};       // 1 - P_2 = w(2-w)
+		case 0: return {log_1_m_w + std::log1p(w), 2.0 * log_w};        // 1 - P_0 = (1-w)(1+w)
+		case 1: return {std::log1p(-w + w * w), log_w + log_1_m_w};     // 1 - P_1 = 1 - w + w^2
+		default: return {log_w + std::log1p(1.0 - w), 2.0 * log_1_m_w}; // 1 - P_2 = w(2-w)
 		}
 	}
 
@@ -269,7 +269,8 @@ public:
 /// Returns the normalised probability of each of the eight states, addressed by `state_index`.
 /// Drawing from them is the caller's business; nothing here touches a random generator.
 ///
-/// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition grid.
+/// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition
+/// grid.
 /// @param prob_z_m_is_one  P(Z_m = 1 | the molecule parent's state).
 /// @param omega            The error probability standing between the tree fields and the field.
 /// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
@@ -297,7 +298,7 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 			const double tree_factor = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
 			const double link        = Policy::prob_y_is_one(z_s, z_m, omega);
 			for (const bool y : {false, true}) {
-				const size_t data   = static_cast<size_t>(y);
+				const auto data     = static_cast<size_t>(y);
 				const double weight = tree_factor * (y ? link : 1.0 - link) * lotus[data].get() *
 				                      simple_error[data].get();
 				probability[state_index(y, z_s, z_m)] = weight;
@@ -310,7 +311,8 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 		throw std::invalid_argument(
 		    "The eight-state block has no probability mass: the eight weights sum to " +
 		    std::to_string(total) +
-		    ". Either a data likelihood is zero for both field states, or the weights underflowed.");
+		    ". Either a data likelihood is zero for both field states, or the weights "
+		    "underflowed.");
 	}
 	for (double &p : probability) { p /= total; }
 	return probability;
