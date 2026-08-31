@@ -142,8 +142,9 @@ void TTree::simulate_Z(size_t tree_index) {
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
-		TCurrentState current_state(_topology(), clique.get_increment(), get_number_of_leaves(),
-		                            get_number_of_nodes());
+		// Simulation starts from nothing sampled, which is what the old current state also gave
+		// here: it was sized but never filled from the storages.
+		TCliqueWalkStates current_state(get_number_of_nodes());
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
@@ -171,10 +172,9 @@ void TTree::simulate_Z(size_t tree_index) {
 			// children since we haven't sampled them yet).
 			std::array<coretools::TSumLogProbability, 2> sum_log;
 			clique.calculate_log_prob_parent_to_node(
-			    node_index,
 			    (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			        _topology().branch_index(node_index)),
-			    this, 0, current_state, sum_log);
+			    current_state.get(parent_of(node_index)), sum_log);
 			bool internal_node_state = sample(sum_log);
 			if (internal_node_state) {
 				_simulate_one(clique, current_state, tree_index, node_index);
@@ -189,8 +189,8 @@ void TTree::simulate_Z(size_t tree_index) {
 	}
 }
 
-void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
-                          size_t node_index_in_tree) {
+void TTree::_simulate_one(const TClique &clique, TCliqueWalkStates &current_state,
+                          size_t tree_index, size_t node_index_in_tree) {
 	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
 	index_in_leaves_space[tree_index] = node_index_in_tree;
 	_Z.insert_one(index_in_leaves_space);

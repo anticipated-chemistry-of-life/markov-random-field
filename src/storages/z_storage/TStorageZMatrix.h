@@ -60,6 +60,27 @@ public:
 	}
 
 	/// Point lookup by linear index in Z space. A missing cell reads as false.
+	/// Whether this cell is held by the matrix, as distinct from reading as zero because it is
+	/// absent.
+	///
+	/// The sampler asks because inserting a new cell reallocates a row, which must not happen
+	/// inside the parallel region: a write to a cell already stored is an in-place flip, and a
+	/// write to one that is not is deferred and committed afterwards. The dense node state holds
+	/// the whole container space and always answers yes, so this is a question about the storage
+	/// that the two answer differently, not a fact about the field -- which is why it is asked
+	/// through the concept rather than assumed.
+	///
+	/// Rows are kept sorted, so this walks one row and stops at the first index past the one it
+	/// wants.
+	[[nodiscard]] bool is_stored(size_t linear_index_in_Z_space) const {
+		const auto md = _row_col(linear_index_in_Z_space);
+		for (auto it = _mat.begin_row(md[0]); it != _mat.end_row(md[0]); ++it) {
+			if (it->index == md[1]) { return true; }
+			if (it->index > md[1]) { break; }
+		}
+		return false;
+	}
+
 	[[nodiscard]] inline bool is_one(size_t linear_index_in_Z_space) const {
 		const auto md = _row_col(linear_index_in_Z_space);
 		return _mat.get(md[0], md[1]).is_one();

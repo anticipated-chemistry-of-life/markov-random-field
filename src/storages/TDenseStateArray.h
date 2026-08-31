@@ -57,6 +57,14 @@ public:
 		_states.assign(coretools::containerProduct(dimensions), 0);
 	}
 
+	/// Always true, in bounds: this implementation holds the whole container space, so there is no
+	/// cell that reads as zero because it is absent. The sparse implementations answer this by
+	/// searching a row, and the sampler asks so that a write which would reallocate a sparse row
+	/// can be deferred out of the parallel region -- a question about the storage, not the field.
+	[[nodiscard]] bool is_stored(size_t linear_index) const {
+		return linear_index < total_size_of_container_space();
+	}
+
 	[[nodiscard]] bool is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _states.size());
 		return _states[linear_index] != 0;

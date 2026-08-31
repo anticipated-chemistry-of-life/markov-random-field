@@ -97,20 +97,20 @@ private:
 	/// @brief Load tree from file
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
 	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
-	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
+	void _simulate_one(const TClique &clique, TCliqueWalkStates &current_state, size_t tree_index,
 	                   size_t node_index_in_tree);
 
 	// updating branch lengths
 	[[nodiscard]] stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
 	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
 	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
-	void _add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
+	void _add_to_LL_branch_lengths(size_t c, const TCliqueWalkStates &current_state,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
 	[[nodiscard]] double
 	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
 	                                          const TClique &clique,
-	                                          const TCurrentState &current_state) const;
+	                                          const TCliqueWalkStates &current_state) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -118,7 +118,7 @@ private:
 	/// node, once with the clique's current grid and once with the proposal's candidate.
 	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
 	                                         bool state_of_node, coretools::TSumLogProbability &LL,
-	                                         const TCurrentState &current_state,
+	                                         const TCliqueWalkStates &current_state,
 	                                         std::optional<size_t> branch_len_bin,
 	                                         const TTransitionGrid &process) const {
 		if (_topology().is_root(index_in_tree)) {
@@ -131,7 +131,7 @@ private:
 	}
 
 	template<bool IsAlpha, typename TypeParam>
-	void _update_nu_or_alpha(const TCurrentState &current_state, size_t c, TypeParam *param) {
+	void _update_nu_or_alpha(const TCliqueWalkStates &current_state, size_t c, TypeParam *param) {
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
@@ -298,7 +298,7 @@ public:
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
-			auto current_state  = _cliques[i].create_current_state(Y, _Z, _topology());
+			auto current_state  = _cliques[i].read_states(Y, _Z, _topology());
 			// update Z
 			if constexpr (!FixZ) {
 				indices_to_insert[i] =
@@ -361,7 +361,7 @@ public:
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(indices_to_insert, Y)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto current_state   = _cliques[i].create_current_state(Y, _Z, _topology());
+			auto current_state   = _cliques[i].read_states(Y, _Z, _topology());
 			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(current_state, _Z, this);
 		}
 

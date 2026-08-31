@@ -42,6 +42,11 @@ public:
 	/// and as the starting value of the inferred epsilon_simple_model parameter during inference.
 	static inline double EPSILON_SIMPLE_MODEL = 0.1;
 
+	/// The error probability omega: the rate at which one tree field cell is corrupted before the
+	/// two are reconciled into the field (ADR-0005). Held fixed for now; the Metropolis move that
+	/// estimates it is #37.
+	static inline double ERROR_PROBABILITY = 0.05;
+
 	static inline double GAMMA = 1.1;
 
 	static inline double ALPHA = 0.5;
@@ -113,6 +118,16 @@ public:
 			throw coretools::TUserError("--epsilon_simple_model must be strictly between 0 and 1, "
 			                            "but got ",
 			                            EPSILON_SIMPLE_MODEL, ".");
+		}
+
+		ERROR_PROBABILITY = params.get<double>("error_probability", ERROR_PROBABILITY);
+		if (ERROR_PROBABILITY <= 0.0 || ERROR_PROBABILITY >= 0.5) {
+			// The open interval is a statement about the model, not a range on an argument: at 0
+			// the link is the deterministic AND and the block update takes log(0), and at or above
+			// 0.5 the tree fields are anti-correlated with the field (ADR-0005).
+			throw coretools::TUserError("--error_probability must be strictly between 0 and 0.5, "
+			                            "but got ",
+			                            ERROR_PROBABILITY, ".");
 		}
 
 		GAMMA = params.get<double>("gamma", GAMMA);

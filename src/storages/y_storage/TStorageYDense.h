@@ -67,6 +67,11 @@ public:
 	// -- over: in the sparse field an insert writes a whole new entry, counter included, and the
 	// -- two implementations have to agree on what a cell holds afterwards.
 
+	/// See TDenseStateArray::is_stored: the dense field holds the whole container space.
+	[[nodiscard]] bool is_stored(size_t linear_index) const {
+		return _states.is_stored(linear_index);
+	}
+
 	[[nodiscard]] bool is_one(size_t linear_index) const { return _states.is_one(linear_index); }
 	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
 		return _states.is_one(_states.get_linear_index_in_container_space(multidim_index));

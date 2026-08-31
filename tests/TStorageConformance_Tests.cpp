@@ -439,6 +439,49 @@ TYPED_TEST(StorageConformance, a_clique_runs_down_a_container_that_is_one_cell_w
 	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 1}));
 }
 
+TYPED_TEST(StorageConformance,
+           a_cell_that_was_inserted_is_stored_and_a_state_write_does_not_change_that) {
+	// The contract both implementations owe: whatever "stored" means to them, inserting a cell
+	// makes it stored, and flipping its state afterwards leaves it stored. That is what lets the
+	// sampler use the answer to decide between an in-place flip and a deferred insert.
+	for (const auto &shape : generated_shapes()) {
+		auto storage      = make_storage<TypeParam>(shape);
+		const size_t last = storage.total_size_of_container_space() - 1;
+		// a chain paired with a chain gives a container one cell wide, where the two indices below
+		// would be the same cell and the last write would decide both states
+		if (last == 0) { continue; }
+
+		storage.insert_one(0);
+		storage.insert_zero(last);
+		ASSERT_TRUE(storage.is_stored(0)) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_TRUE(storage.is_stored(last)) << "shape " << shape[0] << "x" << shape[1];
+
+		// a state write is not an insert, and must not un-store the cell
+		storage.set_state(0, false);
+		storage.set_state(last, true);
+		ASSERT_TRUE(storage.is_stored(0)) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_TRUE(storage.is_stored(last)) << "shape " << shape[0] << "x" << shape[1];
+
+		// and storage says nothing about state
+		ASSERT_FALSE(storage.is_one(0)) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_TRUE(storage.is_one(last)) << "shape " << shape[0] << "x" << shape[1];
+	}
+}
+
+TYPED_TEST(StorageConformance, an_untouched_cell_reads_as_zero_whether_or_not_it_is_stored) {
+	// The one thing the two are *not* required to agree on. Dense holds the whole container space
+	// and calls every cell stored; sparse holds what it was given. Both must still read zero.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	EXPECT_FALSE(storage.is_one(5));
+	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
+	              std::is_same_v<TypeParam, TStorageZDense>) {
+		EXPECT_TRUE(storage.is_stored(5)) << "the dense implementations hold every cell";
+	} else {
+		EXPECT_FALSE(storage.is_stored(5))
+		    << "the sparse implementations hold what they were given";
+	}
+}
+
 TYPED_TEST(StorageConformance, an_insert_outside_the_container_space_throws) {
 	for (const auto &shape : generated_shapes()) {
 		auto storage         = make_storage<TypeParam>(shape);

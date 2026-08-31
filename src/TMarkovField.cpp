@@ -105,25 +105,19 @@ void TMarkovField::_calculate_log_prob_field(
 		const auto &tree   = _trees[dim].get();
 		const auto &clique = tree->get_clique(index_in_leaves_space);
 
-		// translate index in leaves to the index in tree
-		const size_t index_in_tree =
-		    tree->get_node_index_from_leaf_index(index_in_leaves_space[dim]);
-
-		// get leaf index in tree of last dimension
-		const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
+		// A leaf's index in leaf space is its node index (ADR-0004), so no conversion.
+		const size_t leaf_in_tree = index_in_leaves_space[dim];
 
 		// calculate P(parent | node = 0) and P(parent | node = 1)
 		// Note: leaves can never be roots -> they always have a parent (no need to bother with
-		// stationary)
-		if (dim == _trees.size() - 1) { // last dim -> use _clique_last_dim
-			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, tree->get_binned_branch_length(index_in_tree), tree,
-			    leaf_index_in_tree_of_last_dim, _clique_last_dim, sum_log);
-		} else { // use sheet
-			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, tree->get_binned_branch_length(index_in_tree), tree,
-			    leaf_index_in_tree_of_last_dim, _sheets[dim], sum_log);
-		}
+		// stationary). The parent is an internal node, so its state is read from this tree's own
+		// node state. Nothing writes the node state during this sweep, so the read needs no cache
+		// -- which is what collapses the sheet and the clique into one line.
+		const bool parent_state =
+		    clique.state_of(_Y, tree->get_Z(), tree->phylogeny(), tree->parent_of(leaf_in_tree),
+		                    index_in_leaves_space.back());
+		clique.calculate_log_prob_parent_to_node(tree->get_binned_branch_length(leaf_in_tree),
+		                                         parent_state, sum_log);
 	}
 }
 
@@ -340,8 +334,8 @@ void TMarkovField::_simulate_Y() {
 			// Note: leaves can never be roots -> they always have a parent (no need to bother with
 			// stationary)
 			clique.calculate_log_prob_parent_to_node(
-			    index_in_tree, _trees[dim]->get_binned_branch_length(index_in_tree),
-			    _trees[dim].get(), 0, current_state, sum_log);
+			    _trees[dim]->get_binned_branch_length(index_in_tree),
+			    current_state.get(_trees[dim]->parent_of(index_in_tree)), sum_log);
 		}
 		bool y_state = sample(sum_log);
 		if (y_state) { _Y.insert_one(linear_index_in_leaves_space); }

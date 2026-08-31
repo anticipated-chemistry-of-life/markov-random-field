@@ -5,7 +5,6 @@
 #ifndef ACOL_TCLIQUE_H
 #define ACOL_TCLIQUE_H
 
-#include "TCurrentState.h"
 #include "Types.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
@@ -18,6 +17,27 @@
 
 class TPhylogeny;
 class TTree;
+
+/// The states a node-state walk has assigned so far, for the one clique it is walking.
+///
+/// The walk goes in post-order, so a parent is reached after its children and has to see the states
+/// they were just given. The dense storage would show them, because every write lands in place. The
+/// sparse one defers a write to a cell it does not yet hold until after the parallel region, and
+/// would still answer with the old value -- so the two backends would part company inside a single
+/// sweep. Carrying the states here is what keeps them on the same chain.
+///
+/// Seeded from the storages and indexed by node index. This is the whole of what the current-state
+/// class was still needed for, once the field's own sweep stopped needing it: a vector scoped to
+/// the loop that uses it, rather than a class with a fill protocol on both storages.
+class TCliqueWalkStates {
+private:
+	std::vector<uint8_t> _state;
+
+public:
+	explicit TCliqueWalkStates(size_t n_nodes) : _state(n_nodes, 0) {}
+	[[nodiscard]] bool get(size_t node) const { return _state[node] != 0; }
+	void set(size_t node, bool state) { _state[node] = static_cast<uint8_t>(state); }
+};
 
 /** Class representing a clique in our model. A clique is defined as having a set of nodes that are
  * all leaves in all dimensions except one. Each clique has a transition grid, and the start index
@@ -41,24 +61,15 @@ private:
 	static void _calculate_log_prob_root(double stationary_0,
 	                                     std::array<coretools::TSumLogProbability, 2> &sum_log);
 
-	template<typename ContainerStates> // can either be TSheet or TCurrentStates
-	inline bool _getState(const ContainerStates &states, size_t parent_index_in_tree,
-	                      size_t leaf_index_in_tree_of_last_dim) const {
-		if constexpr (std::is_same_v<ContainerStates, TSheet>) { // is a sheet
-			return states.get(parent_index_in_tree, leaf_index_in_tree_of_last_dim);
-		} else { // TCurrentState
-			return states.get(parent_index_in_tree);
-		}
-	}
-
-	void _update_current_state(TInternalStateStorage &Z, TCurrentState &current_state,
-	                           size_t index_in_tree, bool new_state,
-	                           std::vector<size_t> &linear_indices_in_Z_space_to_insert,
-	                           const TTree *tree) const;
+	/// Give `node` its new state: in place where the storage already holds the cell, deferred to
+	/// after the parallel region where it does not, because inserting reallocates a sparse row.
+	void _write_new_state(TInternalStateStorage &Z, TCliqueWalkStates &walk, size_t node,
+	                      bool new_state,
+	                      std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
 	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCurrentState &current_state,
+	    size_t index_in_tree, const TTree *tree, const TCliqueWalkStates &walk,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
 	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
@@ -68,7 +79,7 @@ private:
 	/// @param Z the Z vector of that tree (i.e that clique)
 	/// @param tree the tree of interest
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCurrentState &current_state, TInternalStateStorage &Z,
+	void _set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TInternalStateStorage &Z,
 	                   const TTree *tree,
 	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
@@ -93,18 +104,36 @@ public:
 	/// @param Y The current state of the Y dimension.
 	/// @param Z The current state of the Z dimension.
 	/// @param tree The tree.
-	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density,
-	                             TCurrentState &current_state, TInternalStateStorage &Z,
-	                             const TTree *tree) const;
+	/// Every state this clique starts from, read straight out of the storages. The caller keeps it
+	/// for the whole of the clique's turn, because the parameter and branch-length moves that
+	/// follow the node-state walk have to see the states that walk assigned.
+	[[nodiscard]] TCliqueWalkStates read_states(const TFieldStorage &Y,
+	                                            const TInternalStateStorage &Z,
+	                                            const TPhylogeny &topology) const;
 
-	std::vector<size_t> initialize_Z_from_children(TCurrentState &current_state,
+	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density, TCliqueWalkStates &walk,
+	                             TInternalStateStorage &Z, const TTree *tree) const;
+
+	std::vector<size_t> initialize_Z_from_children(TCliqueWalkStates &walk,
 	                                               TInternalStateStorage &Z,
 	                                               const TTree *tree) const;
 
-	/// A state container sized for `topology` and filled from this clique's start index. The
-	/// topology is all it takes: nothing here needs a parameter or a clique.
-	TCurrentState create_current_state(const TFieldStorage &Y, const TInternalStateStorage &Z,
-	                                   const TPhylogeny &topology);
+	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
+	/// last dimension first and the variable one second is what makes this right for a clique along
+	/// either dimension: when they are the same dimension, the node wins.
+	[[nodiscard]] IndexArray cell_of(size_t node, size_t leaf_index_in_tree_of_last_dim) const {
+		IndexArray cell           = _start_index_in_leaves_space;
+		cell.back()               = leaf_index_in_tree_of_last_dim;
+		cell[_variable_dimension] = node;
+		return cell;
+	}
+
+	/// The state of `node` as the storages hold it. A leaf's state is the field's -- a leaf's index
+	/// in leaf space is its node index (ADR-0004) -- and any other node's is the tree's own node
+	/// state. This is the question the current-state class used to answer from a cache.
+	[[nodiscard]] bool state_of(const TFieldStorage &Y, const TInternalStateStorage &Z,
+	                            const TPhylogeny &topology, size_t node,
+	                            size_t leaf_index_in_tree_of_last_dim) const;
 
 	/// @brief Return the number of nodes in the clique
 	/// @return Return the number of nodes in the clique
@@ -112,16 +141,15 @@ public:
 
 	/// @brief Calculates the log probability of a node to its parent, under this clique's current
 	/// process.
-	template<typename ContainerStates> // ContainerStates can either be TSheet or TCurrentStates
-	void calculate_log_prob_parent_to_node(
-	    size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length, const TTree *tree,
-	    size_t leaf_index_in_tree_of_last_dim, const ContainerStates &states,
-	    std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		const size_t parent_index_in_tree = _get_parent_index(index_in_tree, tree);
-		const auto &process               = transition_grid();
+	/// The parent's state is the caller's to supply, because where it comes from differs: the
+	/// field's sweep reads it from the node state, and the node state's own walk reads it from the
+	/// states that walk has already assigned.
+	void
+	calculate_log_prob_parent_to_node(TypeBinnedBranchLengths binned_branch_length,
+	                                  bool state_of_parent,
+	                                  std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+		const auto &process = transition_grid();
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
-			const bool state_of_parent =
-			    _getState(states, parent_index_in_tree, leaf_index_in_tree_of_last_dim);
 			sum_log[i].add(process.probability(binned_branch_length, state_of_parent, i));
 		}
 	}
@@ -138,7 +166,7 @@ public:
 	/// the same question of the current grid and of its candidate.
 	double calculate_prob_to_parent(size_t index_in_tree, const TTree *tree,
 	                                TypeBinnedBranchLengths binned_branch_length,
-	                                const TCurrentState &current_state,
+	                                const TCliqueWalkStates &current_state,
 	                                const TTransitionGrid &process) const {
 		size_t parent_index = _get_parent_index(index_in_tree, tree);
 

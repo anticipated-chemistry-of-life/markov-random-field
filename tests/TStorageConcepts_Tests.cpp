@@ -20,6 +20,7 @@ namespace {
 /// Everything the shared concept asks for except `remove_zeros`.
 struct AlmostBinaryStorage {
 	[[nodiscard]] bool is_one(size_t) const { return false; }
+	[[nodiscard]] bool is_stored(size_t) const { return false; }
 	void set_state(size_t, bool) {}
 	void insert_one(size_t) {}
 	void insert_zero(size_t) {}

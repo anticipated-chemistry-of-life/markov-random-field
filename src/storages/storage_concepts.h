@@ -41,6 +41,12 @@ concept BinaryFieldStorage =
              std::vector<size_t> &linear_indices) {
 	    // State.
 	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
+	    // Whether the cell is held, as opposed to reading as zero because it is absent. Dense
+	    // always says yes; sparse searches. The sampler asks so it can defer a write that would
+	    // reallocate a sparse row out of the parallel region, which is why a question the two
+	    // deliberately answer differently belongs on the interface rather than in the sampler's
+	    // assumptions. It goes when the sampler stops needing to know (#36).
+	    { const_storage.is_stored(linear_index) } -> std::same_as<bool>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
 	    { storage.insert_zero(linear_index) } -> std::same_as<void>;

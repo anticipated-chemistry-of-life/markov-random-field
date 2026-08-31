@@ -52,9 +52,10 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 	}
 };
 
-double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-                                                        const TClique &clique,
-                                                        const TCurrentState &current_state) const {
+double
+TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
+                                                 const TClique &clique,
+                                                 const TCliqueWalkStates &current_state) const {
 	// translate index in binned branch length vector (of size leaves + internal nodes without
 	// roots) to index in nodes
 	const size_t index_in_tree = _topology().branches()[index_in_binned_branch_length];
@@ -76,7 +77,7 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 	return prob_new / prob_old;
 }
 
-void TTree::_add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
+void TTree::_add_to_LL_branch_lengths(size_t c, const TCliqueWalkStates &current_state,
                                       std::vector<coretools::TSumLogProbability> &log_sum,
                                       const stattools::TPairIndexSampler &pairs) const {
 	const auto &clique = _cliques[c];
