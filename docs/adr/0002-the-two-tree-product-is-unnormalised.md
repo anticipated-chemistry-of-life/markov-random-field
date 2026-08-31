@@ -1,5 +1,7 @@
 # The two-tree product is unnormalised, which biases every parameter toward small nu
 
+_Superseded by [ADR-0005](0005-each-tree-owns-its-leaf-level-field.md), which takes the **second** of the three options listed at the end of this record: the product is replaced by a directed factorisation in which each tree owns its own leaf-level field and the field is a noisy reconciliation of the two. `C` is then identically 1 for every parameter value, so the bias described below is structurally absent rather than corrected. This record is kept because it is the evidence that the work was necessary, and because the diagnosis — two normalised factors that are functions of the same variable — is what tells a future reader which changes would bring the defect back._
+
 The field's joint density is the product of the two trees' likelihoods — `TMarkovField::_calculate_complete_joint_density` sums the two trees' log-densities and nothing else, and `TTree::_update_nu_or_alpha` forms its acceptance ratio from one tree's likelihood alone. Each factor is a properly normalised tree likelihood over its own variables. Their product is not normalised, because both are functions of the same field:
 
 ```

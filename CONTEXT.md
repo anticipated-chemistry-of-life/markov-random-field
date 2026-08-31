@@ -21,7 +21,7 @@ A node with no parent. A tree may have several. A root has no branch, and theref
 _Avoid_: ancestor, origin
 
 **Internal node**:
-A node with at least one child, roots included. Internal nodes are exactly the nodes that carry an internal state, which is why `Z` is indexed in internal-node space.
+A node with at least one child, roots included. The distinction is about tree structure only: every node carries a node state, leaves included.
 _Avoid_: ancestral node, non-leaf
 
 **Branch**:
@@ -31,12 +31,20 @@ _Avoid_: edge, leaves and internal nodes without roots
 ## The latent field
 
 **Field**:
-The latent binary matrix recording, for every (species leaf, molecule leaf) pair, whether that molecule occurs in that species. Written `Y`.
-_Avoid_: presence matrix, occurrence matrix, Y-space
+The latent binary matrix recording, for every (species leaf, molecule leaf) pair, whether that molecule occurs in that species. Written `Y`. It is the *reconciled* field: a noisy AND of the two tree fields, and not a variable the two trees share. See ADR-0005.
+_Avoid_: presence matrix, occurrence matrix, Y-space, shared field (except when naming the model ADR-0005 retired)
 
-**Internal state**:
-The latent binary state of a non-leaf node of one tree, replicated across every clique of that tree. Written `Z`.
-_Avoid_: ancestral state, hidden state
+**Node state**:
+The latent binary state of a node of one tree, replicated across every clique of that tree. Written `Z`. Every node carries one, leaves included: the species tree's node state is `n_nodes(species) x n_leaves(molecules)` and the molecule tree's is `n_leaves(species) x n_nodes(molecules)`.
+_Avoid_: internal state, ancestral state, hidden state
+
+**Tree field**:
+The leaf block of one tree's node state — that tree's own view of the leaf-level field, before the two are reconciled. Written `Z_s` and `Z_m`, the leaf block of the node state written with the same letter. There is one per tree, and together they are what the field reconciles. A tree field and the field are addressed at the same `(row, column)` for a given leaf pair, so the correspondence between them is the identity rather than a conversion. See ADR-0005.
+_Avoid_: per-tree field, own field, leaf state, Z at the leaves
+
+**Error probability**:
+The probability that a tree field cell is corrupted before the two tree fields are reconciled into the field. Written `omega`. One scalar, shared by both trees, constrained to the open interval `(0, 0.5)`. See ADR-0005.
+_Avoid_: noise rate, flip probability, error rate (too easily confused with the simple error model's misreport probability)
 
 **Clique**:
 A set of nodes that vary along exactly one tree's dimension while every other dimension is fixed at a leaf. Cliques belong to a tree: a species-tree clique is identified by a *molecule* leaf, and vice versa.
@@ -55,12 +63,12 @@ One clique's two-state process discretised onto the bin grid: one transition mat
 _Avoid_: transition matrices, lambda matrices, clique process, try matrix
 
 **Neutral dimension**:
-A tree dimension whose parameters are pinned so that every transition matrix row is exactly (0.5, 0.5), making that tree contribute a constant factor to every field conditional. A neutral dimension cannot influence the field.
+A tree dimension whose parameters are pinned so that every transition matrix row is exactly (0.5, 0.5), making that tree's node state an independent coin flip at every node. A neutral dimension carries no phylogenetic signal. It does still *influence* the field under ADR-0005 — its tree field is half ones, so the field's expected density is exactly half the active tree's corrupted rate — where under the old shared-field model its factor cancelled from every field conditional instead.
 _Avoid_: disabled tree, ignored dimension, flat tree
 
 **Field normalising constant**:
-The sum, over every possible field, of the product of the two trees' field likelihoods. Written `C`. It depends on both trees' parameters, and omitting it from an acceptance ratio biases those parameters toward small nu. It is a constant only when one dimension is neutral. See ADR-0002.
-_Avoid_: partition function, Z (that is the internal state), evidence
+Whatever a field distribution would have to be divided by to make it a proper density. Written `C`. Under this model it is identically 1, at every parameter value: the field has exactly one conditional density, `p(Y | Z_s, Z_m, omega)`, and it sums to 1 over fields by construction, so there is nothing left to normalise. The term survives only to name what ADR-0002 diagnosed and ADR-0005 removed — under the old shared-field model `C` was the sum, over every possible field, of the product of the two trees' field likelihoods, and it moved with both trees' parameters, biasing them toward small nu. See ADR-0005.
+_Avoid_: partition function, Z (that is the node state), evidence
 
 ## Branch lengths
 
