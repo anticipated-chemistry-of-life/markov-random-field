@@ -518,6 +518,94 @@ TYPED_TEST(FieldConformance, the_counter_counts_the_iterations_a_cell_was_a_one)
 
 // One shape is enough here where the tests above sweep them all: resetting is a pass over the
 // whole container, and there is no index arithmetic in it for a shape to catch out.
+// -------------------------------------------------------------------------
+// The posterior fraction is a probability
+// -------------------------------------------------------------------------
+
+/// Chain lengths the thinning factor does not divide. Below 32768 the sparse counter needs no
+/// thinning at all and the dense one needs none below 65536, so a shorter chain cannot show this:
+/// numerator and denominator agree by accident there. 32769 therefore exercises only the sparse
+/// field; 65537 and 100003 make both of them thin, which is what the criterion asks for.
+const std::vector<size_t> &chain_lengths_that_thin() {
+	static const std::vector<size_t> lengths = {32769, 65537, 100003};
+	return lengths;
+}
+
+/// A field with one cell held at one for the whole chain, counted over `n_iterations` iterations
+/// starting at `first_iteration`.
+template<typename Field> Field field_held_at_one(size_t n_iterations, size_t first_iteration) {
+	Field field(n_iterations, IndexArray{2, 3});
+	field.insert_one(0);
+	for (size_t k = 0; k < n_iterations; ++k) { field.add_to_counter(first_iteration + k); }
+	return field;
+}
+
+TYPED_TEST(FieldConformance, every_posterior_fraction_is_a_probability) {
+	// The bound, over cells that are one for all, some and none of the chain -- where the test
+	// below takes the one case that pins the denominator exactly. A cell switched off part way
+	// through is what a real chain mostly holds, and it must land strictly inside (0, 1).
+	for (const size_t n_iterations : chain_lengths_that_thin()) {
+		TypeParam field(n_iterations, IndexArray{2, 3});
+		field.insert_one(0);  // one throughout
+		field.insert_one(1);  // one for the first half
+		field.insert_zero(2); // never a one
+
+		for (size_t iteration = 0; iteration < n_iterations; ++iteration) {
+			if (iteration == n_iterations / 2) { field.set_state(1, false); }
+			field.add_to_counter(iteration);
+		}
+
+		for (size_t cell = 0; cell < 3; ++cell) {
+			const double fraction = field.get_fraction_of_ones(cell);
+			EXPECT_GE(fraction, 0.0) << "cell " << cell << ", n_iterations = " << n_iterations;
+			EXPECT_LE(fraction, 1.0) << "cell " << cell << ", n_iterations = " << n_iterations;
+		}
+		EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(2), 0.0) << "n_iterations = " << n_iterations;
+		EXPECT_GT(field.get_fraction_of_ones(1), 0.0) << "n_iterations = " << n_iterations;
+		EXPECT_LT(field.get_fraction_of_ones(1), 1.0) << "n_iterations = " << n_iterations;
+	}
+}
+
+TYPED_TEST(FieldConformance, a_cell_that_is_always_one_has_a_posterior_fraction_of_exactly_one) {
+	for (const size_t n_iterations : chain_lengths_that_thin()) {
+		const auto field = field_held_at_one<TypeParam>(n_iterations, 0);
+		EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 1.0) << "n_iterations = " << n_iterations;
+	}
+}
+
+TYPED_TEST(FieldConformance, the_posterior_fraction_does_not_depend_on_where_the_chain_started) {
+	// Production never counts from zero. TDataModel hands TMarkovField an index that keeps
+	// climbing through burn-in, and burninHasFinished resets the per-cell counters without
+	// resetting that index, so the main chain's first counted iteration is wherever burn-in left
+	// off. A denominator computed from the chain length alone is only right when that offset
+	// happens to line up with the thinning factor.
+	for (const size_t first_iteration : {0u, 1u, 2u, 7u, 1000u}) {
+		const auto field = field_held_at_one<TypeParam>(65537, first_iteration);
+		EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 1.0)
+		    << "first counted iteration = " << first_iteration;
+	}
+}
+
+TYPED_TEST(FieldConformance, reset_counts_restarts_the_denominator_with_the_counters) {
+	// burninHasFinished throws the burn-in's counts away, so the fraction afterwards has to be
+	// over the main chain alone -- denominator included.
+	constexpr size_t n_burnin     = 500;
+	constexpr size_t n_iterations = 65537;
+	TypeParam field(n_iterations, IndexArray{2, 3});
+	field.insert_one(0);
+	for (size_t k = 0; k < n_burnin; ++k) { field.add_to_counter(k); }
+	field.reset_counts();
+	for (size_t k = 0; k < n_iterations; ++k) { field.add_to_counter(n_burnin + k); }
+
+	EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 1.0);
+}
+
+TYPED_TEST(FieldConformance, a_field_that_has_counted_nothing_reports_no_posterior) {
+	TypeParam field(1000, IndexArray{2, 3});
+	field.insert_one(0);
+	EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 0.0);
+}
+
 TYPED_TEST(FieldConformance, reset_counts_clears_every_counter_and_keeps_every_state) {
 	std::mt19937_64 rng(20260828);
 	auto field           = make_storage<TypeParam>(IndexArray{4, 5});
@@ -616,7 +704,6 @@ TEST(StorageEquivalence, the_backends_agree_on_the_counter_and_the_fraction_of_o
 		// chosen for; the test below is the one that says what happens when they do.
 		ASSERT_EQ(sparse.get_thinning_factor(), 1u);
 		ASSERT_EQ(dense.get_thinning_factor(), 1u);
-		ASSERT_EQ(sparse.get_total_counts(), dense.get_total_counts());
 
 		TExpectedCells sparse_expected(n_cells);
 		TExpectedCells dense_expected(n_cells);

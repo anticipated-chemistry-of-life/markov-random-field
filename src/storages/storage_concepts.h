@@ -68,9 +68,17 @@ concept BinaryFieldStorage =
 ///
 /// The counter is thinned rather than incremented every iteration, because an implementation may
 /// hold it in fewer bits than there are iterations. `add_to_counter` is therefore called with the
-/// iteration and decides for itself whether this one counts; `get_thinning_factor` and
-/// `get_total_counts` expose the arithmetic that decision is made from, and are what turns a raw
-/// count back into a fraction.
+/// iteration and decides for itself whether this one counts.
+///
+/// `get_total_counts` reports how many iterations it has actually counted -- a running total, and
+/// deliberately not the arithmetic it looks like. `n_iterations / thinning factor` is wrong twice
+/// over: it floors where `add_to_counter` rounds up, which is how a cell that was a one throughout
+/// came to report a fraction just above 1; and it assumes the counted iterations start at zero,
+/// which they never do, since the caller's index climbs through burn-in and `reset_counts` clears
+/// the counters without clearing it. How many multiples of the thinning factor fall in a chain of
+/// a given length depends on where that chain started, which is not knowable when the field is
+/// sized. Counting removes both questions: the denominator is the numerator's ceiling by
+/// construction, so the fraction stays a probability.
 template<typename T>
 concept FieldStorage = BinaryFieldStorage<T> && requires(T &field, const T &const_field,
                                                          size_t iteration, size_t linear_index) {

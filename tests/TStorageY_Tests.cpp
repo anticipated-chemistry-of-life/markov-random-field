@@ -272,8 +272,10 @@ TEST(YStorageMatrix_Tests, get_fraction_of_ones) {
 	TStorageYMatrix Y(1000, {1, 5});
 	Y.insert_one(3);
 	for (size_t it = 0; it < 4; ++it) { Y.add_to_counter(0); } // counter -> 4
-	// total_counts == n_iterations / thinning_factor == 1000
-	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 4.0 / static_cast<double>(Y.get_total_counts()));
+	// Four iterations were counted, so four out of four is the whole of them. Spelled as a literal
+	// rather than over get_total_counts(), which would divide the count by itself.
+	EXPECT_EQ(Y.get_total_counts(), 4u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 1.0);
 	// a cell that was never stored has fraction 0
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 0.0);
 }

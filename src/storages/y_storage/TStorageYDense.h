@@ -30,6 +30,9 @@ private:
 	TDenseStateArray _states;
 	std::vector<uint16_t> _counts;
 	size_t _thinning_factor = 1;
+	/// The number of iterations actually counted, and so the largest a cell's counter can be.
+	/// Counted rather than derived from the chain length -- see FieldStorage in
+	/// storages/storage_concepts.h for why that arithmetic cannot be done up front.
 	size_t _total_counts    = 0;
 
 public:
@@ -55,7 +58,7 @@ public:
 		_thinning_factor =
 		    std::max<size_t>(1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
 		                                                      static_cast<double>(MAX_COUNTER))));
-		_total_counts = n_iterations / _thinning_factor;
+		_total_counts = 0;
 		_states.initialize_dimensions(dimensions);
 		_counts.assign(_states.total_size_of_container_space(), 0);
 	}
@@ -134,12 +137,20 @@ public:
 			}
 			++_counts[i];
 		}
+		// after the loop, so a counter that overflows does not leave the denominator counting an
+		// iteration the cells never got
+		++_total_counts;
 	}
 
-	void reset_counts() { std::fill(_counts.begin(), _counts.end(), 0); }
+	void reset_counts() {
+		std::fill(_counts.begin(), _counts.end(), 0);
+		_total_counts = 0;
+	}
 
 	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _counts.size());
+		// Nothing counted yet: no posterior to report, and nothing to divide by.
+		if (_total_counts == 0) { return 0.0; }
 		return static_cast<double>(_counts[linear_index]) / static_cast<double>(_total_counts);
 	}
 

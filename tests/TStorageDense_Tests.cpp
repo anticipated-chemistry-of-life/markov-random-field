@@ -185,9 +185,21 @@ TEST(YStorageDense_Tests, thinning_factor_uses_the_full_16_bit_counter) {
 	const TStorageYMatrix sparse(n_iterations, IndexArray{1, 4});
 
 	EXPECT_EQ(dense.get_thinning_factor(), 1u);
-	EXPECT_EQ(dense.get_total_counts(), 65534u);
 	EXPECT_EQ(sparse.get_thinning_factor(), 2u);
-	EXPECT_EQ(sparse.get_total_counts(), 32767u);
+
+	// The counts are what a chain produced, not what its length predicts, so before one runs there
+	// is nothing to report. Running it is what the two thinning factors then differ over.
+	EXPECT_EQ(dense.get_total_counts(), 0u);
+	EXPECT_EQ(sparse.get_total_counts(), 0u);
+
+	TStorageYDense dense_run(n_iterations, {1, 4});
+	TStorageYMatrix sparse_run(n_iterations, IndexArray{1, 4});
+	for (size_t iteration = 0; iteration < n_iterations; ++iteration) {
+		dense_run.add_to_counter(iteration);
+		sparse_run.add_to_counter(iteration);
+	}
+	EXPECT_EQ(dense_run.get_total_counts(), 65534u);  // every iteration
+	EXPECT_EQ(sparse_run.get_total_counts(), 32767u); // one in two
 }
 
 TEST(YStorageDense_Tests, counter_accumulates_for_ones_only) {
@@ -212,11 +224,13 @@ TEST(YStorageDense_Tests, counter_accumulates_once_per_thinning_factor) {
 	// 196605 == 3 * 65535, so one iteration in three is counted.
 	TStorageYDense Y(196605, {1, 2});
 	ASSERT_EQ(Y.get_thinning_factor(), 3u);
-	ASSERT_EQ(Y.get_total_counts(), 65535u);
 	Y.insert_one(0);
 
 	for (size_t iteration = 0; iteration < 9; ++iteration) { Y.add_to_counter(iteration); }
 	EXPECT_EQ(Y.get_counter(0), 3); // iterations 0, 3 and 6
+	// the denominator counted the same three, which is what keeps the fraction a probability
+	EXPECT_EQ(Y.get_total_counts(), 3u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 1.0);
 }
 
 TEST(YStorageDense_Tests, counter_past_the_16_bit_maximum_throws) {
@@ -283,7 +297,10 @@ TEST(YStorageDense_Tests, get_fraction_of_ones) {
 	Y.insert_one(3);
 	for (size_t iteration = 0; iteration < 4; ++iteration) { Y.add_to_counter(iteration); }
 
-	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 4.0 / static_cast<double>(Y.get_total_counts()));
+	// as in TStorageY_Tests: four of the four counted iterations, spelled without dividing the
+	// count by itself
+	EXPECT_EQ(Y.get_total_counts(), 4u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 1.0);
 	// a cell that was never a one has fraction 0
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 0.0);
 }

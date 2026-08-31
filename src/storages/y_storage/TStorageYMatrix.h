@@ -19,7 +19,10 @@
 class TStorageYMatrix {
 private:
 	size_t _thinning_factor;
-	size_t _total_counts;
+	/// The number of iterations actually counted, and so the largest a cell's counter can be.
+	/// Counted rather than derived from the chain length -- see FieldStorage in
+	/// storages/storage_concepts.h for why that arithmetic cannot be done up front.
+	size_t _total_counts = 0;
 	coretools::TSparseMatrix<TStorageY> _mat;
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
@@ -55,7 +58,7 @@ public:
 		constexpr int16_t max_value = std::numeric_limits<int16_t>::max();
 		_thinning_factor =
 		    std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
-		_total_counts       = n_iterations / _thinning_factor;
+		_total_counts       = 0;
 		_dimensions_Y_space = dimensions_Y_space;
 		_mat.resize(dimensions_Y_space[0], dimensions_Y_space[1]);
 	}
@@ -115,6 +118,7 @@ public:
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor == 0) {
 			_mat.updateValues([](TStorageY &elem) { elem.update_counter(); });
+			++_total_counts;
 		}
 	}
 
@@ -123,6 +127,8 @@ public:
 		// A missing cell returns a default-constructed TStorageY (counter == 0),
 		// so the result is 0.0 for absent entries without an explicit empty check.
 		const auto storage        = _mat.get(multidim_index[0], multidim_index[1]);
+		// Nothing counted yet: no posterior to report, and nothing to divide by.
+		if (_total_counts == 0) { return 0.0; }
 		return static_cast<double>(storage.get_counter()) / static_cast<double>(_total_counts);
 	}
 
@@ -139,6 +145,7 @@ public:
 
 	void reset_counts() {
 		_mat.updateValues([](TStorageY &val) { val.reset_counter(); });
+		_total_counts = 0;
 	}
 
 	/// Remove all the elements that have the state to zero.
@@ -160,8 +167,8 @@ public:
 	}
 
 	/// Given a linear index, we want to get the multi-dimensional index (in Y / leaves space).
-	/// Returns a std::vector for callers that need it (get_clique, the reporting model, ...); the hot internal
-	/// paths use the allocation-free _row_col instead.
+	/// Returns a std::vector for callers that need it (get_clique, the reporting model, ...); the
+	/// hot internal paths use the allocation-free _row_col instead.
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Y_space) const {
 		return _row_col(linear_index_in_Y_space);
 	}
