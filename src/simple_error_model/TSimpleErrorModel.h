@@ -3,7 +3,7 @@
 //
 // D is a binary matrix with exactly the same dimensions as the latent field Y: each cell of D is a
 // direct observation of the corresponding cell of Y, correct with probability 1 - epsilon and
-// inverted with probability epsilon. Unlike LOTUS, D is never collapsed and carries no notion of
+// inverted with probability epsilon. Unlike LOTUS, D carries no notion of
 // research effort -- it is deliberately the simplest possible data source, so that switching every
 // other source off isolates whether a convergence problem lives in a data likelihood or in the
 // Markov field itself.

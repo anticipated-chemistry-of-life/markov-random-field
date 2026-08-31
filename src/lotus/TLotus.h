@@ -1,8 +1,8 @@
 //
 // The LOTUS data source.
 //
-// L is a sparse binary matrix of reported occurrences. Unlike the other data sources it may live in
-// fewer dimensions than Y (the remaining ones are collapsed away by TCollapser), and the
+// L is a sparse binary matrix of reported occurrences, indexed on every tree and therefore the
+// same shape as the field. What distinguishes it from the other data sources is that the
 // probability of reporting a present metabolite is not a flat error rate but a per-cell research
 // effort derived from paper counts and the inferred rate gamma.
 //
@@ -16,7 +16,6 @@
 
 #ifdef USE_LOTUS
 
-#include "TCollapser.h"
 #include "TCurrentState.h"
 #include "cli.h"
 #include "constants.h"
@@ -45,7 +44,7 @@ private:
 	// data
 	TFieldStorage _L;
 
-	/// Raw publication counts per (kept dimension, leaf). Constant data; the log transform and the
+	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
 	std::vector<std::vector<size_t>> _paper_counts;
 
@@ -53,9 +52,6 @@ private:
 	/// value whenever either parameter moves, so there is nothing to refresh in place and nothing
 	/// to revert.
 	std::optional<lotus_math::TReportingModel> _reporting_model;
-
-	// how to collapse
-	TCollapser _collapser;
 
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
@@ -69,15 +65,17 @@ private:
 	TCurrentState _tmp_state_along_last_dim;
 
 	// private functions
-	/// Gather the raw paper counts of every kept dimension. Both the inference path and the
-	/// simulation path need this, and neither can do it before the collapser is initialized.
+	/// The number of leaves of each tree, which is the shape of L: records are indexed on every
+	/// tree, so L has the same dimensions as the field.
+	[[nodiscard]] std::vector<size_t> _leaf_counts() const;
+	/// Gather the raw paper counts of every tree. Both the inference path and the simulation path
+	/// need this.
 	void _gather_paper_counts();
 	/// Build a reporting model from the current gamma and error rate.
 	[[nodiscard]] lotus_math::TReportingModel _build_reporting_model() const;
 	[[nodiscard]] const lotus_math::TReportingModel &_reporting() const {
 		return _reporting_model.value();
 	}
-	[[nodiscard]] double _calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage &Y) const;
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
@@ -99,7 +97,7 @@ public:
 	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
 	                                   size_t K);
 	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
-	                           bool old_state, std::array<double, 2> &prob) const;
+	                           std::array<double, 2> &prob) const;
 	/// The Y sweep accumulates the new likelihood as it goes and installs it here at the end.
 	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }
 
@@ -113,19 +111,20 @@ public:
 
 	// --- simulation ---
 
-	/// Sizes L and the parameter storages for simulation, and sets gamma / epsilon to the values
-	/// the data should be simulated under. Must run before simulate_L_from_Y.
-	void prepare_for_simulation(TDataModel *box);
+	/// Sizes L and sets gamma / epsilon to the values the data should be simulated under. The
+	/// parameter storages are sized in initialize(), on both paths. Must run before
+	/// simulate_L_from_Y.
+	void prepare_for_simulation();
 	/// Draws every cell of L given the simulated Y.
 	void simulate_L_from_Y(const TFieldStorage &Y);
-	/// Writes the simulated L as <prefix>_simulated_lotus.tsv: a header naming the kept trees, then
+	/// Writes the simulated L as <prefix>_simulated_lotus.tsv: a header naming every tree, then
 	/// one row of leaf node ids per cell whose state is 1.
 	void write_simulated_L(const std::string &prefix) const;
 
 	// --- accessors ---
 
 	[[nodiscard]] const TFieldStorage &get_L() const { return _L; }
-	[[nodiscard]] std::vector<std::string> kept_tree_names() const;
+	[[nodiscard]] std::vector<std::string> tree_names() const;
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;
 

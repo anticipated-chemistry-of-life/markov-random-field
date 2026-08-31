@@ -2,8 +2,8 @@
 //
 // The first four mirror the research-effort checks in model_validation/tests/test_independent.py,
 // which until now could only be asked of the Python reference. The rest cover ground the reference
-// cannot reach at all: it simulates with a single scalar gamma, while the C++ infers one per kept
-// dimension.
+// cannot reach at all: it simulates with a single scalar gamma, while the C++ infers one per
+// tree.
 
 #include "lotus/TLotusMath.h"
 #include "gtest/gtest.h"
@@ -84,7 +84,7 @@ TEST(LotusMath, effort_saturates_as_gamma_grows) {
 }
 
 // --------------------------------------------------------------------------
-// One gamma per kept dimension
+// One gamma per tree
 // --------------------------------------------------------------------------
 
 TEST(LotusMath, each_dimension_uses_its_own_gamma) {

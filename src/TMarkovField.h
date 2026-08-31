@@ -32,10 +32,8 @@ class TDataModel; // forward declaration
 /// Per-cell outcome of one Y update. Each data source keeps its own likelihood bookkeeping (they
 /// are independent terms), so the results are handed back separately instead of merged.
 struct TYUpdateResult {
-	int diff_counter_1_in_last_dim = 0;
 #ifdef USE_LOTUS
-	/// P(L_cell | x = new_state). Neutral value 1.0 (log 0), used when collapsing makes the LOTUS
-	/// term identical for both Y states and calculate_LL_update_Y leaves it untouched.
+	/// P(L_cell | x = new_state). Neutral value 1.0 (log 0).
 	double prob_lotus_new_state = 1.0;
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
@@ -131,10 +129,8 @@ private:
 	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix,
 	                                         const IndexArray &start_index_in_leaves_space,
 	                                         const IndexArray &previous_ix) const;
-	int _set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
-	               std::vector<size_t> &linear_indices_in_Y_space_to_insert);
-	void _update_counter_1_cliques(bool new_state, bool old_state,
-	                               const IndexArray &index_in_leaves_space);
+	void _set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
+	                std::vector<size_t> &linear_indices_in_Y_space_to_insert);
 
 	void _simulate_Y();
 	// These forward into the data sources. They are declared here and defined in TMarkovField.cpp
@@ -143,8 +139,7 @@ private:
 	// would be checked right here against an incomplete type.
 #ifdef USE_LOTUS
 	void _calc_lotus_LL(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
-	                    size_t leaf_index_last_dim, std::array<double, 2> &prob,
-	                    const TDataModel &data_model);
+	                    std::array<double, 2> &prob, const TDataModel &data_model);
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
 	static void _calc_simple_error_model_LL(size_t index_for_tmp_state, std::array<double, 2> &prob,
@@ -179,17 +174,14 @@ private:
 		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
 
 		// Declared outside the IsSimulation branch so the simulation instantiation does not warn
-		// about an unused variable. 1.0 is the neutral value: calculate_LL_update_Y leaves prob
-		// untouched when collapsing makes the LOTUS term identical for both states, and adding
-		// log(1) = 0 is exactly the no-op that case needs.
+		// about an unused variable. 1.0 is the neutral value, adding log(1) = 0.
 #ifdef USE_LOTUS
 		std::array<double, 2> prob_lotus{1.0, 1.0};
 #endif
 		if constexpr (!IsSimulation) {
 			// calculate log likelihood (lotus)
 #ifdef USE_LOTUS
-			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus,
-			               data_model);
+			_calc_lotus_LL(index_copy, index_for_tmp_state, prob_lotus, data_model);
 			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
 #endif
 			// calculate log likelihood (simple error model)
@@ -207,8 +199,7 @@ private:
 
 		// update Y accordingly
 		TYUpdateResult result;
-		result.diff_counter_1_in_last_dim =
-		    _set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
+		_set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
 #ifdef USE_LOTUS
 		result.prob_lotus_new_state = prob_lotus[new_state];
 #endif
@@ -262,15 +253,11 @@ private:
 		// fork/join every inner iteration). The k/i loops are now executed redundantly by all
 		// threads (SPMD) and the work is shared via `omp for`/`omp single`, turning the per-inner
 		// fork/joins into cheap barriers on a warm team.
-		// previous_ix and diff_counter_1_in_last_dim are shared across the team: previous_ix is
-		// read by all threads in _need_to_update_sheet and written in the post `single`; the
-		// reduction combines into diff_counter_1_in_last_dim (reset to 0 in the prep `single` each
-		// iteration).
+		// previous_ix is shared across the team: every thread reads it in
+		// _need_to_update_sheet and the post `single` writes it.
 		IndexArray previous_ix;
-		int diff_counter_1_in_last_dim = 0;
 #pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
-    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,      \
-               data_model)
+    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, data_model)
 		{
 			for (size_t k = 0; k < _num_outer_loops; ++k) {
 				const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
@@ -297,20 +284,18 @@ private:
 						// fill clique along last dimension
 						_fill_clique_along_last_dim(start_index_in_leaves_space);
 						_prepare_data_LL(start_index_in_leaves_space, K_cur_sheet, data_model);
-						diff_counter_1_in_last_dim = 0; // reset before the reduction below
 					}
 
 					// now loop along all leaves of the last dimension for updating (only K leaves
 					// for which we have everything)
 					const size_t end_ix_in_leaves_last_dim =
 					    start_ix_in_leaves_last_dim + K_cur_sheet;
-#pragma omp for schedule(static) reduction(+ : diff_counter_1_in_last_dim)
+#pragma omp for schedule(static)
 					for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim;
 					     ++j) {
 						const auto result = _update_Y<IsSimulation, initYFromData>(
 						    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
 						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], data_model);
-						diff_counter_1_in_last_dim += result.diff_counter_1_in_last_dim;
 						if constexpr (!IsSimulation) {
 							acc.add(static_cast<size_t>(omp_get_thread_num()), result);
 						}
@@ -320,12 +305,7 @@ private:
 					// Note: indices of where Y is one in _sheets is not accurate anymore, but we
 					// don't use them, so it's ok
 #pragma omp single
-					{
-						_trees.back()
-						    ->get_clique(start_index_in_leaves_space)
-						    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
-						previous_ix = start_index_in_leaves_space;
-					}
+					{ previous_ix = start_index_in_leaves_space; }
 				}
 			}
 		}

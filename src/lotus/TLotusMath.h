@@ -5,9 +5,9 @@
 // flat error rate: a present pair is reported only if anyone looked, and how hard anyone looked is
 // the research effort spent on that pair (CONTEXT.md, "Research effort", "LOTUS record").
 //
-// Research effort is a product over the kept dimensions of `1 - exp(-gamma_i * log(count_i + 1))`,
+// Research effort is a product over the trees of `1 - exp(-gamma_i * log(count_i + 1))`,
 // where `count_i` is the paper count of the leaf that cell occupies in dimension `i` and `gamma_i`
-// is that dimension's detection rate. Note there is one gamma *per kept dimension*, not one
+// is that dimension's detection rate. Note there is one gamma *per tree*, not one
 // overall. Given the latent state `x` of the cell, the emission is then
 //
 //     P(L = 1 | x = 1) = research effort          P(L = 1 | x = 0) = error rate
@@ -58,7 +58,7 @@ private:
 	double _error_rate = 0.0;
 
 public:
-	/// @param gammas       One detection rate per kept dimension.
+	/// @param gammas       One detection rate per tree.
 	/// @param error_rate   The rate at which an absent pair is reported anyway.
 	/// @param paper_counts Raw publication counts, `paper_counts[dimension][leaf]`.
 	TReportingModel(const std::vector<double> &gammas, double error_rate,
@@ -83,8 +83,8 @@ public:
 	[[nodiscard]] size_t n_dimensions() const { return _factor.size(); }
 	[[nodiscard]] double error_rate() const { return _error_rate; }
 
-	/// The probability that a *present* pair at `cell` is reported. `cell` is indexed in collapsed
-	/// space: one leaf index per kept dimension.
+	/// The probability that a *present* pair at `cell` is reported. `cell` is indexed in leaf
+	/// space: one leaf index per tree.
 	[[nodiscard]] double research_effort(const IndexArray &cell) const {
 		double product = 1.0;
 		for (size_t dimension = 0; dimension < _factor.size(); ++dimension) {

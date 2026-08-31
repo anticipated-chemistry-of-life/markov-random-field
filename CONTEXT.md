@@ -95,7 +95,7 @@ An observed (species, molecule) occurrence reported in the literature. Written `
 _Avoid_: citation, literature record, observation
 
 **Research effort**:
-How thoroughly a (species, molecule) pair has been looked for. Determines whether a missing LOTUS record means "absent" or "unstudied". One factor per kept dimension, multiplied together: `1 - exp(-gamma_i · log(count_i + 1))`, where `count_i` is the paper count of the leaf the pair occupies in dimension `i`. Note there is **one gamma per kept dimension**, not one overall — the independent reference simulates with a single scalar for both trees, which is a special case, not the model.
+How thoroughly a (species, molecule) pair has been looked for. Determines whether a missing LOTUS record means "absent" or "unstudied". One factor per tree, multiplied together: `1 - exp(-gamma_i · log(count_i + 1))`, where `count_i` is the paper count of the leaf the pair occupies in dimension `i`. Note there is **one gamma per tree**, not one overall — the independent reference simulates with a single scalar for both trees, which is a special case, not the model.
 _Avoid_: coverage, sampling effort, detection probability
 
 **Paper count**:

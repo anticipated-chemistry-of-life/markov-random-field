@@ -68,7 +68,7 @@ is the multi-batch commit of the sweep's deferred inserts, which one thread neve
 The first thing this gate found, on its first CI run, was a real defect -- worth recording, because
 it is the shape of the problem it exists to catch.
 
-`TLotus::_calculate_log_likelihood_of_L_no_collapsing` splits its sum in two: the cells a cursor
+`TLotus::calculate_log_likelihood_of_L` splits its sum in two: the cells a cursor
 yields, term by term through an accumulator, and every other cell folded into one closed-form
 product. The cursor used to yield the cells the field *stored* -- which is a property of the
 backend, not of the field: the sparse matrix holds the cells it was given, ones and zeros alike,

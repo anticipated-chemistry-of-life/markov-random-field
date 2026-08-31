@@ -150,15 +150,6 @@ void TClique::_calculate_log_prob_node_to_children(
 	}
 }
 
-void TClique::update_counter_leaves_state_1(bool new_state, bool old_state) {
-	const int diff = (int)new_state - (int)old_state;
-	update_counter_leaves_state_1(diff);
-}
-void TClique::update_counter_leaves_state_1(int difference) {
-	assert((int)_counter_leaves_state_1 + difference >= 0);
-	_counter_leaves_state_1 += difference;
-}
-
 bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
 	return coretools::TAcceptOddsRatio::accept(log_Q);

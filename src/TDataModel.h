@@ -4,7 +4,7 @@
 // TDataModel owns the Markov random field (the latent Y and the per-tree Z) and every source of
 // information that is compiled in. Each source is an independent likelihood term over the same Y:
 //
-//   USE_LOTUS              TLotus            reported occurrences, collapsible, research effort
+//   USE_LOTUS              TLotus            reported occurrences, research effort
 //   USE_SIMPLE_ERROR_MODEL TSimpleErrorModel a flat-error-rate noisy copy of Y
 //   USE_MS_DATA            TMSMSData         mass spectrometry (still dormant)
 //

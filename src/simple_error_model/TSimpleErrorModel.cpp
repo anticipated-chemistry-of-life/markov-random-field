@@ -34,15 +34,7 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 	                                            filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 
-	// Unlike LOTUS, D is never collapsed: it must name every tree, in tree order. The order is
-	// checked by validate_header_against_trees, so pinning the count is enough to make column i
-	// correspond to tree i.
-	if (file.header().size() != _trees.size()) {
-		throw coretools::TUserError("File '", filename, "' has ", file.header().size(),
-		                            " columns but there are ", _trees.size(),
-		                            " trees. The simple error model data is never collapsed, so it "
-		                            "must have exactly one column per tree.");
-	}
+	// D names every tree, in tree order, so column i is tree i.
 	sparse_data_file::validate_header_against_trees(file, _trees, filename);
 
 	IndexArray index_in_D_space{};
@@ -65,8 +57,7 @@ void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
 
 void TSimpleErrorModel::fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space,
                                                       size_t K) {
-	// D has the same dimensions as Y, so the index needs no translation (in contrast to LOTUS,
-	// where the collapser maps Y space to L space first).
+	// D has the same dimensions as Y, so the index needs no translation.
 	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, K, _D);
 }
 

@@ -37,9 +37,6 @@ private:
 	size_t _n_nodes;
 	size_t _increment;
 
-	// count the number of leaves with value 1 in a clique
-	TypeCounter1 _counter_leaves_state_1 = 0;
-
 	/// @brief Calculates the log probability of the root given the stationary distribution
 	static void _calculate_log_prob_root(double stationary_0,
 	                                     std::array<coretools::TSumLogProbability, 2> &sum_log);
@@ -128,11 +125,6 @@ public:
 			sum_log[i].add(process.probability(binned_branch_length, state_of_parent, i));
 		}
 	}
-
-	/// Updates the counter of the clique. This is used by the collapser.
-	void update_counter_leaves_state_1(bool new_state, bool old_state);
-	void update_counter_leaves_state_1(int difference);
-	[[nodiscard]] size_t get_counter_leaves_state_1() const { return _counter_leaves_state_1; }
 
 	/// @return Returns the jump size of the clique
 	[[nodiscard]] size_t get_increment() const { return _increment; }

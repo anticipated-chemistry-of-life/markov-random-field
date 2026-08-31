@@ -144,8 +144,8 @@ void TDataModel::updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*
 void TDataModel::_simulateUnderPrior(Storage *) {
 #ifdef USE_LOTUS
 	// Sizes L and sets gamma / epsilon to the values L should be simulated under. Must happen
-	// before the field is simulated, because the collapser it initializes decides L's shape.
-	_lotus.prepare_for_simulation(this);
+	// before the field is simulated, because it sizes L.
+	_lotus.prepare_for_simulation();
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
 	_epsilon_simple_model->set(TypeEpsilonSimpleModel(ProgramOptions::EPSILON_SIMPLE_MODEL));
@@ -169,7 +169,7 @@ void TDataModel::_simulateUnderPrior(Storage *) {
 TDataModel::TNotifierStats TDataModel::_collect_notifier_stats() const {
 	TNotifierStats stats;
 #ifdef USE_LOTUS
-	stats.dim_names   = _lotus.kept_tree_names();
+	stats.dim_names   = _lotus.tree_names();
 	stats.gamma_stats = _lotus.gamma_stats();
 	stats.scalar_stats.push_back({"epsilon", _lotus.error_rate_stats()});
 #endif

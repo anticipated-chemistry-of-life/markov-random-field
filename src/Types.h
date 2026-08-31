@@ -167,7 +167,4 @@ constexpr static size_t NumDimMSData = 1;
 using StorageMSData = coretools::TMultiDimensionalStorage<TypeMSData, NumDimMSData>;
 using SpecMSData    = stattools::TObservation<TypeMSData, NumDimMSData, TMSMSData>;
 
-// Type for calculating the number of 1's per clique
-using TypeCounter1 = uint32_t;
-
 #endif // ACOL_TYPES_H

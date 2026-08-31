@@ -3,8 +3,8 @@
 //
 // The simple error model treats the observed matrix D as a direct, noisy observation of the latent
 // field Y: every cell is reported correctly with probability 1 - epsilon and inverted with
-// probability epsilon. D therefore has exactly the same dimensions as Y and is never collapsed,
-// which makes it a deliberately uninformative-about-structure data source -- useful for isolating
+// probability epsilon. D therefore has exactly the same dimensions as Y, which makes it a
+// deliberately uninformative-about-structure data source -- useful for isolating
 // whether a convergence problem lives in a data likelihood or in the Markov field itself.
 //
 // Because every cell contributes either log(1 - epsilon) or log(epsilon), the total log-likelihood
@@ -73,7 +73,7 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 ///
 /// A cell that is zero in both always agrees and need not be visited, so the two fields are
 /// merge-joined over their ones in ascending linear-index order (the same technique as
-/// TLotus::_calculate_log_likelihood_of_L_no_collapsing), which costs O(ones(Y) + ones(D)) rather
+/// TLotus::calculate_log_likelihood_of_L), which costs O(ones(Y) + ones(D)) rather
 /// than O(total cells).
 [[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y, const TFieldStorage &D) {
 	if (Y.dimensions() != D.dimensions()) {

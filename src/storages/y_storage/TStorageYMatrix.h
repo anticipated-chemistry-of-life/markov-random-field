@@ -160,7 +160,7 @@ public:
 	}
 
 	/// Given a linear index, we want to get the multi-dimensional index (in Y / leaves space).
-	/// Returns a std::vector for callers that need it (get_clique, x_is_one, ...); the hot internal
+	/// Returns a std::vector for callers that need it (get_clique, the reporting model, ...); the hot internal
 	/// paths use the allocation-free _row_col instead.
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Y_space) const {
 		return _row_col(linear_index_in_Y_space);

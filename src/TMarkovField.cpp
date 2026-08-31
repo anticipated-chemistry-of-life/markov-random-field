@@ -128,18 +128,6 @@ void TMarkovField::_calculate_log_prob_field(
 	}
 }
 
-void TMarkovField::_update_counter_1_cliques(bool new_state, bool old_state,
-                                             const IndexArray &index_in_leaves_space) {
-	// update counter of leaves with value 1 for all dimensions except the last one
-	// reason: we parallelize over the last dimension -> can not update the counter there, as this
-	// would result in race condition
-	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
-		_trees[dim]
-		    ->get_clique(index_in_leaves_space)
-		    .update_counter_leaves_state_1(new_state, old_state);
-	}
-}
-
 void TDataSweepAccumulator::commit(TDataModel &data_model) {
 #ifdef USE_LOTUS
 	double sum_new_LL = 0.0;
@@ -157,8 +145,8 @@ void TDataSweepAccumulator::commit(TDataModel &data_model) {
 #endif
 }
 
-int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
-                             std::vector<size_t> &linear_indices_in_Y_space_to_insert) {
+void TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
+                              std::vector<size_t> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
 	// get current state, exists and the linear index in Y space of this cell.
@@ -181,10 +169,6 @@ int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_s
 		}
 	}
 
-	// update values of 1-valued leaves in clique
-	_update_counter_1_cliques(new_state, cur_state, index_in_leaves_space);
-	int diff_counter_1_in_last_dim = (int)new_state - (int)cur_state;
-
 	// update value in _sheets
 	for (size_t dim = 0; dim < _trees.size() - 1; ++dim) {
 		// translate leaf index to node index
@@ -193,8 +177,6 @@ int TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_s
 		_sheets[dim].set(node_index_in_tree_of_dim, leaf_index_in_tree_of_last_dim, new_state);
 	}
 	// Note: no need to update in _clique_last_dim, as this will anyway be overwritten for next Y
-
-	return diff_counter_1_in_last_dim;
 }
 
 void TMarkovField::_read_Y_from_file(const std::string &filename) {
@@ -245,11 +227,9 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 
 #ifdef USE_LOTUS
 void TMarkovField::_calc_lotus_LL(const IndexArray &index_in_leaves_space,
-                                  size_t index_for_tmp_state, size_t leaf_index_last_dim,
-                                  std::array<double, 2> &prob, const TDataModel &data_model) {
-	const bool cur_state = _clique_last_dim.get_Y(leaf_index_last_dim);
-	data_model.get_lotus().calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state,
-	                                             cur_state, prob);
+                                  size_t index_for_tmp_state, std::array<double, 2> &prob,
+                                  const TDataModel &data_model) {
+	data_model.get_lotus().calculate_LL_update_Y(index_in_leaves_space, index_for_tmp_state, prob);
 }
 #endif
 
@@ -368,11 +348,6 @@ void TMarkovField::_simulate_Y() {
 		bool y_state = sample(sum_log);
 		if (y_state) {
 			_Y.insert_one(linear_index_in_leaves_space);
-			for (auto &_tree : _trees) {
-				// get relevant clique
-				auto &clique = _tree->get_clique(multidim_index_in_Y);
-				clique.update_counter_leaves_state_1(true, false);
-			}
 		}
 	}
 }
