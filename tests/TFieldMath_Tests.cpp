@@ -84,11 +84,11 @@ std::array<coretools::Probability, 2> as_probabilities(const std::array<double, 
 	return {coretools::P(pair[0]), coretools::P(pair[1])};
 }
 
-/// A sweep across the open interval the error probability is constrained to.
-const std::vector<double> &omega_sweep() {
-	static const std::vector<double> sweep = {1e-6, 0.001, 0.01, 0.05, 0.1, 0.2,
+/// The range of values across the open interval the error probability is constrained to.
+const std::vector<double> &omega_values() {
+	static const std::vector<double> values = {1e-6, 0.001, 0.01, 0.05, 0.1, 0.2,
 	                                          0.25, 0.3,   0.4,  0.45, 0.499};
-	return sweep;
+	return values;
 }
 
 /// The link probability of a bucket as the counters see it: n(k,1) / (n(k,0) + n(k,1)).
@@ -141,7 +141,7 @@ TEST(FieldMath_Tests, error_probability_rejects_a_tree_it_does_not_have) {
 //-----------------------------------
 
 TEST(FieldMath_Tests, link_table_is_independent_corruption_followed_by_an_and) {
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		for (const bool z_s : {false, true}) {
 			for (const bool z_m : {false, true}) {
@@ -165,7 +165,7 @@ TEST(FieldMath_Tests, link_table_matches_the_four_probabilities_in_the_record) {
 }
 
 TEST(FieldMath_Tests, the_link_is_symmetric_in_the_two_trees) {
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		EXPECT_DOUBLE_EQ(TLinkPolicy::prob_y_is_one(true, false, omega),
 		                 TLinkPolicy::prob_y_is_one(false, true, omega))
@@ -185,7 +185,7 @@ TEST(FieldMath_Tests, bucket_is_the_number_of_tree_fields_in_state_one) {
 }
 
 TEST(FieldMath_Tests, cells_in_one_bucket_share_a_link_probability) {
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		for (const bool z_s : {false, true}) {
 			for (const bool z_m : {false, true}) {
@@ -252,7 +252,7 @@ TEST(FieldMath_Tests, six_counters_match_a_naive_per_cell_recomputation) {
 		}
 	}
 
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		const double want = brute_force_log_likelihood(cells, w);
 		// Relative, not absolute. The residual here is the brute force's, not the closed form's:
@@ -272,10 +272,10 @@ TEST(FieldMath_Tests, an_empty_configuration_has_zero_log_likelihood) {
 // The two parameter-free constraints (ADR-0005, derivation 2)
 //-----------------------------------
 
-TEST(FieldMath_Tests, the_and_identity_holds_across_a_sweep_of_error_probabilities) {
+TEST(FieldMath_Tests, the_and_identity_holds_across_the_error_probability_range) {
 	// P_1^2 = P_0 * P_2, for every omega. This is what makes the AND falsifiable from the
 	// counters alone, with no parameter estimated first.
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		const double p_0 = TLinkPolicy::prob_for_bucket(0, omega);
 		const double p_1 = TLinkPolicy::prob_for_bucket(1, omega);
@@ -286,10 +286,10 @@ TEST(FieldMath_Tests, the_and_identity_holds_across_a_sweep_of_error_probabiliti
 	}
 }
 
-TEST(FieldMath_Tests, the_shared_error_probability_constraint_holds_across_a_sweep) {
+TEST(FieldMath_Tests, the_shared_error_probability_constraint_holds_across_the_range) {
 	// sqrt(P_0) + sqrt(P_2) = 1. Unlike the identity above this one has no blind spot: it fails
 	// exactly when the two trees do not share one error probability (ADR-0005).
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		EXPECT_NEAR(std::sqrt(TLinkPolicy::prob_for_bucket(0, omega)) +
 		                std::sqrt(TLinkPolicy::prob_for_bucket(2, omega)),
@@ -337,7 +337,7 @@ TEST(FieldMath_Tests, the_identity_has_a_blind_spot_that_the_shared_rate_constra
 TEST(FieldMath_Tests, the_log_probabilities_agree_with_the_logs_of_the_probabilities) {
 	// They are not required to be bit-identical -- the cancellation-free forms are the more
 	// accurate of the two, by up to 4e-11 relative at the small end -- but they must agree.
-	for (const double w : omega_sweep()) {
+	for (const double w : omega_values()) {
 		const TErrorProbability omega(w);
 		for (size_t bucket = 0; bucket < TLinkCounters::n_buckets; ++bucket) {
 			const double p   = TLinkPolicy::prob_for_bucket(bucket, omega);

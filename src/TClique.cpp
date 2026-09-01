@@ -71,7 +71,7 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
 			// Note: the *previous* bin, because branch lengths are proposed before the loop starts.
 			// The parent comes after this node in post-order, so the walk has not touched it and
-			// its state is still the one this sweep started from.
+			// its state is still the one this update started from.
 			const auto bin_branch_len = tree->get_previous_binned_branch_length(index_in_tree);
 			calculate_log_prob_parent_to_node(bin_branch_len,
 			                                  walk.get(tree->parent_of(index_in_tree)), sum_log);
@@ -107,7 +107,7 @@ std::vector<size_t> TClique::initialize_Z_from_children(TCliqueWalkStates &walk,
 	// Bottom-up update of Z, as one forward walk. The internal nodes are stored as the non-root
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
-	// children. This used to be a fixed-point loop re-sweeping a set of not-yet-ready nodes until
+	// children. This used to be a fixed-point loop revisiting a set of not-yet-ready nodes until
 	// none remained, which is quadratic in the worst case because nothing about the storage order
 	// guaranteed anything.
 	for (const size_t node_index : tree->get_internal_nodes()) {

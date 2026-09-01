@@ -100,7 +100,7 @@ done
 RUNDIR="$WORKDIR/run"
 rm -rf "$WORKDIR"
 
-# Both chains below pass `--numThreads 1`: the field sweep is parallel and the random stream is
+# Both chains below pass `--numThreads 1`: the field update is parallel and the random stream is
 # drawn from a shared generator, so a run is only reproducible at a fixed thread count (issue #38).
 # Pinning it keeps the gate about the storage backend and nothing else. What that costs is the
 # multi-batch commit of the deferred inserts, which one thread never produces -- that path is

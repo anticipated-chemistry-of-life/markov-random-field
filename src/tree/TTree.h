@@ -328,7 +328,7 @@ public:
 		return _binned_branch_lengths->value(_topology().branch_index(index_in_tree));
 	}
 
-	/// The bin this branch had before the current round of proposals. The clique sweep needs it
+	/// The bin this branch had before the current round of proposals. The clique update needs it
 	/// because branch lengths are proposed before the loop over cliques starts, so `value` inside
 	/// the loop is already the candidate. Exposed here so that a clique can ask the tree rather
 	/// than be handed a pointer to the parameter itself.

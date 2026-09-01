@@ -53,7 +53,7 @@ inline double occurrence_count(size_t paper_count) {
 class TReportingModel {
 private:
 	/// `_factor[dimension][leaf]` caches `1 - exp(-gamma_i * occurrence_count(count))`, so the
-	/// per-cell path in the Y sweep is a product of lookups with no exp() and no parameter access.
+	/// per-cell path in the field update is a product of lookups with no exp() and no parameter access.
 	std::vector<std::vector<double>> _factor;
 	double _error_rate = 0.0;
 
@@ -102,7 +102,7 @@ public:
 
 	/// `P(L | x = 0)`, which does not depend on where the cell is.
 	///
-	/// Separate from `probability` so a caller sweeping a sparse container can answer the absent
+	/// Separate from `probability` so a caller walking a sparse container can answer the absent
 	/// case without building a cell index for it. Most cells are absent, so that conversion is the
 	/// bulk of the work it would otherwise do.
 	[[nodiscard]] double probability_absent(bool L) const {

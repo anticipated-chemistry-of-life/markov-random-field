@@ -178,7 +178,7 @@ public:
 	///
 	/// Every index goes through `insert_one`, counter and all: the sparse form writes a whole new
 	/// entry per index, which starts that cell's counter over, and the two have to leave a cell
-	/// holding the same thing. The sweep only defers a cell it found absent, whose counter is 0
+	/// holding the same thing. The update only defers a cell it found absent, whose counter is 0
 	/// either way.
 	void insert_in_Y(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
 		insert_ones_in_batches(*this, linear_indices_to_insert);

@@ -70,6 +70,16 @@ _Avoid_: disabled tree, ignored dimension, flat tree
 Whatever a field distribution would have to be divided by to make it a proper density. Written `C`. Under this model it is identically 1, at every parameter value: the field has exactly one conditional density, `p(Y | Z_s, Z_m, omega)`, and it sums to 1 over fields by construction, so there is nothing left to normalise. The term survives only to name what ADR-0002 diagnosed and ADR-0005 removed — under the old shared-field model `C` was the sum, over every possible field, of the product of the two trees' field likelihoods, and it moved with both trees' parameters, biasing them toward small nu. See ADR-0005.
 _Avoid_: partition function, Z (that is the node state), evidence
 
+## The chain
+
+**Update**:
+One full pass over a set of variables. The field update visits every leaf pair; a tree's node-state update visits every node of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order.
+_Avoid_: sweep, pass, scan
+
+**Block update**:
+The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
+_Avoid_: Y update, field update, joint draw, eight-state sweep
+
 ## Branch lengths
 
 **Bin**:

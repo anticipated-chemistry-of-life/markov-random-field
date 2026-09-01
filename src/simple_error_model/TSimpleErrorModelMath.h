@@ -10,7 +10,7 @@
 // Because every cell contributes either log(1 - epsilon) or log(epsilon), the total log-likelihood
 // depends on the data only through the number of cells where D and Y disagree. Keeping that single
 // integer turns the epsilon_simple_model Metropolis-Hastings move into an O(1) computation instead
-// of a sweep over the whole container space.
+// of a sum over the whole container space.
 //
 // Everything here is free-standing: it is deliberately NOT guarded by USE_SIMPLE_ERROR_MODEL, so
 // it compiles (and is unit-tested) in every build configuration.

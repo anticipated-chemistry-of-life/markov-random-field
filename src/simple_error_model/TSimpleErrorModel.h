@@ -46,11 +46,11 @@ private:
 
 	/// Number of cells where D and Y currently disagree, and the total number of cells. The
 	/// likelihood depends on the data only through these two numbers (see TSimpleErrorModelMath.h),
-	/// so keeping the count up to date after each Y sweep makes every epsilon move O(1).
+	/// so keeping the count up to date after each field update makes every epsilon move O(1).
 	size_t _n_disagree  = 0;
 	size_t _total_cells = 0;
 
-	/// Cache of the D cells of the current sheet, filled once per sheet by the Y sweep. Mirrors
+	/// Cache of the D cells of the current sheet, filled once per sheet by the field update. Mirrors
 	/// TLotus's cache: it turns the per-cell lookup inside the OpenMP loop into an array read.
 	TCurrentState _tmp_state_along_last_dim;
 
@@ -67,10 +67,10 @@ public:
 	void load_from_file(const std::string &filename);
 
 	/// Synchronises the disagreement count with the current Y. Must be called once before the first
-	/// likelihood evaluation, and after anything that changes Y outside of a sweep.
+	/// likelihood evaluation, and after anything that changes Y outside of an update.
 	void guess_initial_values(const TFieldStorage &Y);
 
-	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
+	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
 	void fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space, size_t K);
 
@@ -86,7 +86,7 @@ public:
 		return _tmp_state_along_last_dim.get_Y(index_for_tmp_state) != new_state;
 	}
 
-	/// Installs the disagreement count accumulated over a full Y sweep.
+	/// Installs the disagreement count accumulated over a full field update.
 	void set_n_disagree(size_t n_disagree) { _n_disagree = n_disagree; }
 
 	// --- likelihood ---

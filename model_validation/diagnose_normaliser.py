@@ -1,6 +1,6 @@
 """Is the `log nu` drift explained by the missing normalising constant?
 
-Sweeps the molecules dimension from neutral to strongly non-neutral and reports,
+Varies the molecules dimension from neutral to strongly non-neutral and reports,
 for each setting, where the C++'s objective is maximised versus where the
 correctly normalised one is. Everything is exact enumeration over the field — no
 MCMC, no sampling, no approximation. See `src/independent/toy_normaliser.py`.
@@ -28,7 +28,7 @@ from src.independent.toy_normaliser import (
 MOLECULE_LOG_NUS = (5.0, 3.0, 2.0, 1.0, 0.0, -0.5, -1.0, -2.0, -3.0)
 
 
-def _sweep_row(
+def _row_for_log_nu(
     log_nu_molecules: float,
     true_log_nu_species: float,
     alpha_species: float,
@@ -95,7 +95,7 @@ def main(
         click.echo(f"  {'-' * 10}  {'-' * 9}  {'-' * 11}  {'-' * 14}  {'-' * 7}")
 
         for log_nu_molecules in MOLECULE_LOG_NUS:
-            row = _sweep_row(
+            row = _row_for_log_nu(
                 log_nu_molecules, true_log_nu_species, alpha_species,
                 alpha_molecules, depth, grid,
             )

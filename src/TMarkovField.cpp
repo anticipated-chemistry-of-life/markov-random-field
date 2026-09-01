@@ -111,7 +111,7 @@ void TMarkovField::_calculate_log_prob_field(
 		// calculate P(parent | node = 0) and P(parent | node = 1)
 		// Note: leaves can never be roots -> they always have a parent (no need to bother with
 		// stationary). The parent is an internal node, so its state is read from this tree's own
-		// node state. Nothing writes the node state during this sweep, so the read needs no cache
+		// node state. Nothing writes the node state during this update, so the read needs no cache
 		// -- which is what collapses the sheet and the clique into one line.
 		const bool parent_state =
 		    clique.state_of(_Y, tree->get_Z(), tree->phylogeny(), tree->parent_of(leaf_in_tree),
@@ -121,7 +121,7 @@ void TMarkovField::_calculate_log_prob_field(
 	}
 }
 
-void TDataSweepAccumulator::commit(TDataModel &data_model) {
+void TDataUpdateAccumulator::commit(TDataModel &data_model) {
 #ifdef USE_LOTUS
 	double sum_new_LL = 0.0;
 	for (auto &i : _lotus_LL) {
@@ -133,7 +133,7 @@ void TDataSweepAccumulator::commit(TDataModel &data_model) {
 #ifdef USE_SIMPLE_ERROR_MODEL
 	size_t total_disagree = 0;
 	for (const auto &i : _n_disagree) { total_disagree += i; }
-	// The sweep visits every cell of Y exactly once, so this is the complete disagreement count.
+	// The update visits every cell of Y exactly once, so this is the complete disagreement count.
 	data_model.get_simple_error_model().set_n_disagree(total_disagree);
 #endif
 }

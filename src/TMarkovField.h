@@ -24,7 +24,7 @@
 #include <vector>
 
 //-----------------------------------
-// Y sweep bookkeeping
+// Field update bookkeeping
 //-----------------------------------
 
 class TDataModel; // forward declaration
@@ -42,12 +42,12 @@ struct TYUpdateResult {
 #endif
 };
 
-/// Per-thread accumulators for one full Y sweep, committed to the data sources at the end.
+/// Per-thread accumulators for one full field update, committed to the data sources at the end.
 ///
 /// The accumulators are bundled into a single object on purpose: `#ifdef` cannot appear inside a
-/// `#pragma omp` line, and the sweep's `default(none) shared(...)` clause has to name every
+/// `#pragma omp` line, and the update's `default(none) shared(...)` clause has to name every
 /// variable it touches. One object keeps that clause identical in every build configuration.
-class TDataSweepAccumulator {
+class TDataUpdateAccumulator {
 private:
 #ifdef USE_LOTUS
 	std::vector<coretools::TSumLogProbability> _lotus_LL;
@@ -59,7 +59,7 @@ private:
 public:
 	/// Sizing happens in the body rather than in a member-initializer list, so that adding or
 	/// removing a source does not require rebalancing the commas of a #ifdef'd init list.
-	explicit TDataSweepAccumulator(size_t n_threads) {
+	explicit TDataUpdateAccumulator(size_t n_threads) {
 #ifdef USE_LOTUS
 		_lotus_LL.resize(n_threads);
 #endif
@@ -148,7 +148,7 @@ private:
 	                                                        bool new_state,
 	                                                        const TDataModel &data_model);
 #endif
-	/// Per-sheet preparation: every compiled-in source caches the slice of its data that the sweep
+	/// Per-sheet preparation: every compiled-in source caches the slice of its data that the update
 	/// is about to walk over.
 	static void _prepare_data_LL(const IndexArray &start_index_in_leaves_space, size_t K_cur_sheet,
 	                             TDataModel &data_model);
@@ -244,11 +244,11 @@ private:
 		}
 
 		// loop over sheets in last dimension
-		TDataSweepAccumulator acc(ProgramOptions::NUMBER_OF_THREADS);
+		TDataUpdateAccumulator acc(ProgramOptions::NUMBER_OF_THREADS);
 		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
 		    ProgramOptions::NUMBER_OF_THREADS);
 
-		// Persistent thread team for the whole sweep: the team is created ONCE here instead of once
+		// Persistent thread team for the whole update: the team is created ONCE here instead of once
 		// per inner iteration (the old `omp parallel for` sat inside the k x i loop, paying a
 		// fork/join every inner iteration). The k/i loops are now executed redundantly by all
 		// threads (SPMD) and the work is shared via `omp for`/`omp single`, turning the per-inner

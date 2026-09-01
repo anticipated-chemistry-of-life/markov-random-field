@@ -5,7 +5,7 @@ Each pins strictly less than the one before, so a failure localises the fault:
 
 1. field *and* internal states pinned — only the parameter updates move, so this
    is close to closed form and sets the empirical ceiling for the other two.
-2. field pinned, internal states inferred — adds the Z Gibbs sweep.
+2. field pinned, internal states inferred — adds the Z Gibbs update.
 3. nothing pinned, inferred from observations — the production path, run against
    the simple error model alone, then LOTUS alone, then both.
 
@@ -31,10 +31,10 @@ from .indexing import TreeIndex, build_tree_index
 NEUTRAL_LOG_NU = 5.0
 NEUTRAL_ALPHA = 0.5
 
-# Gibbs sweeps the C++ runs after its own one-pass initialisation. The reference
-# does a single pass and stops; if the C++'s sweeps target the same distribution,
+# Gibbs updates the C++ runs after its own one-pass initialisation. The reference
+# does a single pass and stops; if the C++'s updates target the same distribution,
 # the two agree, and if they do not, that is the bug being hunted.
-SIMULATION_SWEEPS = 1000
+SIMULATION_UPDATES = 1000
 DEFAULT_REPLICATES = 20
 
 # The `simulated` substring in both names is required by stattools' filename-
@@ -408,7 +408,7 @@ def _write_scripts(out: pathlib.Path, config: ScenarioConfig) -> None:
         "      --tree_species species.txt --tree_molecules molecules.txt \\\n"
         "      --species_paper_counts species_papers.txt \\\n"
         "      --molecules_paper_counts molecules_papers.txt \\\n"
-        f"      --iterations {SIMULATION_SWEEPS} \\\n"
+        f"      --iterations {SIMULATION_UPDATES} \\\n"
         "      --epsilon_simple_model 0.5 \\\n"
         "      --numThreads all --write_Y --write_Z \\\n"
         '      --fixedSeed "$((1000 + i))" \\\n'

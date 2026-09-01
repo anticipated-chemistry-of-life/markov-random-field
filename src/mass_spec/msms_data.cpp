@@ -283,7 +283,7 @@ void TMSMSData::_initialize_runs(size_t number_of_molecules) {
 namespace {
 /// Supplies `TMassSpecRun` with the part of the assignment likelihood ratio that lives in
 /// `TMSMSData`: Y, the mass-spec filter probabilities and the contamination probability. One
-/// instance is bound to a single (species, run) pair for the duration of one sweep.
+/// instance is bound to a single (species, run) pair for the duration of one update.
 class TMSMSDataScorer final : public TAssignmentScorer {
 private:
 	const TMSMSData &_data;

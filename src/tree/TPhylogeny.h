@@ -95,7 +95,7 @@ public:
 	}
 
 	/// Leaves are the first block, so this is a comparison and not a look at the node's children.
-	/// It is the most frequently asked question in the sweep.
+	/// It is the most frequently asked question in the update.
 	[[nodiscard]] bool is_leaf(size_t node) const { return node < _n_leaves; }
 	/// Roots are the last block.
 	[[nodiscard]] bool is_root(size_t node) const { return node >= n_branches(); }

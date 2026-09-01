@@ -92,13 +92,13 @@ public:
 	[[nodiscard]] double calculate_log_likelihood_of_L(const TFieldStorage &Y) const;
 	[[nodiscard]] double cur_LL() const { return _curLL; }
 
-	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
+	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
 	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
 	                                   size_t K);
 	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
 	                           std::array<double, 2> &prob) const;
-	/// The Y sweep accumulates the new likelihood as it goes and installs it here at the end.
+	/// The field update accumulates the new likelihood as it goes and installs it here at the end.
 	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }
 
 	// --- MCMC moves on gamma / epsilon ---

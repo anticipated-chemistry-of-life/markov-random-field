@@ -44,7 +44,7 @@ void read_Z_from_file(const std::string &filename, TInternalStateStorage &Z,
 	}
 
 	// A cell index is a fixed-size IndexArray, so more trees than it holds would run the fill loop
-	// below past its end. The rest of the sweep makes the same assumption -- this is a guard on it,
+	// below past its end. The rest of the update makes the same assumption -- this is a guard on it,
 	// not a limit this reader imposes.
 	if (trees.size() != NUMBER_OF_TREES) {
 		throw coretools::TDevError("read_Z_from_file was given ", trees.size(),

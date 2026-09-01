@@ -101,7 +101,7 @@ private:
 	[[nodiscard]] double _calculate_log_likelihood_of_MSData(double contamination) const;
 
 	/// Tells every run how large the molecule space is, which it needs to size the lookup table
-	/// that maps a molecule to the feature holding it during an assignment sweep.
+	/// that maps a molecule to the feature holding it during an assignment update.
 	void _initialize_runs(size_t number_of_molecules);
 
 public:
@@ -207,7 +207,7 @@ public:
 	calculate_LL_ratio_for_assignment_move(size_t species_idx, const TMassSpecRun &run,
 	                                       const TAssignmentProposal &move) const;
 
-	/// One Metropolis-Hastings sweep over every feature of every run of every species that has MS
+	/// One Metropolis-Hastings update over every feature of every run of every species that has MS
 	/// data. See `TMassSpecRun::update_all_assignments`.
 	void update_all_MS_assignments();
 };

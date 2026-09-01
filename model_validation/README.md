@@ -27,7 +27,7 @@ uv run python validate_independent.py . rung1_pin_field_and_states
 Run the rungs in order and stop at the first failure. Each pins strictly less
 than the one before, so a failure localises the fault: rung 1 pins the field and
 both trees' node states and is close to closed form; rung 2 adds the Z Gibbs
-sweep; rung 3 infers everything from observations, against the simple error model
+update; rung 3 infers everything from observations, against the simple error model
 alone, then LOTUS alone, then both.
 
 Rung 1 is also the empirical ceiling. Its scores are what the looser rungs should

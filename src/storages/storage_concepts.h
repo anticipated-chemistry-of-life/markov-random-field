@@ -23,7 +23,7 @@
 /// `insert_zero` are the bounds-checked way in for a cell that may be absent; `set_state` is the
 /// in-place write for one that is already known to be addressable.
 ///
-/// `fill_current_state` is here because the current model's sweep asks for a whole clique at once:
+/// `fill_current_state` is here because the current model's update asks for a whole clique at once:
 /// for the `K` cells starting at `start_index` and running `increment` apart, it writes the state,
 /// whether the cell is stored, and the linear index of each. It is the one member that exists for
 /// the sampler's convenience rather than to describe the storage, and it is what the model branch

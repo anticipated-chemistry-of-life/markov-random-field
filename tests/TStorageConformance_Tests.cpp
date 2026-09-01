@@ -15,7 +15,7 @@
 //
 // What is deliberately *not* asserted equal between the backends is `exists`: dense stores the
 // whole container space and reports every cell of a clique as existing, where sparse reports only
-// the cells it holds. The sweep reads that answer to choose between flipping a cell in place and
+// the cells it holds. The update reads that answer to choose between flipping a cell in place and
 // deferring an insert (TClique::_update_current_state), and both routes end at the same state --
 // which is what the equivalence tests below check instead. `empty()` is the same story and has a
 // test of its own.
@@ -374,7 +374,7 @@ TYPED_TEST(StorageConformance, every_cell_holds_the_state_it_was_last_written) {
 }
 
 // The two ways a clique runs through a container: along the last dimension, where the cells are
-// consecutive, and along the first, where they are a whole row apart. Everything the sweep reads
+// consecutive, and along the first, where they are a whole row apart. Everything the update reads
 // comes through this call, so it has to answer what the point lookups answer -- for the sparse
 // implementations that means the line walk has to find every stored cell of the clique.
 TYPED_TEST(StorageConformance, fill_current_state_agrees_with_the_point_lookups) {
@@ -559,7 +559,7 @@ TYPED_TEST(FieldConformance, the_counter_counts_the_iterations_a_cell_was_a_one)
 	}
 }
 
-// One shape is enough here where the tests above sweep them all: resetting is a pass over the
+// One shape is enough here where the tests above update them all: resetting is a pass over the
 // whole container, and there is no index arithmetic in it for a shape to catch out.
 // -------------------------------------------------------------------------
 // The posterior fraction is a probability
@@ -794,7 +794,7 @@ TEST(StorageEquivalence, the_fraction_of_ones_survives_a_chain_the_two_thin_diff
 }
 
 // The bulk paths, which the storage concept deliberately leaves out (storage_concepts.h) and
-// which therefore have nothing but this to hold them together: the deferred insert the field sweep
+// which therefore have nothing but this to hold them together: the deferred insert the field update
 // commits after its parallel region, and the whole-space dump the per-iteration traces are written
 // from. Both are named after the storage they belong to rather than after what they do, so there
 // is one block per storage here rather than one templated body.
@@ -803,7 +803,7 @@ TEST(StorageEquivalence, the_backends_agree_on_the_bulk_insert_and_the_whole_spa
 	for (const auto &shape : generated_shapes()) {
 		const size_t n_cells = shape[0] * shape[1];
 
-		// Batches, not one list: the sweep accumulates one vector per thread and hands them over
+		// Batches, not one list: the update accumulates one vector per thread and hands them over
 		// together, and a cell may be named by more than one batch.
 		std::uniform_int_distribution<size_t> cell(0, n_cells - 1);
 		std::vector<std::vector<size_t>> batches(3);

@@ -105,7 +105,7 @@ double TLotus::ll_ratio_after_parameter_move(const TFieldStorage &Y) {
 	// One function for both gamma and the error rate: the reporting model is built from both, so a
 	// move on either replaces it wholesale. Rebuilding the factor table on an error-rate move is
 	// strictly redundant -- the factors depend only on gamma -- but it is one exp() per leaf
-	// against a likelihood sweep over the whole container space, and it buys a single code path
+	// against a likelihood sum over the whole container space, and it buys a single code path
 	// with no parameter-specific state.
 	_oldLL           = _curLL;
 	_reporting_model = _build_reporting_model();

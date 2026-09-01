@@ -58,9 +58,9 @@ is also what decides which iterations get a trace line. The two would then write
 lengths, by design rather than by regression. `run.sh` refuses a chain that long rather than let the
 gate fail for a reason it is not testing.
 
-One thread, always. The field sweep is parallel and draws from a shared random generator, so a run
+One thread, always. The field update is parallel and draws from a shared random generator, so a run
 is not reproducible across thread counts even under one backend (issue #38). What that leaves out
-is the multi-batch commit of the sweep's deferred inserts, which one thread never produces;
+is the multi-batch commit of the update's deferred inserts, which one thread never produces;
 `StorageEquivalence` in `tests/TStorageConformance_Tests.cpp` covers that path instead.
 
 ## What it caught

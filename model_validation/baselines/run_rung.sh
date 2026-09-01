@@ -4,14 +4,14 @@
 #   ./run_rung.sh rung1     field and both trees' internal states pinned
 #   ./run_rung.sh rung2     field pinned, internal states inferred
 #
-# Two rungs, because rung 1 alone does not reach the Z sweep: with --Z.update
+# Two rungs, because rung 1 alone does not reach the Z update: with --Z.update
 # false the clique loop skips update_Z entirely, and with --set_<tree>_Z the
 # bottom-up initialisation returns before it does anything. Every change to
 # either of those would pass a rung-1-only gate without being run once.
 #
 # Single-threaded is not a preference, it is what makes the run reproducible.
 # coretools' TRandomGenerator is `static thread_local`, so every thread owns its
-# own stream; the sweep over cliques is `schedule(dynamic)`, so which clique is
+# own stream; the update over cliques is `schedule(dynamic)`, so which clique is
 # drawn by which thread varies between runs. With --numThreads all the same seed
 # therefore yields a different chain each time -- verified empirically, the whole
 # species trace diverges. With --numThreads 1 the run is byte-stable.

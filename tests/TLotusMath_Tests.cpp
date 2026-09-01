@@ -137,7 +137,7 @@ TEST(LotusMath, an_absent_pair_is_reported_at_the_flat_error_rate) {
 }
 
 TEST(LotusMath, the_absent_case_does_not_depend_on_position) {
-	// This is what lets the likelihood sweep answer absent cells without converting a linear index,
+	// This is what lets the likelihood update answer absent cells without converting a linear index,
 	// and what makes the bulk term for never-stored cells a single constant.
 	const auto model = two_dimensions(1.1, 1.1, 0.03);
 	for (size_t first = 0; first < 3; ++first) {

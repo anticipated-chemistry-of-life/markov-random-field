@@ -2,7 +2,7 @@
 
 `TPhylogeny` stores its nodes as three contiguous blocks: **all leaves, then all internal non-root nodes in post-order, then all roots.** Within the leaf block and the root block the nodes keep the relative order the tree file put them in; within the middle block the order is post-order from each root, visiting children in file order. The construction code is unaware of this — it builds in file order and one permutation is applied at the end.
 
-The point is that the layout answers, by arithmetic alone, the three questions the sweep asks most often. A node is a leaf exactly when its index is below the leaf count. A node is a root exactly when its index is at or above the node count minus the root count. A leaf's index in leaf space *is* its node index; a branch's index *is* its child node's index; an internal node's index in internal-node space is its node index minus the leaf count. All of it derives from three integers — node count, leaf count, root count.
+The point is that the layout answers, by arithmetic alone, the three questions the update asks most often. A node is a leaf exactly when its index is below the leaf count. A node is a root exactly when its index is at or above the node count minus the root count. A leaf's index in leaf space *is* its node index; a branch's index *is* its child node's index; an internal node's index in internal-node space is its node index minus the leaf count. All of it derives from three integers — node count, leaf count, root count.
 
 That is a structural claim standing in for a structural test, and it is the reason this record exists: a reader who finds `node < _n_leaves` where they expected "does this node have children" needs to know why the comparison is legal.
 
@@ -13,7 +13,7 @@ That is a structural claim standing in for a structural test, and it is the reas
 - Ten parallel vectors — five mapping node index forward into a category list, five mapping back — collapse into three counts. The sentinel that meant "not applicable" stops existing, so an unsigned index can no longer wrap around into something that reads like a valid one.
 - The hot accessors stop touching memory to answer a question the index already answers. Asking whether a node is a leaf used to mean a bounds-checked index into the node array, a pointer chase into that node's child list to test whether it was empty, and then a second random lookup into a category index vector. It is now an integer comparison.
 - Index-space conversions become the identity or a subtraction, so indexing the field, the internal state and the branch lengths needs no lookup table.
-- Bottom-up traversal becomes linear. Children always precede parents, so initialising internal state from children is a single forward pass over the middle block and then the roots, rather than a fixed-point loop that re-sweeps a set of not-yet-ready nodes and is quadratic in the worst case.
+- Bottom-up traversal becomes linear. Children always precede parents, so initialising internal state from children is a single forward pass over the middle block and then the roots, rather than a fixed-point loop that re-updates a set of not-yet-ready nodes and is quadratic in the worst case.
 - Any future bottom-up walk gets children-before-parents for free, as a property of the storage rather than something rediscovered at runtime.
 
 ## What it costs

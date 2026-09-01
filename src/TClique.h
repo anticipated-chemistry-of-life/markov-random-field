@@ -24,10 +24,10 @@ class TTree;
 /// they were just given. The dense storage would show them, because every write lands in place. The
 /// sparse one defers a write to a cell it does not yet hold until after the parallel region, and
 /// would still answer with the old value -- so the two backends would part company inside a single
-/// sweep. Carrying the states here is what keeps them on the same chain.
+/// update. Carrying the states here is what keeps them on the same chain.
 ///
 /// Seeded from the storages and indexed by node index. This is the whole of what the current-state
-/// class was still needed for, once the field's own sweep stopped needing it: a vector scoped to
+/// class was still needed for, once the field's own update stopped needing it: a vector scoped to
 /// the loop that uses it, rather than a class with a fill protocol on both storages.
 class TCliqueWalkStates {
 private:
@@ -142,7 +142,7 @@ public:
 	/// @brief Calculates the log probability of a node to its parent, under this clique's current
 	/// process.
 	/// The parent's state is the caller's to supply, because where it comes from differs: the
-	/// field's sweep reads it from the node state, and the node state's own walk reads it from the
+	/// field's update reads it from the node state, and the node state's own walk reads it from the
 	/// states that walk has already assigned.
 	void
 	calculate_log_prob_parent_to_node(TypeBinnedBranchLengths binned_branch_length,

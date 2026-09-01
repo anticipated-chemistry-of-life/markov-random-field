@@ -7,8 +7,8 @@
 #include <map>
 #include <vector>
 
-// Checks that the sweep really samples from the distribution the scorer describes, which is the
-// only thing that can catch a wrong Hastings ratio: the invariant tests in TAssignmentSweep_Tests
+// Checks that the update really samples from the distribution the scorer describes, which is the
+// only thing that can catch a wrong Hastings ratio: the invariant tests in TAssignmentUpdate_Tests
 // pass just as happily with the ratios set to zero.
 //
 // The state space is kept small enough to enumerate. Two features with different numbers of
@@ -89,17 +89,17 @@ TMassSpecRun make_run() {
 
 } // namespace
 
-TEST(TAssignmentStationary_Tests, sweep_samples_the_target_distribution) {
+TEST(TAssignmentStationary_Tests, update_samples_the_target_distribution) {
 	coretools::instances::randomGenerator().setSeed(42, true);
 	auto run = make_run();
 	const TWeightScorer scorer;
 
-	constexpr size_t n_sweeps = 400000;
+	constexpr size_t n_updates = 400000;
 	constexpr size_t n_burnin = 1000;
 	std::map<State, size_t> counts;
-	for (size_t sweep = 0; sweep < n_sweeps + n_burnin; ++sweep) {
+	for (size_t update = 0; update < n_updates + n_burnin; ++update) {
 		run.update_all_assignments(scorer, 0.3);
-		if (sweep < n_burnin) { continue; }
+		if (update < n_burnin) { continue; }
 		++counts[{state_of(run.get_current_assignment(0)),
 		          state_of(run.get_current_assignment(1))}];
 	}
@@ -107,7 +107,7 @@ TEST(TAssignmentStationary_Tests, sweep_samples_the_target_distribution) {
 	const auto expected = analytic_distribution();
 	ASSERT_EQ(counts.size(), expected.size()) << "the chain did not visit every reachable state";
 	for (const auto &[state, probability] : expected) {
-		const double observed = (double)counts.at(state) / (double)n_sweeps;
+		const double observed = (double)counts.at(state) / (double)n_updates;
 		// the smallest target probability here is ~2%, so an absolute tolerance of 0.005 is a
 		// relative error of at most ~25% on the rarest state and much tighter on the common ones
 		EXPECT_NEAR(observed, probability, 0.005)

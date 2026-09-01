@@ -14,7 +14,7 @@ Evaluating the closed form per bin and deleting the recursion was rejected for t
 
 The recursion is not, at present, accumulating error worth guarding against: over `alpha` in `[0.01, 0.99]` and `log_nu` in `[-8, 3.2]`, the grid built by recursion agrees with direct evaluation at the bin centres to `1.6e-15` at `n_bins = 10`. The guard is insurance against a larger grid — `--n_bins` is a command-line option and the accumulated error grows with the number of multiplications — rather than protection against a live problem.
 
-Replacing `arma::expmat` with the closed form for the two base matrices moved the grid by at most `2.1e-15` across that same sweep. At the parameters of the standard validation scenario the base matrices differ bit-for-bit in 250 of 256 cases, by at most `2.2e-16`, and a 200-iteration rung-1 chain at `--numThreads 1 --fixedSeed 42` nonetheless produced byte-identical traces, posteriors and `Y`: the numbers changed, no accept/reject decision did.
+Replacing `arma::expmat` with the closed form for the two base matrices moved the grid by at most `2.1e-15` across that same update. At the parameters of the standard validation scenario the base matrices differ bit-for-bit in 250 of 256 cases, by at most `2.2e-16`, and a 200-iteration rung-1 chain at `--numThreads 1 --fixedSeed 42` nonetheless produced byte-identical traces, posteriors and `Y`: the numbers changed, no accept/reject decision did.
 
 ## Consequences
 

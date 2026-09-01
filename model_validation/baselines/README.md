@@ -63,7 +63,7 @@ cd model_validation && uv run python simulate_independent.py --seed 42
 ## Why the run is single-threaded
 
 `--numThreads 1` is not a preference. coretools' `TRandomGenerator` is
-`static thread_local`, so each thread owns its own stream, and the sweep over
+`static thread_local`, so each thread owns its own stream, and the update over
 cliques is `schedule(dynamic)` -- so which clique is drawn by which thread varies
 between runs. Under `--numThreads all` the same `--fixedSeed 42` therefore
 produces a different chain every time; verified empirically, the entire species

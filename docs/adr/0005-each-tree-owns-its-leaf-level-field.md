@@ -106,7 +106,7 @@ These check the algebra in this record, not an implementation. The implementatio
 
 ## Consequences
 
-**The field is no longer where the two trees meet; the link is.** Anything that read the field as "the species tree's leaf state" is now reading the wrong variable, and there are three variables at each leaf pair where there was one. This is the change that makes the sweep a single eight-state block rather than three single-site updates: with a small `omega`, a field cell at one pins both tree fields, and given both at one the field stays at one with probability near one. That triple is metastable under single-site Gibbs and would present as slow mixing rather than as a bug.
+**The field is no longer where the two trees meet; the link is.** Anything that read the field as "the species tree's leaf state" is now reading the wrong variable, and there are three variables at each leaf pair where there was one. This is the change that makes the update a single eight-state block rather than three single-site updates: with a small `omega`, a field cell at one pins both tree fields, and given both at one the field stays at one with probability near one. That triple is metastable under single-site Gibbs and would present as slow mixing rather than as a bug.
 
 **One new parameter, and it is confounded with two things already in the model.** `omega` trades against the alphas through derivation 3, and against the simple error model's own misreport probability, since both describe noise standing between a latent one and an observed one. Both limits are known in advance and are watched rather than discovered — which is the whole reason the six counters, the posterior of each tree field and the full joint density are traced.
 

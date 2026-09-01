@@ -149,7 +149,7 @@ static_assert(!FieldStorage<TDenseStateArray>,
 // -------------------------------------------------------------------------------------------
 
 /// Writes a one at every index of every batch. The sparse implementations merge the per-thread
-/// batches the sweep hands over and re-sort the matrix once; a dense array has nothing to sort, so
+/// batches the update hands over and re-sort the matrix once; a dense array has nothing to sort, so
 /// this is the writes and nothing else.
 ///
 /// It goes through the storage rather than through its state array because the field's insert does

@@ -17,7 +17,8 @@
 //
 // The table depends on the two tree field states only through their sum, so the link's whole
 // contribution to the likelihood collapses to six integers -- n(bucket, field state) -- and the
-// error-probability Metropolis move becomes O(1) in the number of cells rather than a sweep. That
+// error-probability Metropolis move becomes O(1) in the number of cells rather than a sum over
+// every cell. That
 // is the same trick the simple error model's disagreement count plays for its own rate.
 //
 // Everything here is free-standing. It takes two transition probabilities, an error probability
