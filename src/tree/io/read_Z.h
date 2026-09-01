@@ -30,6 +30,6 @@ class TTree;
 /// Throws coretools::TUserError if the file does not have one column per tree plus the index and
 /// the state, if a name is not in the tree its column belongs to, or if a foreign column names
 /// something other than a leaf.
-void read_Z_from_file(const std::string &filename, TInternalStateStorage &Z,
+void read_Z_from_file(const std::string &filename, TNodeStateStorage &Z,
                       const std::vector<std::unique_ptr<TTree>> &trees,
                       size_t dimension_number_of_tree);

@@ -75,7 +75,7 @@ private:
 	TypeParamAlpha *_alpha_c = nullptr;
 
 	// Set Z
-	TInternalStateStorage _Z;
+	TNodeStateStorage _Z;
 
 	// Joint probability density
 	std::vector<double> _joint_log_prob_density;
@@ -274,8 +274,8 @@ public:
 	std::vector<TClique> &get_cliques();
 	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
 	TClique &get_clique(const IndexArray &index_in_leaves_space);
-	[[nodiscard]] const TInternalStateStorage &get_Z() const;
-	TInternalStateStorage &get_Z();
+	[[nodiscard]] const TNodeStateStorage &get_Z() const;
+	TNodeStateStorage &get_Z();
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 

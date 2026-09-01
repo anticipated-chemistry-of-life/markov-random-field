@@ -45,15 +45,15 @@ public:
 	TCurrentState(const TPhylogeny &topology, size_t increment, size_t size_of_Y, size_t size_of_Z);
 
 	void fill(const IndexArray &start_index_in_leaves_space, const TFieldStorage &Y,
-	          const TInternalStateStorage &Z);
+	          const TNodeStateStorage &Z);
 	void fill_Y(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
 	            const TFieldStorage &Y);
 	void fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-	            const TInternalStateStorage &Z);
+	            const TNodeStateStorage &Z);
 	void fill_Y_along_last_dim(const IndexArray &start_index_in_leaves_space,
 	                           size_t num_nodes_to_parse, const TFieldStorage &Y);
 	void fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-	                           size_t num_nodes_to_parse, const TInternalStateStorage &Z);
+	                           size_t num_nodes_to_parse, const TNodeStateStorage &Z);
 
 	bool get(size_t index_in_tree) const;
 	bool get_Y(size_t ix) const;
@@ -99,7 +99,7 @@ public:
 	/// `Z` is the node state of the dimension this sheet runs along, passed in the same way as
 	/// the field rather than reached for through a tree.
 	void fill(const IndexArray &start_index_in_leaves_space, size_t K, const TFieldStorage &Y,
-	          const TInternalStateStorage &Z);
+	          const TNodeStateStorage &Z);
 
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);

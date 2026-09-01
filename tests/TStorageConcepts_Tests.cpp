@@ -5,8 +5,8 @@
 #include <vector>
 
 // The storage concepts are checked entirely at compile time: TStorageYMatrix.h and
-// TStorageZMatrix.h assert that the sparse pair conforms, and storage_backend.h asserts it of
-// whichever pair the build selected. What those cannot say is that the concepts *reject* anything
+// TStorageZMatrix.h assert that the sparse pair conforms, and storage_backend.h asserts it of the
+// pair its two aliases select. What those cannot say is that the concepts *reject* anything
 // -- a concept whose requires-expression named no member at all would satisfy them just as well.
 //
 // So this file is the other half: types that deliberately fall short, asserted not to conform.
@@ -49,9 +49,9 @@ static_assert(!BinaryFieldStorage<WrongReturnType>, "the return types are part o
 } // namespace
 // NOLINTEND(readability-convert-member-functions-to-static)
 
-// The refinement is a real one in both directions: the internal state carries no posterior counter
+// The refinement is a real one in both directions: the node state carries no posterior counter
 // and must not pass for a field, while the field satisfies both.
-static_assert(BinaryFieldStorage<TInternalStateStorage>);
-static_assert(!FieldStorage<TInternalStateStorage>);
+static_assert(BinaryFieldStorage<TNodeStateStorage>);
+static_assert(!FieldStorage<TNodeStateStorage>);
 static_assert(BinaryFieldStorage<TFieldStorage>);
 static_assert(FieldStorage<TFieldStorage>);

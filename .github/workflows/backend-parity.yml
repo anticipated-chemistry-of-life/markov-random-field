@@ -1,7 +1,7 @@
 # The dense-versus-sparse gate, on every push.
 #
-# What keeps the sparse backend from silently rotting is that two binaries built from the same
-# sources, differing only in which storage the alias in src/storages/storage_backend.h selects,
+# What keeps the sparse storage from silently rotting is that two binaries built from the same
+# sources, differing only in which storage the aliases in src/storages/storage_backend.h select,
 # produce byte-identical output from the same seed. tests/backend_parity/run.sh is the whole of the
 # check; this file exists to run it.
 #

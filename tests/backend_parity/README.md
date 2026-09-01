@@ -1,13 +1,24 @@
 # The dense-versus-sparse gate
 
-Two binaries, built from the same sources and differing only in which storage the alias in
-`src/storages/storage_backend.h` selects, have to produce byte-identical output from the same seed.
+Two binaries, built from the same sources and differing only in which storage the aliases in
+`src/storages/storage_backend.h` select, have to produce byte-identical output from the same seed.
 `run.sh` is the check; `just parity` runs it, and so does CI on every push
 (`.github/workflows/backend-parity.yml`).
 
-The comparison is between two *builds* because the backend is a compile-time choice. That is the
+The comparison is between two *builds* because the storage is a compile-time choice. That is the
 point: there is no dispatch layer that exists only for testing, so the gate exercises exactly what
 ships.
+
+## Which pairs it gates
+
+The field and the node state choose their storage independently, so there are four pairings. The
+gate builds two: sparse field against sparse node state, and dense against dense. Those two between
+them exercise both storages. `src/storages/storage_backend.h` records which pairs are gated and
+ADR-0006 gives the argument. The default build is a mixed pairing, and is not one of the two.
+
+`run.sh` drives cmake itself rather than going through `just`, because nothing in the build system
+chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE` on the
+compiler command line, which is how an external define overrides an alias.
 
 ## The fixture
 
@@ -22,7 +33,7 @@ Four files, small enough that both chains run in well under a second:
 (Internal nodes include the root, per `CONTEXT.md`.)
 
 The two trees are deliberately different shapes, so that no container the run asks for is square:
-the field is 8x6, the species internal state 7x6 and the molecules internal state 8x4. A square
+the field is 8x6, the species node state 7x6 and the molecules node state 8x4. A square
 container is the one shape in which a row-walk and a column-walk can agree by accident, and telling
 those two apart is what the sparse implementation's `fill_current_state` does for a living.
 
@@ -35,9 +46,9 @@ a divergence to show, and small enough to run on every push.
 Every file the runs write, except `*.log` -- which carries a fresh ntfy topic UUID and wall-clock
 timings, and so differs between two runs of the *same* binary.
 
-- `simulate` writes the field and both internal states in full, the LOTUS and simple-error data
+- `simulate` writes the field and both node states in full, the LOTUS and simple-error data
   drawn from them, and the per-iteration traces.
-- `infer` writes the parameter traces, the field and internal-state traces, the joint density and
+- `infer` writes the parameter traces, the field and node-state traces, the joint density and
   the posterior field.
 
 Both backends run in the same working directory, one after the other, with the outputs moved aside

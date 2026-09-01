@@ -250,9 +250,9 @@ class StorageNames {
 public:
 	template<typename Storage> static std::string GetName(int /*index*/) {
 		if constexpr (std::is_same_v<Storage, TStorageZMatrix>) {
-			return "sparse_internal_state";
+			return "sparse_node_state";
 		} else if constexpr (std::is_same_v<Storage, TStorageZDense>) {
-			return "dense_internal_state";
+			return "dense_node_state";
 		} else if constexpr (std::is_same_v<Storage, TStorageYMatrix>) {
 			return "sparse_field";
 		} else {

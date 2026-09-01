@@ -37,27 +37,9 @@ option(SIMPLE_DATA "Compile in the simple error model data source" ON)
 option(USE_MS_DATA "Compile in the mass spec data source" OFF)
 option(BUILD_TESTING "Configure the acol_unitTests target" ON)
 
-# Which implementation backs the field and the internal state. The concepts in
-# src/storages/storage_concepts.h are what make this a choice at all; the
-# aliases in src/storages/storage_backend.h are where it is spent.
-#
-# Two binaries built from these same sources, differing only in this value, must
-# produce byte-identical output from the same seed. `just parity` is what checks
-# it (tests/backend_parity/); `dense` is the obviously-correct reference and
-# `sparse` is the path to larger runs.
-set(ACOL_STORAGE_BACKEND
-    "sparse"
-    CACHE STRING "Storage backend for the field and the internal state")
-set_property(CACHE ACOL_STORAGE_BACKEND PROPERTY STRINGS dense sparse)
-
-if(NOT ACOL_STORAGE_BACKEND MATCHES "^(dense|sparse)$")
-  message(
-    FATAL_ERROR
-      "Unknown ACOL_STORAGE_BACKEND '${ACOL_STORAGE_BACKEND}'. The backends are 'dense' and 'sparse'."
-  )
-endif()
-
-string(TOUPPER "${ACOL_STORAGE_BACKEND}" ACOL_STORAGE_BACKEND_MACRO)
+# Which storage backs the field, and which backs the node state, are not options
+# here. They are two aliases in src/storages/storage_backend.h, chosen
+# independently and edited by hand.
 
 if(NOT LOTUS AND NOT SIMPLE_DATA)
   message(
@@ -71,8 +53,6 @@ message(
   STATUS
     "acol data sources: LOTUS=${LOTUS} SIMPLE_DATA=${SIMPLE_DATA} USE_MS_DATA=${USE_MS_DATA}"
 )
-message(STATUS "acol storage backend: ${ACOL_STORAGE_BACKEND}")
-
 # =============================================================================
 # Dependencies
 # =============================================================================
@@ -177,9 +157,6 @@ function(acol_add_common_sources target)
                       nlohmann_json::nlohmann_json stduuid)
   target_compile_features(${target} PRIVATE cxx_std_20)
   set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
-
-  target_compile_definitions(
-    ${target} PRIVATE ACOL_STORAGE_${ACOL_STORAGE_BACKEND_MACRO})
 
   if(LOTUS)
     target_compile_definitions(${target} PRIVATE USE_LOTUS)

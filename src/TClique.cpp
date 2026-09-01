@@ -19,7 +19,7 @@ TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_
 	_increment                   = increment;
 }
 
-bool TClique::state_of(const TFieldStorage &Y, const TInternalStateStorage &Z,
+bool TClique::state_of(const TFieldStorage &Y, const TNodeStateStorage &Z,
                        const TPhylogeny &topology, size_t node,
                        size_t leaf_index_in_tree_of_last_dim) const {
 	const auto cell = cell_of(node, leaf_index_in_tree_of_last_dim);
@@ -27,7 +27,7 @@ bool TClique::state_of(const TFieldStorage &Y, const TInternalStateStorage &Z,
 	return Z.is_one(Z.get_linear_index_in_container_space(cell));
 }
 
-TCliqueWalkStates TClique::read_states(const TFieldStorage &Y, const TInternalStateStorage &Z,
+TCliqueWalkStates TClique::read_states(const TFieldStorage &Y, const TNodeStateStorage &Z,
                                        const TPhylogeny &topology) const {
 	TCliqueWalkStates walk(topology.n_nodes());
 	const size_t column = _start_index_in_leaves_space.back();
@@ -37,7 +37,7 @@ TCliqueWalkStates TClique::read_states(const TFieldStorage &Y, const TInternalSt
 	return walk;
 }
 
-void TClique::_write_new_state(TInternalStateStorage &Z, TCliqueWalkStates &walk, size_t node,
+void TClique::_write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
                                bool new_state,
                                std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	// Mirrors how the field is written in TMarkovField::_set_new_Y: flip a cell the storage already
@@ -57,7 +57,7 @@ void TClique::_write_new_state(TInternalStateStorage &Z, TCliqueWalkStates &walk
 }
 
 std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
-                                      TCliqueWalkStates &walk, TInternalStateStorage &Z,
+                                      TCliqueWalkStates &walk, TNodeStateStorage &Z,
                                       const TTree *tree) const {
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
@@ -98,7 +98,7 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 }
 
 std::vector<size_t> TClique::initialize_Z_from_children(TCliqueWalkStates &walk,
-                                                        TInternalStateStorage &Z,
+                                                        TNodeStateStorage &Z,
                                                         const TTree *tree) const {
 
 	// initialise vector that will insert the Z not in parallel
@@ -117,7 +117,7 @@ std::vector<size_t> TClique::initialize_Z_from_children(TCliqueWalkStates &walk,
 	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TInternalStateStorage &Z,
+void TClique::_set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TNodeStateStorage &Z,
                             const TTree *tree,
                             std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;

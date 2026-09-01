@@ -135,8 +135,8 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 	}
 }
 
-const TInternalStateStorage &TTree::get_Z() const { return _Z; };
-TInternalStateStorage &TTree::get_Z() { return _Z; };
+const TNodeStateStorage &TTree::get_Z() const { return _Z; };
+TNodeStateStorage &TTree::get_Z() { return _Z; };
 
 void TTree::simulate_Z(size_t tree_index) {
 	for (size_t c = 0; c < _cliques.size(); ++c) {

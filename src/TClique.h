@@ -63,7 +63,7 @@ private:
 
 	/// Give `node` its new state: in place where the storage already holds the cell, deferred to
 	/// after the parallel region where it does not, because inserting reallocates a sparse row.
-	void _write_new_state(TInternalStateStorage &Z, TCliqueWalkStates &walk, size_t node,
+	void _write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
 	                      bool new_state,
 	                      std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
@@ -79,7 +79,7 @@ private:
 	/// @param Z the Z vector of that tree (i.e that clique)
 	/// @param tree the tree of interest
 	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TInternalStateStorage &Z,
+	void _set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TNodeStateStorage &Z,
 	                   const TTree *tree,
 	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
@@ -107,15 +107,13 @@ public:
 	/// Every state this clique starts from, read straight out of the storages. The caller keeps it
 	/// for the whole of the clique's turn, because the parameter and branch-length moves that
 	/// follow the node-state walk have to see the states that walk assigned.
-	[[nodiscard]] TCliqueWalkStates read_states(const TFieldStorage &Y,
-	                                            const TInternalStateStorage &Z,
+	[[nodiscard]] TCliqueWalkStates read_states(const TFieldStorage &Y, const TNodeStateStorage &Z,
 	                                            const TPhylogeny &topology) const;
 
 	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density, TCliqueWalkStates &walk,
-	                             TInternalStateStorage &Z, const TTree *tree) const;
+	                             TNodeStateStorage &Z, const TTree *tree) const;
 
-	std::vector<size_t> initialize_Z_from_children(TCliqueWalkStates &walk,
-	                                               TInternalStateStorage &Z,
+	std::vector<size_t> initialize_Z_from_children(TCliqueWalkStates &walk, TNodeStateStorage &Z,
 	                                               const TTree *tree) const;
 
 	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
@@ -131,7 +129,7 @@ public:
 	/// The state of `node` as the storages hold it. A leaf's state is the field's -- a leaf's index
 	/// in leaf space is its node index (ADR-0004) -- and any other node's is the tree's own node
 	/// state. This is the question the current-state class used to answer from a cache.
-	[[nodiscard]] bool state_of(const TFieldStorage &Y, const TInternalStateStorage &Z,
+	[[nodiscard]] bool state_of(const TFieldStorage &Y, const TNodeStateStorage &Z,
 	                            const TPhylogeny &topology, size_t node,
 	                            size_t leaf_index_in_tree_of_last_dim) const;
 

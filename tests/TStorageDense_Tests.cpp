@@ -8,7 +8,7 @@
 #include <vector>
 
 //-----------------------------------
-// TStorageZDense -- the dense internal state, which is the shared state array plus the bulk paths
+// TStorageZDense -- the dense node state, which is the shared state array plus the bulk paths
 // `Z` is asked for by name. What is asserted of the array here therefore holds of the dense field's
 // state too; the field's own suite below only has to check what the counter adds.
 //

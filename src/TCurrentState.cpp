@@ -25,7 +25,7 @@ TCurrentState::TCurrentState(const TPhylogeny &topology, size_t increment, size_
 }
 
 void TCurrentState::fill(const IndexArray &start_index_in_leaves_space, const TFieldStorage &Y,
-                         const TInternalStateStorage &Z) {
+                         const TNodeStateStorage &Z) {
 	fill_Y(start_index_in_leaves_space, _topology.n_leaves(),
 	       Y); // parse all Y (all leaves)
 	fill_Z(start_index_in_leaves_space, _topology.n_nodes(),
@@ -42,8 +42,7 @@ void TCurrentState::fill_Y_along_last_dim(const IndexArray &start_index_in_leave
 }
 
 void TCurrentState::fill_Z_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                          size_t num_nodes_to_parse,
-                                          const TInternalStateStorage &Z) {
+                                          size_t num_nodes_to_parse, const TNodeStateStorage &Z) {
 	// along the last dimension -> increment is 1; the storage picks the line to walk from that
 	// and its own shape (see TStorageZMatrix::fill_current_state).
 	// _index_in_Z now holds the linear index in Z space of each parsed cell.
@@ -61,7 +60,7 @@ void TCurrentState::fill_Y(const IndexArray &start_index_in_leaves_space, size_t
 }
 
 void TCurrentState::fill_Z(const IndexArray &start_index_in_leaves_space, size_t num_nodes_to_parse,
-                           const TInternalStateStorage &Z) {
+                           const TNodeStateStorage &Z) {
 	// The storage picks the line to walk from the increment and its own shape (see
 	// TStorageZMatrix::fill_current_state).
 	// _index_in_Z now holds the linear index in Z space of each parsed cell.
@@ -130,7 +129,7 @@ TSheet::TSheet(size_t dim_ix, const TPhylogeny &topology, const TPhylogeny &topo
 }
 
 void TSheet::fill(const IndexArray &start_index_in_leaves_space, size_t K, const TFieldStorage &Y,
-                  const TInternalStateStorage &Z) {
+                  const TNodeStateStorage &Z) {
 	// Worksharing fill: this runs on the team created in TMarkovField::_update_all_Y (all threads
 	// call it), so we use `omp for`/`omp single` rather than spawning our own team. If ever called
 	// outside a parallel region the constructs are orphaned and execute sequentially, which is also

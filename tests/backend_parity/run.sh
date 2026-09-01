@@ -2,11 +2,14 @@
 #
 # The dense-versus-sparse gate: two binaries, byte-identical output.
 #
-# Which storage backs the field and the internal state is a compile-time choice (see
-# src/storages/storage_backend.h), so the comparison here is between two *builds* rather than
-# between two runtime modes -- which means it exercises exactly what ships, with no dispatch layer
-# that exists only for testing. Both binaries are built from the same sources and differ only in
-# -DACOL_STORAGE_BACKEND.
+# Which storage backs the field, and which backs the node state, are two aliases in
+# src/storages/storage_backend.h. The comparison here is therefore between two *builds* rather than
+# between two runtime modes, which means it exercises exactly what ships, with no dispatch layer
+# that exists only for testing. Both binaries come from the same sources and differ only in the
+# defines that override those two aliases.
+#
+# The gate pairs sparse with sparse and dense with dense. Why those two and not the mixed pairs is
+# in ADR-0006, and src/storages/storage_backend.h records which pairs it gates.
 #
 # Each backend runs the same two chains from the same seed, one after the other, in the *same*
 # working directory with the fixture copied in and every argument spelled identically -- the
@@ -15,9 +18,9 @@
 # working directory, so two runs in two directories would differ there and nowhere else. Then every
 # file one run wrote is compared with the other's byte for byte:
 #
-#   simulate -> the field and both internal states, in full, plus the LOTUS and simple-error data
+#   simulate -> the field and both node states, in full, plus the LOTUS and simple-error data
 #               drawn from them and the per-iteration traces.
-#   infer    -> the parameter traces, the field and internal-state traces, the joint density and
+#   infer    -> the parameter traces, the field and node-state traces, the joint density and
 #               the posterior field.
 #
 # Only `*.log` is left out: it carries a fresh ntfy topic UUID and wall-clock timings, so it
@@ -27,6 +30,8 @@
 #
 # Environment:
 #   ACOL_MODE        debug | release          (default release)
+#   ACOL_ENV         micromamba environment   (default acol_env)
+#   MAMBA_EXE        path to micromamba       (default: the one on PATH)
 #   ACOL_PARITY_DIR  where to run             (default build/parity)
 #   ACOL_PARITY_SEED fixed seed               (default 42)
 #   ACOL_PARITY_ITERATIONS  chain length      (default 400)
@@ -37,6 +42,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="${ACOL_MODE:-release}"
+CONDA_ENV="${ACOL_ENV:-acol_env}"
+MAMBA="${MAMBA_EXE:-micromamba}"
 SEED="${ACOL_PARITY_SEED:-42}"
 ITERATIONS="${ACOL_PARITY_ITERATIONS:-400}"
 WORKDIR="${ACOL_PARITY_DIR:-$ROOT/build/parity}"
@@ -75,7 +82,12 @@ fi
 
 # Indexed rather than associative arrays, and indices rather than names throughout: macOS ships
 # bash 3.2, which has no `declare -A`.
+#
+# One gated pair per index: its label, the field's storage and the node state's. `sparse` names the
+# pair whose storages are both sparse, which is what the label meant before the two could differ.
 BACKENDS=(sparse dense)
+FIELD_STORAGES=(TStorageYMatrix TStorageYDense)
+NODE_STATE_STORAGES=(TStorageZMatrix TStorageZDense)
 BINARIES=()
 
 # Copied into the working directory rather than referred to, so that both runs spell every argument
@@ -83,14 +95,59 @@ BINARIES=()
 FIXTURE=(species.txt molecules.txt species_papers.txt molecules_papers.txt)
 
 # ---------------------------------------------------------------------------
-# Build one binary per backend
+# Build one binary per gated pair
+#
+# The gate drives cmake itself rather than going through `just`. `just` knows nothing about the
+# storages, because nothing in the build system chooses them any more, and this is the one build
+# that overrides the aliases.
 # ---------------------------------------------------------------------------
 
+command -v "$MAMBA" >/dev/null 2>&1 || {
+    echo "error: micromamba not found (set MAMBA_EXE to its path)" >&2
+    exit 1
+}
+"$MAMBA" run -n "$CONDA_ENV" true >/dev/null 2>&1 || {
+    echo "error: micromamba environment '$CONDA_ENV' is missing or broken; run 'just setup'" >&2
+    exit 1
+}
+
+# One directory per pair, beside the ordinary ones, so a rerun rebuilds only what changed.
+#
+# Everything below runs inside the environment, because the flags are built from CXXFLAGS. The
+# conda compiler packages export CC, CXX and the matching sysroot flags from their activation
+# scripts. The defines are appended to CXXFLAGS rather than replacing it, so the sysroot flags
+# survive. The plain compiler names are the fallback when nothing exported them.
+#
+# Configure only when the cache does not already hold exactly these flags. Re-running cmake
+# regenerates armadillo's headers, which invalidates every object that includes them. Ninja
+# re-runs cmake by itself when CMakeLists.txt or the presets change, so skipping it is safe.
+build_binary() {
+    local suffix="$1" field="$2" node_state="$3"
+    local defines="-DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
+
+    ACOL_FLAG_SUFFIX="$suffix" "$MAMBA" run -n "$CONDA_ENV" bash -eu -c '
+        if [[ -z "${CXX:-}" ]]; then
+            case "$(uname -s)" in
+                Darwin) export CC="$CONDA_PREFIX/bin/clang" CXX="$CONDA_PREFIX/bin/clang++" ;;
+                *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
+            esac
+        fi
+        flags="${CXXFLAGS:-} $3"
+        if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$2/CMakeCache.txt" 2>/dev/null; then
+            cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF \
+                  -DCMAKE_CXX_FLAGS="$flags"
+        fi
+        exec cmake --build "$2" --target acol
+    ' _ "$MODE" "build/${MODE}${suffix}" "$defines"
+}
+
 cd "$ROOT"
-for backend in "${BACKENDS[@]}"; do
+for index in "${!BACKENDS[@]}"; do
+    backend="${BACKENDS[$index]}"
+    suffix="-${FLAGS}-parity-${backend}"
     echo "==> building the $backend-backed binary"
-    ACOL_BACKEND="$backend" just build "$MODE" "$FLAGS"
-    BINARIES+=("$ROOT/$(ACOL_BACKEND="$backend" just bin "$MODE" "$FLAGS")")
+    build_binary "$suffix" "${FIELD_STORAGES[$index]}" "${NODE_STATE_STORAGES[$index]}"
+    BINARIES+=("$ROOT/build/${MODE}${suffix}/acol")
 done
 
 # ---------------------------------------------------------------------------
@@ -204,9 +261,9 @@ compare_backends() {
 # Both comparisons run even when the first fails, so a divergence is reported in full rather than
 # one phase at a time.
 divergences=0
-echo "==> comparing the simulated field, internal states and data"
+echo "==> comparing the simulated field, node states and data"
 compare_backends simulate || divergences=1
-echo "==> comparing the parameter, field and internal-state traces"
+echo "==> comparing the parameter, field and node-state traces"
 compare_backends infer || divergences=1
 
 ((divergences == 0)) || exit 1
