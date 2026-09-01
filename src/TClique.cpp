@@ -8,6 +8,7 @@
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/TTree.h"
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -38,15 +39,13 @@ TCliqueWalkStates TClique::read_states(const TFieldStorage &Y, const TNodeStateS
 }
 
 void TClique::_write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
-                               bool new_state,
+                               bool new_state, size_t linear_index_in_Z_space,
                                std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
 	// Mirrors how the field is written in TMarkovField::_set_new_Y: flip a cell the storage already
 	// holds, and defer one it does not, so no sparse row is reallocated while threads are reading
 	// it. The walk records the new state either way, which is what makes a deferred write visible
 	// to the parent that reads it later in this same walk.
 	if (walk.get(node) != new_state) {
-		const auto cell                      = cell_of(node, _start_index_in_leaves_space.back());
-		const size_t linear_index_in_Z_space = Z.get_linear_index_in_container_space(cell);
 		if (new_state && !Z.is_stored(linear_index_in_Z_space)) {
 			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
 		} else {
@@ -56,9 +55,14 @@ void TClique::_write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, si
 	walk.set(node, new_state);
 }
 
+size_t TClique::linear_index_of(const TNodeStateStorage &Z, size_t node) const {
+	return Z.get_linear_index_in_container_space(
+	    cell_of(node, _start_index_in_leaves_space.back()));
+}
+
 std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
                                       TCliqueWalkStates &walk, TNodeStateStorage &Z,
-                                      const TTree *tree) const {
+                                      const TTree *tree, const TCellUniforms &uniforms) const {
 	std::vector<size_t> linear_indices_in_Z_space_to_insert;
 
 	const double stationary_0 = transition_grid().stationary(false);
@@ -80,10 +84,12 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
 		_calculate_log_prob_node_to_children(index_in_tree, tree, walk, sum_log);
 
-		// sample new state and update Z accordingly
-		const double log_prob_0 = sum_log[0].getSum();
-		const double log_prob_1 = sum_log[1].getSum();
-		bool new_state          = sample(log_prob_0, log_prob_1);
+		// sample new state and update Z accordingly. The cell decides which uniform it draws, so
+		// the state this node gets does not depend on which thread walked this clique.
+		const double log_prob_0              = sum_log[0].getSum();
+		const double log_prob_1              = sum_log[1].getSum();
+		const size_t linear_index_in_Z_space = linear_index_of(Z, index_in_tree);
+		bool new_state = sample(log_prob_0, log_prob_1, uniforms.at(linear_index_in_Z_space));
 
 		if (new_state) {
 			joint_prob_density[omp_get_thread_num()] += log_prob_1;
@@ -91,7 +97,8 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 			joint_prob_density[omp_get_thread_num()] += log_prob_0;
 		}
 
-		_write_new_state(Z, walk, index_in_tree, new_state, linear_indices_in_Z_space_to_insert);
+		_write_new_state(Z, walk, index_in_tree, new_state, linear_index_in_Z_space,
+		                 linear_indices_in_Z_space_to_insert);
 	}
 
 	return linear_indices_in_Z_space_to_insert;
@@ -129,7 +136,8 @@ void TClique::_set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TNodeSta
 	const double log_prob_1 = sum_log[1].getSum();
 
 	bool new_state = log_prob_1 > log_prob_0;
-	_write_new_state(Z, walk, node_index, new_state, linear_indices_in_Z_space_to_insert);
+	_write_new_state(Z, walk, node_index, new_state, linear_index_of(Z, node_index),
+	                 linear_indices_in_Z_space_to_insert);
 }
 
 void TClique::_calculate_log_prob_root(double stationary_0,
@@ -154,14 +162,31 @@ void TClique::_calculate_log_prob_node_to_children(
 	}
 }
 
-bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
-	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
-	return coretools::TAcceptOddsRatio::accept(log_Q);
+bool sample(coretools::Probability probability_of_one, double uniform) {
+	return uniform < probability_of_one;
 }
 
-bool sample(double log_prob_0, double log_prob_1) {
-	const double log_Q = log_prob_1 - log_prob_0;
-	return coretools::TAcceptOddsRatio::accept(log_Q);
+namespace {
+/// `1 / (1 + exp(-log_odds))` is the probability of state 1. Log odds of NaN make the comparison
+/// false, so a pair of probabilities that says nothing reads as state 0.
+///
+/// The tails need no branch of their own: the exponential saturates at either end and gives the
+/// answer that tail asks for. ADR-0007 says why this is written here rather than taken from the
+/// odds-ratio helper it replaces.
+///
+/// The comparison is written out rather than handed to the probability overload, because a weak
+/// probability type rejects the NaN this has to let through.
+bool state_one(double log_odds, double uniform) {
+	return uniform < 1.0 / (1.0 + std::exp(-log_odds));
+}
+} // namespace
+
+bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log, double uniform) {
+	return state_one(sum_log[1].getSum() - sum_log[0].getSum(), uniform);
+}
+
+bool sample(double log_prob_0, double log_prob_1, double uniform) {
+	return state_one(log_prob_1 - log_prob_0, uniform);
 }
 
 size_t TClique::_get_parent_index(size_t index_in_tree, const TTree *tree) {

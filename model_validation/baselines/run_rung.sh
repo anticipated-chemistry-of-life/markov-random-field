@@ -10,11 +10,14 @@
 # either of those would pass a rung-1-only gate without being run once.
 #
 # Single-threaded is not a preference, it is what makes the run reproducible.
-# coretools' TRandomGenerator is `static thread_local`, so every thread owns its
-# own stream; the update over cliques is `schedule(dynamic)`, so which clique is
-# drawn by which thread varies between runs. With --numThreads all the same seed
-# therefore yields a different chain each time -- verified empirically, the whole
-# species trace diverges. With --numThreads 1 the run is byte-stable.
+# Every cell draw is hashed from the cell's position now (ADR-0007), but the
+# alpha and nu moves still draw from coretools' `static thread_local`
+# TRandomGenerator inside a `schedule(dynamic)` loop over cliques. So which
+# clique is drawn by which thread varies between runs, and with --numThreads all
+# the same seed yields a different chain each time -- verified empirically, the
+# whole species trace diverges. With --numThreads 1 the run is byte-stable.
+# This is an infer run, so it is the half that is still affected; a simulate run
+# is now byte-stable at any thread count, and `just parity` gates that.
 set -euo pipefail
 RUNG="${1:?usage: run_rung.sh rung1|rung2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

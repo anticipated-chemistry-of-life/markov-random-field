@@ -69,10 +69,25 @@ is also what decides which iterations get a trace line. The two would then write
 lengths, by design rather than by regression. `run.sh` refuses a chain that long rather than let the
 gate fail for a reason it is not testing.
 
-One thread, always. The field update is parallel and draws from a shared random generator, so a run
-is not reproducible across thread counts even under one backend (issue #38). What that leaves out
-is the multi-batch commit of the update's deferred inserts, which one thread never produces;
-`StorageEquivalence` in `tests/TStorageConformance_Tests.cpp` covers that path instead.
+One thread for the two backend chains. What that leaves out is the multi-batch commit of the
+update's deferred inserts, which one thread never produces; `StorageEquivalence` in
+`tests/TStorageConformance_Tests.cpp` covers that path instead.
+
+## The thread-count check
+
+A third run, at the foot of `run.sh`: the dense binary simulates the same chain again at four
+threads (`ACOL_PARITY_THREADS`), and every file it writes has to match the one-thread run byte for
+byte. `acol.parameters` is left out, because it echoes the command line and the command line is
+where the two runs differ on purpose.
+
+A cell's uniform is hashed from its position (ADR-0007), so a chain that draws nothing else gives
+one answer however many threads it runs on. `simulate` is that chain: `IsSimulation` compiles the
+alpha and nu moves out of the clique loop, and those moves hold the last draws still taken from the
+thread-local generator.
+
+`infer` is therefore **not** checked this way, and it would fail if it were. That is the half of
+"reproducible at any thread count" that does not hold yet, and ADR-0007 records what a repair
+costs.
 
 ## What it caught
 

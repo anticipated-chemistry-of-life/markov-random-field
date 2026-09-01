@@ -8,6 +8,8 @@
 #include "Types.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
+#include "coretools/Types/probability.h"
+#include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
 #include "tree/branch/TTransitionGrid.h"
 #include <cstddef>
@@ -63,8 +65,10 @@ private:
 
 	/// Give `node` its new state: in place where the storage already holds the cell, deferred to
 	/// after the parallel region where it does not, because inserting reallocates a sparse row.
+	/// The caller supplies the linear index, because it already needs it to name the node's cell to
+	/// the stream of uniforms.
 	void _write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
-	                      bool new_state,
+	                      bool new_state, size_t linear_index_in_Z_space,
 	                      std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
 
 	/// @brief Calculates the log probability of a node to its children
@@ -110,11 +114,18 @@ public:
 	[[nodiscard]] TCliqueWalkStates read_states(const TFieldStorage &Y, const TNodeStateStorage &Z,
 	                                            const TPhylogeny &topology) const;
 
+	/// @param uniforms the node state's stream for this iteration. Each node draws the one uniform
+	/// its own cell names, so the walk gives the same states whichever thread runs it.
 	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density, TCliqueWalkStates &walk,
-	                             TNodeStateStorage &Z, const TTree *tree) const;
+	                             TNodeStateStorage &Z, const TTree *tree,
+	                             const TCellUniforms &uniforms) const;
 
 	std::vector<size_t> initialize_Z_from_children(TCliqueWalkStates &walk, TNodeStateStorage &Z,
 	                                               const TTree *tree) const;
+
+	/// The linear index, in the node state's container space, of the cell node `node` occupies.
+	/// This is the cell's name, both to the storage and to the stream of uniforms.
+	[[nodiscard]] size_t linear_index_of(const TNodeStateStorage &Z, size_t node) const;
 
 	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
 	/// last dimension first and the variable one second is what makes this right for a clique along
@@ -174,7 +185,14 @@ public:
 	}
 };
 
-bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log);
-bool sample(double log_prob_0, double log_prob_1);
+/// The two-state draw: state 1 with the probability its caller names, either as a probability or
+/// as a pair of log probabilities.
+///
+/// Every caller supplies the uniform, and it comes from the cell being drawn (`TCellUniforms`)
+/// rather than from a running generator. A caller that cannot name its cell therefore cannot draw.
+/// ADR-0007 says why.
+bool sample(coretools::Probability probability_of_one, double uniform);
+bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log, double uniform);
+bool sample(double log_prob_0, double log_prob_1, double uniform);
 
 #endif // ACOL_TCLIQUE_H

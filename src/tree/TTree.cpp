@@ -139,6 +139,9 @@ const TNodeStateStorage &TTree::get_Z() const { return _Z; };
 TNodeStateStorage &TTree::get_Z() { return _Z; };
 
 void TTree::simulate_Z(size_t tree_index) {
+	// A stream of its own, so this draw and the chain's first update are two draws (ADR-0007).
+	const TCellUniforms uniforms(run_seed(), TCellStream::node_state_at_start, 0, _dimension);
+
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
@@ -154,7 +157,8 @@ void TTree::simulate_Z(size_t tree_index) {
 		// we can also prepare the queue for the DFS
 		std::queue<size_t> node_queue;
 		for (const auto root_index_in_tree : this->get_root_nodes()) {
-			bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
+			bool root_state =
+			    sample(p, uniforms.at(clique.linear_index_of(_Z, root_index_in_tree)));
 			if (root_state) {
 				_simulate_one(clique, current_state, tree_index, root_index_in_tree);
 			}
@@ -175,7 +179,8 @@ void TTree::simulate_Z(size_t tree_index) {
 			    (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			        _topology().branch_index(node_index)),
 			    current_state.get(parent_of(node_index)), sum_log);
-			bool internal_node_state = sample(sum_log);
+			bool internal_node_state =
+			    sample(sum_log, uniforms.at(clique.linear_index_of(_Z, node_index)));
 			if (internal_node_state) {
 				_simulate_one(clique, current_state, tree_index, node_index);
 			}

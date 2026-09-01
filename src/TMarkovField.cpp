@@ -138,14 +138,16 @@ void TDataUpdateAccumulator::commit(TDataModel &data_model) {
 #endif
 }
 
-void TMarkovField::_set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
+void TMarkovField::_set_new_Y(bool new_state, const TCellInY &cell_in_Y,
+                              const IndexArray &index_in_leaves_space,
                               std::vector<size_t> &linear_indices_in_Y_space_to_insert) {
 	const size_t leaf_index_in_tree_of_last_dim = index_in_leaves_space.back();
 
-	// get current state, exists and the linear index in Y space of this cell.
-	// get it from _clique_last_dim, as this is re-computed for each update and is thus reliable.
-	const auto [cur_state, exists_in_Y, linear_index_in_Y_space] =
-	    _clique_last_dim.get_state_exist_ix_in_Y(leaf_index_in_tree_of_last_dim);
+	// The cell comes from the caller, which read it from _clique_last_dim to name the uniform this
+	// state was drawn with. That is what ties the draw to the cell the write lands on.
+	const bool cur_state                 = cell_in_Y.state;
+	const bool exists_in_Y               = cell_in_Y.is_stored;
+	const size_t linear_index_in_Y_space = cell_in_Y.linear_index;
 
 	// Thread-safety: this runs inside the parallel loop over the last dimension, so all concurrent
 	// calls touch cells of the same matrix row. Flipping the state of an *existing* cell is an
@@ -316,6 +318,8 @@ void TMarkovField::_simulate_Y() {
 	// probabilities of the child given the parent. set number of leaves per dimension (set the last
 	// dimension to one)
 	if (ProgramOptions::SIMULATION_NO_Y_INITIALIZATION) { return; }
+	// A stream of its own, so this draw and the chain's first update are two draws (ADR-0007).
+	const TCellUniforms uniforms(run_seed(), TCellStream::field_at_start, 0);
 	for (size_t linear_index_in_leaves_space = 0;
 	     linear_index_in_leaves_space < _Y.total_size_of_container_space();
 	     ++linear_index_in_leaves_space) {
@@ -337,7 +341,7 @@ void TMarkovField::_simulate_Y() {
 			    _trees[dim]->get_binned_branch_length(index_in_tree),
 			    current_state.get(_trees[dim]->parent_of(index_in_tree)), sum_log);
 		}
-		bool y_state = sample(sum_log);
+		bool y_state = sample(sum_log, uniforms.at(linear_index_in_leaves_space));
 		if (y_state) { _Y.insert_one(linear_index_in_leaves_space); }
 	}
 }

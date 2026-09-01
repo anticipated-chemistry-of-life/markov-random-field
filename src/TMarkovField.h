@@ -16,6 +16,7 @@
 #include "coretools/algorithms.h"
 #include "mass_spec/msms_data.h"
 #include "omp.h"
+#include "random/TCellUniforms.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -129,7 +130,8 @@ private:
 	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix,
 	                                         const IndexArray &start_index_in_leaves_space,
 	                                         const IndexArray &previous_ix) const;
-	void _set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
+	void _set_new_Y(bool new_state, const TCellInY &cell_in_Y,
+	                const IndexArray &index_in_leaves_space,
 	                std::vector<size_t> &linear_indices_in_Y_space_to_insert);
 
 	void _simulate_Y();
@@ -162,9 +164,13 @@ private:
 	TYUpdateResult _update_Y(const IndexArray &index_in_leaves_space, size_t leaf_index_last_dim,
 	                         size_t index_for_tmp_state,
 	                         std::vector<size_t> &linear_indices_in_Y_space_to_insert,
-	                         const TDataModel &data_model) {
+	                         const TDataModel &data_model, const TCellUniforms &uniforms) {
 		auto index_copy   = index_in_leaves_space;
 		index_copy.back() = leaf_index_last_dim;
+
+		// The cell this update is about to write, read once. Its linear index names the uniform,
+		// and the write below needs the other two answers.
+		const TCellInY cell_in_Y = _clique_last_dim.get_state_exist_ix_in_Y(leaf_index_last_dim);
 
 		// prepare log probabilities for the two possible states
 		std::array<coretools::TSumLogProbability, 2> sum_log;
@@ -194,12 +200,13 @@ private:
 			if (_ms_data.has_value()) { _ms_data->add_log_likelihood(index_copy, sum_log); }
 		}
 
-		// sample state
-		const bool new_state = sample(sum_log);
+		// sample state. The cell names the uniform it draws, so the thread that happens to reach
+		// this cell does not decide what it gets.
+		const bool new_state = sample(sum_log, uniforms.at(cell_in_Y.linear_index));
 
 		// update Y accordingly
 		TYUpdateResult result;
-		_set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
+		_set_new_Y(new_state, cell_in_Y, index_copy, linear_indices_in_Y_space_to_insert);
 #ifdef USE_LOTUS
 		result.prob_lotus_new_state = prob_lotus[new_state];
 #endif
@@ -243,13 +250,17 @@ private:
 			return;
 		}
 
+		// The stream the field's cells draw from this iteration, built before the parallel region
+		// (see run_seed).
+		const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
+
 		// loop over sheets in last dimension
 		TDataUpdateAccumulator acc(ProgramOptions::NUMBER_OF_THREADS);
 		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
 		    ProgramOptions::NUMBER_OF_THREADS);
 
-		// Persistent thread team for the whole update: the team is created ONCE here instead of once
-		// per inner iteration (the old `omp parallel for` sat inside the k x i loop, paying a
+		// Persistent thread team for the whole update: the team is created ONCE here instead of
+		// once per inner iteration (the old `omp parallel for` sat inside the k x i loop, paying a
 		// fork/join every inner iteration). The k/i loops are now executed redundantly by all
 		// threads (SPMD) and the work is shared via `omp for`/`omp single`, turning the per-inner
 		// fork/joins into cheap barriers on a warm team.
@@ -257,7 +268,7 @@ private:
 		// _need_to_update_sheet and the post `single` writes it.
 		IndexArray previous_ix;
 #pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
-    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, data_model)
+    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, data_model, field_uniforms)
 		{
 			for (size_t k = 0; k < _num_outer_loops; ++k) {
 				const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
@@ -295,7 +306,8 @@ private:
 					     ++j) {
 						const auto result = _update_Y<IsSimulation, initYFromData>(
 						    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
-						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], data_model);
+						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], data_model,
+						    field_uniforms);
 						if constexpr (!IsSimulation) {
 							acc.add(static_cast<size_t>(omp_get_thread_num()), result);
 						}
@@ -335,7 +347,8 @@ private:
 		}
 
 		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y);
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y,
+			                                                                          iteration);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {

@@ -16,6 +16,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "omp.h"
+#include "random/TCellUniforms.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
@@ -280,9 +281,15 @@ public:
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
 	template<bool IsSimulation, bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(const TFieldStorage &Y) {
+	void update_Z_and_nus_and_alphas_and_branch_lengths(const TFieldStorage &Y, size_t iteration) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
+
+		// The stream this tree's node state draws from this iteration, built before the parallel
+		// region (see run_seed). Each tree names its own dimension, so the two never share a
+		// uniform.
+		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
+		                                        _dimension);
 
 		// build pairs of branch lengths to update
 		auto pairs         = _build_pairs_branch_lengths();
@@ -294,15 +301,15 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
+    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert, node_state_uniforms)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// fill the current state for this clique
 			auto current_state  = _cliques[i].read_states(Y, _Z, _topology());
 			// update Z
 			if constexpr (!FixZ) {
-				indices_to_insert[i] =
-				    _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this);
+				indices_to_insert[i] = _cliques[i].update_Z(_joint_log_prob_density, current_state,
+				                                            _Z, this, node_state_uniforms);
 			}
 
 			// update nu and alpha

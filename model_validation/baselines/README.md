@@ -62,19 +62,22 @@ cd model_validation && uv run python simulate_independent.py --seed 42
 
 ## Why the run is single-threaded
 
-`--numThreads 1` is not a preference. coretools' `TRandomGenerator` is
-`static thread_local`, so each thread owns its own stream, and the update over
-cliques is `schedule(dynamic)` -- so which clique is drawn by which thread varies
-between runs. Under `--numThreads all` the same `--fixedSeed 42` therefore
-produces a different chain every time; verified empirically, the entire species
-trace diverges from line 3 onwards, while the pinned molecules side stays put.
+`--numThreads 1` is not a preference. Every cell draw is hashed from the cell's
+position now (ADR-0007), but the alpha and nu moves still draw from coretools'
+`static thread_local` `TRandomGenerator`, inside a `schedule(dynamic)` loop over
+cliques -- so which clique is drawn by which thread varies between runs. Under
+`--numThreads all` the same `--fixedSeed 42` therefore produces a different chain
+every time; verified empirically, the entire species trace diverges from line 3
+onwards, while the pinned molecules side stays put.
 
 Single-threaded, two runs agree on every output file. `acol.log` is excluded from
 the manifest regardless: it carries a per-run ntfy topic UUID and wall-clock
 timings, neither of which say anything about the model.
 
-A consequence worth knowing outside this directory: **a multi-threaded acol run
-is not reproducible from its seed.** That is a property of the harness, not of
+A consequence worth knowing outside this directory: **a multi-threaded acol
+`infer` run is not reproducible from its seed.** A `simulate` run is, at any
+thread count, because `IsSimulation` compiles the alpha and nu moves out of the
+clique loop; `just parity` gates that. Both are properties of the harness, not of
 any one refactor.
 
 ## Scope of the gate

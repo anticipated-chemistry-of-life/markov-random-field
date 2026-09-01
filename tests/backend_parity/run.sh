@@ -35,6 +35,7 @@
 #   ACOL_PARITY_DIR  where to run             (default build/parity)
 #   ACOL_PARITY_SEED fixed seed               (default 42)
 #   ACOL_PARITY_ITERATIONS  chain length      (default 400)
+#   ACOL_PARITY_THREADS  threads for the thread-count check  (default 4)
 
 set -euo pipefail
 
@@ -157,14 +158,31 @@ done
 RUNDIR="$WORKDIR/run"
 rm -rf "$WORKDIR"
 
-# Both chains below pass `--numThreads 1`: the field update is parallel and the random stream is
-# drawn from a shared generator, so a run is only reproducible at a fixed thread count (issue #38).
-# Pinning it keeps the gate about the storage backend and nothing else. What that costs is the
-# multi-batch commit of the deferred inserts, which one thread never produces -- that path is
-# covered at the storage seam instead, by StorageEquivalence in tests/TStorageConformance_Tests.cpp.
+# Both chains below pass `--numThreads 1`. Every cell draw is now hashed from the cell's position
+# (ADR-0007), so `simulate` gives the same bytes at any thread count. `infer` does not: the alpha
+# and nu moves run inside the same parallel loop over cliques and still draw from the thread-local
+# generator, which no option seeds on a worker thread. Pinning one thread keeps the gate about the
+# storage backend and nothing else. What that costs is the multi-batch commit of the deferred
+# inserts, which one thread never produces -- that path is covered at the storage seam instead, by
+# StorageEquivalence in tests/TStorageConformance_Tests.cpp.
 run_acol() {
     local index="$1"; shift
     (cd "$RUNDIR" && "${BINARIES[$index]}" "$@" >/dev/null)
+}
+
+# One simulate invocation, spelled once: the thread-count check at the foot runs the same chain
+# again, and the two have to differ in the thread count and in nothing else.
+run_simulate() {
+    local index="$1" out="$2" threads="$3"
+    run_acol "$index" simulate \
+        --out "$out" \
+        --tree_species species.txt --tree_molecules molecules.txt \
+        --species_paper_counts species_papers.txt \
+        --molecules_paper_counts molecules_papers.txt \
+        --iterations "$ITERATIONS" --n_bins 6 \
+        --epsilon_simple_model 0.1 --gamma 1.1 \
+        --numThreads "$threads" --fixedSeed "$SEED" \
+        --write_Y --write_Z --write_Y_trace --write_Z_trace
 }
 
 for index in "${!BACKENDS[@]}"; do
@@ -175,15 +193,7 @@ for index in "${!BACKENDS[@]}"; do
     cp "${FIXTURE[@]/#/$SCRIPT_DIR/}" "$RUNDIR/"
 
     echo "==> $backend: simulate"
-    run_acol "$index" simulate \
-        --out simulate/acol \
-        --tree_species species.txt --tree_molecules molecules.txt \
-        --species_paper_counts species_papers.txt \
-        --molecules_paper_counts molecules_papers.txt \
-        --iterations "$ITERATIONS" --n_bins 6 \
-        --epsilon_simple_model 0.1 --gamma 1.1 \
-        --numThreads 1 --fixedSeed "$SEED" \
-        --write_Y --write_Z --write_Y_trace --write_Z_trace
+    run_simulate "$index" simulate/acol 1
 
     # Inference reads the field and data this same run just simulated, so both backends infer from
     # bytes the simulate comparison below has already proven identical.
@@ -219,20 +229,21 @@ for index in "${!BACKENDS[@]}"; do
 done
 rm -rf "$RUNDIR"
 
-compare_backends() {
-    local subdir="$1"
-    local left="$WORKDIR/${BACKENDS[0]}/$subdir"
-    local right="$WORKDIR/${BACKENDS[1]}/$subdir"
+# Every file two directories hold, byte for byte. `label` names what the two sides are, and `skip`
+# is the extended regular expression of filenames the comparison leaves out.
+compare_dirs() {
+    local left="$1" right="$2" label="$3" skip="${4:-\.log$}"
 
-    # A file one backend wrote and the other did not is a divergence in its own right, so the file
+    # A file one side wrote and the other did not is a divergence in its own right, so the file
     # lists are compared before the contents.
-    # `|| true` because `set -o pipefail` would otherwise make a directory of nothing but logs --
-    # an empty grep -- abort the script before the "nothing to compare" check below can say so.
+    # `|| true` because `set -o pipefail` would otherwise make a directory of nothing but skipped
+    # files -- an empty grep -- abort the script before the "nothing to compare" check below can
+    # say so.
     local left_list right_list
-    left_list="$(cd "$left" && ls -1 | grep -v '\.log$' | sort || true)"
-    right_list="$(cd "$right" && ls -1 | grep -v '\.log$' | sort || true)"
+    left_list="$(cd "$left" && ls -1 | grep -Ev "$skip" | sort || true)"
+    right_list="$(cd "$right" && ls -1 | grep -Ev "$skip" | sort || true)"
     if [[ "$left_list" != "$right_list" ]]; then
-        echo "FAIL: $subdir: the two backends wrote different files" >&2
+        echo "FAIL: $label: the two sides wrote different files" >&2
         diff <(echo "$left_list") <(echo "$right_list") >&2 || true
         return 1
     fi
@@ -240,7 +251,7 @@ compare_backends() {
     local n_files
     n_files="$(printf '%s\n' "$left_list" | grep -c . || true)"
     if ((n_files == 0)); then
-        echo "FAIL: $subdir: neither backend wrote anything to compare" >&2
+        echo "FAIL: $label: neither side wrote anything to compare" >&2
         return 1
     fi
 
@@ -248,14 +259,20 @@ compare_backends() {
     while IFS= read -r file; do
         [[ -n "$file" ]] || continue
         if ! cmp -s "$left/$file" "$right/$file"; then
-            echo "FAIL: $subdir/$file differs between ${BACKENDS[0]} and ${BACKENDS[1]}" >&2
+            echo "FAIL: $label: $file differs" >&2
             diff "$left/$file" "$right/$file" | head -20 >&2 || true
             failed=1
         fi
     done <<<"$left_list"
 
     ((failed == 0)) || return 1
-    echo "  $subdir: $n_files files identical"
+    echo "  $label: $n_files files identical"
+}
+
+compare_backends() {
+    local subdir="$1"
+    compare_dirs "$WORKDIR/${BACKENDS[0]}/$subdir" "$WORKDIR/${BACKENDS[1]}/$subdir" \
+                 "$subdir, ${BACKENDS[0]} against ${BACKENDS[1]}"
 }
 
 # Both comparisons run even when the first fails, so a divergence is reported in full rather than
@@ -266,5 +283,40 @@ compare_backends simulate || divergences=1
 echo "==> comparing the parameter, field and node-state traces"
 compare_backends infer || divergences=1
 
+# ---------------------------------------------------------------------------
+# One backend, two thread counts
+#
+# Every cell draw is hashed from the cell's position (ADR-0007), so a chain that draws nothing else
+# gives one answer however many threads it runs on. `simulate` is that chain: IsSimulation compiles
+# the alpha and nu moves out of the clique loop, and those moves are the last draws still taken
+# from the thread-local generator. So this gates the half of "reproducible at any thread count"
+# that holds today. `infer` is the other half and is not gated, which is why both chains above stay
+# at one thread.
+#
+# The dense pair is the default build, so it is the one this runs again.
+# ---------------------------------------------------------------------------
+THREADS="${ACOL_PARITY_THREADS:-4}"
+
+dense_index=""
+for index in "${!BACKENDS[@]}"; do
+    [[ "${BACKENDS[$index]}" == dense ]] && dense_index="$index"
+done
+if [[ -z "$dense_index" ]]; then
+    echo "error: no backend named 'dense' to run the thread-count check against" >&2
+    exit 1
+fi
+
+echo "==> checking that simulate gives the same bytes at $THREADS threads"
+rm -rf "$RUNDIR"
+mkdir -p "$RUNDIR/simulate"
+cp "${FIXTURE[@]/#/$SCRIPT_DIR/}" "$RUNDIR/"
+run_simulate "$dense_index" simulate/acol "$THREADS"
+
+# acol.parameters echoes the command line, and the command line is where the two runs differ on
+# purpose. Everything else the run wrote has to match.
+compare_dirs "$WORKDIR/dense/simulate" "$RUNDIR/simulate" \
+             "simulate, 1 thread against $THREADS" '\.log$|^acol\.parameters$' || divergences=1
+rm -rf "$RUNDIR"
+
 ((divergences == 0)) || exit 1
-echo "the dense and sparse backends agree byte for byte"
+echo "the dense and sparse backends agree byte for byte, and simulate ignores the thread count"

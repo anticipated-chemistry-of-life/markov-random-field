@@ -80,6 +80,10 @@ _Avoid_: sweep, pass, scan
 The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
 _Avoid_: Y update, field update, joint draw, eight-state sweep
 
+**Cell uniform**:
+The one uniform a cell's update draws, derived by hashing the seed, the stream, the tree, the iteration and the cell's linear index instead of taken from a running generator. Two cells, two iterations, two containers and two seeds share one only by chance, and the number a cell gets does not move when the thread count changes or when an update visits the cells in another order. That last property is what lets the dense and the sparse backend traverse their storage differently and still run one chain. `TCellUniforms`, `src/random/`. See ADR-0007.
+_Avoid_: random number, uniform variate, the cell's random draw
+
 **Window**:
 The strided view a storage opens over itself, given a start, a count and a stride. An update reads and writes its cells through a window rather than through a cache of its own, so each storage brings the traversal that suits it: the dense window indexes the state vector, and the sparse window walks its line once and buffers the inserts it cannot make in place. A window shows its own write to a later read on the same window. It ends once: it either commits its buffered inserts or hands them to the caller, which is the only exit open to a window inside a parallel region. `TDenseWindow` and `TSparseWindow`, `src/storages/`. See ADR-0006.
 _Avoid_: slice, view, buffer, current state

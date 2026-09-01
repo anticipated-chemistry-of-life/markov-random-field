@@ -91,10 +91,14 @@ non-neutral, and then reproduces the drift as an MCMC and removes it. See
   are read raw (`read_paper_counts` in `src/lotus/paper_counts.cpp`) and the
   `log(count + 1)` is applied by `lotus_math::TReportingModel`. Simulating LOTUS
   data from raw counts is indistinguishable from an inference bug.
-- **`--numThreads all` is not reproducible.** Two identical invocations under the
-  same `--fixedSeed` give posterior means differing by ~0.2 posterior standard
-  deviations. Any test that compares runs exactly must pass `--numThreads 1`;
-  `check_neutrality_invariant.sh` does.
+- **`--numThreads all` is not reproducible for `infer`.** Two identical
+  invocations under the same `--fixedSeed` give posterior means differing by ~0.2
+  posterior standard deviations. The cell draws are hashed from their position
+  (ADR-0007); what is left is the alpha and nu moves, which still draw from the
+  thread-local generator inside the clique loop. Any test that compares `infer`
+  runs exactly must pass `--numThreads 1`; `check_neutrality_invariant.sh` does.
+  A `simulate` run is reproducible at any thread count, and `just parity` gates
+  it.
 - **"internal nodes" means two different things.** The startup log line counts
   internal nodes _excluding_ roots, while `TPhylogeny::n_internal_nodes()`
   _includes_ them. Neither sizes the node state any more: since ADR-0005 that

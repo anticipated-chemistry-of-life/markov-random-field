@@ -106,12 +106,9 @@ bool TCurrentState::exists_in_storage(size_t index_in_tree) const {
 	return _exists_in_Z[index_in_tree];
 }
 
-std::tuple<bool, bool, size_t>
-TCurrentState::get_state_exist_ix_in_Y(size_t index_in_leaves) const {
-	const bool state  = _current_state_Y[index_in_leaves];
-	const bool exists = _exists_in_Y[index_in_leaves];
-	const size_t ix   = _index_in_Y[index_in_leaves];
-	return {state, exists, ix};
+TCellInY TCurrentState::get_state_exist_ix_in_Y(size_t index_in_leaves) const {
+	return {static_cast<bool>(_current_state_Y[index_in_leaves]),
+	        static_cast<bool>(_exists_in_Y[index_in_leaves]), _index_in_Y[index_in_leaves]};
 }
 
 //-----------------------------------
@@ -183,9 +180,8 @@ void TSheet::set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_
 	_cur_states[node_index_in_tree_of_dim].set_Y(ix, value);
 }
 
-std::tuple<bool, bool, size_t>
-TSheet::get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
-                                size_t leaf_index_in_tree_of_last_dim) const {
+TCellInY TSheet::get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
+                                         size_t leaf_index_in_tree_of_last_dim) const {
 	// calculate index in Y: leaf index in last dimension, relative to start index
 	const size_t ix = leaf_index_in_tree_of_last_dim - _start_ix_in_leaves_space_last_dim;
 	return _cur_states[node_index_in_tree_of_dim].get_state_exist_ix_in_Y(ix);

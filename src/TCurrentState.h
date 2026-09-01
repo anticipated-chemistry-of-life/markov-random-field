@@ -8,10 +8,17 @@
 #include "constants.h"
 #include "storages/storage_backend.h"
 #include <cstddef>
-#include <tuple>
 #include <vector>
 
 class TPhylogeny; // only the topology is needed: no parameters, no cliques, no field
+
+/// One cell of the field as a clique holds it. The field update reads all three at once, because it
+/// names the cell to its stream of uniforms before it knows what state the cell is about to take.
+struct TCellInY {
+	bool state          = false; ///< the state the storage holds for this cell
+	bool is_stored      = false; ///< whether the storage holds the cell at all
+	size_t linear_index = 0;     ///< where the cell sits, in field space
+};
 
 //-----------------------------------
 // TCurrentState
@@ -69,7 +76,7 @@ public:
 	size_t get_linear_index_in_storage(size_t index_in_tree) const;
 	bool exists_in_storage(size_t index_in_tree) const;
 
-	std::tuple<bool, bool, size_t> get_state_exist_ix_in_Y(size_t index_in_leaves) const;
+	[[nodiscard]] TCellInY get_state_exist_ix_in_Y(size_t index_in_leaves) const;
 };
 
 //-----------------------------------
@@ -104,9 +111,8 @@ public:
 	bool get(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim) const;
 	void set(size_t node_index_in_tree_of_dim, size_t leaf_index_in_tree_of_last_dim, bool value);
 
-	std::tuple<bool, bool, size_t>
-	get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
-	                        size_t leaf_index_in_tree_of_last_dim) const;
+	[[nodiscard]] TCellInY get_state_exist_ix_in_Y(size_t node_index_in_tree_of_dim,
+	                                               size_t leaf_index_in_tree_of_last_dim) const;
 };
 
 #endif // ACOL_TCURRENTSTATE_H

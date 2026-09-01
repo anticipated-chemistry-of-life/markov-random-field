@@ -371,10 +371,12 @@ def _write_scripts(out: pathlib.Path, config: ScenarioConfig) -> None:
     # rather than diffed against rung 1, so it does not depend on rung 1 having
     # been run or on its thread count.
     #
-    # Single-threaded on purpose. With --numThreads all the binary is not
+    # Single-threaded on purpose. With --numThreads all an infer run is not
     # reproducible even under --fixedSeed: two identical invocations produce
-    # posterior means differing by ~0.2 posterior standard deviations. An exact
-    # diff is only a valid test of neutrality when the run is deterministic.
+    # posterior means differing by ~0.2 posterior standard deviations. The cell
+    # draws are hashed from their position (ADR-0007); the alpha and nu moves are
+    # what is left. An exact diff is only a valid test of neutrality when the run
+    # is deterministic.
     invariant = out / "check_neutrality_invariant.sh"
     invariant.write_text(
         _PREAMBLE.format(flags="s")
