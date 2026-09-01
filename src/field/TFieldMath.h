@@ -215,18 +215,11 @@ public:
 		}
 	}
 
-	/// `{ log(1 - P_k), log P_k }`, indexed by the field state, each from a closed form chosen so
-	/// that nothing cancels.
+	/// `{ log(1 - P_k), log P_k }`, indexed by the field state.
 	///
-	/// Taking logs of `prob_for_bucket` would be shorter and is what this did first. It is worse in
-	/// both directions, and not where one would guess. `1 - P_k` is *exact* whenever `P_k >= 0.5`
-	/// (Sterbenz), so `log1p` buys nothing for the both-ones bucket; the loss is at the other end,
-	/// where `P_0 = omega^2` is tiny and `1 - P_0` rounds to 1. And `log P_2` formed as
-	/// `log((1 - w) * (1 - w))` loses the squaring's rounding -- 4e-11 relative at `omega = 1e-6`
-	/// -- where ADR-0005's observation that `log P_k` is *affine* in `k` gives it exactly.
-	///
-	/// So: the logs come from the affine form, and the complements from expansions that subtract
-	/// nothing near-equal -- `1 - P_0 = (1-w)(1+w)`, `1 - P_1 = 1 - w + w^2`, `1 - P_2 = w(2-w)`.
+	/// Each value comes from a closed form that cancels nothing. The logs come from the affine
+	/// form; the complements come from expansions that subtract nothing near-equal. Taking logs of
+	/// `prob_for_bucket` is shorter and loses accuracy at both ends. ADR-0006 gives the numbers.
 	[[nodiscard]] static std::array<double, 2> log_prob_for_bucket(size_t bucket,
 	                                                               const TErrorProbability &omega) {
 		check_bucket(bucket, n_buckets);
