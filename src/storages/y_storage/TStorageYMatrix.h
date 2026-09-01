@@ -10,7 +10,9 @@
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
 #include "storages/storage_concepts.h"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -18,11 +20,11 @@
 
 class TStorageYMatrix {
 private:
-	size_t _thinning_factor;
+	size_t _thinning_factor = 1;
 	/// The number of iterations actually counted, and so the largest a cell's counter can be.
 	/// Counted rather than derived from the chain length -- see FieldStorage in
 	/// storages/storage_concepts.h for why that arithmetic cannot be done up front.
-	size_t _total_counts = 0;
+	size_t _total_counts    = 0;
 	coretools::TSparseMatrix<TStorageY> _mat;
 
 	/// _dimensions_Y_space is the number of leaf nodes in each dimension
@@ -55,9 +57,11 @@ public:
 	};
 
 	void initialize(const size_t n_iterations, const IndexArray &dimensions_Y_space) {
-		constexpr int16_t max_value = std::numeric_limits<int16_t>::max();
-		_thinning_factor =
-		    std::ceil(static_cast<double>(n_iterations) / static_cast<double>(max_value));
+		// add_to_counter takes the iteration modulo the thinning factor, so it stays at least one
+		// even for a chain with no iterations to thin.
+		_thinning_factor = std::max<size_t>(
+		    1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
+		                                     static_cast<double>(TStorageY::MAX_COUNTER))));
 		_total_counts       = 0;
 		_dimensions_Y_space = dimensions_Y_space;
 		_mat.resize(dimensions_Y_space[0], dimensions_Y_space[1]);

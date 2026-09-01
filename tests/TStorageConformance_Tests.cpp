@@ -643,6 +643,26 @@ TYPED_TEST(FieldConformance, reset_counts_restarts_the_denominator_with_the_coun
 	EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 1.0);
 }
 
+// The thinning factor is a divisor before it is a number: add_to_counter takes the iteration
+// modulo it. ceil(n / capacity) is zero for a chain with no iterations in it, so a field sized for
+// one would divide by zero on its first count -- which is why the factor carries a floor of one.
+TYPED_TEST(FieldConformance, the_thinning_factor_is_at_least_one_for_any_chain_length) {
+	// Zero is the case the floor exists for; the lengths above it say the floor changes nothing
+	// there, on both sides of each counter's capacity.
+	for (const size_t n_iterations : {0u, 1u, 300u, 32769u, 100003u}) {
+		const TypeParam field(n_iterations, IndexArray{2, 3});
+		EXPECT_GE(field.get_thinning_factor(), 1u) << "n_iterations = " << n_iterations;
+	}
+
+	// And the field sized for no iterations survives being counted, which is what the floor is
+	// really for.
+	TypeParam field(0, IndexArray{2, 3});
+	field.insert_one(0);
+	field.add_to_counter(0);
+	EXPECT_EQ(field.get_total_counts(), 1u);
+	EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 1.0);
+}
+
 TYPED_TEST(FieldConformance, a_field_that_has_counted_nothing_reports_no_posterior) {
 	TypeParam field(1000, IndexArray{2, 3});
 	field.insert_one(0);
