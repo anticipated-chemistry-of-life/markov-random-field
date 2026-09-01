@@ -20,51 +20,29 @@ TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_
 	_increment                   = increment;
 }
 
-bool TClique::state_of(const TFieldStorage &Y, const TNodeStateStorage &Z,
-                       const TPhylogeny &topology, size_t node,
-                       size_t leaf_index_in_tree_of_last_dim) const {
-	const auto cell = cell_of(node, leaf_index_in_tree_of_last_dim);
-	if (topology.is_leaf(node)) { return Y.is_one(Y.get_linear_index_in_container_space(cell)); }
-	return Z.is_one(Z.get_linear_index_in_container_space(cell));
+// Both windows open at the same cell and step by the same stride. The field and the leaf block of
+// a node state address a leaf pair at the same (row, column) (ADR-0005). Only the clique's own
+// dimension differs in extent between the two containers, so the step along the other one is the
+// same in both. Each storage turns that subscript into a linear index of its own, and the two
+// differ.
+TCliqueStates::TCliqueStates(TFieldStorage &Y, TNodeStateStorage &Z, const TClique &clique,
+                             const TPhylogeny &topology)
+    : _leaves(Y.open_window(clique.first_cell(), topology.n_leaves(), clique.get_increment())),
+      _nodes(
+          Z.open_window(clique.first_cell(), clique.get_number_of_nodes(), clique.get_increment())),
+      _topology(&topology) {}
+
+TCliqueStates TClique::open_states(TFieldStorage &Y, TNodeStateStorage &Z,
+                                   const TPhylogeny &topology) const {
+	return {Y, Z, *this, topology};
 }
 
-TCliqueWalkStates TClique::read_states(const TFieldStorage &Y, const TNodeStateStorage &Z,
-                                       const TPhylogeny &topology) const {
-	TCliqueWalkStates walk(topology.n_nodes());
-	const size_t column = _start_index_in_leaves_space.back();
-	for (size_t node = 0; node < topology.n_nodes(); ++node) {
-		walk.set(node, state_of(Y, Z, topology, node, column));
-	}
-	return walk;
+TNodeStateStorage::TWindow TClique::open_node_state_window(TNodeStateStorage &Z) const {
+	return Z.open_window(first_cell(), _n_nodes, _increment);
 }
 
-void TClique::_write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
-                               bool new_state, size_t linear_index_in_Z_space,
-                               std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
-	// Mirrors how the field is written in TMarkovField::_set_new_Y: flip a cell the storage already
-	// holds, and defer one it does not, so no sparse row is reallocated while threads are reading
-	// it. The walk records the new state either way, which is what makes a deferred write visible
-	// to the parent that reads it later in this same walk.
-	if (walk.get(node) != new_state) {
-		if (new_state && !Z.is_stored(linear_index_in_Z_space)) {
-			linear_indices_in_Z_space_to_insert.emplace_back(linear_index_in_Z_space);
-		} else {
-			Z.set_state(linear_index_in_Z_space, new_state);
-		}
-	}
-	walk.set(node, new_state);
-}
-
-size_t TClique::linear_index_of(const TNodeStateStorage &Z, size_t node) const {
-	return Z.get_linear_index_in_container_space(
-	    cell_of(node, _start_index_in_leaves_space.back()));
-}
-
-std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
-                                      TCliqueWalkStates &walk, TNodeStateStorage &Z,
-                                      const TTree *tree, const TCellUniforms &uniforms) const {
-	std::vector<size_t> linear_indices_in_Z_space_to_insert;
-
+void TClique::update_Z(std::vector<double> &joint_prob_density, TCliqueStates &states,
+                       const TTree *tree, const TCellUniforms &uniforms) const {
 	const double stationary_0 = transition_grid().stationary(false);
 
 	for (const auto index_in_tree : tree->get_internal_nodes()) {
@@ -78,18 +56,18 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 			// its state is still the one this update started from.
 			const auto bin_branch_len = tree->get_previous_binned_branch_length(index_in_tree);
 			calculate_log_prob_parent_to_node(bin_branch_len,
-			                                  walk.get(tree->parent_of(index_in_tree)), sum_log);
+			                                  states.get(tree->parent_of(index_in_tree)), sum_log);
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
-		_calculate_log_prob_node_to_children(index_in_tree, tree, walk, sum_log);
+		_calculate_log_prob_node_to_children(index_in_tree, tree, states, sum_log);
 
 		// sample new state and update Z accordingly. The cell decides which uniform it draws, so
 		// the state this node gets does not depend on which thread walked this clique.
-		const double log_prob_0              = sum_log[0].getSum();
-		const double log_prob_1              = sum_log[1].getSum();
-		const size_t linear_index_in_Z_space = linear_index_of(Z, index_in_tree);
-		bool new_state = sample(log_prob_0, log_prob_1, uniforms.at(linear_index_in_Z_space));
+		const double log_prob_0 = sum_log[0].getSum();
+		const double log_prob_1 = sum_log[1].getSum();
+		bool new_state =
+		    sample(log_prob_0, log_prob_1, uniforms.at(states.linear_index_in_Z(index_in_tree)));
 
 		if (new_state) {
 			joint_prob_density[omp_get_thread_num()] += log_prob_1;
@@ -97,20 +75,14 @@ std::vector<size_t> TClique::update_Z(std::vector<double> &joint_prob_density,
 			joint_prob_density[omp_get_thread_num()] += log_prob_0;
 		}
 
-		_write_new_state(Z, walk, index_in_tree, new_state, linear_index_in_Z_space,
-		                 linear_indices_in_Z_space_to_insert);
+		// The window writes the cell it already holds in place, and buffers the one it does not,
+		// because inserting reallocates a sparse row. A later read on this window sees the new
+		// state either way, which is what the parent of this node needs.
+		states.set(index_in_tree, new_state);
 	}
-
-	return linear_indices_in_Z_space_to_insert;
 }
 
-std::vector<size_t> TClique::initialize_Z_from_children(TCliqueWalkStates &walk,
-                                                        TNodeStateStorage &Z,
-                                                        const TTree *tree) const {
-
-	// initialise vector that will insert the Z not in parallel
-	std::vector<size_t> linear_indices_in_Z_space_to_insert;
-
+void TClique::initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const {
 	// Bottom-up update of Z, as one forward walk. The internal nodes are stored as the non-root
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
@@ -118,26 +90,21 @@ std::vector<size_t> TClique::initialize_Z_from_children(TCliqueWalkStates &walk,
 	// none remained, which is quadratic in the worst case because nothing about the storage order
 	// guaranteed anything.
 	for (const size_t node_index : tree->get_internal_nodes()) {
-		_set_Z_to_MLE(node_index, walk, Z, tree, linear_indices_in_Z_space_to_insert);
+		_set_Z_to_MLE(node_index, states, tree);
 	}
-
-	return linear_indices_in_Z_space_to_insert;
 }
 
-void TClique::_set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TNodeStateStorage &Z,
-                            const TTree *tree,
-                            std::vector<size_t> &linear_indices_in_Z_space_to_insert) const {
+void TClique::_set_Z_to_MLE(size_t node_index, TCliqueStates &states, const TTree *tree) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
-	_calculate_log_prob_node_to_children(node_index, tree, walk, sum_log);
+	_calculate_log_prob_node_to_children(node_index, tree, states, sum_log);
 
 	// sample new state and update Z accordingly
 	const double log_prob_0 = sum_log[0].getSum();
 	const double log_prob_1 = sum_log[1].getSum();
 
 	bool new_state = log_prob_1 > log_prob_0;
-	_write_new_state(Z, walk, node_index, new_state, linear_index_of(Z, node_index),
-	                 linear_indices_in_Z_space_to_insert);
+	states.set(node_index, new_state);
 }
 
 void TClique::_calculate_log_prob_root(double stationary_0,
@@ -147,15 +114,15 @@ void TClique::_calculate_log_prob_root(double stationary_0,
 }
 
 void TClique::_calculate_log_prob_node_to_children(
-    size_t index_in_tree, const TTree *tree, const TCliqueWalkStates &walk,
+    size_t index_in_tree, const TTree *tree, const TCliqueStates &states,
     std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	const auto &process = transition_grid();
 	for (const auto &child_index : tree->children_of(index_in_tree)) {
 		// Note: the *previous* bin, because new values were proposed before the loop started.
 		// Children come before their parent in post-order, so this reads a state the walk has
-		// already assigned -- which is the whole reason the walk carries them.
+		// already assigned -- which the window shows even where it could not write it in place.
 		auto bin_length        = tree->get_previous_binned_branch_length(child_index);
-		const bool child_state = walk.get(child_index);
+		const bool child_state = states.get(child_index);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			sum_log[i].add(process.probability(bin_length, i, child_state));
 		}

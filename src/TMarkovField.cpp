@@ -319,10 +319,7 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	//    TDataModel::_simulateUnderPrior, so that all sources see the same Y).
 	// 5. From that simulated data can we go back and infer the prior params
 	//
-	for (size_t tree_index = 0; tree_index < _trees.size(); ++tree_index) {
-		auto &tree = _trees[tree_index];
-		tree->simulate_Z(tree_index);
-	}
+	for (auto &tree : _trees) { tree->simulate_Z(); }
 
 	_simulate_Y();
 

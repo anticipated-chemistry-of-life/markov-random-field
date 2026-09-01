@@ -138,30 +138,30 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 const TNodeStateStorage &TTree::get_Z() const { return _Z; };
 TNodeStateStorage &TTree::get_Z() { return _Z; };
 
-void TTree::simulate_Z(size_t tree_index) {
+void TTree::simulate_Z() {
 	// A stream of its own, so this draw and the chain's first update are two draws (ADR-0007).
 	const TCellUniforms uniforms(run_seed(), TCellStream::node_state_at_start, 0, _dimension);
 
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
-		// Simulation starts from nothing sampled, which is what the old current state also gave
-		// here: it was sized but never filled from the storages.
-		TCliqueWalkStates current_state(get_number_of_nodes());
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
+
+		// This clique's column of the node state. The simulation runs top-down, so every node
+		// reads the state its parent was given through the window that wrote it. The window closes
+		// with the clique's turn and commits what it buffered, which is safe here because the
+		// simulation runs on one thread.
+		auto nodes        = clique.open_node_state_window(_Z);
 		double proba_root = clique.transition_grid().stationary(true);
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS
 		std::queue<size_t> node_queue;
 		for (const auto root_index_in_tree : this->get_root_nodes()) {
-			bool root_state =
-			    sample(p, uniforms.at(clique.linear_index_of(_Z, root_index_in_tree)));
-			if (root_state) {
-				_simulate_one(clique, current_state, tree_index, root_index_in_tree);
-			}
+			bool root_state = sample(p, uniforms.at(nodes.linear_index(root_index_in_tree)));
+			nodes.set_state(root_index_in_tree, root_state);
 			for (const auto child : this->children_of(root_index_in_tree)) {
 				if (!this->isLeaf(child)) { node_queue.push(child); }
 			} // those are the first children of the tree (children of the roots).
@@ -178,12 +178,9 @@ void TTree::simulate_Z(size_t tree_index) {
 			clique.calculate_log_prob_parent_to_node(
 			    (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			        _topology().branch_index(node_index)),
-			    current_state.get(parent_of(node_index)), sum_log);
-			bool internal_node_state =
-			    sample(sum_log, uniforms.at(clique.linear_index_of(_Z, node_index)));
-			if (internal_node_state) {
-				_simulate_one(clique, current_state, tree_index, node_index);
-			}
+			    nodes.is_one(parent_of(node_index)), sum_log);
+			bool internal_node_state = sample(sum_log, uniforms.at(nodes.linear_index(node_index)));
+			nodes.set_state(node_index, internal_node_state);
 
 			for (size_t child_index : this->children_of(node_index)) {
 				if (!this->isLeaf(child_index)) {
@@ -192,12 +189,4 @@ void TTree::simulate_Z(size_t tree_index) {
 			}
 		} // internal nodes done, we go to the leaves
 	}
-}
-
-void TTree::_simulate_one(const TClique &clique, TCliqueWalkStates &current_state,
-                          size_t tree_index, size_t node_index_in_tree) {
-	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
-	index_in_leaves_space[tree_index] = node_index_in_tree;
-	_Z.insert_one(index_in_leaves_space);
-	current_state.set(node_index_in_tree, true);
 }

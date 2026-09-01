@@ -52,10 +52,9 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 	}
 };
 
-double
-TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-                                                 const TClique &clique,
-                                                 const TCliqueWalkStates &current_state) const {
+double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
+                                                        const TClique &clique,
+                                                        const TCliqueStates &states) const {
 	// translate index in binned branch length vector (of size leaves + internal nodes without
 	// roots) to index in nodes
 	const size_t index_in_tree = _topology().branches()[index_in_binned_branch_length];
@@ -67,17 +66,17 @@ TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_l
 	// calculate probability of parent to node for old branch length
 	double prob_old = clique.calculate_prob_to_parent(
 	    index_in_tree, this, _binned_branch_lengths->oldValue(index_in_binned_branch_length),
-	    current_state, process);
+	    states, process);
 
 	// calculate probability of parent to node for new branch length
 	double prob_new = clique.calculate_prob_to_parent(
-	    index_in_tree, this, _binned_branch_lengths->value(index_in_binned_branch_length),
-	    current_state, process);
+	    index_in_tree, this, _binned_branch_lengths->value(index_in_binned_branch_length), states,
+	    process);
 
 	return prob_new / prob_old;
 }
 
-void TTree::_add_to_LL_branch_lengths(size_t c, const TCliqueWalkStates &current_state,
+void TTree::_add_to_LL_branch_lengths(size_t c, const TCliqueStates &states,
                                       std::vector<coretools::TSumLogProbability> &log_sum,
                                       const stattools::TPairIndexSampler &pairs) const {
 	const auto &clique = _cliques[c];
@@ -87,8 +86,8 @@ void TTree::_add_to_LL_branch_lengths(size_t c, const TCliqueWalkStates &current
 		// that index corresponds to the index in fake, concatenated vector of leaves and internal
 		// nodes without roots
 		auto [p1, p2]   = pairs.getIndexPair(p);
-		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, current_state);
-		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, current_state);
+		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, states);
+		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, states);
 
 		log_sum[p].add(ratio_p1);
 		log_sum[p].add(ratio_p2);

@@ -74,10 +74,10 @@ concept BinaryFieldStorage =
 	    // State.
 	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
 	    // Whether the cell is held, as opposed to reading as zero because it is absent. Dense
-	    // always says yes; sparse searches. The sampler asks so it can defer a write that would
-	    // reallocate a sparse row out of the parallel region, which is why a question the two
-	    // deliberately answer differently belongs on the interface rather than in the sampler's
-	    // assumptions. It goes when the sampler stops needing to know (#36).
+	    // always says yes; sparse searches. No update asks any more: a window defers the write it
+	    // cannot make in place, and answers a later read from its own line. The one caller that
+	    // had to know which storage it was talking to has gone. What is left is the tests, and #55
+	    // takes it off this interface.
 	    { const_storage.is_stored(linear_index) } -> std::same_as<bool>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
@@ -100,8 +100,8 @@ concept BinaryFieldStorage =
 		                                     linear_indices)
 	    } -> std::same_as<void>;
 
-	    // The strided window the sampler reads and writes through. The field update reads and
-	    // writes its cells through one; the clique walk moves onto it in #53.
+	    // The strided window the sampler reads and writes through. The field update walks a row of
+	    // it, and the node-state walk a column of it.
 	    typename T::TWindow;
 	    requires StorageWindow<typename T::TWindow>;
 	    {

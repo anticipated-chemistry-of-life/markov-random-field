@@ -7,38 +7,74 @@
 
 #include "Types.h"
 #include "constants.h"
+#include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
+#include "tree/TPhylogeny.h"
 #include "tree/branch/TTransitionGrid.h"
 #include <cstddef>
 #include <optional>
 #include <utility>
 #include <vector>
 
-class TPhylogeny;
 class TTree;
+class TClique;
 
-/// The states a node-state walk has assigned so far, for the one clique it is walking.
+/// The states of one clique's nodes, read and written through windows.
 ///
-/// The walk goes in post-order, so a parent is reached after its children and has to see the states
-/// they were just given. The dense storage would show them, because every write lands in place. The
-/// sparse one defers a write to a cell it does not yet hold until after the parallel region, and
-/// would still answer with the old value -- so the two backends would part company inside a single
-/// update. Carrying the states here is what keeps them on the same chain.
+/// The node state's column holds every node of the clique's tree. The field's column beside it
+/// holds the leaves, whose state is the field's. A node is at the same position in both. That is
+/// because a leaf's index in leaf space is its node index, and the leaves come first (ADR-0004).
 ///
-/// Seeded from the storages and indexed by node index. This is the whole of what the current-state
-/// class was still needed for, once the field's own update stopped needing it: a vector scoped to
-/// the loop that uses it, rather than a class with a fill protocol on both storages.
-class TCliqueWalkStates {
+/// The walk keeps no copy of the states it assigns. It reads them back from the window it wrote
+/// them through. Both windows stay open across the moves that follow the walk, which read those
+/// states too. ADR-0006 gives the argument for both.
+class TCliqueStates {
 private:
-	std::vector<uint8_t> _state;
+	/// The field's column: this clique's leaves. Read and never written. The walk assigns internal
+	/// nodes only.
+	TFieldStorage::TWindow _leaves;
+	/// The node state's column: every node of this clique.
+	TNodeStateStorage::TWindow _nodes;
+	const TPhylogeny *_topology;
 
 public:
-	explicit TCliqueWalkStates(size_t n_nodes) : _state(n_nodes, 0) {}
-	[[nodiscard]] bool get(size_t node) const { return _state[node] != 0; }
-	void set(size_t node, bool state) { _state[node] = static_cast<uint8_t>(state); }
+	/// Opens both windows over the clique's column of its own storage.
+	TCliqueStates(TFieldStorage &Y, TNodeStateStorage &Z, const TClique &clique,
+	              const TPhylogeny &topology);
+
+	/// The state of `node`: a leaf's is the field's, and any other node's is the tree's own node
+	/// state.
+	[[nodiscard]] bool get(size_t node) const {
+		return _topology->is_leaf(node) ? _leaves.is_one(node) : _nodes.is_one(node);
+	}
+
+	/// Gives `node` its new state. A write of the state the cell already carries is dropped. The
+	/// sparse window would otherwise buffer an insert for a cell it does not hold, and then throw
+	/// that insert away.
+	void set(size_t node, bool state) {
+		// This writes the node state, and a leaf's state is the field's. The walk assigns internal
+		// nodes only, so the two never meet. #36 moves the leaves into the node state.
+		DEBUG_ASSERT(!_topology->is_leaf(node));
+		if (_nodes.is_one(node) != state) { _nodes.set_state(node, state); }
+	}
+
+	/// The linear index, in the node state's container space, of the cell `node` occupies. This is
+	/// the cell's name to the stream of uniforms.
+	[[nodiscard]] size_t linear_index_in_Z(size_t node) const { return _nodes.linear_index(node); }
+
+	/// Hands out the cells the node state's window could not write in place, as linear indices,
+	/// and ends both windows. The caller commits them after the parallel region. That is the only
+	/// exit a window inside one may take (ADR-0006).
+	[[nodiscard]] std::vector<size_t> take_buffered_inserts() {
+		// The field's window buffers nothing, because nothing writes it. It is ended here all the
+		// same, so that neither window of the pair reaches its storage on the way out.
+		const std::vector<size_t> field_inserts = _leaves.take_buffered_inserts();
+		DEBUG_ASSERT(field_inserts.empty());
+		return _nodes.take_buffered_inserts();
+	}
 };
 
 /** Class representing a clique in our model. A clique is defined as having a set of nodes that are
@@ -63,31 +99,29 @@ private:
 	static void _calculate_log_prob_root(double stationary_0,
 	                                     std::array<coretools::TSumLogProbability, 2> &sum_log);
 
-	/// Give `node` its new state: in place where the storage already holds the cell, deferred to
-	/// after the parallel region where it does not, because inserting reallocates a sparse row.
-	/// The caller supplies the linear index, because it already needs it to name the node's cell to
-	/// the stream of uniforms.
-	void _write_new_state(TNodeStateStorage &Z, TCliqueWalkStates &walk, size_t node,
-	                      bool new_state, size_t linear_index_in_Z_space,
-	                      std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
-
 	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCliqueWalkStates &walk,
+	    size_t index_in_tree, const TTree *tree, const TCliqueStates &states,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
 	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
 	/// that Z is stuck in a state and cannot change.
 	/// @param node_index The index of the internal node we want to set
-	/// @param current_state The current state of the clique.
-	/// @param Z the Z vector of that tree (i.e that clique)
+	/// @param states The states of this clique's nodes, read and written through its windows.
 	/// @param tree the tree of interest
-	/// @param linear_indices_in_Z_space_to_insert Same as the variable name
-	void _set_Z_to_MLE(size_t node_index, TCliqueWalkStates &walk, TNodeStateStorage &Z,
-	                   const TTree *tree,
-	                   std::vector<size_t> &linear_indices_in_Z_space_to_insert) const;
+	void _set_Z_to_MLE(size_t node_index, TCliqueStates &states, const TTree *tree) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
+
+	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
+	/// last dimension first and the variable one second is what makes this right for a clique along
+	/// either dimension: when they are the same dimension, the node wins.
+	[[nodiscard]] IndexArray cell_of(size_t node, size_t leaf_index_in_tree_of_last_dim) const {
+		IndexArray cell           = _start_index_in_leaves_space;
+		cell.back()               = leaf_index_in_tree_of_last_dim;
+		cell[_variable_dimension] = node;
+		return cell;
+	}
 
 public:
 	TClique(const IndexArray &start_index, size_t variable_dimension, size_t n_nodes,
@@ -104,45 +138,32 @@ public:
 		return _transition_grid.value();
 	}
 
-	/// @brief Update the Z dimension for this clique.
-	/// @param Y The current state of the Y dimension.
-	/// @param Z The current state of the Z dimension.
-	/// @param tree The tree.
-	/// Every state this clique starts from, read straight out of the storages. The caller keeps it
-	/// for the whole of the clique's turn, because the parameter and branch-length moves that
-	/// follow the node-state walk have to see the states that walk assigned.
-	[[nodiscard]] TCliqueWalkStates read_states(const TFieldStorage &Y, const TNodeStateStorage &Z,
-	                                            const TPhylogeny &topology) const;
+	/// The windows this clique's turn reads and writes through: the node state's column, and the
+	/// field's column for the leaves. The caller keeps them open for the whole of that turn,
+	/// because the parameter and branch-length moves that follow the node-state walk have to see
+	/// the states that walk assigned.
+	[[nodiscard]] TCliqueStates open_states(TFieldStorage &Y, TNodeStateStorage &Z,
+	                                        const TPhylogeny &topology) const;
 
-	/// @param uniforms the node state's stream for this iteration. Each node draws the one uniform
-	/// its own cell names, so the walk gives the same states whichever thread runs it.
-	std::vector<size_t> update_Z(std::vector<double> &joint_prob_density, TCliqueWalkStates &walk,
-	                             TNodeStateStorage &Z, const TTree *tree,
-	                             const TCellUniforms &uniforms) const;
+	/// The node state's column for this clique, on its own. The simulation draws every node from
+	/// its parent and reads no leaf, so it needs no window on the field.
+	[[nodiscard]] TNodeStateStorage::TWindow open_node_state_window(TNodeStateStorage &Z) const;
 
-	std::vector<size_t> initialize_Z_from_children(TCliqueWalkStates &walk, TNodeStateStorage &Z,
-	                                               const TTree *tree) const;
-
-	/// The linear index, in the node state's container space, of the cell node `node` occupies.
-	/// This is the cell's name, both to the storage and to the stream of uniforms.
-	[[nodiscard]] size_t linear_index_of(const TNodeStateStorage &Z, size_t node) const;
-
-	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
-	/// last dimension first and the variable one second is what makes this right for a clique along
-	/// either dimension: when they are the same dimension, the node wins.
-	[[nodiscard]] IndexArray cell_of(size_t node, size_t leaf_index_in_tree_of_last_dim) const {
-		IndexArray cell           = _start_index_in_leaves_space;
-		cell.back()               = leaf_index_in_tree_of_last_dim;
-		cell[_variable_dimension] = node;
-		return cell;
+	/// The cell this clique's first node occupies. A window over the clique opens here and steps
+	/// by the increment.
+	[[nodiscard]] IndexArray first_cell() const {
+		return cell_of(0, _start_index_in_leaves_space.back());
 	}
 
-	/// The state of `node` as the storages hold it. A leaf's state is the field's -- a leaf's index
-	/// in leaf space is its node index (ADR-0004) -- and any other node's is the tree's own node
-	/// state. This is the question the current-state class used to answer from a cache.
-	[[nodiscard]] bool state_of(const TFieldStorage &Y, const TNodeStateStorage &Z,
-	                            const TPhylogeny &topology, size_t node,
-	                            size_t leaf_index_in_tree_of_last_dim) const;
+	/// @brief Update the Z dimension for this clique.
+	/// @param states The states of this clique's nodes, read and written through its windows.
+	/// @param tree The tree.
+	/// @param uniforms the node state's stream for this iteration. Each node draws the one uniform
+	/// its own cell names, so the walk gives the same states whichever thread runs it.
+	void update_Z(std::vector<double> &joint_prob_density, TCliqueStates &states, const TTree *tree,
+	              const TCellUniforms &uniforms) const;
+
+	void initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const;
 
 	/// @brief Return the number of nodes in the clique
 	/// @return Return the number of nodes in the clique
@@ -166,21 +187,16 @@ public:
 	/// @return Returns the jump size of the clique
 	[[nodiscard]] size_t get_increment() const { return _increment; }
 
-	/// @return Returns the start index in the leaf space of that specific clique
-	[[nodiscard]] const IndexArray &get_start_index_in_leaf_space() const {
-		return _start_index_in_leaves_space;
-	}
-
 	/// @brief P(node | parent) under an explicitly given process, so a Metropolis proposal can ask
 	/// the same question of the current grid and of its candidate.
 	double calculate_prob_to_parent(size_t index_in_tree, const TTree *tree,
 	                                TypeBinnedBranchLengths binned_branch_length,
-	                                const TCliqueWalkStates &current_state,
+	                                const TCliqueStates &states,
 	                                const TTransitionGrid &process) const {
 		size_t parent_index = _get_parent_index(index_in_tree, tree);
 
-		bool parent_state = current_state.get(parent_index);
-		bool child_state  = current_state.get(index_in_tree);
+		bool parent_state = states.get(parent_index);
+		bool child_state  = states.get(index_in_tree);
 		return process.probability(binned_branch_length, parent_state, child_state);
 	}
 };
