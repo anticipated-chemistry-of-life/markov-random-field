@@ -16,7 +16,7 @@
 
 TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees,
                                      TypeParamEpsilon *epsilon)
-    : _trees(trees), _epsilon(epsilon), _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
+    : _trees(trees), _epsilon(epsilon) {}
 
 void TSimpleErrorModel::initialize_storage() {
 	// D lives in the same space as Y: one dimension per tree, sized by that tree's leaf count.
@@ -53,12 +53,6 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 
 void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
-}
-
-void TSimpleErrorModel::fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                                      size_t K) {
-	// D has the same dimensions as Y, so the index needs no translation.
-	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, K, _D);
 }
 
 void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {

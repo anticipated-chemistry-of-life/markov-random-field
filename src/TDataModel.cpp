@@ -95,16 +95,6 @@ double TDataModel::getSumLogPriorDensity(const Storage &) const {
 	return sum;
 }
 
-void TDataModel::fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-                                               size_t K) {
-#ifdef USE_LOTUS
-	_lotus.fill_tmp_state_along_last_dim(start_index_clique_along_last_dim, K);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	_simple_error_model.fill_tmp_state_along_last_dim(start_index_clique_along_last_dim, K);
-#endif
-}
-
 void TDataModel::update_markov_field() { _markov_field.update(*this, _mrf_update_iteration++); }
 
 #ifdef USE_LOTUS

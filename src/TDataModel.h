@@ -121,11 +121,6 @@ public:
 	/// the same Y, so they simply add.
 	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 
-	/// Per-sheet preparation for the field update: each source caches the slice of its data that the
-	/// update is about to walk over.
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-	                                   size_t K);
-
 	void update_markov_field();
 
 	// --- MCMC moves, dispatched by stattools on the parameter pointer type ---

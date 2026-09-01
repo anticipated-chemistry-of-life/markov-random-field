@@ -22,8 +22,7 @@
 
 TLotus::TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
                TypeParamErrorRate *error_rate)
-    : _trees(trees), _gamma(gamma), _error_rate(error_rate),
-      _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
+    : _trees(trees), _gamma(gamma), _error_rate(error_rate) {}
 
 void TLotus::initialize(TDataModel *box, bool simulate) {
 	if (!simulate) { load_from_file(get_filename_lotus()); }
@@ -83,21 +82,13 @@ TNtfyNotifier::ParamStats TLotus::error_rate_stats() const {
 	return {_error_rate->mean(0), _error_rate->var(0), _error_rate->sd(0)};
 }
 
-void TLotus::fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-                                           size_t K) {
-	// L has the field's dimensions, so the field's clique index is already L's.
-	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_clique_along_last_dim, K, _L);
-}
-
 /// This function will be used when we update Y.
-void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
-                                   size_t index_for_tmp_state,
+void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
                                    std::array<double, 2> &prob) const {
 	// A field cell is its own L cell now, so the emission depends on this cell alone: no clique of
 	// other cells can make L's latent state one while this one is zero.
 	for (size_t i = 0; i < 2; ++i) {
-		prob[i] = _reporting().probability(i, _tmp_state_along_last_dim.get_Y(index_for_tmp_state),
-		                                   index_in_leaves_space);
+		prob[i] = _reporting().probability(i, reports_the_cell, index_in_leaves_space);
 	}
 }
 

@@ -56,11 +56,10 @@ concept StorageWindow = requires(T &window, const T &const_window, size_t k, boo
 /// `open_window` is the traversal the storage brings with it: a strided view the sampler reads and
 /// writes through, described at `StorageWindow` above.
 ///
-/// `fill_current_state` is here because the current model's update asks for a whole clique at once:
-/// for the `K` cells starting at `start_index` and running `increment` apart, it writes the state,
-/// whether the cell is stored, and the linear index of each. It is the one member that exists for
-/// the sampler's convenience rather than to describe the storage, and it is what the model branch
-/// is expected to narrow away.
+/// `fill_current_state` writes, for the `K` cells starting at `start_index` and running `increment`
+/// apart, the state, whether the cell is stored, and the linear index of each. No update calls it
+/// any more -- the field update reads its cells through a window (#54) -- so what is left is the
+/// tests and the benchmark, and #55 takes it off this interface.
 ///
 /// Deliberately outside the concept: the bulk-insert and whole-space dump paths, which the two
 /// implementations still spell with `Y` and `Z` in their names, and the field-only reporting
@@ -101,8 +100,8 @@ concept BinaryFieldStorage =
 		                                     linear_indices)
 	    } -> std::same_as<void>;
 
-	    // The strided window the sampler reads and writes through. It sits beside the clique fill
-	    // rather than replacing it: nothing has migrated onto it yet.
+	    // The strided window the sampler reads and writes through. The field update reads and
+	    // writes its cells through one; the clique walk moves onto it in #53.
 	    typename T::TWindow;
 	    requires StorageWindow<typename T::TWindow>;
 	    {

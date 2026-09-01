@@ -16,7 +16,6 @@
 
 #ifdef USE_LOTUS
 
-#include "TCurrentState.h"
 #include "cli.h"
 #include "constants.h"
 #include "lotus/TLotusMath.h"
@@ -62,7 +61,6 @@ private:
 	// temporary values
 	double _oldLL = 0.0;
 	double _curLL = 0.0;
-	TCurrentState _tmp_state_along_last_dim;
 
 	// private functions
 	/// The number of leaves of each tree, which is the shape of L: records are indexed on every
@@ -94,9 +92,16 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-	                                   size_t K);
-	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
+	/// L's cells for one row of the field, as a window: `n_cells` cells from `start_index`, one
+	/// after the other. L has the field's dimensions, so the field's index is already L's. The
+	/// update opens one window per species leaf and reads it. Nothing writes L.
+	[[nodiscard]] TFieldStorage::TWindow open_row(const IndexArray &start_index, size_t n_cells) {
+		return _L.open_window(start_index, n_cells, /*stride=*/1);
+	}
+
+	/// prob[0] = P(L_cell | Y = 0), prob[1] = P(L_cell | Y = 1). `reports_the_cell` is whether
+	/// LOTUS holds a record for it, which the caller reads from the window above.
+	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
 	                           std::array<double, 2> &prob) const;
 	/// The field update accumulates the new likelihood as it goes and installs it here at the end.
 	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }

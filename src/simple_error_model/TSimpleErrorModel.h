@@ -18,7 +18,6 @@
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 
-#include "TCurrentState.h"
 #include "Types.h"
 #include "constants.h"
 #include "stattools/ParametersObservations/TParameter.h"
@@ -50,10 +49,6 @@ private:
 	size_t _n_disagree  = 0;
 	size_t _total_cells = 0;
 
-	/// Cache of the D cells of the current sheet, filled once per sheet by the field update. Mirrors
-	/// TLotus's cache: it turns the per-cell lookup inside the OpenMP loop into an array read.
-	TCurrentState _tmp_state_along_last_dim;
-
 	[[nodiscard]] double _eps() const { return (double)_epsilon->value(); }
 
 public:
@@ -72,18 +67,17 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space, size_t K);
-
-	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1) for the cell at position
-	/// `index_for_tmp_state` within the current sheet.
-	void probabilities_for_Y_update(size_t index_for_tmp_state, std::array<double, 2> &prob) const {
-		simple_error_model::probabilities_for_both_Y_states(
-		    _tmp_state_along_last_dim.get_Y(index_for_tmp_state), _eps(), prob);
+	/// D's cells for one row of the field, as a window: `n_cells` cells from `start_index`, one
+	/// after the other. D has the field's dimensions, so the field's index is already D's. The
+	/// update opens one window per species leaf and reads it. Nothing writes D.
+	[[nodiscard]] TFieldStorage::TWindow open_row(const IndexArray &start_index, size_t n_cells) {
+		return _D.open_window(start_index, n_cells, /*stride=*/1);
 	}
 
-	/// Whether the observed cell contradicts the state Y was just set to.
-	[[nodiscard]] bool disagrees_with(size_t index_for_tmp_state, bool new_state) const {
-		return _tmp_state_along_last_dim.get_Y(index_for_tmp_state) != new_state;
+	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1). `observed_state` is the state D
+	/// holds for the cell, which the caller reads from the window above.
+	void probabilities_for_Y_update(bool observed_state, std::array<double, 2> &prob) const {
+		simple_error_model::probabilities_for_both_Y_states(observed_state, _eps(), prob);
 	}
 
 	/// Installs the disagreement count accumulated over a full field update.
