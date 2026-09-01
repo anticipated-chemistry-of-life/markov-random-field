@@ -635,6 +635,40 @@ TYPED_TEST(StorageConformance, a_window_writes_a_held_cell_at_once_and_defers_th
 	EXPECT_TRUE(storage.is_one(5));
 }
 
+TYPED_TEST(StorageConformance, a_window_hands_out_the_inserts_it_could_not_write_in_place) {
+	// The other way a window ends. The clique walk runs in parallel, and an insert writes one row
+	// and one column of a sparse matrix, so no window in that loop may insert. It hands the cells
+	// out instead, and one bulk insert commits them after the loop. The dense window hands out
+	// nothing, so the same loop body serves both backends. See ADR-0006.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_zero(4); // held by both, in state 0
+
+	auto window = storage.open_window(IndexArray{1, 0}, /*n_cells=*/4, /*stride=*/1);
+	window.set_state(0, true);  // cell 4, which both storages hold
+	window.set_state(1, true);  // cell 5, which only the dense storage holds
+	window.set_state(2, false); // cell 6, which neither storage has to be told about
+
+	const auto handed_out = window.take_buffered_inserts();
+	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
+	              std::is_same_v<TypeParam, TStorageZDense>) {
+		EXPECT_TRUE(handed_out.empty()) << "the dense window writes every cell in place";
+	} else {
+		EXPECT_EQ(handed_out, (std::vector<size_t>{5}))
+		    << "the sparse window hands out the cell it does not hold, and only that one";
+		EXPECT_FALSE(storage.is_one(5)) << "the window handed the insert out rather than making it";
+	}
+
+	// The write in place landed either way, and a cell written to zero is never handed out.
+	EXPECT_TRUE(storage.is_one(4));
+	EXPECT_FALSE(storage.is_one(6));
+
+	// The window is drained. Closing it now writes nothing, so a buffered cell cannot reach the
+	// storage twice.
+	window.close();
+	EXPECT_TRUE(storage.is_one(4));
+	EXPECT_FALSE(storage.is_one(6));
+}
+
 TYPED_TEST(StorageConformance, a_window_runs_down_a_container_that_is_one_cell_wide) {
 	// A window along the first dimension steps by the width of a row, so in a container one cell
 	// wide it steps by one -- the stride a window along the last dimension has. The shape tells
@@ -1045,6 +1079,96 @@ TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes_
 		expect_same_cells(sparse_Y, dense_Y, shape);
 		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
 	}
+}
+
+TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_committed_in_bulk) {
+	// The shape the node-state update takes, end to end: every window writes, hands out what it
+	// could not insert, and one bulk insert commits the lot afterwards. The dense window hands out
+	// nothing, so the same loop body drives both backends.
+	//
+	// The windows of one pass do not overlap, exactly as one clique per column and one species
+	// leaf per row do not. Overlapping windows would be a different question: a deferred insert
+	// commits after a later window has written the same cell to zero, and the two backends would
+	// then be asked to agree about an order the sampler never asks for.
+	std::mt19937_64 rng(20260828);
+	size_t n_cells_the_sparse_windows_handed_out = 0;
+	for (const auto &shape : generated_shapes()) {
+		const size_t n_cells = shape[0] * shape[1];
+		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
+
+		TStorageZMatrix sparse_Z(shape);
+		TStorageZDense dense_Z(shape);
+		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
+		TStorageYDense dense_Y(N_ITERATIONS, shape);
+		TExpectedCells ignored(n_cells);
+		replay(sparse_Z, writes, ignored);
+		replay(dense_Z, writes, ignored);
+		replay(sparse_Y, writes, ignored);
+		replay(dense_Y, writes, ignored);
+
+		const auto run_one_pass = [&](const std::vector<TWindowShape> &requests) {
+			std::vector<std::vector<uint8_t>> written;
+			written.reserve(requests.size());
+			for (const auto &request : requests) {
+				written.push_back(random_states(rng, request.n_cells));
+			}
+			const auto write_and_hand_out = [&](auto &storage) {
+				std::vector<std::vector<size_t>> batches;
+				batches.reserve(requests.size());
+				for (size_t r = 0; r < requests.size(); ++r) {
+					auto window = storage.open_window(requests[r].start, requests[r].n_cells,
+					                                  requests[r].stride);
+					for (size_t k = 0; k < requests[r].n_cells; ++k) {
+						window.set_state(k, written[r][k] != 0);
+					}
+					batches.push_back(window.take_buffered_inserts());
+				}
+				return batches;
+			};
+			const auto sparse_Z_batches = write_and_hand_out(sparse_Z);
+			const auto dense_Z_batches  = write_and_hand_out(dense_Z);
+			const auto sparse_Y_batches = write_and_hand_out(sparse_Y);
+			const auto dense_Y_batches  = write_and_hand_out(dense_Y);
+
+			for (const auto &batch : sparse_Z_batches) {
+				n_cells_the_sparse_windows_handed_out += batch.size();
+			}
+			for (const auto &batch : dense_Z_batches) {
+				ASSERT_TRUE(batch.empty()) << "the dense window writes every cell in place";
+			}
+			for (const auto &batch : dense_Y_batches) {
+				ASSERT_TRUE(batch.empty()) << "the dense window writes every cell in place";
+			}
+
+			sparse_Z.insert_in_Z(sparse_Z_batches);
+			dense_Z.insert_in_Z(dense_Z_batches);
+			sparse_Y.insert_in_Y(sparse_Y_batches);
+			dense_Y.insert_in_Y(dense_Y_batches);
+			expect_same_cells(sparse_Z, dense_Z, shape);
+			expect_same_cells(sparse_Y, dense_Y, shape);
+		};
+
+		// One pass down the rows and one along the columns, four windows each at most, because a
+		// pass over every line of the largest generated shape turns the suite into a benchmark.
+		std::vector<TWindowShape> rows;
+		for (size_t row = 0; row < std::min<size_t>(shape[0], 4); ++row) {
+			rows.push_back({IndexArray{row, 0}, shape[1], 1});
+		}
+		std::vector<TWindowShape> columns;
+		for (size_t col = 0; col < std::min<size_t>(shape[1], 4); ++col) {
+			columns.push_back({IndexArray{0, col}, shape[0], shape[1]});
+		}
+		run_one_pass(rows);
+		run_one_pass(columns);
+
+		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
+	}
+
+	// Without this the body above would pass just as happily on windows that handed out nothing,
+	// which is the one case in which the bulk commit proves nothing.
+	EXPECT_GT(n_cells_the_sparse_windows_handed_out, 0u)
+	    << "no sparse window handed an insert out, so the bulk commit was never asked to do "
+	       "anything";
 }
 
 TEST(StorageEquivalence, the_backends_agree_on_the_counter_and_the_fraction_of_ones) {

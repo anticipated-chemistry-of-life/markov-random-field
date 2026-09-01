@@ -22,15 +22,21 @@
 /// parallel region. A read that returned the old state would send the two backends down different
 /// chains inside a single update.
 ///
-/// `close` commits what the window buffered, and the destructor runs it again for a window the
-/// caller lets go of. A cell is addressed by its position in the window; `linear_index` is what
-/// turns that back into the storage's own index.
+/// A window ends once, in one of two ways. `close` commits what the window buffered, and the
+/// destructor runs it again for a window the caller lets go of. `take_buffered_inserts` hands the
+/// buffer to the caller as linear indices and writes nothing, which is the only exit a window
+/// inside a parallel region may take. The dense window hands out an empty list, so one loop body
+/// serves both backends. ADR-0006 gives the argument.
+///
+/// A cell is addressed by its position in the window; `linear_index` is what turns that back into
+/// the storage's own index.
 template<typename T>
 concept StorageWindow = requires(T &window, const T &const_window, size_t k, bool state) {
 	{ const_window.size() } -> std::same_as<size_t>;
 	{ const_window.is_one(k) } -> std::same_as<bool>;
 	{ const_window.linear_index(k) } -> std::same_as<size_t>;
 	{ window.set_state(k, state) } -> std::same_as<void>;
+	{ window.take_buffered_inserts() } -> std::same_as<std::vector<size_t>>;
 	{ window.close() } -> std::same_as<void>;
 };
 

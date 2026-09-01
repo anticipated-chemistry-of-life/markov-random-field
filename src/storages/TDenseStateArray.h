@@ -53,10 +53,18 @@ public:
 	[[nodiscard]] bool is_one(size_t k) const { return _states[linear_index(k)] != 0; }
 	void set_state(size_t k, bool state) { _states[linear_index(k)] = state ? 1 : 0; }
 
-	/// Nothing to commit: every write through this window already reached the array. It stays a
-	/// non-static member because that is the window interface both backends answer to.
-	// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+	// Both members below use nothing of this window. They stay non-static members because that is
+	// the interface both backends answer to.
+	// NOLINTBEGIN(readability-convert-member-functions-to-static)
+
+	/// The dense window buffers nothing, so it hands out nothing. The caller commits an empty
+	/// batch and the storage does no work, which is what lets one loop body serve both backends.
+	[[nodiscard]] std::vector<size_t> take_buffered_inserts() { return {}; }
+
+	/// Nothing to commit: every write through this window already reached the array.
 	void close() {}
+
+	// NOLINTEND(readability-convert-member-functions-to-static)
 };
 
 // The two properties that make this window the dense path rather than a cache in front of it: it

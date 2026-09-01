@@ -19,7 +19,11 @@
 ///
 /// A write to a cell the matrix already holds goes in place. A write to one it does not hold waits
 /// in a buffer, because the insert would reallocate a row and a column while other threads read
-/// them. `close` commits the buffer.
+/// them.
+///
+/// A window ends once, in one of two ways. `close` commits the buffer into the matrix.
+/// `take_buffered_inserts` hands the buffer to the caller and writes nothing, which is the only
+/// exit a window inside a parallel region may take. See ADR-0006.
 ///
 /// A window shows its own buffered write to a later read on the same window. That is what lets a
 /// post-order walk read the states it has just assigned, and what keeps the sparse and the dense
@@ -141,10 +145,30 @@ public:
 		}
 	}
 
+	/// Hands out the cells this window could not write in place, as linear indices in container
+	/// space, and closes the window. The caller commits them, which is what lets a window end
+	/// inside a parallel region. An insert writes one row and one column of the matrix, and
+	/// threads share one of the two however the work is split. See ADR-0006.
+	///
+	/// A cell that ended the window as a zero is left out, because a cell the matrix does not hold
+	/// already reads as zero.
+	[[nodiscard]] std::vector<size_t> take_buffered_inserts() {
+		std::vector<size_t> linear_indices;
+		linear_indices.reserve(_to_insert.size());
+		for (const size_t k : _to_insert) {
+			if (_states[k] == 0) { continue; }
+			linear_indices.push_back(linear_index(k));
+		}
+		_to_insert.clear();
+		_open = false;
+		return linear_indices;
+	}
+
 	/// Inserts every buffered cell that ended the window as a one. A cell that ended as a zero is
 	/// dropped, because a cell the matrix does not hold already reads as zero.
 	///
-	/// This inserts, so it reallocates rows and columns. It must run outside a parallel region.
+	/// This inserts, so it reallocates rows and columns. It must run outside a parallel region. A
+	/// window that ran inside one hands its buffer out instead.
 	void close() {
 		if (!_open) { return; }
 		_open = false;

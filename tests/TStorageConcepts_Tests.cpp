@@ -23,6 +23,7 @@ struct Window {
 	[[nodiscard]] bool is_one(size_t) const { return false; }
 	[[nodiscard]] size_t linear_index(size_t) const { return 0; }
 	void set_state(size_t, bool) {}
+	std::vector<size_t> take_buffered_inserts() { return {}; }
 	void close() {}
 };
 static_assert(StorageWindow<Window>, "the full window surface must conform");
@@ -34,6 +35,7 @@ struct UnclosableWindow {
 	[[nodiscard]] bool is_one(size_t) const { return false; }
 	[[nodiscard]] size_t linear_index(size_t) const { return 0; }
 	void set_state(size_t, bool) {}
+	std::vector<size_t> take_buffered_inserts() { return {}; }
 };
 static_assert(!StorageWindow<UnclosableWindow>, "a window that cannot close must not conform");
 

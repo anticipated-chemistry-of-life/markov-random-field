@@ -8,7 +8,7 @@ So the traversal moves next to the storage, and the arithmetic stays shared.
 
 ## The window
 
-Every storage opens a **window**: a strided view over itself, given a start, a count and a stride. The dense window holds a base and a stride, and a read or a write through it compiles to an indexing of the state vector — no buffer, no fill, no copy. The sparse window materialises on open, exactly as the current clique fill does, writes in place where it already holds the cell, buffers the inserts, and flushes them when it closes.
+Every storage opens a **window**: a strided view over itself, given a start, a count and a stride. The dense window holds a base and a stride, and a read or a write through it compiles to an indexing of the state vector — no buffer, no fill, no copy. The sparse window materialises on open, exactly as the current clique fill does, writes in place where it already holds the cell, and buffers the inserts. Where those buffered inserts go is below, under *Where a window's inserts go*.
 
 One abstraction covers both shapes the sampler needs. The block update walks a row: stride 1, one leaf pair after another. A clique walks a column of its tree's node state: stride equal to the leaf count of the other dimension. The existing clique fill is already parameterised exactly this way, which is why this is a generalisation of something that works rather than a new mechanism.
 
@@ -27,6 +27,16 @@ This is not a convenience. A node-state walk goes in post-order, so it reaches a
 A clique's window stays open across the alpha, nu and branch-length moves that follow its walk, because those moves have to see the states the walk assigned.
 
 This is longer than the lifetime a reader would assume from the block update, where a window is opened for one row and closed at the end of it. It is written down here because it is the one place where a window is not scoped to the loop that created it, and because closing it early would be a silent correctness bug rather than a compile error: the moves would read the storage, and on the sparse backend they would read stale values for every deferred cell.
+
+## Where a window's inserts go
+
+A window ends once, in one of two ways. `close` writes the buffered inserts into the storage. `take_buffered_inserts` hands them to the caller as linear indices and writes nothing.
+
+The second exit is not a convenience, and it is the one correction this record has needed. A clique's window opens and closes inside the parallel loop over cliques, and an insert into the sparse matrix writes one row vector **and** one column vector. A clique owns its column and shares every row, so it cannot insert there. Splitting the work the other way, as the block update does over species leaves, only swaps which of the two is shared: the leaf owns its row and shares every column. No partition of a matrix keeps both private, so **no window may commit an insert inside a parallel region**, whichever primitive it reaches for.
+
+So the batched commit stays where it already is. Each window hands its list out, and one bulk insert runs after the region — which is what `insert_in_Z` and `insert_in_Y` do today, from the per-clique lists `TClique::update_Z` returns. The dense window hands out an empty list and the dense bulk insert then does nothing, so one loop body serves both backends and the dense path pays nothing for a step it does not need.
+
+`close` stays for the caller outside a parallel region, and for the window that is dropped rather than drained — the destructor runs it, so a buffered write cannot be lost by forgetting. It commits cell by cell rather than through `setRaw` and `cleanUp`, because `cleanUp` sorts every row and every column of the whole matrix, erases stored zeros in lines the window never saw, and adds to a count of stored cells that it does not clear first. Those are the right costs to pay once per update, over every thread's list at once, and the wrong ones to pay once per window.
 
 ## Selecting a backend
 

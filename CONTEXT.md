@@ -81,7 +81,7 @@ The joint draw over the field and both tree fields at one leaf pair, taken from 
 _Avoid_: Y update, field update, joint draw, eight-state sweep
 
 **Window**:
-The strided view a storage opens over itself, given a start, a count and a stride. An update reads and writes its cells through a window rather than through a cache of its own, so each storage brings the traversal that suits it: the dense window indexes the state vector, and the sparse window walks its line once and buffers the inserts it cannot make in place. A window shows its own write to a later read on the same window. `TDenseWindow` and `TSparseWindow`, `src/storages/`. See ADR-0006.
+The strided view a storage opens over itself, given a start, a count and a stride. An update reads and writes its cells through a window rather than through a cache of its own, so each storage brings the traversal that suits it: the dense window indexes the state vector, and the sparse window walks its line once and buffers the inserts it cannot make in place. A window shows its own write to a later read on the same window. It ends once: it either commits its buffered inserts or hands them to the caller, which is the only exit open to a window inside a parallel region. `TDenseWindow` and `TSparseWindow`, `src/storages/`. See ADR-0006.
 _Avoid_: slice, view, buffer, current state
 
 ## Branch lengths
