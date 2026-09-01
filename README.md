@@ -80,9 +80,10 @@ The interface an alias has to satisfy is the pair of concepts in
 `src/storages/storage_concepts.h`, checked with `static_assert` rather than through virtual calls,
 so nothing on a storage access path pays for the choice.
 
-The default pairs a **sparse field with a dense node state**. Fill decides that pairing, not size.
-`docs/adr/0006-each-storage-brings-its-own-traversal.md` gives the argument, and the header records
-which pairings CI gates.
+Both defaults are **dense** for now, which is one of the two pairings CI gates.
+`docs/adr/0006-each-storage-brings-its-own-traversal.md` argues for a sparse field against a dense
+node state, on fill rather than size; that pairing is one line away when the runs need it. The
+header records which pairings CI gates.
 
 An external define overrides either alias:
 

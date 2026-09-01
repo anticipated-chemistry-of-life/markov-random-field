@@ -14,7 +14,7 @@ ships.
 The field and the node state choose their storage independently, so there are four pairings. The
 gate builds two: sparse field against sparse node state, and dense against dense. Those two between
 them exercise both storages. `src/storages/storage_backend.h` records which pairs are gated and
-ADR-0006 gives the argument. The default build is a mixed pairing, and is not one of the two.
+ADR-0006 gives the argument. The default build is dense against dense, so it is one of the two.
 
 `run.sh` drives cmake itself rather than going through `just`, because nothing in the build system
 chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE` on the

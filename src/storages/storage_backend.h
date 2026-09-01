@@ -22,13 +22,14 @@
 // `-DACOL_FIELD_STORAGE=TStorageYDense` to the compiler is how `just parity`
 // (tests/backend_parity/) builds two binaries from one source tree.
 //
-// The defaults pair a sparse field with a dense node state. Fill decides that pairing, not size.
-// ADR-0006 gives the argument.
+// Both defaults are dense for now, which is one of the two pairs the gate covers. ADR-0006 argues
+// for a sparse field against a dense node state, on fill rather than size. That pairing is one
+// line away when the runs need it.
 
 #ifdef ACOL_FIELD_STORAGE
 using TFieldStorage = ACOL_FIELD_STORAGE;
 #else
-using TFieldStorage = TStorageYMatrix;
+using TFieldStorage = TStorageYDense;
 #endif
 
 #ifdef ACOL_NODE_STATE_STORAGE
@@ -42,8 +43,8 @@ using TNodeStateStorage = TStorageZDense;
 //     field   node state   gated
 //     ------  -----------  ---------------------
 //     sparse  sparse       yes, by `just parity`
-//     dense   dense        yes, by `just parity`
-//     sparse  dense        no  <- the default
+//     dense   dense        yes, by `just parity`  <- the default
+//     sparse  dense        no
 //     dense   sparse       no
 //
 // The two gated pairs between them exercise both storages. An ungated pair is untested, not
