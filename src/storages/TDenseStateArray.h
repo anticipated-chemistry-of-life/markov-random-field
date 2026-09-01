@@ -11,7 +11,59 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <vector>
+
+/// A strided window over a dense state array: the array's first byte, the linear index the
+/// window starts at, how many cells it holds, and how far apart they are.
+///
+/// A read or a write through it is an indexing of the state vector. There is no buffer to fill,
+/// nothing to copy, and no test of whether the cell is there, because a dense array holds every
+/// cell. So `close` has nothing to commit -- every write already landed. See ADR-0006.
+///
+/// The window points into the array it was opened on. It must not outlive that array, and the
+/// array must not be resized while the window is open.
+class TDenseWindow {
+private:
+	uint8_t *_states     = nullptr;
+	size_t _start_linear = 0;
+	size_t _n_cells      = 0;
+	size_t _stride       = 1;
+
+public:
+	TDenseWindow(uint8_t *states, size_t start_linear, size_t n_cells, size_t stride)
+	    : _states(states), _start_linear(start_linear), _n_cells(n_cells), _stride(stride) {}
+	~TDenseWindow() = default;
+
+	// A window is fixed in place. The sparse one carries a buffer to commit, and this one is held
+	// to the same rule so that code written against one backend compiles against the other.
+	TDenseWindow(const TDenseWindow &)            = delete;
+	TDenseWindow &operator=(const TDenseWindow &) = delete;
+	TDenseWindow(TDenseWindow &&)                 = delete;
+	TDenseWindow &operator=(TDenseWindow &&)      = delete;
+
+	[[nodiscard]] size_t size() const { return _n_cells; }
+
+	/// The linear index in container space of the window's `k`th cell.
+	[[nodiscard]] size_t linear_index(size_t k) const {
+		DEBUG_ASSERT(k < _n_cells);
+		return _start_linear + k * _stride;
+	}
+
+	[[nodiscard]] bool is_one(size_t k) const { return _states[linear_index(k)] != 0; }
+	void set_state(size_t k, bool state) { _states[linear_index(k)] = state ? 1 : 0; }
+
+	/// Nothing to commit: every write through this window already reached the array. It stays a
+	/// non-static member because that is the window interface both backends answer to.
+	// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+	void close() {}
+};
+
+// The two properties that make this window the dense path rather than a cache in front of it: it
+// holds a base, a count and a stride and nothing else, and it has nothing to run on the way out.
+static_assert(sizeof(TDenseWindow) <= 4 * sizeof(size_t), "The dense window holds no buffer.");
+static_assert(std::is_trivially_destructible_v<TDenseWindow>,
+              "The dense window has nothing to flush.");
 
 /// One byte of state per cell of the container space, laid out in the order the linear index
 /// already denotes (row-major), so a cell's linear index *is* its position in the array.
@@ -131,6 +183,18 @@ public:
 			linear_index[k]     = linear;
 			current_state[k]    = _states[linear];
 		}
+	}
+
+	using TWindow = TDenseWindow;
+
+	/// A strided window over `n_cells` cells, the first at `start_index` and the rest `stride`
+	/// apart. The window indexes this array directly, so it holds the array's first byte rather
+	/// than a copy of the cells it covers.
+	[[nodiscard]] TDenseWindow open_window(const IndexArray &start_index, size_t n_cells,
+	                                       size_t stride) {
+		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions);
+		DEBUG_ASSERT(n_cells == 0 || start_linear + (n_cells - 1) * stride < _states.size());
+		return {_states.data(), start_linear, n_cells, stride};
 	}
 };
 

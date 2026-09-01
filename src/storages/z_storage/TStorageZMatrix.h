@@ -10,6 +10,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSparseMatrix.h"
 #include "coretools/algorithms.h"
+#include "storages/TSparseWindow.h"
 #include "storages/storage_concepts.h"
 #include <cstddef>
 #include <utility>
@@ -166,6 +167,18 @@ public:
 				exists[k]        = 1;
 			}
 		}
+	}
+
+	using TWindow = TSparseWindow<TStorageZ>;
+
+	/// A strided window over `n_cells` cells, the first at `start_index` and the rest `stride`
+	/// apart. The window walks the line once on open, and buffers an insert until it closes.
+	[[nodiscard]] TWindow open_window(const IndexArray &start_index, size_t n_cells,
+	                                  size_t stride) {
+		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions_in_Z_space);
+		DEBUG_ASSERT(n_cells == 0 ||
+		             start_linear + (n_cells - 1) * stride < total_size_of_container_space());
+		return {_mat, _dimensions_in_Z_space[1], start_linear, n_cells, stride};
 	}
 
 	/// Bulk-insert deferred 0 -> 1 transitions (linear indices in Z space), then re-sort once.

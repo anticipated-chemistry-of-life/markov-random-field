@@ -97,6 +97,16 @@ public:
 		}
 	}
 
+	using TWindow = TDenseWindow;
+
+	/// A strided window over `n_cells` cells, the first at `start_index` and the rest `stride`
+	/// apart. It writes state, and leaves the counter beside it alone -- the same rule `set_state`
+	/// follows.
+	[[nodiscard]] TDenseWindow open_window(const IndexArray &start_index, size_t n_cells,
+	                                       size_t stride) {
+		return _states.open_window(start_index, n_cells, stride);
+	}
+
 	[[nodiscard]] size_t total_size_of_container_space() const {
 		return _states.total_size_of_container_space();
 	}

@@ -10,6 +10,30 @@
 #include <cstdint>
 #include <vector>
 
+/// The strided view a storage opens over itself: a start, a count and a stride.
+///
+/// The sampler reads and writes a run of cells through a window rather than through a cache it
+/// owns. Each storage brings the traversal that suits it, and the two are free to differ: the
+/// dense window indexes the state vector, and the sparse window materialises its line once. See
+/// ADR-0006.
+///
+/// A window shows its own write to a later read on the same window. The sparse window has to
+/// buffer a write to a cell it does not hold, because the insert would reallocate a row inside the
+/// parallel region. A read that returned the old state would send the two backends down different
+/// chains inside a single update.
+///
+/// `close` commits what the window buffered, and the destructor runs it again for a window the
+/// caller lets go of. A cell is addressed by its position in the window; `linear_index` is what
+/// turns that back into the storage's own index.
+template<typename T>
+concept StorageWindow = requires(T &window, const T &const_window, size_t k, bool state) {
+	{ const_window.size() } -> std::same_as<size_t>;
+	{ const_window.is_one(k) } -> std::same_as<bool>;
+	{ const_window.linear_index(k) } -> std::same_as<size_t>;
+	{ window.set_state(k, state) } -> std::same_as<void>;
+	{ window.close() } -> std::same_as<void>;
+};
+
 /// The surface the field (`Y`) and the internal state (`Z`) share: a binary state per cell,
 /// the size of the space that state lives in, and the conversion between a linear index and a
 /// multi-dimensional one.
@@ -22,6 +46,9 @@
 /// there is no "does this cell exist" question on the point-lookup path. `insert_one` and
 /// `insert_zero` are the bounds-checked way in for a cell that may be absent; `set_state` is the
 /// in-place write for one that is already known to be addressable.
+///
+/// `open_window` is the traversal the storage brings with it: a strided view the sampler reads and
+/// writes through, described at `StorageWindow` above.
 ///
 /// `fill_current_state` is here because the current model's update asks for a whole clique at once:
 /// for the `K` cells starting at `start_index` and running `increment` apart, it writes the state,
@@ -67,6 +94,14 @@ concept BinaryFieldStorage =
 		    const_storage.fill_current_state(multidim_index, n_cells, increment, states, exists,
 		                                     linear_indices)
 	    } -> std::same_as<void>;
+
+	    // The strided window the sampler reads and writes through. It sits beside the clique fill
+	    // rather than replacing it: nothing has migrated onto it yet.
+	    typename T::TWindow;
+	    requires StorageWindow<typename T::TWindow>;
+	    {
+		    storage.open_window(multidim_index, n_cells, increment)
+	    } -> std::same_as<typename T::TWindow>;
     };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

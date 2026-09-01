@@ -80,6 +80,10 @@ _Avoid_: sweep, pass, scan
 The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
 _Avoid_: Y update, field update, joint draw, eight-state sweep
 
+**Window**:
+The strided view a storage opens over itself, given a start, a count and a stride. An update reads and writes its cells through a window rather than through a cache of its own, so each storage brings the traversal that suits it: the dense window indexes the state vector, and the sparse window walks its line once and buffers the inserts it cannot make in place. A window shows its own write to a later read on the same window. `TDenseWindow` and `TSparseWindow`, `src/storages/`. See ADR-0006.
+_Avoid_: slice, view, buffer, current state
+
 ## Branch lengths
 
 **Bin**:
