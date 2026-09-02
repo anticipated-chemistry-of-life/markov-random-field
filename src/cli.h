@@ -41,9 +41,13 @@ public:
 	static inline double EPSILON_SIMPLE_MODEL = 0.1;
 
 	/// The error probability omega: the rate at which one tree field cell is corrupted before the
-	/// two are reconciled into the field (ADR-0005). Held fixed for now; the Metropolis move that
-	/// estimates it is #37.
+	/// two are reconciled into the field (ADR-0005). Used as the simulated truth when simulating
+	/// and as the starting value of the inferred omega parameter when inferring.
 	static inline double ERROR_PROBABILITY = 0.05;
+
+	/// The rate of the exponential prior on the error probability, truncated to (0, 0.5). A rate of
+	/// 20 puts the prior mean at 0.05. A larger rate concentrates the prior harder on small values.
+	static inline double ERROR_PROBABILITY_PRIOR_RATE = 20.0;
 
 	static inline double GAMMA = 1.1;
 
@@ -136,6 +140,14 @@ public:
 			                            ERROR_PROBABILITY, ".");
 		}
 
+		ERROR_PROBABILITY_PRIOR_RATE =
+		    params.get<double>("error_probability_prior_rate", ERROR_PROBABILITY_PRIOR_RATE);
+		if (ERROR_PROBABILITY_PRIOR_RATE <= 0.0) {
+			throw coretools::TUserError("--error_probability_prior_rate must be strictly positive, "
+			                            "but got ",
+			                            ERROR_PROBABILITY_PRIOR_RATE, ".");
+		}
+
 		GAMMA = params.get<double>("gamma", GAMMA);
 
 		ALPHA = params.get<double>("alpha", ALPHA);
@@ -178,6 +190,10 @@ public:
 		             "'simple_data' build option)\n";
 		std::cout << "--epsilon_simple_model         Error rate of the simple error model, in "
 		             "(0,1). Simulated truth when simulating, starting value when inferring\n";
+		std::cout << "--error_probability            Error probability omega, in (0,0.5). "
+		             "Simulated truth when simulating, starting value when inferring\n";
+		std::cout << "--error_probability_prior_rate Rate of the exponential prior on omega "
+		             "(> 0). A rate of 20 puts the prior mean at 0.05\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 	}

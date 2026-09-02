@@ -10,9 +10,10 @@
 #include <vector>
 
 TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSources &sources,
-                       size_t n_iterations, const MarkovFieldParams &markov_field_stattools_param,
-                       std::string prefix, bool simulate)
-    : _trees(trees), _markov_field(n_iterations, trees, prefix),
+                       TMarkovField::TypeParamErrorProbability *omega, size_t n_iterations,
+                       const MarkovFieldParams &markov_field_stattools_param, std::string prefix,
+                       bool simulate)
+    : _trees(trees), _markov_field(n_iterations, trees, omega, prefix), _omega(omega),
       _markov_field_stattools_param(markov_field_stattools_param),
 #ifdef USE_LOTUS
       _lotus(trees, sources.gamma, sources.error_rate), _gamma(sources.gamma),
@@ -33,6 +34,7 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
 #ifdef USE_SIMPLE_ERROR_MODEL
 	params.push_back(_epsilon_simple_model);
 #endif
+	params.push_back(_omega);
 	for (const auto &it : _markov_field_stattools_param) { params.push_back(it.get()); }
 	this->addPriorParameter(params);
 }
@@ -50,6 +52,8 @@ void TDataModel::initialize() {
 	_epsilon_simple_model->initStorage(this, {1});
 	if (!_simulate) { _simple_error_model.load_from_file(ProgramOptions::SIMPLE_DATA_FILENAME); }
 #endif
+
+	_omega->initStorage(this, {1});
 
 	for (auto &it : _markov_field_stattools_param) { it->initStorage(this, {0}); }
 
@@ -82,6 +86,12 @@ void TDataModel::guessInitialValues() {
 	    "Using simple error model data with initial epsilon_simple_model = ",
 	    ProgramOptions::EPSILON_SIMPLE_MODEL, ".");
 #endif
+
+	_omega->set(TypeErrorProbability(ProgramOptions::ERROR_PROBABILITY));
+	coretools::instances::logfile().list(
+	    "Starting the error probability omega at ", ProgramOptions::ERROR_PROBABILITY,
+	    ", under an exponential prior of rate ", ProgramOptions::ERROR_PROBABILITY_PRIOR_RATE,
+	    " truncated to (0, 0.5).");
 }
 
 double TDataModel::getSumLogPriorDensity(const Storage &) const {
@@ -131,6 +141,20 @@ void TDataModel::updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*
 }
 #endif
 
+double TDataModel::calculateLLRatio(TMarkovField::TypeParamErrorProbability *, size_t /*Index*/) {
+	// O(1): the link's likelihood depends on the whole field only through the six counters, and
+	// they do not move with the error probability. stattools has already proposed, so the
+	// parameter holds the proposal and remembers the value it replaces.
+	return _markov_field.link_log_likelihood_ratio();
+}
+
+void TDataModel::updateTempVals(TMarkovField::TypeParamErrorProbability *, size_t /*Index*/,
+                                bool /*Accepted*/) {
+	// Nothing to undo: the link's likelihood is rebuilt in O(1) from the counters and the current
+	// error probability, and stattools restores the value itself when a proposal is rejected. The
+	// overload still has to exist -- stattools throws at runtime if it is missing.
+}
+
 void TDataModel::_simulateUnderPrior(Storage *) {
 #ifdef USE_LOTUS
 	// Sizes L and sets gamma / epsilon to the values L should be simulated under. Must happen
@@ -140,6 +164,9 @@ void TDataModel::_simulateUnderPrior(Storage *) {
 #ifdef USE_SIMPLE_ERROR_MODEL
 	_epsilon_simple_model->set(TypeEpsilonSimpleModel(ProgramOptions::EPSILON_SIMPLE_MODEL));
 #endif
+	// The field is simulated at the error probability the run was given, not at a draw from the
+	// prior, so a simulated data set says which value produced it.
+	_omega->set(TypeErrorProbability(ProgramOptions::ERROR_PROBABILITY));
 
 	// first simulate Markov random field
 	_markov_field.simulate(*this);
@@ -168,6 +195,7 @@ TDataModel::TNotifierStats TDataModel::_collect_notifier_stats() const {
 	                              {_epsilon_simple_model->mean(0), _epsilon_simple_model->var(0),
 	                               _epsilon_simple_model->sd(0)}});
 #endif
+	stats.scalar_stats.push_back({"omega", {_omega->mean(0), _omega->var(0), _omega->sd(0)}});
 	return stats;
 }
 

@@ -30,6 +30,11 @@ class TDataModel; // forward declaration
 //-----------------------------------
 
 class TMarkovField {
+public:
+	/// The error probability, as stattools moves it. It hangs off TDataModel, which owns this
+	/// class and forwards the MCMC callbacks, the way the simple error model's rate does.
+	using TypeParamErrorProbability = stattools::TParameter<SpecErrorProbability, TDataModel>;
+
 private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
@@ -45,14 +50,19 @@ private:
 	// source is that source's own work.
 	std::optional<TMSMSData> _ms_data;
 
-	// The error probability standing between the two tree fields and the field. Held fixed for
-	// now; the Metropolis move that estimates it is #37.
-	field_math::TErrorProbability _omega{ProgramOptions::ERROR_PROBABILITY};
+	// The error probability standing between the two tree fields and the field. stattools owns the
+	// value and moves it; this is where the field reads it.
+	TypeParamErrorProbability *_omega = nullptr;
 
 	// The link's sufficient statistic over the whole field, n(bucket, field state). The block
 	// update tallies it as it goes and commits it here, which is what makes the error
 	// probability's likelihood O(1) in the number of cells (ADR-0005).
 	field_math::TLinkCounters _link_counters;
+
+	// Every counter tally the trace file has written, added together. The AND diagnostic is
+	// reported from these, so it pools the cells of the whole chain instead of reading one
+	// iteration. Burn-in clears them.
+	field_math::TLinkCounters _traced_link_counters;
 
 	// The two tree factors of every leaf pair, at the states the last block update drew. The
 	// link's own term is not in here: it comes from the counters above, for the whole field at
@@ -66,6 +76,7 @@ private:
 	coretools::TOutputFile _Y_trace_file;
 	std::vector<coretools::TOutputFile> _Z_trace_files;
 	coretools::TOutputFile _joint_density_file;
+	coretools::TOutputFile _link_counters_file;
 
 	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
 	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
@@ -74,6 +85,23 @@ private:
 
 	/// Opens the field's trace file on the first iteration of a chain.
 	void _open_Y_trace_file(bool is_simulation);
+
+	/// The error probability the chain holds now.
+	[[nodiscard]] field_math::TErrorProbability _error_probability() const;
+
+	/// The link's log-likelihood, from the six counters and the current error probability.
+	[[nodiscard]] double _link_log_likelihood() const;
+
+	/// Writes the six counters of one iteration, and adds them to the tally the diagnostic reads.
+	/// Opens the file on first use.
+	///
+	/// The trace is not behind a flag. Six integers an iteration is what the error probability's
+	/// whole likelihood rests on, and the AND diagnostic reads nothing else.
+	void _trace_link_counters(size_t iteration, bool is_simulation);
+
+	/// Reports the two parameter-free constraints to the log file. A violation means the link is
+	/// wrong, which is a finding rather than a defect, so this throws nothing and fails nothing.
+	void _report_link_diagnostic() const;
 
 	/// Puts both tree fields at the field, and tallies the six counters over them. Only the fixed
 	/// field path needs it: a block update writes all three and leaves the tally behind as it goes.
@@ -165,8 +193,26 @@ private:
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
-	             std::string _prefix);
+	             TypeParamErrorProbability *omega, std::string _prefix);
 	~TMarkovField() = default;
+
+	/// Puts the error probability's support at the open interval (0, 0.5).
+	///
+	/// The bound is a statement about the model, not a range on an argument (ADR-0005): at 0 the
+	/// link is the deterministic AND and the block update takes log(0), and at 0.5 and above the
+	/// tree fields are anti-correlated with the field. The type carries it, so the Metropolis
+	/// proposal mirrors at both ends and never leaves the interval.
+	///
+	/// Must run before stattools sizes the parameter, because the value it creates then is checked
+	/// against these bounds.
+	static void set_error_probability_support();
+
+	/// The log-likelihood ratio of the proposed error probability against the one it replaces.
+	///
+	/// O(1) in the number of cells: the counters do not move with the error probability, so this
+	/// reads six integers and no cell. stattools has already proposed when this is called, so the
+	/// parameter holds the proposal and remembers the old value.
+	[[nodiscard]] double link_log_likelihood_ratio() const;
 
 	// updates
 	void update(TDataModel &data_model, size_t iteration);

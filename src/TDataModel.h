@@ -61,6 +61,10 @@ private:
 	// the latent field: Y and, per tree, Z
 	TMarkovField _markov_field;
 
+	// the error probability standing between the two tree fields and the field; owned by TModel,
+	// moved by stattools
+	TMarkovField::TypeParamErrorProbability *_omega = nullptr;
+
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
 	const MarkovFieldParams &_markov_field_stattools_param;
 
@@ -104,9 +108,13 @@ private:
 	[[nodiscard]] TNotifierStats _collect_notifier_stats() const;
 
 public:
+	/// `omega` is the field's own parameter, not a data source's, so it is passed apart from
+	/// `sources`: every data source stands above the field, and the error probability stands
+	/// inside it.
 	TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSources &sources,
-	           size_t n_iterations, const MarkovFieldParams &markov_field_stattools_param,
-	           std::string prefix, bool simulate);
+	           TMarkovField::TypeParamErrorProbability *omega, size_t n_iterations,
+	           const MarkovFieldParams &markov_field_stattools_param, std::string prefix,
+	           bool simulate);
 	~TDataModel() override = default;
 
 	[[nodiscard]] std::string name() const override;
@@ -137,6 +145,12 @@ public:
 	[[nodiscard]] double calculateLLRatio(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/);
 	void updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/, bool Accepted);
 #endif
+
+	// The error probability is not a data source's parameter, so it is never behind an #ifdef: the
+	// link stands between the tree fields and the field in every build.
+	[[nodiscard]] double calculateLLRatio(TMarkovField::TypeParamErrorProbability *,
+	                                      size_t /*Index*/);
+	void updateTempVals(TMarkovField::TypeParamErrorProbability *, size_t /*Index*/, bool Accepted);
 
 	// --- accessors ---
 

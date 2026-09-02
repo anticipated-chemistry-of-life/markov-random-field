@@ -43,8 +43,16 @@ The leaf block of one tree's node state — that tree's own view of the leaf-lev
 _Avoid_: per-tree field, own field, leaf state, Z at the leaves
 
 **Error probability**:
-The probability that a tree field cell is corrupted before the two tree fields are reconciled into the field. Written `omega`. One scalar, shared by both trees, constrained to the open interval `(0, 0.5)`. See ADR-0005.
+The probability that a tree field cell is corrupted before the two tree fields are reconciled into the field. Written `omega`. One scalar, shared by both trees, constrained to the open interval `(0, 0.5)`. It is estimated, under an exponential prior truncated to that interval, and its Metropolis move reads the link counters rather than the cells. See ADR-0005.
 _Avoid_: noise rate, flip probability, error rate (too easily confused with the simple error model's misreport probability)
+
+**Bucket**:
+The number of tree fields in state 1 at one leaf pair, so 0, 1 or 2. The link table depends on the two tree field states only through it, which is what collapses four cells to three probabilities. See ADR-0005.
+_Avoid_: class, category, sum of the tree fields
+
+**Link counters**:
+The link's sufficient statistic: six integers, `n(bucket, field state)`, counting the leaf pairs of the whole field. The link's whole likelihood is a function of them and the error probability, so the error probability's move costs the same whatever the size of the field. The block update tallies them as it goes. Traced to `<prefix>_link_counters_trace.txt`, which is what the AND diagnostic reads. See ADR-0005.
+_Avoid_: sufficient statistics, the six counts, contingency table
 
 **Clique**:
 A set of nodes that vary along exactly one tree's dimension while every other dimension is fixed at a leaf. Cliques belong to a tree: a species-tree clique is identified by a *molecule* leaf, and vice versa.

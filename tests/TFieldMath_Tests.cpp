@@ -121,6 +121,27 @@ size_t bucket_written_out(const TCell &cell) {
 	return ones;
 }
 
+/// A configuration of `n` cells, drawn from a fixed-width generator so that it does not depend on
+/// the platform.
+std::vector<TCell> cells_from_seed(uint32_t seed, size_t n) {
+	std::vector<TCell> cells;
+	cells.reserve(n);
+	for (size_t i = 0; i < n; ++i) {
+		seed = seed * 1103515245u + 12345u;
+		cells.push_back({.z_s = ((seed >> 16u) & 1u) != 0u,
+		                 .z_m = ((seed >> 17u) & 1u) != 0u,
+		                 .y   = ((seed >> 18u) & 1u) != 0u});
+	}
+	return cells;
+}
+
+/// The counters of a configuration, tallied the way the block update tallies them.
+TLinkCounters counters_of(const std::vector<TCell> &cells) {
+	TLinkCounters counters;
+	for (const auto &c : cells) { counters.add(TLinkPolicy::bucket(c.z_s, c.z_m), c.y); }
+	return counters;
+}
+
 /// The six counters recomputed from scratch: walk every cell and count it.
 std::array<std::array<size_t, 2>, 3> recount(const std::vector<TCell> &cells) {
 	std::array<std::array<size_t, 2>, 3> n{};
@@ -320,18 +341,8 @@ TEST(FieldMath_Tests, merging_an_empty_tally_changes_nothing) {
 
 TEST(FieldMath_Tests, six_counters_match_a_naive_per_cell_recomputation) {
 	// a configuration with every bucket and both field states represented
-	std::vector<TCell> cells;
-	uint32_t seed = 1u; // fixed width, so the configuration does not depend on the platform
-	for (size_t i = 0; i < 400; ++i) {
-		seed          = seed * 1103515245u + 12345u;
-		const bool zs = ((seed >> 16u) & 1u) != 0u;
-		const bool zm = ((seed >> 17u) & 1u) != 0u;
-		const bool y  = ((seed >> 18u) & 1u) != 0u;
-		cells.push_back({zs, zm, y});
-	}
-
-	TLinkCounters counters;
-	for (const auto &cell : cells) { counters.add(TLinkPolicy::bucket(cell.z_s, cell.z_m), cell.y); }
+	const auto cells    = cells_from_seed(1u, 400);
+	const auto counters = counters_of(cells);
 	ASSERT_EQ(counters.total(), cells.size());
 	// the comparison is only worth anything if every one of the six counters is live
 	for (size_t bucket = 0; bucket < TLinkCounters::n_buckets; ++bucket) {
@@ -354,6 +365,55 @@ TEST(FieldMath_Tests, six_counters_match_a_naive_per_cell_recomputation) {
 TEST(FieldMath_Tests, an_empty_configuration_has_zero_log_likelihood) {
 	const TLinkCounters counters;
 	EXPECT_DOUBLE_EQ(TLinkPolicy::log_likelihood(counters, TErrorProbability(0.1)), 0.0);
+}
+
+//-----------------------------------
+// The error probability's move (ADR-0005, derivation 2)
+//-----------------------------------
+
+TEST(FieldMath_Tests, the_move_reads_the_counters_and_no_cell) {
+	// The whole point of the six counters: a proposal on the error probability is scored from them
+	// alone. The configuration below is 400 cells, and the ratio never sees one.
+	const auto cells    = cells_from_seed(7u, 400);
+	const auto counters = counters_of(cells);
+
+	for (const double old_w : omega_values()) {
+		for (const double new_w : omega_values()) {
+			const double want =
+			    brute_force_log_likelihood(cells, new_w) - brute_force_log_likelihood(cells, old_w);
+			const double got = TLinkPolicy::log_likelihood_ratio(counters, TErrorProbability(old_w),
+			                                                     TErrorProbability(new_w));
+			// The tolerance is the brute force's, as in the log-likelihood test above: it squares
+			// and then takes a log where the closed form is affine in the bucket.
+			EXPECT_NEAR(got, want, 1e-11 * std::abs(want) + 1e-9)
+			    << "omega " << old_w << " -> " << new_w;
+		}
+	}
+}
+
+TEST(FieldMath_Tests, the_ratio_is_the_difference_of_the_two_log_likelihoods) {
+	const auto counters = counters_from({{{400, 9600}, {1600, 8400}, {6400, 3600}}});
+	const TErrorProbability old_omega(0.2);
+	const TErrorProbability new_omega(0.05);
+
+	EXPECT_DOUBLE_EQ(TLinkPolicy::log_likelihood_ratio(counters, old_omega, new_omega),
+	                 TLinkPolicy::log_likelihood(counters, new_omega) -
+	                     TLinkPolicy::log_likelihood(counters, old_omega));
+}
+
+TEST(FieldMath_Tests, a_proposal_that_does_not_move_has_a_zero_ratio) {
+	const auto counters = counters_from({{{400, 9600}, {1600, 8400}, {6400, 3600}}});
+	const TErrorProbability omega(0.13);
+	EXPECT_DOUBLE_EQ(TLinkPolicy::log_likelihood_ratio(counters, omega, omega), 0.0);
+}
+
+TEST(FieldMath_Tests, an_empty_configuration_gives_a_zero_ratio) {
+	// Before the first block update the counters are empty, so the error probability moves on its
+	// prior alone.
+	const TLinkCounters counters;
+	EXPECT_DOUBLE_EQ(
+	    TLinkPolicy::log_likelihood_ratio(counters, TErrorProbability(0.1), TErrorProbability(0.2)),
+	    0.0);
 }
 
 //-----------------------------------
@@ -416,6 +476,59 @@ TEST(FieldMath_Tests, the_identity_has_a_blind_spot_that_the_shared_rate_constra
 	// the shared-rate constraint is not, and misses 1 by the amount the record quotes
 	EXPECT_NEAR(std::sqrt(p_0) + std::sqrt(p_2), 1.0 - 0.0282202113, 1e-9);
 	EXPECT_GT(std::abs(std::sqrt(p_0) + std::sqrt(p_2) - 1.0), 1e-2);
+}
+
+//-----------------------------------
+// The diagnostic those constraints ship as
+//-----------------------------------
+
+TEST(FieldMath_Tests, the_diagnostic_reads_the_bucket_rates_off_the_counters) {
+	const auto counters   = counters_from({{{400, 9600}, {1600, 8400}, {6400, 3600}}});
+	const auto diagnostic = TLinkPolicy::diagnose(counters);
+
+	EXPECT_TRUE(diagnostic.is_complete());
+	for (size_t bucket = 0; bucket < TLinkCounters::n_buckets; ++bucket) {
+		EXPECT_DOUBLE_EQ(diagnostic.prob[bucket], empirical_prob(counters, bucket))
+		    << "bucket " << bucket;
+	}
+}
+
+TEST(FieldMath_Tests, both_residuals_vanish_under_one_shared_error_probability) {
+	// The same counts as the constraints test above: omega = 0.2 realised exactly.
+	const auto diagnostic =
+	    TLinkPolicy::diagnose(counters_from({{{400, 9600}, {1600, 8400}, {6400, 3600}}}));
+
+	EXPECT_NEAR(diagnostic.and_identity_residual, 0.0, 1e-15);
+	EXPECT_NEAR(diagnostic.shared_error_probability_residual, 0.0, 1e-15);
+}
+
+TEST(FieldMath_Tests, the_diagnostic_carries_the_identity_blind_spot_the_record_describes) {
+	// Two trees corrupted at 0.05 and 0.2, mixed so that the pooled middle rate lands on the
+	// geometric mean of the two mixed cells. The identity sees nothing; the shared-rate residual
+	// misses 1 by the amount ADR-0005 quotes.
+	const auto diagnostic =
+	    TLinkPolicy::diagnose(counters_from({{{1000, 99000}, {8718, 91282}, {76000, 24000}}}));
+
+	EXPECT_LT(std::abs(diagnostic.and_identity_residual), 1e-6);
+	EXPECT_NEAR(diagnostic.shared_error_probability_residual, -0.0282202113, 1e-9);
+}
+
+TEST(FieldMath_Tests, an_empty_bucket_leaves_the_diagnostic_incomplete) {
+	// A held field puts both tree fields at the field, so no leaf pair ever lands in bucket 1.
+	// There is nothing to falsify then, and the diagnostic says so rather than reporting a number.
+	const auto diagnostic = TLinkPolicy::diagnose(counters_from({{{0, 9600}, {0, 0}, {6400, 0}}}));
+
+	EXPECT_FALSE(diagnostic.is_complete());
+	EXPECT_TRUE(std::isnan(diagnostic.prob[1]));
+	EXPECT_TRUE(std::isnan(diagnostic.and_identity_residual));
+}
+
+TEST(FieldMath_Tests, the_diagnostic_never_throws) {
+	// It reports a finding about the model, so it must survive every configuration a chain can
+	// reach -- an empty one included.
+	EXPECT_NO_THROW(static_cast<void>(TLinkPolicy::diagnose(TLinkCounters())));
+	EXPECT_NO_THROW(
+	    static_cast<void>(TLinkPolicy::diagnose(counters_from({{{1, 0}, {0, 1}, {1, 1}}}))));
 }
 
 //-----------------------------------

@@ -100,7 +100,10 @@ void TModel::_create_trees() {
 }
 
 TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
-    : _prefix(prefix)
+    : _prefix(prefix),
+      _error_probability(
+          "omega", &_prior_on_error_probability,
+          {_prefix, coretools::str::toString(ProgramOptions::ERROR_PROBABILITY_PRIOR_RATE)})
 #ifdef USE_LOTUS
       ,
       _gamma("gamma", &_prior_on_gamma, {_prefix}),
@@ -117,6 +120,10 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
                            {_prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
 #endif
 {
+	// The support is set before stattools sizes any parameter. A value stattools makes then is
+	// checked against these bounds.
+	TMarkovField::set_error_probability_support();
+
 	// create trees (including mu_0, mu_1 and binned branch lengths)
 	_create_trees();
 
@@ -131,7 +138,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 #endif
 
 	// create the likelihood box that owns the Markov field and all data sources
-	_data_model = std::make_unique<TDataModel>(_trees, sources, n_iterations,
+	_data_model = std::make_unique<TDataModel>(_trees, sources, &_error_probability, n_iterations,
 	                                           _markov_field_stattools_param, _prefix, simulate);
 
 	// note: fixed prior parameters are now passed through the TParameterDefinition at

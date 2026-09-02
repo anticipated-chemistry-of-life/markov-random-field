@@ -194,6 +194,36 @@ public:
 	}
 };
 
+/// What the six counters say about the link, with no parameter estimated first.
+///
+/// `p_k = n(k,1) / (n(k,0) + n(k,1))` is the rate at which the field reads 1 in bucket k. One error
+/// probability pins all three of those rates, so two residuals must vanish whatever its value, and
+/// they test different assumptions. The first tests that the link is an independent corruption
+/// followed by an AND. The second tests that both trees are corrupted at one rate. Only the second
+/// has no blind spot: bucketing pools the two mixed cells, and there is always a split of them at
+/// which the first holds despite unequal rates. See ADR-0005.
+///
+/// A residual away from zero means the link is wrong, which is a finding rather than a defect. Both
+/// ship as reported diagnostics, and neither fails anything. Counters taken from a chain carry that
+/// chain's noise, so the reader judges the size of a residual rather than its sign.
+struct TLinkDiagnostic {
+	/// `p_k`, one per bucket. A bucket that held no cell gives a NaN, which every residual carries.
+	std::array<double, TLinkCounters::n_buckets> prob{};
+	/// `p_1^2 - p_0 * p_2`. Zero when the link is an independent-corruption AND.
+	double and_identity_residual             = 0.0;
+	/// `sqrt(p_0) + sqrt(p_2) - 1`. Zero when both trees share one error probability.
+	double shared_error_probability_residual = 0.0;
+
+	/// Whether every bucket held at least one cell. An empty bucket leaves the residuals NaN, and
+	/// says the configuration is too degenerate to falsify anything.
+	[[nodiscard]] bool is_complete() const noexcept {
+		for (const double p : prob) {
+			if (std::isnan(p)) { return false; }
+		}
+		return true;
+	}
+};
+
 /// What the sampler needs from a link: the probability of a field cell given the two tree field
 /// cells, the bucket that cell falls in, and the likelihood of a whole configuration from the
 /// bucket counts alone.
@@ -208,6 +238,7 @@ concept LinkPolicy = requires(bool z_s, bool z_m, size_t bucket, const TErrorPro
 	{ T::bucket(z_s, z_m) } -> std::same_as<size_t>;
 	{ T::prob_for_bucket(bucket, omega) } -> std::same_as<double>;
 	{ T::log_likelihood(counters, omega) } -> std::same_as<double>;
+	{ T::log_likelihood_ratio(counters, omega, omega) } -> std::same_as<double>;
 };
 
 /// The field is the AND of the two independently corrupted tree fields.
@@ -290,6 +321,40 @@ public:
 			sum += static_cast<double>(counters.count(bucket, true)) * log_p[1];
 		}
 		return sum;
+	}
+
+	/// The log-likelihood ratio between a proposed error probability and the current one.
+	///
+	/// The counters do not move with omega, so this reads six integers and no cell. That is what
+	/// makes the error probability's Metropolis move O(1) in the number of cells, the same trick
+	/// the simple error model's disagreement count plays for its own rate.
+	[[nodiscard]] static double log_likelihood_ratio(const TLinkCounters &counters,
+	                                                 const TErrorProbability &old_omega,
+	                                                 const TErrorProbability &new_omega) {
+		return log_likelihood(counters, new_omega) - log_likelihood(counters, old_omega);
+	}
+
+	/// The two parameter-free constraints, read off the counters.
+	///
+	/// Nothing here estimates omega first: three Bernoulli rates are pinned by one parameter, so
+	/// the residuals are a statement about the link alone. A bucket that held no cell gives a NaN
+	/// rate, and `TLinkDiagnostic::is_complete` reports that. This throws nothing and fails
+	/// nothing; see the type for what each residual tests.
+	[[nodiscard]] static TLinkDiagnostic diagnose(const TLinkCounters &counters) {
+		TLinkDiagnostic diagnostic;
+		for (size_t bucket = 0; bucket < n_buckets; ++bucket) {
+			const auto n_zero       = static_cast<double>(counters.count(bucket, false));
+			const auto n_one        = static_cast<double>(counters.count(bucket, true));
+			// An empty bucket gives 0 / 0, which is the NaN is_complete() reports.
+			diagnostic.prob[bucket] = n_one / (n_zero + n_one);
+		}
+		const double p_0 = diagnostic.prob[0];
+		const double p_1 = diagnostic.prob[1];
+		const double p_2 = diagnostic.prob[2];
+
+		diagnostic.and_identity_residual             = p_1 * p_1 - p_0 * p_2;
+		diagnostic.shared_error_probability_residual = std::sqrt(p_0) + std::sqrt(p_2) - 1.0;
+		return diagnostic;
 	}
 };
 

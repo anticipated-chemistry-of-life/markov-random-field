@@ -8,6 +8,7 @@
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
+#include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
@@ -19,15 +20,17 @@
 #include "tree/TTree.h"
 #include "tree/io/write_Z.h"
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
 
 TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
-                           std::string _prefix)
-    : _trees(Trees), _prefix(std::move(_prefix)) {
+                           TypeParamErrorProbability *omega, std::string _prefix)
+    : _trees(Trees), _prefix(std::move(_prefix)), _omega(omega) {
 	using namespace coretools::instances;
 
 	// find molecule and species dimensions; construct mass spec data if both trees are present
@@ -72,6 +75,30 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 }
 
 //-----------------------------------
+// The error probability
+//-----------------------------------
+
+void TMarkovField::set_error_probability_support() {
+	TypeErrorProbability::setMin(std::numeric_limits<double>::min());
+	TypeErrorProbability::setMax(std::nextafter(0.5, 0.0));
+}
+
+field_math::TErrorProbability TMarkovField::_error_probability() const {
+	// The type keeps the value inside (0, 0.5), and TErrorProbability checks it again. The second
+	// check costs nothing here: this is called once per update, not once per cell.
+	return field_math::TErrorProbability(static_cast<double>(_omega->value()));
+}
+
+double TMarkovField::_link_log_likelihood() const {
+	return TLinkPolicy::log_likelihood(_link_counters, _error_probability());
+}
+
+double TMarkovField::link_log_likelihood_ratio() const {
+	const field_math::TErrorProbability old_omega(static_cast<double>(_omega->oldValue()));
+	return TLinkPolicy::log_likelihood_ratio(_link_counters, old_omega, _error_probability());
+}
+
+//-----------------------------------
 // The block update
 //-----------------------------------
 
@@ -83,6 +110,57 @@ void TMarkovField::_open_Y_trace_file(bool is_simulation) {
 	}
 	const std::string suffix = is_simulation ? "_simulated_Y_trace.txt" : "_Y_trace.txt";
 	_Y_trace_file.open(_prefix + suffix, Y_trace_header, "\t");
+}
+
+void TMarkovField::_trace_link_counters(size_t iteration, bool is_simulation) {
+	if (!_link_counters_file.isOpen()) {
+		std::vector<std::string> header;
+		header.reserve(2 * field_math::TLinkCounters::n_buckets);
+		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+			header.push_back("n_bucket" + std::to_string(bucket) + "_field0");
+			header.push_back("n_bucket" + std::to_string(bucket) + "_field1");
+		}
+		const std::string suffix =
+		    is_simulation ? "_simulated_link_counters_trace.txt" : "_link_counters_trace.txt";
+		_link_counters_file.open(_prefix + suffix, header, "\t");
+	}
+
+	if (iteration % _Y.get_thinning_factor() != 0) { return; }
+
+	std::vector<size_t> line;
+	line.reserve(2 * field_math::TLinkCounters::n_buckets);
+	for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+		line.push_back(_link_counters.count(bucket, false));
+		line.push_back(_link_counters.count(bucket, true));
+	}
+	_link_counters_file.writeln(line);
+
+	// The diagnostic reads what this file wrote, and nothing else.
+	_traced_link_counters.merge(_link_counters);
+}
+
+void TMarkovField::_report_link_diagnostic() const {
+	using namespace coretools::instances;
+
+	const auto diagnostic = TLinkPolicy::diagnose(_traced_link_counters);
+	logfile().startIndent("The AND link, checked against the counters (ADR-0005):");
+	if (!diagnostic.is_complete()) {
+		logfile().list("A bucket held no cell, so neither constraint says anything.");
+		logfile().endIndent();
+		return;
+	}
+	logfile().list("P_0 = ", diagnostic.prob[0], ", P_1 = ", diagnostic.prob[1],
+	               ", P_2 = ", diagnostic.prob[2], ".");
+	logfile().list("P_1^2 - P_0 * P_2 = ", diagnostic.and_identity_residual,
+	               ". It is 0 when the link corrupts the two tree fields independently and ANDs "
+	               "them.");
+	logfile().list("sqrt(P_0) + sqrt(P_2) - 1 = ", diagnostic.shared_error_probability_residual,
+	               ". It is 0 when both trees share one error probability.");
+	logfile().list("Both read ", _traced_link_counters.total(),
+	               " counted cells, pooled over the chain. They carry that chain's noise. A "
+	               "residual that survives a longer chain means the link is wrong. That is a "
+	               "finding, and it fails nothing.");
+	logfile().endIndent();
 }
 
 /// A held field holds both tree fields with it, because the block draws all three together.
@@ -134,6 +212,8 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 		// The block draws the two tree fields with the field, so holding one holds all three. The
 		// leaf layer never moves after this, and one tally stands for the whole chain.
 		if (iteration == 0) { _hold_tree_fields_at_the_field(); }
+		// The error probability still moves against that tally, so the trace still carries it.
+		_trace_link_counters(iteration, IsSimulation);
 		return;
 	}
 
@@ -145,8 +225,9 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	TBlockModel<IsSimulation, InitYFromData> model(_trees, data_model, accumulator);
 	std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 
+	const field_math::TErrorProbability omega = _error_probability();
 	block_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
-	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), _omega,
+	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), omega,
 	                               model, field_uniforms, tallies);
 
 	// The update covered every leaf pair, so the tally it built is the configuration itself.
@@ -156,6 +237,8 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 		_link_counters.merge(tally.counters);
 		_block_log_density += tally.log_density;
 	}
+
+	_trace_link_counters(iteration, IsSimulation);
 
 	// at the very end: sum the per-thread accumulators and store them in the data sources
 	if constexpr (!IsSimulation) { accumulator.commit(data_model); }
@@ -298,6 +381,8 @@ void TMarkovField::_simulate_Y() {
 void TMarkovField::burninHasFinished() {
 	_Y.reset_counts();
 	_Y.remove_zeros();
+	// The diagnostic reports the chain, not the burn-in that preceded it.
+	_traced_link_counters = field_math::TLinkCounters();
 }
 
 void TMarkovField::oneBurninHasFinished() { _Y.remove_zeros(); }
@@ -305,6 +390,7 @@ void TMarkovField::oneBurninHasFinished() { _Y.remove_zeros(); }
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
 	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
+	_report_link_diagnostic();
 }
 
 const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }
@@ -317,7 +403,7 @@ double TMarkovField::_calculate_complete_joint_density() {
 	// The link, for the whole field at once. Its likelihood is a function of the six counters and
 	// the error probability alone, so this is six integers rather than a walk over the cells
 	// (ADR-0005).
-	sum_log_field += TLinkPolicy::log_likelihood(_link_counters, _omega);
+	sum_log_field += _link_log_likelihood();
 
 	// now we loop over all Z to get the joint probability
 	for (const auto &tree : _trees) { sum_log_field += tree->get_complete_joint_density(); }

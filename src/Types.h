@@ -92,6 +92,28 @@ using SpecEpsilonSimpleModel =
                          stattools::Hash<coretools::toHash("epsilon_simple_model")>,
                          PriorOnEpsilonSimpleModel>;
 
+// Omega, the error probability
+// The rate at which one tree field cell is corrupted before the two are reconciled into the field
+// (ADR-0005). One scalar, shared by both trees.
+//
+// The support is the open interval (0, 0.5), which is a statement about the model rather than a
+// range on an argument: at 0 the link is the deterministic AND and the block update takes log(0),
+// and at 0.5 and above the tree fields are anti-correlated with the field. No coretools interval
+// spells that, so the bounds are set at run time -- see
+// TMarkovField::set_error_probability_support, which must run before stattools sizes the parameter.
+//
+// The prior is an exponential truncated to that interval, so it is concentrated near small values:
+// an error probability near a half says the tree fields carry almost nothing. The default rate of
+// 20 puts the prior mean at 0.05, and truncation moves it by 2e-5. Set it with
+// --error_probability_prior_rate.
+using TypeErrorProbability = coretools::MinMaxVariable<coretools::toHash("omega")>;
+using PriorOnErrorProbability =
+    stattools::prior::TExponentialFixed<stattools::TParameterBase, TypeErrorProbability, 1,
+                                        /*TruncatedTop=*/true, /*TruncatedBottom=*/true>;
+using SpecErrorProbability =
+    stattools::ParamSpec<TypeErrorProbability, stattools::Hash<coretools::toHash("omega")>,
+                         PriorOnErrorProbability>;
+
 // Alpha
 using PriorOnAlpha = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeAlpha, 1>;
 using SpecAlpha =
