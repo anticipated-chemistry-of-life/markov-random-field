@@ -84,10 +84,9 @@ static_assert(std::is_trivially_destructible_v<TDenseWindow>,
 ///
 /// Every cell of the container space is stored, from the moment the array is sized. That is the
 /// point of the dense form -- there is no "is this cell present" case to reason about, which is
-/// what makes it the implementation to check the sparse one against -- and it is what three
-/// members read differently for:
+/// what makes it the implementation to check the sparse one against -- and it is what two members
+/// read differently for:
 ///   - `remove_zeros` has nothing to remove and does nothing,
-///   - `fill_current_state` reports every cell of the clique as existing,
 ///   - `empty` answers "no cell is one", where sparse answers "nothing is stored". The two part
 ///     company over a cell inserted as a zero, which the sparse matrix counts as stored: after
 ///     `insert_zero`, sparse is not empty and this is. The caller asking (TMarkovField, checking
@@ -115,14 +114,6 @@ public:
 	void initialize_dimensions(const IndexArray &dimensions) {
 		_dimensions = dimensions;
 		_states.assign(coretools::containerProduct(dimensions), 0);
-	}
-
-	/// Always true, in bounds: this implementation holds the whole container space, so there is no
-	/// cell that reads as zero because it is absent. The sparse implementations answer this by
-	/// searching a row, and the sampler asks so that a write which would reallocate a sparse row
-	/// can be deferred out of the parallel region -- a question about the storage, not the field.
-	[[nodiscard]] bool is_stored(size_t linear_index) const {
-		return linear_index < total_size_of_container_space();
 	}
 
 	[[nodiscard]] bool is_one(size_t linear_index) const {
@@ -171,26 +162,6 @@ public:
 
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index) const {
 		return coretools::getSubscriptsAsArray(linear_index, _dimensions);
-	}
-
-	/// The current state of a clique of `K` cells starting at `start_index` and running
-	/// `increment` apart. Where the sparse implementation walks a row or a column to find which of
-	/// those cells it holds, this one indexes straight into the array, and reports every cell as
-	/// existing because every cell does.
-	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
-	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
-	                        std::vector<size_t> &linear_index) const {
-		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions);
-		DEBUG_ASSERT(K == 0 || start_linear + (K - 1) * increment < _states.size());
-
-		current_state.assign(K, 0);
-		exists.assign(K, 1);
-		linear_index.assign(K, 0);
-		for (size_t k = 0; k < K; ++k) {
-			const size_t linear = start_linear + k * increment;
-			linear_index[k]     = linear;
-			current_state[k]    = _states[linear];
-		}
 	}
 
 	using TWindow = TDenseWindow;

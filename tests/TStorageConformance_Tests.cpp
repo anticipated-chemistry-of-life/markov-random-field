@@ -17,12 +17,11 @@
 // dense window indexes the state vector while the sparse window materialises its line, so the two
 // run different code behind one interface (ADR-0006). What they owe in common is here.
 //
-// What is deliberately *not* asserted equal between the backends is `exists`: dense stores the
-// whole container space and reports every cell of a clique as existing, where sparse reports only
-// the cells it holds. The update reads that answer to choose between flipping a cell in place and
-// deferring an insert (TClique::_update_current_state), and both routes end at the same state --
-// which is what the equivalence tests below check instead. `empty()` is the same story and has a
-// test of its own.
+// What is deliberately *not* asserted equal between the backends is which cells a storage holds.
+// Dense holds the whole container space, sparse holds what it was given. Nothing outside a storage
+// asks any more: the sparse window answers it from the line it walked on open. What is left to
+// check is that both backends end at the same state, which is what the equivalence tests below do.
+// `empty()` is the same story and has a test of its own.
 //
 
 #include "constants.h"
@@ -34,6 +33,7 @@
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/TPhylogeny.h"
 #include "tree/node_state_shape.h"
+#include "window_contents.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -427,83 +427,18 @@ TYPED_TEST(StorageConformance, every_cell_holds_the_state_it_was_last_written) {
 	}
 }
 
-// The two ways a clique runs through a container: along the last dimension, where the cells are
-// consecutive, and along the first, where they are a whole row apart. Everything the update reads
-// comes through this call, so it has to answer what the point lookups answer -- for the sparse
-// implementations that means the line walk has to find every stored cell of the clique.
-TYPED_TEST(StorageConformance, fill_current_state_agrees_with_the_point_lookups) {
-	std::mt19937_64 rng(20260828);
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-
-	for (const auto &shape : generated_shapes()) {
-		auto storage         = make_storage<TypeParam>(shape);
-		const size_t n_cells = storage.total_size_of_container_space();
-		TExpectedCells expected(n_cells);
-		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
-
-		auto check_clique = [&](const IndexArray &start, size_t K, size_t increment) {
-			storage.fill_current_state(start, K, increment, state, exists, linear);
-			const size_t start_linear = start[0] * shape[1] + start[1];
-			ASSERT_EQ(state.size(), K);
-			ASSERT_EQ(linear.size(), K);
-			for (size_t k = 0; k < K; ++k) {
-				ASSERT_EQ(linear[k], start_linear + k * increment)
-				    << "clique cell " << k << " of shape " << shape[0] << "x" << shape[1];
-				ASSERT_EQ(state[k] != 0, storage.is_one(linear[k]))
-				    << "clique cell " << k << " of shape " << shape[0] << "x" << shape[1];
-			}
-		};
-
-		// Along the last dimension: one clique per row, and one starting halfway along it, because
-		// a clique need not start at the beginning of its line.
-		for (size_t row = 0; row < shape[0]; ++row) {
-			check_clique(IndexArray{row, 0}, shape[1], 1);
-			const size_t half = shape[1] / 2;
-			check_clique(IndexArray{row, half}, shape[1] - half, 1);
-			if (::testing::Test::HasFailure()) { FAIL() << "row " << row; }
-		}
-		// Along the first dimension: one clique per column, the increment being the width of a row.
-		for (size_t col = 0; col < shape[1]; ++col) {
-			check_clique(IndexArray{0, col}, shape[0], shape[1]);
-			const size_t half = shape[0] / 2;
-			check_clique(IndexArray{half, col}, shape[0] - half, shape[1]);
-			if (::testing::Test::HasFailure()) { FAIL() << "column " << col; }
-		}
-	}
-}
-
-// A clique along the first dimension steps by the width of a row, so in a container one cell wide
-// it steps by one -- the same increment a clique along the *last* dimension has. The two are told
-// apart by the shape and not by the increment: where there is a single column, a clique of more
-// than one cell can only be a column. A container gets a single column whenever the other tree
-// has a single leaf, which is exactly what the generator's deep chain is.
-TYPED_TEST(StorageConformance, a_clique_runs_down_a_container_that_is_one_cell_wide) {
-	auto storage = make_storage<TypeParam>(IndexArray{4, 1});
-	storage.insert_one(1);
-	storage.insert_one(3);
-
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	storage.fill_current_state(IndexArray{0, 0}, /*K=*/4, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 1, 2, 3}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 1}));
-}
-
 // -------------------------------------------------------------------------
 // The window a storage opens over itself
 // -------------------------------------------------------------------------
 
-TYPED_TEST(StorageConformance, a_window_reads_what_the_clique_fill_and_the_point_lookups_read) {
-	// The window is the clique fill generalised, so it has to answer what the clique fill answers
-	// and what a point lookup answers. Over every line of every generated shape, both ways round.
+TYPED_TEST(StorageConformance, a_window_reads_what_the_point_lookups_read) {
+	// Everything an update reads comes through a window, so a window has to answer what a point
+	// lookup answers -- for the sparse implementation that means the line walk has to find every
+	// stored cell of the line. Over every line of every generated shape, both ways round: along
+	// the last dimension, where the cells are consecutive, and along the first, where they are a
+	// whole row apart. Each line is taken whole and again from halfway along, because a window
+	// need not start at the beginning of its line.
 	std::mt19937_64 rng(20260828);
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
 
 	for (const auto &shape : generated_shapes()) {
 		auto storage         = make_storage<TypeParam>(shape);
@@ -512,14 +447,16 @@ TYPED_TEST(StorageConformance, a_window_reads_what_the_clique_fill_and_the_point
 		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
 
 		for (const auto &request : every_window_over(shape)) {
-			storage.fill_current_state(request.start, request.n_cells, request.stride, state,
-			                           exists, linear);
+			const size_t start_linear = request.start[0] * shape[1] + request.start[1];
 			auto window = storage.open_window(request.start, request.n_cells, request.stride);
 			ASSERT_EQ(window.size(), request.n_cells);
 			for (size_t k = 0; k < request.n_cells; ++k) {
-				ASSERT_EQ(window.linear_index(k), linear[k]) << "window cell " << k;
-				ASSERT_EQ(window.is_one(k), storage.is_one(linear[k])) << "window cell " << k;
-				ASSERT_EQ(window.is_one(k), state[k] != 0) << "window cell " << k;
+				ASSERT_EQ(window.linear_index(k), start_linear + k * request.stride)
+				    << "window cell " << k;
+				ASSERT_EQ(window.is_one(k), storage.is_one(window.linear_index(k)))
+				    << "window cell " << k;
+				ASSERT_EQ(window.is_one(k), expected.states[window.linear_index(k)] != 0)
+				    << "window cell " << k;
 			}
 			if (::testing::Test::HasFailure()) {
 				FAIL() << "window at " << request.start[0] << "," << request.start[1] << " of "
@@ -635,6 +572,33 @@ TYPED_TEST(StorageConformance, a_window_writes_a_held_cell_at_once_and_defers_th
 	EXPECT_TRUE(storage.is_one(5));
 }
 
+TYPED_TEST(StorageConformance, a_column_window_writes_a_held_cell_at_once_and_defers_the_rest) {
+	// The same split, down a column. The sparse window walks a matrix row for a stride of one and a
+	// matrix column otherwise, so the two strides run different code to decide which cells the
+	// matrix holds. A column window that called a held cell absent would defer the write, and the
+	// commit writes a whole new cell where an in-place write keeps what the cell already carries.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_zero(4); // (row 1, column 0), held by both, in state 0
+
+	auto window = storage.open_window(IndexArray{0, 0}, /*n_cells=*/3, /*stride=*/4); // column 0
+	window.set_state(1, true); // cell 4, which both storages hold
+	window.set_state(2, true); // cell 8, which only the dense storage holds
+
+	EXPECT_TRUE(storage.is_one(4)) << "a write to a held cell goes in place";
+	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
+	              std::is_same_v<TypeParam, TStorageZDense>) {
+		EXPECT_TRUE(storage.is_one(8)) << "the dense window holds no buffer";
+	} else {
+		EXPECT_FALSE(storage.is_one(8)) << "the sparse window buffers an insert until it closes";
+	}
+	EXPECT_TRUE(window.is_one(1));
+	EXPECT_TRUE(window.is_one(2));
+
+	window.close();
+	EXPECT_TRUE(storage.is_one(4));
+	EXPECT_TRUE(storage.is_one(8));
+}
+
 TYPED_TEST(StorageConformance, a_window_hands_out_the_inserts_it_could_not_write_in_place) {
 	// The other way a window ends. The clique walk runs in parallel, and an insert writes one row
 	// and one column of a sparse matrix, so no window in that loop may insert. It hands the cells
@@ -704,47 +668,12 @@ TYPED_TEST(StorageConformance, a_window_over_no_cells_holds_nothing_and_closes) 
 	EXPECT_NO_THROW(window.close());
 }
 
-TYPED_TEST(StorageConformance,
-           a_cell_that_was_inserted_is_stored_and_a_state_write_does_not_change_that) {
-	// The contract both implementations owe: whatever "stored" means to them, inserting a cell
-	// makes it stored, and flipping its state afterwards leaves it stored. That is what lets the
-	// sampler use the answer to decide between an in-place flip and a deferred insert.
-	for (const auto &shape : generated_shapes()) {
-		auto storage      = make_storage<TypeParam>(shape);
-		const size_t last = storage.total_size_of_container_space() - 1;
-		// a chain paired with a chain gives a container one cell wide, where the two indices below
-		// would be the same cell and the last write would decide both states
-		if (last == 0) { continue; }
-
-		storage.insert_one(0);
-		storage.insert_zero(last);
-		ASSERT_TRUE(storage.is_stored(0)) << "shape " << shape[0] << "x" << shape[1];
-		ASSERT_TRUE(storage.is_stored(last)) << "shape " << shape[0] << "x" << shape[1];
-
-		// a state write is not an insert, and must not un-store the cell
-		storage.set_state(0, false);
-		storage.set_state(last, true);
-		ASSERT_TRUE(storage.is_stored(0)) << "shape " << shape[0] << "x" << shape[1];
-		ASSERT_TRUE(storage.is_stored(last)) << "shape " << shape[0] << "x" << shape[1];
-
-		// and storage says nothing about state
-		ASSERT_FALSE(storage.is_one(0)) << "shape " << shape[0] << "x" << shape[1];
-		ASSERT_TRUE(storage.is_one(last)) << "shape " << shape[0] << "x" << shape[1];
-	}
-}
-
-TYPED_TEST(StorageConformance, an_untouched_cell_reads_as_zero_whether_or_not_it_is_stored) {
-	// The one thing the two are *not* required to agree on. Dense holds the whole container space
-	// and calls every cell stored; sparse holds what it was given. Both must still read zero.
+TYPED_TEST(StorageConformance, an_untouched_cell_reads_as_zero) {
+	// Dense holds the whole container space; sparse holds what it was given. Which of the two a
+	// cell falls under is no longer a question the interface answers, and this is why it need not:
+	// an untouched cell reads as zero either way.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
 	EXPECT_FALSE(storage.is_one(5));
-	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
-	              std::is_same_v<TypeParam, TStorageZDense>) {
-		EXPECT_TRUE(storage.is_stored(5)) << "the dense implementations hold every cell";
-	} else {
-		EXPECT_FALSE(storage.is_stored(5))
-		    << "the sparse implementations hold what they were given";
-	}
 }
 
 TYPED_TEST(StorageConformance, an_insert_outside_the_container_space_throws) {
@@ -944,9 +873,16 @@ TYPED_TEST(FieldConformance, a_write_through_a_window_leaves_the_counter_alone) 
 	TExpectedCells expected(n_cells);
 	run_chain(field, random_script(rng, n_cells, N_ITERATIONS), expected);
 
-	// The whole container, one row at a time, written to the state it already holds.
+	// The whole container, one row at a time and then one column at a time, each cell written to
+	// the state it already holds. Both ways round, because the sparse window walks a matrix row for
+	// a stride of one and a matrix column otherwise. A column window that called a held cell absent
+	// would defer the write, and the commit writes a whole new cell -- counter and all.
 	for (size_t row = 0; row < 4; ++row) {
 		auto window = field.open_window(IndexArray{row, 0}, /*n_cells=*/5, /*stride=*/1);
+		for (size_t k = 0; k < window.size(); ++k) { window.set_state(k, window.is_one(k)); }
+	}
+	for (size_t col = 0; col < 5; ++col) {
+		auto window = field.open_window(IndexArray{0, col}, /*n_cells=*/4, /*stride=*/5);
 		for (size_t k = 0; k < window.size(); ++k) { window.set_state(k, window.is_one(k)); }
 	}
 	for (size_t i = 0; i < n_cells; ++i) {
@@ -974,9 +910,12 @@ TYPED_TEST(FieldConformance, reset_counts_clears_every_counter_and_keeps_every_s
 // The two backends together
 // -------------------------------------------------------------------------
 
-/// Cell for cell, and clique for clique: what one implementation answers, the other answers.
+/// Cell for cell, and line for line: what one implementation answers, the other answers.
+///
+/// The line half goes through a window, because a window is the only way in to a run of cells. The
+/// two windows run different code, so reading each line through both is what says they agree.
 template<typename First, typename Second>
-void expect_same_cells(const First &first, const Second &second, const IndexArray &shape) {
+void expect_same_cells(First &first, Second &second, const IndexArray &shape) {
 	ASSERT_EQ(first.total_size_of_container_space(), second.total_size_of_container_space());
 	const size_t n_cells = first.total_size_of_container_space();
 
@@ -987,23 +926,20 @@ void expect_same_cells(const First &first, const Second &second, const IndexArra
 		    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 	}
 
-	std::vector<uint8_t> first_state;
-	std::vector<uint8_t> second_state;
-	std::vector<uint8_t> ignored_exists;
-	std::vector<size_t> first_linear;
-	std::vector<size_t> second_linear;
-	auto same_clique = [&](const IndexArray &start, size_t K, size_t increment) {
-		first.fill_current_state(start, K, increment, first_state, ignored_exists, first_linear);
-		second.fill_current_state(start, K, increment, second_state, ignored_exists, second_linear);
-		ASSERT_EQ(first_linear, second_linear) << "clique at " << start[0] << "," << start[1]
-		                                       << " of shape " << shape[0] << "x" << shape[1];
-		ASSERT_EQ(first_state, second_state) << "clique at " << start[0] << "," << start[1]
-		                                     << " of shape " << shape[0] << "x" << shape[1];
+	auto same_line = [&](const IndexArray &start, size_t n_cells_in_line, size_t stride) {
+		auto first_window  = first.open_window(start, n_cells_in_line, stride);
+		auto second_window = second.open_window(start, n_cells_in_line, stride);
+		ASSERT_EQ(linear_indices_of(first_window), linear_indices_of(second_window))
+		    << "the line at " << start[0] << "," << start[1] << " of shape " << shape[0] << "x"
+		    << shape[1];
+		ASSERT_EQ(states_of(first_window), states_of(second_window))
+		    << "the line at " << start[0] << "," << start[1] << " of shape " << shape[0] << "x"
+		    << shape[1];
 	};
 
-	for (size_t row = 0; row < shape[0]; ++row) { same_clique(IndexArray{row, 0}, shape[1], 1); }
+	for (size_t row = 0; row < shape[0]; ++row) { same_line(IndexArray{row, 0}, shape[1], 1); }
 	for (size_t col = 0; col < shape[1]; ++col) {
-		same_clique(IndexArray{0, col}, shape[0], shape[1]);
+		same_line(IndexArray{0, col}, shape[0], shape[1]);
 	}
 }
 

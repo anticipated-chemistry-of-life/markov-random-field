@@ -2,6 +2,7 @@
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZDense.h"
+#include "window_contents.h"
 #include "gtest/gtest.h"
 #include <cstddef>
 #include <cstdint>
@@ -103,56 +104,43 @@ TEST(ZStorageDense_Tests, insert_zero_outside_the_container_space_throws) {
 	EXPECT_NO_THROW(Z.insert_zero(5));
 }
 
-// increment == 1: the variable dimension is the last one -- for the sparse implementation a row
-// walk, for this one a straight run of linear indices.
-TEST(ZStorageDense_Tests, fill_current_state_along_the_last_dimension) {
+// stride == 1: the variable dimension is the last one -- for the sparse implementation a row walk,
+// for this one a straight run of linear indices.
+TEST(ZStorageDense_Tests, a_window_runs_along_the_last_dimension) {
 	TStorageZDense Z({1, 6});
 	Z.insert_one(1);
 	Z.insert_one(3);
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Z.fill_current_state(IndexArray{0, 0}, /*K=*/6, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 1, 2, 3, 4, 5}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 1, 0, 0}));
-	// dense stores the whole container space, so every cell of the clique exists
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1, 1, 1, 1}));
+	auto window = Z.open_window(IndexArray{0, 0}, /*n_cells=*/6, /*stride=*/1);
+	ASSERT_EQ(window.size(), 6u);
+	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{0, 1, 2, 3, 4, 5}));
+	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{0, 1, 0, 1, 0, 0}));
 }
 
-// increment > 1: the variable dimension is the first one -- a column of the matrix.
-TEST(ZStorageDense_Tests, fill_current_state_along_the_first_dimension) {
-	TStorageZDense Z({3, 2}); // 3 rows, 2 cols -> nCols == 2 == increment
+// stride > 1: the variable dimension is the first one -- a column of the matrix.
+TEST(ZStorageDense_Tests, a_window_runs_along_the_first_dimension) {
+	TStorageZDense Z({3, 2}); // 3 rows, 2 cols -> nCols == 2 == stride
 	Z.insert_one(2);          // (row 1, col 0)
 	Z.insert_one(4);          // (row 2, col 0)
 	Z.insert_one(3);          // (row 1, col 1) -> not on the col-0 walk
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Z.fill_current_state(IndexArray{0, 0}, /*K=*/3, /*increment=*/2, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 2, 4}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 1}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1}));
+	auto window = Z.open_window(IndexArray{0, 0}, /*n_cells=*/3, /*stride=*/2);
+	ASSERT_EQ(window.size(), 3u);
+	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{0, 2, 4}));
+	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{0, 1, 1}));
 }
 
-TEST(ZStorageDense_Tests, fill_current_state_honours_the_start_index) {
+TEST(ZStorageDense_Tests, a_window_honours_the_start_index) {
 	TStorageZDense Z({1, 6});
 	Z.insert_one(2);
 	Z.insert_one(4);
 	Z.insert_one(5); // past the end of the window -> must not be reported
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	// window covers columns [2, 5)
-	Z.fill_current_state(IndexArray{0, 2}, /*K=*/3, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{2, 3, 4}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{1, 0, 1}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1}));
+	// the window covers columns [2, 5)
+	auto window = Z.open_window(IndexArray{0, 2}, /*n_cells=*/3, /*stride=*/1);
+	ASSERT_EQ(window.size(), 3u);
+	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{2, 3, 4}));
+	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{1, 0, 1}));
 }
 
 //-----------------------------------
@@ -305,16 +293,12 @@ TEST(YStorageDense_Tests, get_fraction_of_ones) {
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 0.0);
 }
 
-TEST(YStorageDense_Tests, fill_current_state_reports_every_cell_as_existing) {
+TEST(YStorageDense_Tests, a_window_reads_the_states_the_field_holds) {
 	TStorageYDense Y(1000, {1, 4});
 	Y.insert_one(1);
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Y.fill_current_state(IndexArray{0, 0}, /*K=*/4, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 1, 2, 3}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 0}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1, 1}));
+	auto window = Y.open_window(IndexArray{0, 0}, /*n_cells=*/4, /*stride=*/1);
+	ASSERT_EQ(window.size(), 4u);
+	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{0, 1, 2, 3}));
+	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{0, 1, 0, 0}));
 }

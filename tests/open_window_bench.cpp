@@ -14,18 +14,24 @@
 // Helpers
 // -------------------------------------------------------------------------
 //
-// Since the migration to TSparseMatrix, fill_current_state is a member of
-// TStorageYMatrix that walks a single matrix row (increment == 1, "easy") or a
-// single matrix column (increment > 1, "hard"). The old sorted-vector variants
-// (binary-search window / linear window) no longer exist, so there is nothing
-// left to compare them against — these benchmarks now time the matrix fill
-// directly and verify it against a brute-force per-cell lookup.
+// Opening a window is the whole of the sparse path's cost model. A point lookup in a sparse matrix
+// costs a search, so the sparse window walks one line on open and answers every later read from
+// what it found. Everything an update reads goes through that walk, and how it scales with density
+// is what decides whether the sparse backend is usable at scale.
+//
+// Which line the window walks follows from the stride: a stride of one is a matrix row ("easy"),
+// and a stride of one row width is a matrix column ("hard"). The two are timed apart because they
+// are different walks over the same data.
+//
+// Correctness of the walk is a conformance question and is asserted over generated shapes in
+// tests/TStorageConformance_Tests.cpp. The one check here guards the benchmark itself: it says the
+// windows being timed, at these sizes and densities, hold what the field holds.
 
 namespace {
 
 // Build a TStorageYMatrix with Bernoulli(density) ones at each position.
-// insert_in_Y now takes batches of *linear indices* (the index is implicit in
-// the matrix position; TStorageY no longer stores it).
+// insert_in_Y takes batches of *linear indices* (the index is implicit in the
+// matrix position; TStorageY does not store it).
 TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
 	TStorageYMatrix Y;
 	Y.initialize(/*n_iterations=*/1000, dims);
@@ -70,40 +76,33 @@ void report(const std::string &label, const BenchResult &r) {
 } // namespace
 
 // -------------------------------------------------------------------------
-// Correctness: the matrix fill must agree with a brute-force per-cell lookup
+// Correctness: a window must hold what the point lookups answer
 // -------------------------------------------------------------------------
 
-TEST(FillCurrentState_Matrix, matches_brute_force) {
+TEST(OpenWindow_Matrix, matches_brute_force) {
 	constexpr size_t dim0 = 200;
 	constexpr size_t dim1 = 200;
 
 	for (double density : {0.001, 0.05, 0.5}) {
 		auto Y = make_Y({dim0, dim1}, density);
-		std::vector<uint8_t> cur;
-		std::vector<uint8_t> exists;
-		std::vector<size_t> lin;
 
-		// easy path: scan a full row (increment 1) -> linear = row * dim1 + k
+		// easy path: a whole matrix row (stride 1) -> linear = row * dim1 + k
 		for (size_t row : {size_t{0}, size_t{37}, dim0 - 1}) {
-			const IndexArray start = {row, 0};
-			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
+			auto window = Y.open_window(IndexArray{row, 0}, dim1, /*stride=*/1);
 			for (size_t k = 0; k < dim1; ++k) {
 				const size_t linear = row * dim1 + k;
-				EXPECT_EQ(static_cast<bool>(cur[k]), Y.is_one(linear))
-				    << "easy row=" << row << " k=" << k;
-				EXPECT_EQ(lin[k], linear);
+				EXPECT_EQ(window.linear_index(k), linear) << "easy row=" << row << " k=" << k;
+				EXPECT_EQ(window.is_one(k), Y.is_one(linear)) << "easy row=" << row << " k=" << k;
 			}
 		}
 
-		// hard path: scan a full column (increment dim1) -> linear = k * dim1 + col
+		// hard path: a whole matrix column (stride dim1) -> linear = k * dim1 + col
 		for (size_t col : {size_t{0}, size_t{37}, dim1 - 1}) {
-			const IndexArray start = {0, col};
-			Y.fill_current_state(start, dim0, /*increment=*/dim1, cur, exists, lin);
+			auto window = Y.open_window(IndexArray{0, col}, dim0, /*stride=*/dim1);
 			for (size_t k = 0; k < dim0; ++k) {
 				const size_t linear = k * dim1 + col;
-				EXPECT_EQ(static_cast<bool>(cur[k]), Y.is_one(linear))
-				    << "hard col=" << col << " k=" << k;
-				EXPECT_EQ(lin[k], linear);
+				EXPECT_EQ(window.linear_index(k), linear) << "hard col=" << col << " k=" << k;
+				EXPECT_EQ(window.is_one(k), Y.is_one(linear)) << "hard col=" << col << " k=" << k;
 			}
 		}
 	}
@@ -113,27 +112,24 @@ TEST(FillCurrentState_Matrix, matches_brute_force) {
 // Benchmarks
 // -------------------------------------------------------------------------
 
-// Easy path (increment = 1): scan one full matrix row.
-TEST(Benchmark_FillCurrentState, easy_path) {
+// Easy path (stride 1): open a window over one full matrix row.
+TEST(Benchmark_OpenWindow, easy_path) {
 	constexpr size_t dim0  = 1000;
 	constexpr size_t dim1  = 1000;
 	constexpr size_t total = dim0 * dim1;
 
-	const IndexArray start = {0, 0}; // scan row 0
+	const IndexArray start = {0, 0}; // row 0
 
-	std::cout << "\n=== fill_current_state — easy path (increment=1, along last dim) ===\n";
+	std::cout << "\n=== open_window — easy path (stride=1, along last dim) ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
-	          << "  n_nodes=" << dim1 << "\n\n";
+	          << "  n_cells=" << dim1 << "\n\n";
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
-		auto Y = make_Y({dim0, dim1}, density);
-		std::vector<uint8_t> cur;
-		std::vector<uint8_t> exists;
-		std::vector<size_t> lin;
+		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
 		auto r      = timed([&] {
-			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
-			sink += cur[0]; // prevent dead-code elimination
+			auto window = Y.open_window(start, dim1, /*stride=*/1);
+			sink += window.is_one(0); // prevent dead-code elimination
 		});
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
@@ -142,30 +138,25 @@ TEST(Benchmark_FillCurrentState, easy_path) {
 	}
 }
 
-// Hard path (increment = dim1): scan one full matrix column. This is the case the
-// migration made cheap — a direct column walk instead of binary-search striding.
-TEST(Benchmark_FillCurrentState, hard_path) {
-	constexpr size_t dim0      = 1000;
-	constexpr size_t dim1      = 1000;
-	constexpr size_t total     = dim0 * dim1;
-	constexpr size_t increment = dim1; // stride between consecutive row elements
+// Hard path (stride = dim1): open a window over one full matrix column.
+TEST(Benchmark_OpenWindow, hard_path) {
+	constexpr size_t dim0   = 1000;
+	constexpr size_t dim1   = 1000;
+	constexpr size_t total  = dim0 * dim1;
+	constexpr size_t stride = dim1; // one row width
 
-	const IndexArray start = {0, 0}; // scan column 0
+	const IndexArray start = {0, 0}; // column 0
 
-	std::cout << "\n=== fill_current_state — hard path (increment=" << increment
-	          << ", non-last dim) ===\n";
+	std::cout << "\n=== open_window — hard path (stride=" << stride << ", non-last dim) ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
-	          << "  n_nodes=" << dim0 << "\n\n";
+	          << "  n_cells=" << dim0 << "\n\n";
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
-		auto Y = make_Y({dim0, dim1}, density);
-		std::vector<uint8_t> cur;
-		std::vector<uint8_t> exists;
-		std::vector<size_t> lin;
+		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
 		auto r      = timed([&] {
-			Y.fill_current_state(start, dim0, increment, cur, exists, lin);
-			sink += cur[0];
+			auto window = Y.open_window(start, dim0, stride);
+			sink += window.is_one(0);
 		});
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
@@ -175,10 +166,10 @@ TEST(Benchmark_FillCurrentState, hard_path) {
 }
 
 // Easy vs. hard side-by-side at several densities.
-TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
-	constexpr size_t dim0      = 1000;
-	constexpr size_t dim1      = 1000;
-	constexpr size_t increment = dim1;
+TEST(Benchmark_OpenWindow, easy_vs_hard_comparison) {
+	constexpr size_t dim0   = 1000;
+	constexpr size_t dim1   = 1000;
+	constexpr size_t stride = dim1;
 
 	const IndexArray start = {0, 0};
 
@@ -190,18 +181,15 @@ TEST(Benchmark_FillCurrentState, easy_vs_hard_comparison) {
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y = make_Y({dim0, dim1}, density);
-		std::vector<uint8_t> cur;
-		std::vector<uint8_t> exists;
-		std::vector<size_t> lin;
 
 		size_t sink = 0;
 		auto easy   = timed([&] {
-			Y.fill_current_state(start, dim1, /*increment=*/1, cur, exists, lin);
-			sink += cur[0];
+			auto window = Y.open_window(start, dim1, /*stride=*/1);
+			sink += window.is_one(0);
 		});
 		auto hard   = timed([&] {
-			Y.fill_current_state(start, dim0, increment, cur, exists, lin);
-			sink += cur[0];
+			auto window = Y.open_window(start, dim0, stride);
+			sink += window.is_one(0);
 		});
 		(void)sink;
 

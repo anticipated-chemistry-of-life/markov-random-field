@@ -35,7 +35,7 @@ Four files, small enough that both chains run in well under a second:
 The two trees are deliberately different shapes, so that no container the run asks for is square:
 the field is 8x6, the species node state 7x6 and the molecules node state 8x4. A square
 container is the one shape in which a row-walk and a column-walk can agree by accident, and telling
-those two apart is what the sparse implementation's `fill_current_state` does for a living.
+those two apart is what the sparse window does on every open.
 
 The parameters are not fitted to anything and no result of the run is interpreted -- only that the
 two backends produce the same bytes. What matters about the fixture is that it is varied enough for

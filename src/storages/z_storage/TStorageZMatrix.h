@@ -61,27 +61,6 @@ public:
 	}
 
 	/// Point lookup by linear index in Z space. A missing cell reads as false.
-	/// Whether this cell is held by the matrix, as distinct from reading as zero because it is
-	/// absent.
-	///
-	/// The sampler asks because inserting a new cell reallocates a row, which must not happen
-	/// inside the parallel region: a write to a cell already stored is an in-place flip, and a
-	/// write to one that is not is deferred and committed afterwards. The dense node state holds
-	/// the whole container space and always answers yes, so this is a question about the storage
-	/// that the two answer differently, not a fact about the field -- which is why it is asked
-	/// through the concept rather than assumed.
-	///
-	/// Rows are kept sorted, so this walks one row and stops at the first index past the one it
-	/// wants.
-	[[nodiscard]] bool is_stored(size_t linear_index_in_Z_space) const {
-		const auto md = _row_col(linear_index_in_Z_space);
-		for (auto it = _mat.begin_row(md[0]); it != _mat.end_row(md[0]); ++it) {
-			if (it->index == md[1]) { return true; }
-			if (it->index > md[1]) { break; }
-		}
-		return false;
-	}
-
 	[[nodiscard]] inline bool is_one(size_t linear_index_in_Z_space) const {
 		const auto md = _row_col(linear_index_in_Z_space);
 		return _mat.get(md[0], md[1]).is_one();
@@ -122,51 +101,6 @@ public:
 
 	[[nodiscard]] size_t total_size_of_container_space() const {
 		return coretools::containerProduct(_dimensions_in_Z_space);
-	}
-
-	/// Fast current-state fill for a clique of `K` nodes running along one dimension, starting at
-	/// `start_index` (a multi-dimensional index in Z space). Mirror of
-	/// TStorageYMatrix::fill_current_state: walk a single row (the last dimension, which an
-	/// increment of 1 names only while there is more than one column) or a single column
-	/// (otherwise) once. Outputs, for every k in [0, K): the current state, whether the cell is
-	/// stored, and its linear index in Z space.
-	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
-	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
-	                        std::vector<size_t> &linear_index) const {
-		current_state.assign(K, 0);
-		exists.assign(K, 0);
-		linear_index.assign(K, 0);
-
-		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions_in_Z_space);
-		for (size_t k = 0; k < K; ++k) { linear_index[k] = start_linear + k * increment; }
-
-		// The column count is part of the test because a single-column container gives a clique
-		// along either dimension an increment of 1, and only the first dimension can be longer
-		// than one cell there. A container is one column wide whenever the other tree has a
-		// single leaf.
-		if (increment == 1 && _dimensions_in_Z_space[1] > 1) {
-			// variable dimension is the last one -> a single matrix row, entries sorted by column.
-			const size_t row       = start_index[0];
-			const size_t start_col = start_index[1];
-			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-				if (it->index < start_col) { continue; }
-				const size_t k = it->index - start_col;
-				if (k >= K) { break; } // sorted -> no later entry can fall in range
-				current_state[k] = it->val.is_one();
-				exists[k]        = 1;
-			}
-		} else {
-			// variable dimension is the first one -> a single matrix column, entries sorted by row.
-			const size_t col       = start_index[1];
-			const size_t start_row = start_index[0];
-			for (auto it = _mat.begin_col(col); it != _mat.end_col(col); ++it) {
-				if (it->index < start_row) { continue; }
-				const size_t k = it->index - start_row;
-				if (k >= K) { break; }
-				current_state[k] = it->val.is_one();
-				exists[k]        = 1;
-			}
-		}
 	}
 
 	using TWindow = TSparseWindow<TStorageZ>;

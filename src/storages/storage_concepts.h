@@ -7,7 +7,6 @@
 #include "constants.h"
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <vector>
 
 /// The strided view a storage opens over itself: a start, a count and a stride.
@@ -49,17 +48,15 @@ concept StorageWindow = requires(T &window, const T &const_window, size_t k, boo
 /// `FieldStorage` below names, and `Z` deliberately does not satisfy it.
 ///
 /// A cell that is not stored reads as state 0, so `is_one` is total over the container space and
-/// there is no "does this cell exist" question on the point-lookup path. `insert_one` and
-/// `insert_zero` are the bounds-checked way in for a cell that may be absent; `set_state` is the
-/// in-place write for one that is already known to be addressable.
+/// there is no "does this cell exist" question on this interface. Which cells a storage holds is
+/// its own business: the sparse window reads that off the line it walks on open, and the dense
+/// window never asks. `insert_one` and `insert_zero` are the bounds-checked way in for a cell that
+/// may be absent; `set_state` is the in-place write for one that is already known to be
+/// addressable.
 ///
 /// `open_window` is the traversal the storage brings with it: a strided view the sampler reads and
-/// writes through, described at `StorageWindow` above.
-///
-/// `fill_current_state` writes, for the `K` cells starting at `start_index` and running `increment`
-/// apart, the state, whether the cell is stored, and the linear index of each. No update calls it
-/// any more -- the field update reads its cells through a window (#54) -- so what is left is the
-/// tests and the benchmark, and #55 takes it off this interface.
+/// writes through, described at `StorageWindow` above. It is the only way in to a run of cells. The
+/// clique fill this concept used to name is now the sparse window's constructor.
 ///
 /// Deliberately outside the concept: the bulk-insert and whole-space dump paths, which the two
 /// implementations still spell with `Y` and `Z` in their names, and the field-only reporting
@@ -68,17 +65,9 @@ concept StorageWindow = requires(T &window, const T &const_window, size_t k, boo
 template<typename T>
 concept BinaryFieldStorage =
     requires(T &storage, const T &const_storage, size_t linear_index, bool state,
-             const IndexArray &multidim_index, size_t n_cells, size_t increment,
-             std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
-             std::vector<size_t> &linear_indices) {
+             const IndexArray &multidim_index, size_t n_cells, size_t stride) {
 	    // State.
 	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
-	    // Whether the cell is held, as opposed to reading as zero because it is absent. Dense
-	    // always says yes; sparse searches. No update asks any more: a window defers the write it
-	    // cannot make in place, and answers a later read from its own line. The one caller that
-	    // had to know which storage it was talking to has gone. What is left is the tests, and #55
-	    // takes it off this interface.
-	    { const_storage.is_stored(linear_index) } -> std::same_as<bool>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
 	    { storage.insert_zero(linear_index) } -> std::same_as<void>;
@@ -94,18 +83,12 @@ concept BinaryFieldStorage =
 	    } -> std::same_as<size_t>;
 	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
 
-	    // One clique's current state, in one call.
-	    {
-		    const_storage.fill_current_state(multidim_index, n_cells, increment, states, exists,
-		                                     linear_indices)
-	    } -> std::same_as<void>;
-
 	    // The strided window the sampler reads and writes through. The field update walks a row of
 	    // it, and the node-state walk a column of it.
 	    typename T::TWindow;
 	    requires StorageWindow<typename T::TWindow>;
 	    {
-		    storage.open_window(multidim_index, n_cells, increment)
+		    storage.open_window(multidim_index, n_cells, stride)
 	    } -> std::same_as<typename T::TWindow>;
     };
 

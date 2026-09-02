@@ -14,8 +14,9 @@
 /// A strided window over a sparse matrix of binary cells: the matrix, the linear index the window
 /// starts at, how many cells it holds, and how far apart they are.
 ///
-/// The window materialises its line once, on open, exactly as the clique fill does. A point lookup
-/// in this matrix costs a search, so the sparse path pays that search once per line. See ADR-0006.
+/// The window materialises its line once, on open. A point lookup in this matrix costs a search, so
+/// the sparse path pays that search once per line rather than once per cell. The storage interface
+/// used to carry this walk as a clique fill. It lives here now. See ADR-0006.
 ///
 /// A write to a cell the matrix already holds goes in place. A write to one it does not hold waits
 /// in a buffer, because the insert would reallocate a row and a column while other threads read
@@ -45,7 +46,8 @@ private:
 	/// The state of every cell of the window: what the matrix held when the window opened, plus
 	/// every write since. A read answers from here, which is what makes a buffered write visible.
 	std::vector<uint8_t> _states;
-	/// Where each cell is.
+	/// Where each cell is. This is the window's own answer to whether the matrix holds a cell, and
+	/// the only place that question is asked.
 	std::vector<THolding> _holding;
 	/// The cells whose insert waits for `close`.
 	std::vector<size_t> _to_insert;
@@ -58,6 +60,13 @@ private:
 	}
 
 	/// Reads the window's cells out of the matrix, in one walk of one line.
+	///
+	/// The matrix keeps rows and columns sorted. One walk of the line therefore costs O(nnz in
+	/// that line). Which line it is follows from the stride *and* the shape. A window along the
+	/// first dimension steps by the width of a row. That width is one cell in a single-column
+	/// container, so the stride alone does not name the dimension.
+	///   - stride == 1, more than one column : the last dimension -> walk the matrix row.
+	///   - otherwise                         : the first dimension -> walk the matrix column.
 	void _materialise() {
 		const size_t n_cells = _states.size();
 		if (n_cells == 0) { return; }
@@ -65,9 +74,8 @@ private:
 		const size_t start_row = _start_linear / _n_cols;
 		const size_t start_col = _start_linear % _n_cols;
 
-		// The column count is part of the test because a single-column container gives a window
-		// along either dimension a stride of one, and only the first dimension can be longer than
-		// one cell there. A container is one column wide whenever the other tree has a single leaf.
+		// A container is one column wide whenever the other tree has a single leaf, which is why
+		// the column count is part of the test.
 		if (_stride == 1 && _n_cols > 1) {
 			// the variable dimension is the last one -> a single matrix row, sorted by column
 			for (auto it = _mat->begin_row(start_row); it != _mat->end_row(start_row); ++it) {

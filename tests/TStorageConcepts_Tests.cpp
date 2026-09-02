@@ -1,7 +1,6 @@
 
 #include "storages/storage_backend.h"
 #include <cstddef>
-#include <cstdint>
 #include <vector>
 
 // The storage concepts are checked entirely at compile time: TStorageYMatrix.h and
@@ -42,7 +41,6 @@ static_assert(!StorageWindow<UnclosableWindow>, "a window that cannot close must
 /// Everything the shared concept asks for except `remove_zeros`.
 struct AlmostBinaryStorage {
 	[[nodiscard]] bool is_one(size_t) const { return false; }
-	[[nodiscard]] bool is_stored(size_t) const { return false; }
 	void set_state(size_t, bool) {}
 	void insert_one(size_t) {}
 	void insert_zero(size_t) {}
@@ -50,8 +48,6 @@ struct AlmostBinaryStorage {
 	[[nodiscard]] bool empty() const { return true; }
 	[[nodiscard]] size_t get_linear_index_in_container_space(const IndexArray &) const { return 0; }
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t) const { return {}; }
-	void fill_current_state(const IndexArray &, size_t, size_t, std::vector<uint8_t> &,
-	                        std::vector<uint8_t> &, std::vector<size_t> &) const {}
 	using TWindow = Window;
 	TWindow open_window(const IndexArray &, size_t, size_t) { return {}; }
 };

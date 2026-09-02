@@ -18,10 +18,9 @@
 /// all of which the sparse implementation spells with a `Z` in the name too.
 ///
 /// Every cell of the container space is stored here, so "the stored entries" is "every cell". That
-/// is the same reading `TDenseStateArray::fill_current_state` gives `exists`, and it is the one
-/// difference from the sparse implementation that is visible in output: `write_Z_to_file` asked for
-/// only the stored cells writes the whole container space under this backend. Production only ever
-/// asks it for the whole space anyway.
+/// is the one difference from the sparse implementation that is visible in output:
+/// `write_Z_to_file` asked for only the stored cells writes the whole container space under this
+/// backend. Production only ever asks it for the whole space anyway.
 class TStorageZDense : public TDenseStateArray {
 public:
 	TStorageZDense() = default;
