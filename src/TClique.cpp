@@ -20,21 +20,17 @@ TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_
 	_increment                   = increment;
 }
 
-// Both windows open at the same cell and step by the same stride. The field and the leaf block of
-// a node state address a leaf pair at the same (row, column) (ADR-0005). Only the clique's own
-// dimension differs in extent between the two containers, so the step along the other one is the
-// same in both. Each storage turns that subscript into a linear index of its own, and the two
-// differ.
-TCliqueStates::TCliqueStates(TFieldStorage &Y, TNodeStateStorage &Z, const TClique &clique,
+// The window opens at the clique's first cell and steps by its increment, over every node of the
+// tree. The leaf block of that column is this tree's tree field, at the same (row, column) as the
+// field itself (ADR-0005), so the walk needs no second window to reach a leaf's state.
+TCliqueStates::TCliqueStates(TNodeStateStorage &Z, const TClique &clique,
                              const TPhylogeny &topology)
-    : _leaves(Y.open_window(clique.first_cell(), topology.n_leaves(), clique.get_increment())),
-      _nodes(
+    : _nodes(
           Z.open_window(clique.first_cell(), clique.get_number_of_nodes(), clique.get_increment())),
       _topology(&topology) {}
 
-TCliqueStates TClique::open_states(TFieldStorage &Y, TNodeStateStorage &Z,
-                                   const TPhylogeny &topology) const {
-	return {Y, Z, *this, topology};
+TCliqueStates TClique::open_states(TNodeStateStorage &Z, const TPhylogeny &topology) const {
+	return {Z, *this, topology};
 }
 
 TNodeStateStorage::TWindow TClique::open_node_state_window(TNodeStateStorage &Z) const {

@@ -73,7 +73,7 @@ _Avoid_: partition function, Z (that is the node state), evidence
 ## The chain
 
 **Update**:
-One full pass over a set of variables. The field update visits every leaf pair; a tree's node-state update visits every node of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order.
+One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every internal node of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: block-update every leaf pair, update each tree's internal node state, then the parameters.
 _Avoid_: sweep, pass, scan
 
 **Block update**:

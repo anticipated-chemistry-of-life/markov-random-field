@@ -12,6 +12,7 @@
 #include "constants.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
+#include "field/TFieldMath.h"
 #include "mass_spec/msms_data.h"
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
@@ -22,66 +23,7 @@
 #include <string>
 #include <vector>
 
-//-----------------------------------
-// Field update bookkeeping
-//-----------------------------------
-
 class TDataModel; // forward declaration
-
-/// Per-cell outcome of one Y update. Each data source keeps its own likelihood bookkeeping (they
-/// are independent terms), so the results are handed back separately instead of merged.
-struct TYUpdateResult {
-#ifdef USE_LOTUS
-	/// P(L_cell | x = new_state). Neutral value 1.0 (log 0).
-	double prob_lotus_new_state = 1.0;
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	/// Whether the observed D cell contradicts the state Y was just set to.
-	bool simple_model_disagrees = false;
-#endif
-};
-
-/// Per-thread accumulators for one full field update, committed to the data sources at the end.
-///
-/// The accumulators are bundled into a single object on purpose: `#ifdef` cannot appear inside a
-/// `#pragma omp` line, and the update's `default(none) shared(...)` clause has to name every
-/// variable it touches. One object keeps that clause identical in every build configuration.
-class TDataUpdateAccumulator {
-private:
-#ifdef USE_LOTUS
-	std::vector<coretools::TSumLogProbability> _lotus_LL;
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	std::vector<size_t> _n_disagree;
-#endif
-
-public:
-	/// Sizing happens in the body rather than in a member-initializer list, so that adding or
-	/// removing a source does not require rebalancing the commas of a #ifdef'd init list.
-	explicit TDataUpdateAccumulator(size_t n_threads) {
-#ifdef USE_LOTUS
-		_lotus_LL.resize(n_threads);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		_n_disagree.assign(n_threads, 0);
-#endif
-	}
-
-	/// Hot path: called once per updated Y cell, from inside the parallel region. Only ever touches
-	/// the slot of the calling thread.
-	void add(size_t thread, const TYUpdateResult &result) {
-#ifdef USE_LOTUS
-		_lotus_LL[thread].add(result.prob_lotus_new_state);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		_n_disagree[thread] += static_cast<size_t>(result.simple_model_disagrees);
-#endif
-	}
-
-	/// Sums the per-thread slots and installs the results in the data sources. Called once, after
-	/// the parallel region.
-	void commit(TDataModel &data_model);
-};
 
 //-----------------------------------
 // TMarkovField
@@ -98,11 +40,24 @@ private:
 	bool _fix_Y = false;
 	bool _fix_Z = false;
 
-	// mass spectrometry data and the dimension indices of molecules/species within _trees
+	// Mass spectrometry data, still dormant. Nothing builds it. The block update does not read it
+	// either: the eight-state block takes the LOTUS and the simple-error term, and adapting a third
+	// source is that source's own work.
 	std::optional<TMSMSData> _ms_data;
 
-	// complete joint density of the markov random field
-	std::vector<double> _complete_log_density;
+	// The error probability standing between the two tree fields and the field. Held fixed for
+	// now; the Metropolis move that estimates it is #37.
+	field_math::TErrorProbability _omega{ProgramOptions::ERROR_PROBABILITY};
+
+	// The link's sufficient statistic over the whole field, n(bucket, field state). The block
+	// update tallies it as it goes and commits it here, which is what makes the error
+	// probability's likelihood O(1) in the number of cells (ADR-0005).
+	field_math::TLinkCounters _link_counters;
+
+	// The two tree factors of every leaf pair, at the states the last block update drew. The
+	// link's own term is not in here: it comes from the counters above, for the whole field at
+	// once.
+	double _block_log_density = 0.0;
 
 	/// Was Z initialized from children ?
 	bool _z_initialized_from_children = false;
@@ -112,31 +67,20 @@ private:
 	std::vector<coretools::TOutputFile> _Z_trace_files;
 	coretools::TOutputFile _joint_density_file;
 
-	// The field update: one species leaf per thread, read and written through windows.
-	//
-	// Both templates are defined in TMarkovField.cpp. Every caller of them is in that file, and
-	// the update reads the data sources, which this header only forward-declares.
+	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
+	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
+	template<bool IsSimulation, bool InitYFromData>
+	void _update_block(TDataModel &data_model, size_t iteration);
 
-	/// Draws every cell of one species leaf's row of the field.
-	///
-	/// The row is a thread's whole share of the update. A field cell's Markov blanket holds no
-	/// other field cell, so the rows are conditionally independent given the node states. The call
-	/// hands out the cells its window could not write in place, through `deferred_inserts`.
-	template<bool IsSimulation, bool initYFromData>
-	void _update_field_row(size_t species_leaf, TDataModel &data_model,
-	                       const TCellUniforms &uniforms, TDataUpdateAccumulator &accumulator,
-	                       std::vector<size_t> &deferred_inserts);
+	/// Opens the field's trace file on the first iteration of a chain.
+	void _open_Y_trace_file(bool is_simulation);
 
-	/// One field update: every species leaf, one thread each.
-	template<bool IsSimulation, bool initYFromData>
-	void _update_all_Y(TDataModel &data_model, size_t iteration);
+	/// Puts both tree fields at the field, and tallies the six counters over them. Only the fixed
+	/// field path needs it: a block update writes all three and leaves the tally behind as it goes.
+	void _hold_tree_fields_at_the_field();
 
 	void _simulate_Y();
 	double _calculate_complete_joint_density();
-	void _reset_log_joint_density() {
-		_complete_log_density.clear();
-		_complete_log_density.resize(ProgramOptions::NUMBER_OF_THREADS);
-	}
 
 	void _read_Y_from_file(const std::string &filename);
 
@@ -154,8 +98,7 @@ private:
 		}
 
 		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y,
-			                                                                          iteration);
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(iteration);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
@@ -233,6 +176,7 @@ public:
 
 	// get Y
 	[[nodiscard]] const TFieldStorage &get_Y_matrix() const;
+
 
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();

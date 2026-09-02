@@ -176,6 +176,17 @@ public:
 		return _n[bucket][static_cast<size_t>(y)];
 	}
 
+	/// Adds another tally's counts to this one.
+	///
+	/// The block update keeps one tally per thread, because a thread sees only a share of the
+	/// cells and `remove` would take a partial count below zero. This is how the shares come back
+	/// together after the parallel region.
+	void merge(const TLinkCounters &other) noexcept {
+		for (size_t bucket = 0; bucket < n_buckets; ++bucket) {
+			for (size_t y = 0; y < 2; ++y) { _n[bucket][y] += other._n[bucket][y]; }
+		}
+	}
+
 	[[nodiscard]] size_t total() const noexcept {
 		size_t sum = 0;
 		for (const auto &bucket : _n) { sum += bucket[0] + bucket[1]; }

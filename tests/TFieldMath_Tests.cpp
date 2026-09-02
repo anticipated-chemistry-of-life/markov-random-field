@@ -289,6 +289,35 @@ TEST(FieldMath_Tests, removing_from_an_empty_bucket_is_rejected) {
 	EXPECT_THROW(counters.remove(0, true), std::invalid_argument);
 }
 
+TEST(FieldMath_Tests, merging_adds_one_tally_to_another) {
+	// what the block update does after its parallel region: each thread counted its own share of
+	// the cells, and the shares come back together
+	TLinkCounters first;
+	first.add(0, false);
+	first.add(2, true);
+	first.add(2, true);
+
+	TLinkCounters second;
+	second.add(2, true);
+	second.add(1, false);
+
+	first.merge(second);
+	EXPECT_EQ(first.count(0, false), 1u);
+	EXPECT_EQ(first.count(1, false), 1u);
+	EXPECT_EQ(first.count(2, true), 3u);
+	EXPECT_EQ(first.total(), 5u);
+	// the tally merged in is left alone, so a thread's share can be read after it is committed
+	EXPECT_EQ(second.total(), 2u);
+}
+
+TEST(FieldMath_Tests, merging_an_empty_tally_changes_nothing) {
+	TLinkCounters counters;
+	counters.add(1, true);
+	counters.merge(TLinkCounters());
+	EXPECT_EQ(counters.count(1, true), 1u);
+	EXPECT_EQ(counters.total(), 1u);
+}
+
 TEST(FieldMath_Tests, six_counters_match_a_naive_per_cell_recomputation) {
 	// a configuration with every bucket and both field states represented
 	std::vector<TCell> cells;

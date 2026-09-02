@@ -11,7 +11,9 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "omp.h"
+#include "field/TBlockUpdate.h"
+#include "field/TBlockModel.h"
+#include "field/link_backend.h"
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
@@ -23,12 +25,6 @@
 #include <utility>
 #include <vector>
 
-// The field update names the two trees. A thread takes a species leaf and walks the molecule
-// leaves of its row. A third tree would be a third window and a third factor, so the update says
-// so here rather than looping over a dimension count that cannot change.
-static_assert(NUMBER_OF_TREES == 2,
-              "The field update is written for one species tree and one molecule tree.");
-
 TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
                            std::string _prefix)
     : _trees(Trees), _prefix(std::move(_prefix)) {
@@ -39,7 +35,10 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 
 	// read: fix Y or Z?
 	_fix_Y = ProgramOptions::FIX_Y;
-	if (_fix_Y) { logfile().list("Will fix Y during the MCMC."); }
+	if (_fix_Y) {
+		// The block draws the field and both tree fields together, so holding one holds all three.
+		logfile().list("Will fix Y, and with it both tree fields, during the MCMC.");
+	}
 	_fix_Z = ProgramOptions::FIX_Z;
 	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
 
@@ -55,23 +54,6 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
 		_read_Y_from_file(filename);
 	}
-}
-
-void TDataUpdateAccumulator::commit(TDataModel &data_model) {
-#ifdef USE_LOTUS
-	double sum_new_LL = 0.0;
-	for (auto &i : _lotus_LL) {
-		// loop over all LL (stored per thread) and sum
-		sum_new_LL += i.getSum();
-	}
-	data_model.get_lotus().update_cur_LL(sum_new_LL);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	size_t total_disagree = 0;
-	for (const auto &i : _n_disagree) { total_disagree += i; }
-	// The update visits every cell of Y exactly once, so this is the complete disagreement count.
-	data_model.get_simple_error_model().set_n_disagree(total_disagree);
-#endif
 }
 
 void TMarkovField::_read_Y_from_file(const std::string &filename) {
@@ -90,140 +72,57 @@ void TMarkovField::_read_Y_from_file(const std::string &filename) {
 }
 
 //-----------------------------------
-// The field update
+// The block update
 //-----------------------------------
 
-template<bool IsSimulation, bool initYFromData>
-void TMarkovField::_update_field_row(size_t species_leaf, TDataModel &data_model,
-                                     const TCellUniforms &uniforms,
-                                     TDataUpdateAccumulator &accumulator,
-                                     std::vector<size_t> &deferred_inserts) {
-	const TTree &species_tree      = *_trees.front();
-	const TTree &molecule_tree     = *_trees.back();
-	const size_t n_molecule_leaves = molecule_tree.get_number_of_leaves();
-	const auto thread              = static_cast<size_t>(omp_get_thread_num());
-	const IndexArray row_start{species_leaf, 0};
-
-	// The field's row: every cell this call draws, and the only cells it writes.
-	auto field_row = _Y.open_window(row_start, n_molecule_leaves, /*stride=*/1);
-
-	// The species parent's row. A leaf is never a root, so its parent is an internal node and the
-	// species tree's node state holds it.
-	//
-	// The two node states are reached through the mutable trees because a window can write, and
-	// opening one is a non-const operation. Neither window below is written: the two-state draw
-	// writes the field alone.
-	auto species_parent_row = _trees.front()->get_Z().open_window(
-	    IndexArray{species_tree.parent_of(species_leaf), 0}, n_molecule_leaves, /*stride=*/1);
-
-	// The molecule node state's row, over every molecule node. A cell's molecule parent is a
-	// column of this one row, so one window covers every parent the row reads.
-	auto molecule_row = _trees.back()->get_Z().open_window(
-	    row_start, molecule_tree.get_number_of_nodes(), /*stride=*/1);
-
-	// Each data source's own row of the same cells. Both have the field's dimensions, so the
-	// field's index is already theirs.
-#ifdef USE_LOTUS
-	auto lotus_row = data_model.get_lotus().open_row(row_start, n_molecule_leaves);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	auto simple_data_row =
-	    data_model.get_simple_error_model().open_row(row_start, n_molecule_leaves);
-#endif
-
-	// The branch from the species leaf to its parent is the same for every cell of the row. So is
-	// the molecule tree's clique, which a species leaf names.
-	const auto species_branch      = species_tree.get_binned_branch_length(species_leaf);
-	const TClique &molecule_clique = molecule_tree.get_clique(row_start);
-
-	for (size_t molecule_leaf = 0; molecule_leaf < n_molecule_leaves; ++molecule_leaf) {
-		const IndexArray cell{species_leaf, molecule_leaf};
-
-		// prepare log probabilities for the two possible states
-		std::array<coretools::TSumLogProbability, 2> sum_log;
-
-		// calculate probabilities in Markov random field: one factor per tree, each the two-state
-		// process on the branch from that tree's parent
-		if constexpr (!initYFromData) {
-			// The species tree's clique is named by the molecule leaf, so it changes along the row.
-			species_tree.get_clique(cell).calculate_log_prob_parent_to_node(
-			    species_branch, species_parent_row.is_one(molecule_leaf), sum_log);
-			molecule_clique.calculate_log_prob_parent_to_node(
-			    molecule_tree.get_binned_branch_length(molecule_leaf),
-			    molecule_row.is_one(molecule_tree.parent_of(molecule_leaf)), sum_log);
-		}
-		// getSum() is not const, so the copy the joint density reads from is not either.
-		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
-
-		// Declared outside the IsSimulation branch so the simulation instantiation does not warn
-		// about an unused variable. 1.0 is the neutral value, adding log(1) = 0.
-#ifdef USE_LOTUS
-		std::array<double, 2> prob_lotus{1.0, 1.0};
-#endif
-		if constexpr (!IsSimulation) {
-			// calculate log likelihood (lotus)
-#ifdef USE_LOTUS
-			data_model.get_lotus().calculate_LL_update_Y(cell, lotus_row.is_one(molecule_leaf),
-			                                             prob_lotus);
-			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
-#endif
-			// calculate log likelihood (simple error model)
-#ifdef USE_SIMPLE_ERROR_MODEL
-			std::array<double, 2> prob_simple{};
-			data_model.get_simple_error_model().probabilities_for_Y_update(
-			    simple_data_row.is_one(molecule_leaf), prob_simple);
-			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_simple[i]); }
-#endif
-			// calculate log likelihood mass spec data
-			if (_ms_data.has_value()) { _ms_data->add_log_likelihood(cell, sum_log); }
-		}
-
-		// sample state. The cell names the uniform it draws, so the thread that happens to reach
-		// this cell does not decide what it gets.
-		const bool new_state = sample(sum_log, uniforms.at(field_row.linear_index(molecule_leaf)));
-
-		// Write the cell back through the window it was read from. A window that holds the cell
-		// writes it in place, and one that does not buffers the insert for the caller.
-		if (field_row.is_one(molecule_leaf) != new_state) {
-			field_row.set_state(molecule_leaf, new_state);
-		}
-
-		TYUpdateResult result;
-#ifdef USE_LOTUS
-		result.prob_lotus_new_state = prob_lotus[new_state];
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		if constexpr (!IsSimulation) {
-			// The observed cell contradicts the state the field was just given.
-			result.simple_model_disagrees = simple_data_row.is_one(molecule_leaf) != new_state;
-		}
-#endif
-		if constexpr (!IsSimulation) { accumulator.add(thread, result); }
-
-		_complete_log_density[thread] += sum_log_field[static_cast<size_t>(new_state)].getSum();
+void TMarkovField::_open_Y_trace_file(bool is_simulation) {
+	std::vector<size_t> Y_trace_header;
+	Y_trace_header.reserve(_Y.total_size_of_container_space());
+	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
+		Y_trace_header.push_back(i);
 	}
-
-	// The window ends here, inside the parallel region, so it hands its inserts out rather than
-	// making them: an insert writes one row and one column of a sparse field, and the threads
-	// share every column. See ADR-0006.
-	deferred_inserts = field_row.take_buffered_inserts();
+	const std::string suffix = is_simulation ? "_simulated_Y_trace.txt" : "_Y_trace.txt";
+	_Y_trace_file.open(_prefix + suffix, Y_trace_header, "\t");
 }
 
-template<bool IsSimulation, bool initYFromData>
-void TMarkovField::_update_all_Y(TDataModel &data_model, size_t iteration) {
-	_reset_log_joint_density();
+/// A held field holds both tree fields with it, because the block draws all three together.
+///
+/// The tree fields take the field's own states. Under the AND link that is the configuration the
+/// field is most likely to have come from, and it is what the internal nodes are built from
+/// (TTree::initialize_Z_from_children). Before the block, that walk read the field itself.
+void TMarkovField::_hold_tree_fields_at_the_field() {
+	const TTree &species_tree      = *_trees.front();
+	const TTree &molecule_tree     = *_trees.back();
+	auto &species_field            = _trees.front()->get_Z();
+	auto &molecule_field           = _trees.back()->get_Z();
+	const size_t n_molecule_leaves = molecule_tree.get_number_of_leaves();
 
+	_link_counters = field_math::TLinkCounters();
+	for (size_t species_leaf = 0; species_leaf < species_tree.get_number_of_leaves();
+	     ++species_leaf) {
+		for (size_t molecule_leaf = 0; molecule_leaf < n_molecule_leaves; ++molecule_leaf) {
+			const IndexArray cell{species_leaf, molecule_leaf};
+			const bool y = _Y.is_one(_Y.get_linear_index_in_container_space(cell));
+			// Only a cell that disagrees is written. A sparse node state does not hold every cell,
+			// and inserting one that already reads as zero would grow it for nothing.
+			for (auto *tree_field : {&species_field, &molecule_field}) {
+				const size_t index = tree_field->get_linear_index_in_container_space(cell);
+				if (tree_field->is_one(index) == y) { continue; }
+				if (y) {
+					tree_field->insert_one(index);
+				} else {
+					tree_field->insert_zero(index);
+				}
+			}
+			_link_counters.add(TLinkPolicy::bucket(y, y), y);
+		}
+	}
+}
+
+template<bool IsSimulation, bool InitYFromData>
+void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
-		std::vector<size_t> Y_trace_header;
-		Y_trace_header.reserve(_Y.total_size_of_container_space());
-		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
-			Y_trace_header.push_back(i);
-		}
-		if constexpr (IsSimulation) {
-			_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
-		} else {
-			_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
-		}
+		_open_Y_trace_file(IsSimulation);
 	}
 
 	if (_fix_Y) {
@@ -232,43 +131,32 @@ void TMarkovField::_update_all_Y(TDataModel &data_model, size_t iteration) {
 			throw coretools::TUserError("Y is currently empty and fixed. Was Y read from a file ? "
 			                            "(--set_Y)");
 		}
+		// The block draws the two tree fields with the field, so holding one holds all three. The
+		// leaf layer never moves after this, and one tally stands for the whole chain.
+		if (iteration == 0) { _hold_tree_fields_at_the_field(); }
 		return;
 	}
 
-	// The stream the field's cells draw from this iteration, built before the parallel region
+	// The stream the leaf pairs draw from this iteration, built before the parallel region
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
 	TDataUpdateAccumulator accumulator(ProgramOptions::NUMBER_OF_THREADS);
+	TBlockModel<IsSimulation, InitYFromData> model(_trees, data_model, accumulator);
+	std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 
-	// One list per species leaf, filled by the window that leaf's row is written through. No two
-	// leaves share a list, so the lists need neither a thread index nor a lock, and nothing has to
-	// be drained inside the region.
-	// Not const: OpenMP made a const variable predetermined shared before version 4.0 and does not
-	// now, so a `default(none)` clause that names one is right under some compilers and wrong under
-	// others.
-	size_t n_species_leaves = _trees.front()->get_number_of_leaves();
-	std::vector<std::vector<size_t>> deferred_inserts(n_species_leaves);
+	block_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
+	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), _omega,
+	                               model, field_uniforms, tallies);
 
-	// A thread takes a species leaf. Two rows of the field share no cell, and a field cell's
-	// Markov blanket holds no other field cell, so the rows are conditionally independent given
-	// the node states. A cell's uniform is hashed from its position (ADR-0007), so which thread
-	// reaches a cell, and in which order, moves no number.
-	//
-	// The species tree's leaf count is therefore the widest this team can run. Splitting the other
-	// way would give a thread a column, and a column of the sparse field is what no window may
-	// insert into (ADR-0006).
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(static) default(none)                                                                 \
-    shared(accumulator, deferred_inserts, data_model, field_uniforms, n_species_leaves)
-	for (size_t species_leaf = 0; species_leaf < n_species_leaves; ++species_leaf) {
-		_update_field_row<IsSimulation, initYFromData>(species_leaf, data_model, field_uniforms,
-		                                               accumulator, deferred_inserts[species_leaf]);
+	// The update covered every leaf pair, so the tally it built is the configuration itself.
+	_link_counters     = field_math::TLinkCounters();
+	_block_log_density = 0.0;
+	for (const auto &tally : tallies) {
+		_link_counters.merge(tally.counters);
+		_block_log_density += tally.log_density;
 	}
 
-	// The inserts every row deferred, in one batch. The dense field is handed empty lists and does
-	// nothing with them.
-	_Y.insert_in_Y(deferred_inserts);
 	// at the very end: sum the per-thread accumulators and store them in the data sources
 	if constexpr (!IsSimulation) { accumulator.commit(data_model); }
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {
@@ -286,12 +174,14 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 		                         "\t");
 	}
 
+	// The block update is the whole of the leaf layer's turn: it draws the field and both tree
+	// fields together. Then each tree walks its own internal nodes, and then the parameters move.
 	if (iteration == 0 && !_z_initialized_from_children) {
-		_update_all_Y<false, true>(data_model, iteration);
-		for (auto &tree : _trees) { tree->initialize_Z_from_children(_Y); }
+		_update_block<false, true>(data_model, iteration);
+		for (auto &tree : _trees) { tree->initialize_Z_from_children(); }
 		_z_initialized_from_children = true;
 	} else {
-		_update_all_Y<false, false>(data_model, iteration);
+		_update_block<false, false>(data_model, iteration);
 	}
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);
@@ -342,7 +232,7 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 
-		_update_all_Y<true, false>(data_model, iteration);
+		_update_block<true, false>(data_model, iteration);
 
 		if (_fix_Z) {
 			_update_all_Z<true, true>(iteration);
@@ -420,14 +310,20 @@ void TMarkovField::MCMCHasFinished() {
 const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }
 
 double TMarkovField::_calculate_complete_joint_density() {
+	// The leaf layer: the two tree factors of every leaf pair, at the states the block drew. The
+	// fixed-field path leaves this at zero, because no block ran to compute it.
+	double sum_log_field = _block_log_density;
 
-	// we can initialize the sum_log_field for the joint probability of the Markov random field
-
-	// Easy case: Y
-	double sum_log_field = coretools::containerSum(_complete_log_density);
+	// The link, for the whole field at once. Its likelihood is a function of the six counters and
+	// the error probability alone, so this is six integers rather than a walk over the cells
+	// (ADR-0005).
+	sum_log_field += TLinkPolicy::log_likelihood(_link_counters, _omega);
 
 	// now we loop over all Z to get the joint probability
 	for (const auto &tree : _trees) { sum_log_field += tree->get_complete_joint_density(); }
 
+	// This is not yet the ADR-0005 factorisation. A tree's own term scores every node against its
+	// parent *and* against each child, so each edge is counted twice. That predates the block, and
+	// #41 rebuilds this trace.
 	return sum_log_field;
 };

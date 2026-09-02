@@ -278,11 +278,12 @@ public:
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
-	/// The field is taken as a mutable reference because opening a window is a write to the
-	/// storage's own bookkeeping. Nothing here writes the field: the walk assigns node states, and
-	/// the field's window is read for the leaves alone.
+	/// The field is not named here at all. Each tree owns a leaf-level view of it: its tree field,
+	/// the leaf block of this tree's node state. So the walk below, and the alpha and nu moves
+	/// after it, read one tree and nothing else. See ADR-0005. The leaves themselves are drawn
+	/// with the field, as one eight-state block, before this runs.
 	template<bool IsSimulation, bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(TFieldStorage &Y, size_t iteration) {
+	void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
 		_reset_joint_log_prob_density();
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
@@ -302,12 +303,12 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert, node_state_uniforms)
+    schedule(dynamic) shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
-			// The windows this clique reads and writes through. They stay open across the moves
+			// The window this clique reads and writes through. It stays open across the moves
 			// below, because those moves read the states the walk assigns (ADR-0006).
-			auto states         = _cliques[i].open_states(Y, _Z, _topology());
+			auto states         = _cliques[i].open_states(_Z, _topology());
 			// update Z
 			if constexpr (!FixZ) {
 				_cliques[i].update_Z(_joint_log_prob_density, states, this, node_state_uniforms);
@@ -322,9 +323,9 @@ public:
 				_add_to_LL_branch_lengths(i, states, log_sum_local, pairs);
 			}
 
-			// The windows end here, inside the parallel region, so the node state's hands its
-			// inserts out rather than making them (ADR-0006). The list is taken whether or not the
-			// walk ran. A window that is dropped instead commits what it holds.
+			// The window ends here, inside the parallel region, so it hands its inserts out
+			// rather than making them (ADR-0006). The list is taken whether or not the walk ran.
+			// A window that is dropped instead commits what it holds.
 			indices_to_insert[i] = states.take_buffered_inserts();
 		}
 
@@ -364,7 +365,7 @@ public:
 		return coretools::containerSum(_joint_log_prob_density);
 	}
 
-	void initialize_Z_from_children(TFieldStorage &Y) {
+	void initialize_Z_from_children() {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 
@@ -372,9 +373,9 @@ public:
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(dynamic) default(none) shared(indices_to_insert, Y)
+    schedule(dynamic) default(none) shared(indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto states = _cliques[i].open_states(Y, _Z, _topology());
+			auto states = _cliques[i].open_states(_Z, _topology());
 			_cliques[i].initialize_Z_from_children(states, this);
 			indices_to_insert[i] = states.take_buffered_inserts();
 		}

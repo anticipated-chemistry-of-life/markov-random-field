@@ -22,41 +22,34 @@
 class TTree;
 class TClique;
 
-/// The states of one clique's nodes, read and written through windows.
+/// The states of one clique's nodes, read and written through a window.
 ///
-/// The node state's column holds every node of the clique's tree. The field's column beside it
-/// holds the leaves, whose state is the field's. A node is at the same position in both. That is
-/// because a leaf's index in leaf space is its node index, and the leaves come first (ADR-0004).
+/// The window runs over every node of the clique, leaves included. Nothing here reads the field.
+/// A tree field is the leaf block of this very run of cells, so the walk below, and the alpha and
+/// nu moves after it, read one tree alone. See ADR-0005.
 ///
 /// The walk keeps no copy of the states it assigns. It reads them back from the window it wrote
-/// them through. Both windows stay open across the moves that follow the walk, which read those
+/// them through. The window stays open across the moves that follow the walk, which read those
 /// states too. ADR-0006 gives the argument for both.
 class TCliqueStates {
 private:
-	/// The field's column: this clique's leaves. Read and never written. The walk assigns internal
-	/// nodes only.
-	TFieldStorage::TWindow _leaves;
-	/// The node state's column: every node of this clique.
+	/// This clique's cells of the node state: every node of the tree.
 	TNodeStateStorage::TWindow _nodes;
 	const TPhylogeny *_topology;
 
 public:
-	/// Opens both windows over the clique's column of its own storage.
-	TCliqueStates(TFieldStorage &Y, TNodeStateStorage &Z, const TClique &clique,
-	              const TPhylogeny &topology);
+	/// Opens the window over this clique's cells of the node state.
+	TCliqueStates(TNodeStateStorage &Z, const TClique &clique, const TPhylogeny &topology);
 
-	/// The state of `node`: a leaf's is the field's, and any other node's is the tree's own node
-	/// state.
-	[[nodiscard]] bool get(size_t node) const {
-		return _topology->is_leaf(node) ? _leaves.is_one(node) : _nodes.is_one(node);
-	}
+	/// The state of `node`, from this tree's own node state.
+	[[nodiscard]] bool get(size_t node) const { return _nodes.is_one(node); }
 
 	/// Gives `node` its new state. A write of the state the cell already carries is dropped. The
 	/// sparse window would otherwise buffer an insert for a cell it does not hold, and then throw
 	/// that insert away.
 	void set(size_t node, bool state) {
-		// This writes the node state, and a leaf's state is the field's. The walk assigns internal
-		// nodes only, so the two never meet. #36 moves the leaves into the node state.
+		// The walk assigns internal nodes. A leaf's state is drawn with the field and the other
+		// tree's leaf, as one eight-state block, and not here (ADR-0005).
 		DEBUG_ASSERT(!_topology->is_leaf(node));
 		if (_nodes.is_one(node) != state) { _nodes.set_state(node, state); }
 	}
@@ -65,14 +58,10 @@ public:
 	/// the cell's name to the stream of uniforms.
 	[[nodiscard]] size_t linear_index_in_Z(size_t node) const { return _nodes.linear_index(node); }
 
-	/// Hands out the cells the node state's window could not write in place, as linear indices,
-	/// and ends both windows. The caller commits them after the parallel region. That is the only
-	/// exit a window inside one may take (ADR-0006).
+	/// Hands out the cells the window could not write in place, as linear indices, and ends the
+	/// window. The caller commits them after the parallel region. That is the only exit a window
+	/// inside one may take (ADR-0006).
 	[[nodiscard]] std::vector<size_t> take_buffered_inserts() {
-		// The field's window buffers nothing, because nothing writes it. It is ended here all the
-		// same, so that neither window of the pair reaches its storage on the way out.
-		const std::vector<size_t> field_inserts = _leaves.take_buffered_inserts();
-		DEBUG_ASSERT(field_inserts.empty());
 		return _nodes.take_buffered_inserts();
 	}
 };
@@ -138,11 +127,10 @@ public:
 		return _transition_grid.value();
 	}
 
-	/// The windows this clique's turn reads and writes through: the node state's column, and the
-	/// field's column for the leaves. The caller keeps them open for the whole of that turn,
-	/// because the parameter and branch-length moves that follow the node-state walk have to see
-	/// the states that walk assigned.
-	[[nodiscard]] TCliqueStates open_states(TFieldStorage &Y, TNodeStateStorage &Z,
+	/// The window this clique's turn reads and writes through: the node state's column. The caller
+	/// keeps it open for the whole of that turn, because the parameter and branch-length moves that
+	/// follow the node-state walk have to see the states that walk assigned.
+	[[nodiscard]] TCliqueStates open_states(TNodeStateStorage &Z,
 	                                        const TPhylogeny &topology) const;
 
 	/// The node state's column for this clique, on its own. The simulation draws every node from
