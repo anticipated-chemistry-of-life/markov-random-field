@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -35,6 +36,8 @@ struct TCell {
 	bool z_s = false;
 	bool z_m = false;
 	bool y   = false;
+
+	bool operator==(const TCell &) const = default;
 };
 
 /// The log-likelihood written the long way: walk every cell and add its own term. Shares no code
@@ -109,6 +112,60 @@ TLinkCounters counters_from(const std::array<std::pair<size_t, size_t>, 3> &ones
 	return counters;
 }
 
+/// The bucket of a cell, written out here rather than taken from the link. A test of the
+/// incremental counter arithmetic is worth nothing if it counts the way the kernel counts.
+size_t bucket_written_out(const TCell &cell) {
+	size_t ones = 0;
+	if (cell.z_s) { ++ones; }
+	if (cell.z_m) { ++ones; }
+	return ones;
+}
+
+/// The six counters recomputed from scratch: walk every cell and count it.
+std::array<std::array<size_t, 2>, 3> recount(const std::vector<TCell> &cells) {
+	std::array<std::array<size_t, 2>, 3> n{};
+	for (const auto &cell : cells) { ++n[bucket_written_out(cell)][cell.y ? 1 : 0]; }
+	return n;
+}
+
+/// One leaf pair's read scalars, so that a test can draw the same cell many times.
+struct TCellScalars {
+	double p_s = 0.5;
+	double p_m = 0.5;
+	std::array<double, 2> lotus{1.0, 1.0};
+	std::array<double, 2> simple_error{1.0, 1.0};
+};
+
+/// The midpoint of the i-th of n equal steps across [0, 1).
+double uniform_on_grid(size_t i, size_t n) {
+	return (static_cast<double>(i) + 0.5) / static_cast<double>(n);
+}
+
+/// A linear congruential generator, so that a fixture does not depend on the platform. It is a
+/// running generator, which is what a cell uniform deliberately is not (ADR-0007). Nothing the
+/// sampler does draws from one.
+class TTestLcg {
+private:
+	uint32_t _state = 1u;
+
+public:
+	explicit TTestLcg(uint32_t seed) : _state(seed) {}
+
+	/// The next value on [0, 1).
+	double next() {
+		_state = _state * 1103515245u + 12345u;
+		return static_cast<double>(_state >> 8u) * 0x1.0p-24;
+	}
+
+	/// The next value on [low, high), away from the ends of the unit interval.
+	double next_between(double low, double high) { return low + (high - low) * next(); }
+};
+
+/// The states one cell is in, in the order the kernel takes them.
+TBlockStates as_block_states(const TCell &cell) {
+	return TBlockStates{.y = cell.y, .z_s = cell.z_s, .z_m = cell.z_m};
+}
+
 } // namespace
 
 //-----------------------------------
@@ -133,7 +190,9 @@ TEST(FieldMath_Tests, error_probability_rejects_values_outside_the_open_interval
 
 TEST(FieldMath_Tests, error_probability_rejects_a_tree_it_does_not_have) {
 	const TErrorProbability omega(0.1);
-	EXPECT_THROW(omega.for_tree(NUMBER_OF_TREES), std::invalid_argument);
+	// The cast to void is what a [[nodiscard]] return needs when the call is the whole statement.
+	// Every EXPECT_THROW below over a value-returning call carries it for the same reason.
+	EXPECT_THROW(static_cast<void>(omega.for_tree(NUMBER_OF_TREES)), std::invalid_argument);
 }
 
 //-----------------------------------
@@ -499,8 +558,220 @@ TEST(FieldMath_Tests, the_block_rejects_a_configuration_with_no_mass) {
 	// zero is a perfectly good probability, so the type lets this through and the block itself
 	// has to notice that nothing is left to normalise
 	const std::array<double, 2> nothing = {0.0, 0.0};
-	EXPECT_THROW(block_probabilities<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5),
-	                                              TErrorProbability(0.1), as_probabilities(nothing),
-	                                              as_probabilities(nothing)),
+	EXPECT_THROW(static_cast<void>(block_probabilities<TLinkPolicy>(
+	                 coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
+	                 as_probabilities(nothing), as_probabilities(nothing))),
 	             std::invalid_argument);
+}
+
+//-----------------------------------
+// The block draw and its counter move
+//-----------------------------------
+
+TEST(FieldMath_Tests, states_of_index_inverts_state_index) {
+	for (const bool y : {false, true}) {
+		for (const bool z_s : {false, true}) {
+			for (const bool z_m : {false, true}) {
+				const auto states = states_of_index(state_index(y, z_s, z_m));
+				EXPECT_EQ(states.y, y);
+				EXPECT_EQ(states.z_s, z_s);
+				EXPECT_EQ(states.z_m, z_m);
+			}
+		}
+	}
+	for (size_t index = 0; index < n_block_states; ++index) {
+		const auto states = states_of_index(index);
+		EXPECT_EQ(state_index(states.y, states.z_s, states.z_m), index);
+	}
+}
+
+TEST(FieldMath_Tests, states_of_index_rejects_an_index_it_does_not_have) {
+	EXPECT_THROW(static_cast<void>(states_of_index(n_block_states)), std::invalid_argument);
+}
+
+TEST(FieldMath_Tests, the_draw_reproduces_the_eight_probabilities_over_many_uniforms) {
+	// Inverse transform sampling over a regular grid of uniforms lands in each state a number of
+	// times within one of the grid size times that state's probability. So this asserts the whole
+	// distribution rather than a sample of it.
+	const std::array<double, 2> lotus        = {0.6, 0.3};
+	const std::array<double, 2> simple_error = {0.25, 0.8};
+	constexpr size_t n_uniforms              = 100000;
+
+	for (const double w : {0.02, 0.2, 0.45}) {
+		for (const double p_s : {0.15, 0.7}) {
+			// the brute force above, so that the draw is not checked against the closed form it
+			// draws from
+			const auto want = brute_force_block(p_s, 0.4, w, lotus, simple_error);
+
+			std::array<size_t, n_block_states> drawn{};
+			for (size_t i = 0; i < n_uniforms; ++i) {
+				const double uniform = uniform_on_grid(i, n_uniforms);
+				const auto draw      = draw_block<TLinkPolicy>(
+				    coretools::P(p_s), coretools::P(0.4), TErrorProbability(w),
+				    as_probabilities(lotus), as_probabilities(simple_error), TBlockStates{},
+				    uniform);
+				++drawn[state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m)];
+			}
+
+			for (size_t i = 0; i < n_block_states; ++i) {
+				const double fraction = static_cast<double>(drawn[i]) / n_uniforms;
+				EXPECT_NEAR(fraction, want[i], 2.0 / n_uniforms)
+				    << "state " << i << ", omega = " << w << ", p_s = " << p_s;
+			}
+		}
+	}
+}
+
+TEST(FieldMath_Tests, the_draw_rises_with_the_uniform) {
+	// The state index never falls as the uniform rises. That is what makes the test above a
+	// statement about the eight probabilities and not about eight arbitrary counts.
+	const std::array<double, 2> lotus        = {0.5, 0.45};
+	const std::array<double, 2> simple_error = {0.3, 0.7};
+	size_t previous                          = 0;
+	for (size_t i = 0; i < 5000; ++i) {
+		const double uniform = uniform_on_grid(i, 5000);
+		const auto draw      = draw_block<TLinkPolicy>(
+		    coretools::P(0.3), coretools::P(0.6), TErrorProbability(0.1), as_probabilities(lotus),
+		    as_probabilities(simple_error), TBlockStates{}, uniform);
+		const size_t index = state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m);
+		EXPECT_GE(index, previous) << "uniform = " << uniform;
+		previous = index;
+	}
+}
+
+TEST(FieldMath_Tests, the_draw_never_reaches_a_state_with_no_mass) {
+	// A datum that rules out one field state rules out the four block states that carry it. The
+	// last of those is the state that the rounding of a running sum would otherwise fall into.
+	//
+	// The largest uniform there is takes the last turn. The running sum stops below it, so it is
+	// the one uniform here that reaches the draw's fallback.
+	const std::array<double, 2> lotus        = {0.8, 0.0};
+	const std::array<double, 2> simple_error = {1.0, 1.0};
+	constexpr size_t n_uniforms              = 10000;
+	for (size_t i = 0; i <= n_uniforms; ++i) {
+		const double uniform =
+		    i < n_uniforms ? uniform_on_grid(i, n_uniforms) : std::nextafter(1.0, 0.0);
+		const auto draw = draw_block<TLinkPolicy>(
+		    coretools::P(0.9), coretools::P(0.9), TErrorProbability(0.01), as_probabilities(lotus),
+		    as_probabilities(simple_error), TBlockStates{}, uniform);
+		ASSERT_FALSE(draw.drawn.y) << "uniform = " << uniform;
+	}
+}
+
+TEST(FieldMath_Tests, the_draw_rejects_a_uniform_outside_the_unit_interval) {
+	const std::array<double, 2> flat = {1.0, 1.0};
+	const auto draw_at               = [&flat](double uniform) {
+		return draw_block<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
+		                               as_probabilities(flat), as_probabilities(flat),
+		                               TBlockStates{}, uniform);
+	};
+	EXPECT_THROW(draw_at(1.0), std::invalid_argument);
+	EXPECT_THROW(draw_at(-1e-9), std::invalid_argument);
+	EXPECT_THROW(draw_at(std::nan("")), std::invalid_argument);
+	EXPECT_NO_THROW(draw_at(0.0));
+	EXPECT_NO_THROW(draw_at(std::nextafter(1.0, 0.0)));
+}
+
+TEST(FieldMath_Tests, the_counter_move_names_the_cells_the_states_fall_in) {
+	const std::array<double, 2> flat = {1.0, 1.0};
+	const TErrorProbability omega(0.15);
+	for (const bool y : {false, true}) {
+		for (const bool z_s : {false, true}) {
+			for (const bool z_m : {false, true}) {
+				const TBlockStates current{.y = y, .z_s = z_s, .z_m = z_m};
+				const auto draw = draw_block<TLinkPolicy>(coretools::P(0.4), coretools::P(0.6),
+				                                          omega, as_probabilities(flat),
+				                                          as_probabilities(flat), current, 0.37);
+				// the cell it leaves is named by the states it was in
+				EXPECT_EQ(draw.from.bucket,
+				          bucket_written_out(TCell{.z_s = z_s, .z_m = z_m, .y = y}));
+				EXPECT_EQ(draw.from.y, y);
+				// the cell it enters is named by the states it was given
+				EXPECT_EQ(draw.to.bucket,
+				          bucket_written_out(TCell{
+				              .z_s = draw.drawn.z_s, .z_m = draw.drawn.z_m, .y = draw.drawn.y}));
+				EXPECT_EQ(draw.to.y, draw.drawn.y);
+			}
+		}
+	}
+}
+
+TEST(FieldMath_Tests, the_states_drawn_do_not_depend_on_the_states_read) {
+	// Only the counter cell the leaf pair leaves depends on where it was. The draw itself is the
+	// block's conditional, and the current states are not a factor of it.
+	const std::array<double, 2> lotus        = {0.7, 0.2};
+	const std::array<double, 2> simple_error = {0.35, 0.65};
+	const TErrorProbability omega(0.08);
+	for (size_t i = 0; i < 200; ++i) {
+		const double uniform = uniform_on_grid(i, 200);
+		const auto draw_from = [&](const TBlockStates &current) {
+			return draw_block<TLinkPolicy>(coretools::P(0.45), coretools::P(0.55), omega,
+			                               as_probabilities(lotus), as_probabilities(simple_error),
+			                               current, uniform);
+		};
+		const auto zeros = draw_from(TBlockStates{});
+		const auto ones  = draw_from(TBlockStates{.y = true, .z_s = true, .z_m = true});
+		EXPECT_EQ(zeros.drawn.y, ones.drawn.y) << "uniform = " << uniform;
+		EXPECT_EQ(zeros.drawn.z_s, ones.drawn.z_s) << "uniform = " << uniform;
+		EXPECT_EQ(zeros.drawn.z_m, ones.drawn.z_m) << "uniform = " << uniform;
+		EXPECT_EQ(zeros.to.bucket, ones.to.bucket) << "uniform = " << uniform;
+	}
+}
+
+TEST(FieldMath_Tests, the_counter_moves_match_a_full_recomputation_after_many_draws) {
+	// The counters are carried by the moves alone over many passes. They are then compared with a
+	// count taken over the final configuration. ADR-0006 says why a bucket delta is the one thing
+	// worth this much test.
+	constexpr size_t n_cells  = 1000;
+	constexpr size_t n_passes = 15;
+	// A quarter of the cells land in bucket 0, and omega^2 of those carry a field state of 1. So
+	// the rarest of the six counters is what sets the error probability here.
+	const TErrorProbability omega(0.25);
+
+	TTestLcg generator(20250902u);
+	std::vector<TCell> cells(n_cells);
+	std::vector<TCellScalars> scalars(n_cells);
+	for (size_t i = 0; i < n_cells; ++i) {
+		cells[i]   = {.z_s = generator.next() < 0.5,
+		              .z_m = generator.next() < 0.5,
+		              .y   = generator.next() < 0.5};
+		scalars[i] = {generator.next_between(0.05, 0.95),
+		              generator.next_between(0.05, 0.95),
+		              {generator.next_between(0.05, 0.95), generator.next_between(0.05, 0.95)},
+		              {generator.next_between(0.05, 0.95), generator.next_between(0.05, 0.95)}};
+	}
+	const auto first_configuration = cells;
+
+	// The counters are counted once, and then never again.
+	TLinkCounters counters;
+	for (const auto &cell : cells) { counters.add(bucket_written_out(cell), cell.y); }
+
+	for (size_t pass = 0; pass < n_passes; ++pass) {
+		for (size_t i = 0; i < n_cells; ++i) {
+			const auto &scalar = scalars[i];
+			const auto draw    = draw_block<TLinkPolicy>(
+			    coretools::P(scalar.p_s), coretools::P(scalar.p_m), omega,
+			    as_probabilities(scalar.lotus), as_probabilities(scalar.simple_error),
+			    as_block_states(cells[i]), generator.next());
+			// the two lines a traversal writes, and the only two
+			counters.remove(draw.from.bucket, draw.from.y);
+			counters.add(draw.to.bucket, draw.to.y);
+			cells[i] = {.z_s = draw.drawn.z_s, .z_m = draw.drawn.z_m, .y = draw.drawn.y};
+		}
+	}
+
+	// The comparison is worth something only if the configuration moved and every counter is live.
+	// Ten is a health check on the fixture, not a property of the model: a counter that holds one
+	// or two cells is one seed away from holding none, and would take the comparison with it.
+	EXPECT_NE(cells, first_configuration);
+	const auto want = recount(cells);
+	for (size_t bucket = 0; bucket < TLinkCounters::n_buckets; ++bucket) {
+		for (const bool y : {false, true}) {
+			ASSERT_GE(want[bucket][static_cast<size_t>(y)], 10u)
+			    << "bucket " << bucket << ", field state " << y;
+			EXPECT_EQ(counters.count(bucket, y), want[bucket][static_cast<size_t>(y)])
+			    << "bucket " << bucket << ", field state " << y;
+		}
+	}
+	EXPECT_EQ(counters.total(), n_cells);
 }

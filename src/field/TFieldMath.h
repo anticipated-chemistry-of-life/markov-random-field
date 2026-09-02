@@ -110,6 +110,36 @@ inline void check_bucket(size_t bucket, size_t n_buckets) {
 	       static_cast<size_t>(z_m);
 }
 
+/// The number of states one leaf pair can be in, over the field and the two tree fields.
+inline constexpr size_t n_block_states = 8;
+
+/// The three states of one leaf pair: the field and the two tree fields.
+///
+/// One type serves both ends of a block update. The states read out of the three windows go in.
+/// The states drawn come back.
+struct TBlockStates {
+	bool y   = false; ///< the field
+	bool z_s = false; ///< the species tree field
+	bool z_m = false; ///< the molecule tree field
+};
+
+/// The inverse of `state_index`.
+[[nodiscard]] constexpr TBlockStates states_of_index(size_t index) {
+	if (index >= n_block_states) {
+		throw std::invalid_argument("There is no block state " + std::to_string(index) +
+		                            "; there are " + std::to_string(n_block_states) + ".");
+	}
+	return {.y   = ((index >> 2U) & 1U) != 0U,
+	        .z_s = ((index >> 1U) & 1U) != 0U,
+	        .z_m = (index & 1U) != 0U};
+}
+
+/// One cell of the six counters: a bucket and a field state.
+struct TCounterCell {
+	size_t bucket = 0;
+	bool y        = false;
+};
+
 /// The sufficient statistic of the link: `n(bucket, field state)`.
 ///
 /// Six integers carry the whole link likelihood, so the error-probability move never walks the
@@ -270,7 +300,7 @@ public:
 /// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
 /// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
 template<LinkPolicy Policy>
-[[nodiscard]] std::array<double, 8>
+[[nodiscard]] std::array<double, n_block_states>
 block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
                     const TErrorProbability &omega,
                     const std::array<coretools::Probability, 2> &lotus,
@@ -284,7 +314,7 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 	const double p_s = prob_z_s_is_one.get();
 	const double p_m = prob_z_m_is_one.get();
 
-	std::array<double, 8> probability{};
+	std::array<double, n_block_states> probability{};
 	double total = 0.0;
 
 	for (const bool z_s : {false, true}) {
@@ -310,6 +340,77 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 	}
 	for (double &p : probability) { p /= total; }
 	return probability;
+}
+
+/// What one block draw did at one leaf pair. The counter move comes back whole: each end carries a
+/// bucket and a field state.
+struct TBlockDraw {
+	TBlockStates drawn; ///< the states the draw assigned
+	TCounterCell from;  ///< the counter cell the leaf pair left
+	TCounterCell to;    ///< the counter cell it counts in now
+};
+
+/// Draw the eight-state block at one leaf pair, and report the counter cell the leaf pair moved
+/// between.
+///
+/// The draw is inverse transform sampling over `block_probabilities`, in `state_index` order. The
+/// same uniform therefore gives the same state whatever order a traversal reaches the cell in.
+///
+/// The counter move comes back with the states, so that no traversal computes the delta itself.
+/// ADR-0006 says why that arithmetic must not be written twice.
+///
+/// Pure, as its neighbours are. It touches no storage, no tree, no parameter and no random
+/// generator. The caller hands it the cell's uniform.
+///
+/// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition
+///                         grid.
+/// @param prob_z_m_is_one  P(Z_m = 1 | the molecule parent's state).
+/// @param omega            The error probability standing between the tree fields and the field.
+/// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
+/// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
+/// @param current          The states the leaf pair is in now. Only the cell it leaves depends on
+///                         them.
+/// @param uniform          The cell's uniform, on [0, 1).
+template<LinkPolicy Policy>
+[[nodiscard]] TBlockDraw
+draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
+           const TErrorProbability &omega, const std::array<coretools::Probability, 2> &lotus,
+           const std::array<coretools::Probability, 2> &simple_error, const TBlockStates &current,
+           double uniform) {
+	// Written as two negations, so that a NaN uniform is rejected rather than drawn on.
+	if (!(uniform >= 0.0) || !(uniform < 1.0)) {
+		throw std::invalid_argument("The uniform must lie in [0, 1), but it is " +
+		                            std::to_string(uniform) + ".");
+	}
+
+	const auto probability =
+	    block_probabilities<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, lotus, simple_error);
+
+	size_t index      = n_block_states;
+	double cumulative = 0.0;
+	for (size_t i = 0; i < n_block_states; ++i) {
+		cumulative += probability[i];
+		if (uniform < cumulative) {
+			index = i;
+			break;
+		}
+	}
+	if (index == n_block_states) {
+		// The running sum stopped below the uniform. Only rounding can do that, because the
+		// weights are normalised. So the last state that has mass takes the draw. A state with no
+		// mass stays out of reach: a datum that rules one out must keep ruling it out.
+		for (size_t i = n_block_states; i-- > 0;) {
+			if (probability[i] > 0.0) {
+				index = i;
+				break;
+			}
+		}
+	}
+
+	const TBlockStates drawn = states_of_index(index);
+	return {.drawn = drawn,
+	        .from  = {.bucket = Policy::bucket(current.z_s, current.z_m), .y = current.y},
+	        .to    = {.bucket = Policy::bucket(drawn.z_s, drawn.z_m), .y = drawn.y}};
 }
 
 } // namespace field_math
