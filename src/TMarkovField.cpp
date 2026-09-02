@@ -14,6 +14,7 @@
 #include "coretools/algorithms.h"
 #include "field/TBlockUpdate.h"
 #include "field/TBlockModel.h"
+#include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
@@ -56,6 +57,7 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	if (parameters().exists("set_Y")) {
 		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
 		_read_Y_from_file(filename);
+		_field_came_from_a_file = true;
 	}
 }
 
@@ -169,49 +171,63 @@ void TMarkovField::_report_link_diagnostic() const {
 /// field is most likely to have come from, and it is what the internal nodes are built from
 /// (TTree::initialize_Z_from_children). Before the block, that walk read the field itself.
 void TMarkovField::_hold_tree_fields_at_the_field() {
-	const TTree &species_tree      = *_trees.front();
-	const TTree &molecule_tree     = *_trees.back();
-	auto &species_field            = _trees.front()->get_Z();
-	auto &molecule_field           = _trees.back()->get_Z();
-	const size_t n_molecule_leaves = molecule_tree.get_number_of_leaves();
-
-	_link_counters = field_math::TLinkCounters();
-	for (size_t species_leaf = 0; species_leaf < species_tree.get_number_of_leaves();
-	     ++species_leaf) {
-		for (size_t molecule_leaf = 0; molecule_leaf < n_molecule_leaves; ++molecule_leaf) {
-			const IndexArray cell{species_leaf, molecule_leaf};
-			const bool y = _Y.is_one(_Y.get_linear_index_in_container_space(cell));
-			// Only a cell that disagrees is written. A sparse node state does not hold every cell,
-			// and inserting one that already reads as zero would grow it for nothing.
-			for (auto *tree_field : {&species_field, &molecule_field}) {
-				const size_t index = tree_field->get_linear_index_in_container_space(cell);
-				if (tree_field->is_one(index) == y) { continue; }
-				if (y) {
-					tree_field->insert_one(index);
-				} else {
-					tree_field->insert_zero(index);
-				}
-			}
-			_link_counters.add(TLinkPolicy::bucket(y, y), y);
-		}
-	}
+	_link_counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
+	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z());
 }
 
-template<bool IsSimulation, bool InitYFromData>
+void TMarkovField::_throw_if_the_fixed_field_is_empty() const {
+	if (!_fix_Y || !_Y.empty()) { return; }
+	throw coretools::TUserError("Y is currently empty and fixed. Was Y read from a file ? "
+	                            "(--set_Y)");
+}
+
+/// The chain start, which CONTEXT.md names and ADR-0005 argues.
+///
+/// The field takes the LOTUS records. Both tree fields take the field. Each tree then initialises
+/// every internal node from its children. With no record anywhere the start is all zeros.
+///
+/// A field the run gave stands as it is. --set_Y is the start the run asked for, and --fix_Y holds
+/// one for the whole chain. --fix_Y without a file leaves the field empty, which this reports as
+/// the user error it is.
+///
+/// The six counters this leaves are degenerate. Bucket 1 holds nothing, so the AND diagnostic says
+/// nothing about them. That is accepted. The first block update recounts every leaf pair and
+/// replaces the tally. A fixed field runs no block update, so its degenerate tally stands for the
+/// whole chain -- which is the truth of a field both tree fields match exactly.
+void TMarkovField::_start_the_chain([[maybe_unused]] const TDataModel &data_model) {
+	using namespace coretools::instances;
+
+	// Before the log line below reports a start, and before every clique is walked for nothing.
+	_throw_if_the_fixed_field_is_empty();
+
+	// A fixed field is a field from a file, so the flag alone decides.
+	if (!_field_came_from_a_file) {
+#ifdef USE_LOTUS
+		leaf_layer_start::start_the_field_at(data_model.get_lotus().get_L(), _Y);
+#endif
+	}
+	_hold_tree_fields_at_the_field();
+	logfile().list("The chain starts with the field and both tree fields at one in ",
+	               _Y.number_of_ones(), " of ", _Y.total_size_of_container_space(), " cells.");
+
+	for (auto &tree : _trees) { tree->initialize_Z_from_children(); }
+}
+
+template<bool IsSimulation>
 void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 		_open_Y_trace_file(IsSimulation);
 	}
 
 	if (_fix_Y) {
-		// keep the two ifs separate because if Y is not empty, then we just return
-		if (_Y.empty()) {
-			throw coretools::TUserError("Y is currently empty and fixed. Was Y read from a file ? "
-			                            "(--set_Y)");
-		}
+		_throw_if_the_fixed_field_is_empty();
 		// The block draws the two tree fields with the field, so holding one holds all three. The
-		// leaf layer never moves after this, and one tally stands for the whole chain.
-		if (iteration == 0) { _hold_tree_fields_at_the_field(); }
+		// leaf layer never moves after this, and one tally stands for the whole chain. An inferred
+		// chain holds them when it starts (_start_the_chain). A simulated chain has no start of
+		// its own, so it holds them here.
+		if constexpr (IsSimulation) {
+			if (iteration == 0) { _hold_tree_fields_at_the_field(); }
+		}
 		// The error probability still moves against that tally, so the trace still carries it.
 		_trace_link_counters(iteration, IsSimulation);
 		return;
@@ -222,7 +238,7 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
 	TDataUpdateAccumulator accumulator(ProgramOptions::NUMBER_OF_THREADS);
-	TBlockModel<IsSimulation, InitYFromData> model(_trees, data_model, accumulator);
+	TBlockModel<IsSimulation> model(_trees, data_model, accumulator);
 	std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 
 	const field_math::TErrorProbability omega = _error_probability();
@@ -257,15 +273,16 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 		                         "\t");
 	}
 
+	// The chain is started before its first update, so that update reads a node state both trees
+	// have something to say about.
+	if (iteration == 0 && !_chain_started) {
+		_start_the_chain(data_model);
+		_chain_started = true;
+	}
+
 	// The block update is the whole of the leaf layer's turn: it draws the field and both tree
 	// fields together. Then each tree walks its own internal nodes, and then the parameters move.
-	if (iteration == 0 && !_z_initialized_from_children) {
-		_update_block<false, true>(data_model, iteration);
-		for (auto &tree : _trees) { tree->initialize_Z_from_children(); }
-		_z_initialized_from_children = true;
-	} else {
-		_update_block<false, false>(data_model, iteration);
-	}
+	_update_block<false>(data_model, iteration);
 	if (_fix_Z) {
 		_update_all_Z<false, true>(iteration);
 	} else {
@@ -315,7 +332,7 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	coretools::TProgressReporter prog(max_iteration, report);
 	for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
 
-		_update_block<true, false>(data_model, iteration);
+		_update_block<true>(data_model, iteration);
 
 		if (_fix_Z) {
 			_update_all_Z<true, true>(iteration);

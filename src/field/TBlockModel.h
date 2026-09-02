@@ -108,13 +108,11 @@ public:
 
 /// The two trees and every compiled-in data source, as the block update wants them.
 ///
+/// Both trees have something to say from the first update on, because the chain is given a
+/// starting node state before it (TMarkovField::_start_the_chain).
+///
 /// @tparam IsSimulation   a simulated chain draws from the prior, so every data term is neutral.
-/// @tparam InitYFromData  the chain's first update runs before any internal node has a state, so
-///                        neither tree has anything to say yet. Both tree factors become a coin
-///                        flip, and the data and the link decide the leaf pair on their own. The
-///                        node states are built from the tree fields this leaves behind
-///                        (TTree::initialize_Z_from_children).
-template<bool IsSimulation, bool InitYFromData> class TBlockModel {
+template<bool IsSimulation> class TBlockModel {
 private:
 	const TTree &_species_tree;
 	const TTree &_molecule_tree;
@@ -171,18 +169,13 @@ public:
 			const IndexArray cell{_species_leaf, molecule_leaf};
 
 			block_update::TLeafPairFactors leaf_pair;
-			if constexpr (InitYFromData) {
-				leaf_pair.prob_z_s_is_one = coretools::P(0.5);
-				leaf_pair.prob_z_m_is_one = coretools::P(0.5);
-			} else {
-				// The species tree's clique is named by the molecule leaf, so it changes along the
-				// row. The molecule tree's is named by the species leaf, so it does not.
-				leaf_pair.prob_z_s_is_one = prob_of_one(_model->_species_tree.get_clique(cell),
-				                                        _species_branch, species_parent);
-				leaf_pair.prob_z_m_is_one = prob_of_one(
-				    *_molecule_clique, _model->_molecule_tree.get_binned_branch_length(molecule_leaf),
-				    molecule_parent);
-			}
+			// The species tree's clique is named by the molecule leaf, so it changes along the
+			// row. The molecule tree's is named by the species leaf, so it does not.
+			leaf_pair.prob_z_s_is_one = prob_of_one(_model->_species_tree.get_clique(cell),
+			                                        _species_branch, species_parent);
+			leaf_pair.prob_z_m_is_one = prob_of_one(
+			    *_molecule_clique, _model->_molecule_tree.get_binned_branch_length(molecule_leaf),
+			    molecule_parent);
 
 			// 1.0 is the neutral value, adding log(1) = 0. A simulated chain keeps it, and so does
 			// a build that left a source out.

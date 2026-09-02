@@ -84,6 +84,10 @@ _Avoid_: partition function, Z (that is the node state), evidence
 One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every internal node of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: block-update every leaf pair, update each tree's internal node state, then the parameters.
 _Avoid_: sweep, pass, scan
 
+**Chain start**:
+The configuration a chain holds before its first update. Both tree fields start at one wherever a LOTUS record exists, and zero elsewhere. The field starts matching them. Each tree then initialises every internal node from its children, in one forward pass. Every state is a mode and not a draw. Under the AND a record is strong evidence that both tree fields are one at that cell, so the chain starts near the posterior mode. With no record anywhere the start is all zeros. `leaf_layer_start` in `src/field/` starts the leaf layer, and `TTree::initialize_Z_from_children` the nodes above it. See ADR-0005.
+_Avoid_: initial values, seed, guess, warm-up
+
 **Block update**:
 The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
 _Avoid_: Y update, field update, joint draw, eight-state sweep

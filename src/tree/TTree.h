@@ -365,6 +365,10 @@ public:
 		return coretools::containerSum(_joint_log_prob_density);
 	}
 
+	/// Starts every internal node of this tree at the state its children make most likely. One
+	/// forward pass over each clique. This is initialisation and not a sampler move. It runs once,
+	/// before the chain's first update, and reads the tree field the chain start wrote
+	/// (TMarkovField::_start_the_chain). A node state the run supplied stays as it is.
 	void initialize_Z_from_children() {
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }

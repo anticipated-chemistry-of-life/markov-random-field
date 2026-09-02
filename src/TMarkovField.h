@@ -69,8 +69,14 @@ private:
 	// once.
 	double _block_log_density = 0.0;
 
-	/// Was Z initialized from children ?
-	bool _z_initialized_from_children = false;
+	/// Whether the chain has been started. The start runs on the first update and not in the
+	/// constructor. Initialising the internal nodes reads each clique's transition grid, and the
+	/// parameters build those.
+	bool _chain_started = false;
+
+	/// Whether --set_Y gave the field its states. The chain leaves such a field as it is, and does
+	/// not start it at the LOTUS records.
+	bool _field_came_from_a_file = false;
 
 	// output files
 	coretools::TOutputFile _Y_trace_file;
@@ -80,8 +86,7 @@ private:
 
 	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
 	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
-	template<bool IsSimulation, bool InitYFromData>
-	void _update_block(TDataModel &data_model, size_t iteration);
+	template<bool IsSimulation> void _update_block(TDataModel &data_model, size_t iteration);
 
 	/// Opens the field's trace file on the first iteration of a chain.
 	void _open_Y_trace_file(bool is_simulation);
@@ -103,8 +108,17 @@ private:
 	/// wrong, which is a finding rather than a defect, so this throws nothing and fails nothing.
 	void _report_link_diagnostic() const;
 
-	/// Puts both tree fields at the field, and tallies the six counters over them. Only the fixed
-	/// field path needs it: a block update writes all three and leaves the tally behind as it goes.
+	/// The chain start: the field at the LOTUS records, both tree fields at the field, and every
+	/// internal node at what its children make most likely.
+	void _start_the_chain(const TDataModel &data_model);
+
+	/// A fixed field has to come from somewhere. Throws when the run fixed the field and gave it
+	/// no states, which is a user error rather than a chain to run.
+	void _throw_if_the_fixed_field_is_empty() const;
+
+	/// Puts both tree fields at the field, and tallies the six counters over them. The chain's
+	/// start needs it, and so does the fixed field, which has no block update to write all three
+	/// and leave the tally behind as it goes.
 	void _hold_tree_fields_at_the_field();
 
 	void _simulate_Y();

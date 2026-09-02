@@ -79,28 +79,29 @@ void TClique::update_Z(std::vector<double> &joint_prob_density, TCliqueStates &s
 }
 
 void TClique::initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const {
-	// Bottom-up update of Z, as one forward walk. The internal nodes are stored as the non-root
+	// Bottom-up start of Z, as one forward walk. The internal nodes are stored as the non-root
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
 	// children. This used to be a fixed-point loop revisiting a set of not-yet-ready nodes until
 	// none remained, which is quadratic in the worst case because nothing about the storage order
 	// guaranteed anything.
 	for (const size_t node_index : tree->get_internal_nodes()) {
-		_set_Z_to_MLE(node_index, states, tree);
+		_initialize_node_from_children(node_index, states, tree);
 	}
 }
 
-void TClique::_set_Z_to_MLE(size_t node_index, TCliqueStates &states, const TTree *tree) const {
+void TClique::_initialize_node_from_children(size_t node_index, TCliqueStates &states,
+                                             const TTree *tree) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
 	_calculate_log_prob_node_to_children(node_index, tree, states, sum_log);
 
-	// sample new state and update Z accordingly
 	const double log_prob_0 = sum_log[0].getSum();
 	const double log_prob_1 = sum_log[1].getSum();
 
-	bool new_state = log_prob_1 > log_prob_0;
-	states.set(node_index, new_state);
+	// The mode, not a draw: this is where the chain starts, and the first update moves it.
+	const bool most_likely_state = log_prob_1 > log_prob_0;
+	states.set(node_index, most_likely_state);
 }
 
 void TClique::_calculate_log_prob_root(double stationary_0,

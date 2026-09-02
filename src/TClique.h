@@ -93,12 +93,14 @@ private:
 	    size_t index_in_tree, const TTree *tree, const TCliqueStates &states,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
-	/// @brief Sets Z given the maximal likelihood given its children. This was created to avoid
-	/// that Z is stuck in a state and cannot change.
-	/// @param node_index The index of the internal node we want to set
+	/// @brief Starts one internal node at the state its children make most likely. This is
+	/// initialisation and not a sampler move: it runs once, before the chain's first update, and
+	/// it takes the mode rather than a draw.
+	/// @param node_index The index of the internal node we want to start
 	/// @param states The states of this clique's nodes, read and written through its windows.
 	/// @param tree the tree of interest
-	void _set_Z_to_MLE(size_t node_index, TCliqueStates &states, const TTree *tree) const;
+	void _initialize_node_from_children(size_t node_index, TCliqueStates &states,
+	                                    const TTree *tree) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
