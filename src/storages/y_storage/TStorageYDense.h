@@ -16,12 +16,15 @@ private:
 	IndexArray _dimensions_Y_space{};
 
 public:
+	using iterator       = typename std::vector<TStorageY>::iterator;
+	using const_iterator = typename std::vector<TStorageY>::const_iterator;
+
 	void initialize(size_t n_iterations, const IndexArray &dimensions) {
 		_thinning_factor = std::max<size_t>(
 		    1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
 		                                     static_cast<double>(TStorageY::MAX_COUNTER))));
 
-		_total_counts       = n_iterations / _thinning_factor;
+		_total_counts       = 0;
 		_dimensions_Y_space = dimensions;
 		_vec.assign(total_size_of_container_space(), TStorageY(false));
 	}
@@ -37,10 +40,18 @@ public:
 	}
 
 	[[nodiscard]] bool empty() const { return _vec.empty(); }
-	[[nodiscard]] bool is_one(size_t linear_index) const {
+	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _vec.size());
-		return _vec[linear_index].is_one();
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(),
+		        _vec.begin() + linear_index};
 	}
+
+	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
+		DEBUG_ASSERT(linear_index < _vec.size());
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(),
+		        _vec.begin() + linear_index};
+	}
+
 	void set_state(size_t linear_index, bool state) {
 		DEBUG_ASSERT(linear_index < _vec.size());
 		_vec[linear_index].set_state(state);
@@ -74,10 +85,12 @@ public:
 
 	void reset_counts() {
 		for (auto &i : _vec) { i.set_counter(0); }
+		_total_counts = 0;
 	}
 
 	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _vec.size());
+		if (_total_counts == 0) { return 0.0; }
 		return static_cast<double>(_vec[linear_index].get_counter()) /
 		       static_cast<double>(_total_counts);
 	}
@@ -90,9 +103,9 @@ public:
 			if (!i.is_one()) { continue; }
 			i.update_counter();
 		}
+		++_total_counts;
 	}
 
 	[[nodiscard]] const IndexArray &dimensions() const { return _dimensions_Y_space; }
 };
-static_assert(FieldStorage<TStorageYDense>,
-              "The debse field must satisfy the field storage interface.");
+static_assert(FieldStorage<TStorageYDense>);

@@ -132,7 +132,7 @@ private:
 		size_t parent_index              = parent_of(index_in_tree);
 		IndexArray parent_index_in_tree  = index;
 		parent_index_in_tree[_dimension] = parent_index;
-		bool parent_state                = _Z.is_one(parent_index_in_tree);
+		bool parent_state                = _Z.is_one(parent_index_in_tree).is_one;
 		return process.probability(binned_branch_length, parent_state, node_state);
 	}
 
@@ -169,7 +169,7 @@ private:
 			// i; the other dimension is the clique_index
 			multi_dim_index[_dimension]     = i;
 			multi_dim_index[1 - _dimension] = clique_index;
-			bool state_of_node              = _Z.is_one(multi_dim_index);
+			bool state_of_node              = _Z.is_one(multi_dim_index).is_one;
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
@@ -375,12 +375,12 @@ public:
 	                                  std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 };
 
-bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
+inline bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
 	return coretools::TAcceptOddsRatio::accept(log_Q);
 }
 
-bool sample(double log_prob_0, double log_prob_1) {
+inline bool sample(double log_prob_0, double log_prob_1) {
 	const double log_Q = log_prob_1 - log_prob_0;
 	return coretools::TAcceptOddsRatio::accept(log_Q);
 }

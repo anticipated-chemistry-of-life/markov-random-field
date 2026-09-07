@@ -51,7 +51,7 @@ void write_Z_to_file(const std::string &filename, const TTree &tree,
 	// Which cells, and nothing else, is what the two write paths differ in: the whole container
 	// space, where a missing cell reads as state 0 and so a point lookup covers both cases, or
 	// only the stored entries, which come in ascending linear-index order.
-	for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) { write_cell(i, Z.is_one(i)); }
+	for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) { write_cell(i, Z.is_one(i).is_one); }
 }
 
 void write_branch_length_grid(const TTree &tree) {

@@ -49,6 +49,8 @@ private:
 
 public:
 	TDenseStateArray() = default;
+	using iterator = std::vector<uint8_t>::iterator;
+	using const_iterator = std::vector<uint8_t>::const_iterator;
 	explicit TDenseStateArray(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
 
 	/// Sizes the array to the container space and puts every cell in state 0.
@@ -57,15 +59,30 @@ public:
 		_states.assign(coretools::containerProduct(dimensions), 0);
 	}
 
-	[[nodiscard]] bool is_one(size_t linear_index) const {
+	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _states.size());
-		return _states[linear_index] != 0;
+		return {_states[linear_index] != 0, linear_index < _states.size(),
+		        _states.cbegin() + linear_index};
 	}
 
-	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
+	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
+		DEBUG_ASSERT(linear_index < _states.size());
+		return {_states[linear_index] != 0, linear_index < _states.size(),
+		        _states.begin() + linear_index};
+	}
+
+	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &multidim_index) const {
 		const size_t linear_index = get_linear_index_in_container_space(multidim_index);
 		DEBUG_ASSERT(linear_index < _states.size());
-		return _states[linear_index] != 0;
+		return {_states[linear_index] != 0, linear_index < _states.size(),
+		        _states.cbegin() + linear_index};
+	}
+
+	[[nodiscard]] IsOneResult<iterator> is_one(const IndexArray &multidim_index) {
+		const size_t linear_index = get_linear_index_in_container_space(multidim_index);
+		DEBUG_ASSERT(linear_index < _states.size());
+		return {_states[linear_index] != 0, linear_index < _states.size(),
+		        _states.begin() + linear_index};
 	}
 
 	void set_state(size_t linear_index, bool state) {

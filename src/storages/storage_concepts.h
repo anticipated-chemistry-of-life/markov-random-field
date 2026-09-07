@@ -10,6 +10,12 @@
 #include <cstdint>
 #include <vector>
 
+template<typename It> struct IsOneResult {
+	bool is_one;
+	bool in_container;
+	It iterator;
+};
+
 /// The surface the field (`Y`) and the internal state (`Z`) share: a binary state per cell,
 /// the size of the space that state lives in, and the conversion between a linear index and a
 /// multi-dimensional one.
@@ -40,7 +46,8 @@ concept BinaryFieldStorage =
              std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
              std::vector<size_t> &linear_indices) {
 	    // State.
-	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
+	    { const_storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::const_iterator>>;
+	    { storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::iterator>>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
 	    { storage.insert_zero(linear_index) } -> std::same_as<void>;

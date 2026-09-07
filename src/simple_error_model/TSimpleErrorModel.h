@@ -68,13 +68,13 @@ public:
 	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1) for the cell at position
 	/// `index_for_tmp_state` within the current sheet.
 	void probabilities_for_Y_update(size_t index_for_tmp_state, std::array<double, 2> &prob) const {
-		simple_error_model::probabilities_for_both_Y_states(_D.is_one(index_for_tmp_state), _eps(),
+		simple_error_model::probabilities_for_both_Y_states(_D.is_one(index_for_tmp_state).is_one, _eps(),
 		                                                    prob);
 	}
 
 	/// Whether the observed cell contradicts the state Y was just set to.
 	[[nodiscard]] bool disagrees_with(size_t index_for_tmp_state, bool new_state) const {
-		return _D.is_one(index_for_tmp_state) != new_state;
+		return _D.is_one(index_for_tmp_state).is_one != new_state;
 	}
 
 	/// Installs the disagreement count accumulated over a full Y sweep.

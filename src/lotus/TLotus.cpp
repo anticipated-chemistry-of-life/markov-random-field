@@ -95,7 +95,7 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
 	// if-statement) new Y = 1 -> x will always be true
 	for (size_t i = 0; i < 2; ++i) {
 		prob[i] =
-		    _reporting().probability(i, _L.is_one(index_in_leaves_space), index_in_leaves_space);
+		    _reporting().probability(i, _L.is_one(index_in_leaves_space).is_one, index_in_leaves_space);
 	}
 }
 
@@ -159,8 +159,8 @@ double TLotus::_calculate_log_likelihood_of_L(const TFieldStorage &Y) const {
 	coretools::TSumLogProbability sum_log;
 
 	for (size_t i = 0; i < total; ++i) {
-		bool state_of_Y = Y.is_one(i);
-		bool state_of_L = _L.is_one(i);
+		bool state_of_Y = Y.is_one(i).is_one;
+		bool state_of_L = _L.is_one(i).is_one;
 
 		sum_log.add(
 		    _reporting().probability(state_of_Y, state_of_L, _L.get_multi_dimensional_index(i)));
@@ -207,7 +207,7 @@ void TLotus::prepare_for_simulation(TDataModel *box) {
 void TLotus::simulate_L_from_Y(const TFieldStorage &Y) {
 	for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
 		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
-		bool x                                = Y.is_one(i);
+		bool x                                = Y.is_one(i).is_one;
 		const double proba = _reporting().probability(x, true, multi_dim_index_in_L_space);
 		const coretools::Probability p(proba);
 		if (coretools::instances::randomGenerator().pickOneOfTwo(p)) { _L.insert_one(i); }
@@ -224,7 +224,7 @@ void TLotus::write_simulated_L(const std::string &prefix) const {
 	std::vector<std::string> line(NUMBER_OF_TREES);
 
 	for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
-		if (!_L.is_one(i)) { continue; }
+		if (!_L.is_one(i).is_one) { continue; }
 		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
 		for (size_t j = 0; j < NUMBER_OF_TREES; ++j) {
 			const size_t node_index_in_tree =

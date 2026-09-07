@@ -73,7 +73,7 @@ void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
 	for (size_t i = 0; i < _total_cells; ++i) {
 		// Only ones are stored; an absent cell reads as 0, which is exactly the encoding the
 		// sparse output file uses.
-		if (simple_error_model::draw_D_given_Y(Y.is_one(i), eps)) { _D.insert_one(i); }
+		if (simple_error_model::draw_D_given_Y(Y.is_one(i).is_one, eps)) { _D.insert_one(i); }
 	}
 
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
@@ -88,7 +88,7 @@ void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
 
 	std::vector<std::string> line(_trees.size());
 	for (size_t i = 0; i < _D.total_size_of_container_space(); ++i) {
-		if (!_D.is_one(i)) { continue; }
+		if (!_D.is_one(i).is_one) { continue; }
 		const auto index_in_D_space = _D.get_multi_dimensional_index(i);
 		for (size_t j = 0; j < _trees.size(); ++j) {
 			const size_t node_index =

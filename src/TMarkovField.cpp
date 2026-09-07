@@ -1,5 +1,6 @@
 #include "TMarkovField.h"
 #include "TDataModel.h"
+#include <stdexcept>
 
 TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
                            std::string _prefix)
@@ -41,3 +42,14 @@ void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
 	// _write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
 }
+
+void TMarkovField::update([[maybe_unused]] TDataModel &data_model,
+                          [[maybe_unused]] size_t iteration) {
+	throw std::runtime_error("Not implemented yet");
+}
+
+void TMarkovField::simulate([[maybe_unused]] TDataModel &data_model) {
+	throw std::runtime_error("Not implemented yet");
+}
+
+const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }

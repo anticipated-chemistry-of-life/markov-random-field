@@ -67,7 +67,7 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 	IndexArray index{};
 	index[_dimension]     = index_in_tree;
 	index[1 - _dimension] = clique_index;
-	const bool node_state = _Z.is_one(index);
+	const bool node_state = _Z.is_one(index).is_one;
 	double prob_old       = _calculate_prob_to_parent(
 	    index_in_tree, index, node_state,
 	    _binned_branch_lengths->oldValue(index_in_binned_branch_length), process);

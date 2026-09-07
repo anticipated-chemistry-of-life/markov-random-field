@@ -145,7 +145,7 @@ void TTree::calculate_log_prob_parent_to_node(
 	index[_dimension]     = parent_index;
 	index[1 - _dimension] = clique_index;
 	for (size_t i = 0; i < 2; ++i) {
-		const bool parent_state = _Z.is_one(index);
+		const bool parent_state = _Z.is_one(index).is_one;
 		sum_log[i].add(process.probability(binned_branch_length, parent_state, i));
 	}
 };
