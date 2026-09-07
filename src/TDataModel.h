@@ -129,6 +129,16 @@ public:
 	/// the same Y, so they simply add.
 	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 
+	/// `log p(L, D | Y)`: the same sum, under the name the joint density trace asks for it by. It
+	/// is the data factor of the ADR-0005 factorisation, and stattools' own accessor takes a
+	/// storage the field has nothing to hand it.
+	///
+	/// The LOTUS records and the simple error model, and nothing else. The mass spectrometry
+	/// source is dormant -- nothing builds it, and it hangs off the field rather than this class --
+	/// so it has no term to add. A build that wakes it adds it here, or the joint density stops
+	/// being the whole of the model.
+	[[nodiscard]] double data_log_likelihood() const;
+
 	void update_markov_field();
 
 	// --- MCMC moves, dispatched by stattools on the parameter pointer type ---

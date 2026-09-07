@@ -21,6 +21,7 @@
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
+#include "tree/node_state_density.h"
 #include <cstddef>
 #include <optional>
 #include <span>
@@ -78,14 +79,7 @@ private:
 	// Set Z
 	TNodeStateStorage _Z;
 
-	// Joint probability density
-	std::vector<double> _joint_log_prob_density;
-
 	// private functions
-	void _reset_joint_log_prob_density() {
-		_joint_log_prob_density.clear();
-		_joint_log_prob_density.resize(ProgramOptions::NUMBER_OF_THREADS);
-	}
 	void _set_initial_branch_lengths(bool is_simulation);
 	[[nodiscard]] std::vector<size_t>
 	_bin_branch_lengths(const std::vector<double> &branch_lengths) const;
@@ -284,7 +278,6 @@ public:
 	/// with the field, as one eight-state block, before this runs.
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
-		_reset_joint_log_prob_density();
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 		// The stream this tree's node state draws from this iteration, built before the parallel
@@ -310,9 +303,7 @@ public:
 			// below, because those moves read the states the walk assigns (ADR-0006).
 			auto states         = _cliques[i].open_states(_Z, _topology());
 			// update Z
-			if constexpr (!FixZ) {
-				_cliques[i].update_Z(_joint_log_prob_density, states, this, node_state_uniforms);
-			}
+			if constexpr (!FixZ) { _cliques[i].update_Z(states, this, node_state_uniforms); }
 
 			// update nu and alpha
 			if constexpr (!IsSimulation) {
@@ -361,8 +352,37 @@ public:
 
 	void simulate_Z();
 
-	[[nodiscard]] double get_complete_joint_density() const {
-		return coretools::containerSum(_joint_log_prob_density);
+	/// `log p(Z | theta)` for this tree: every clique's own column of the node state, scored under
+	/// that clique's process.
+	///
+	/// One term per node -- a root against the stationary distribution, everything else against its
+	/// parent -- so each branch is counted exactly once and the result is a density. That is what
+	/// makes it the no-drift instrument ADR-0002 says the old sum of tree likelihoods was not.
+	///
+	/// It reads the states the node state holds now and the bins the branches sit in now, so it is
+	/// the density of the configuration as the iteration leaves it. It is a pass over the whole
+	/// node state, which is why writing the joint density is behind a command-line flag.
+	[[nodiscard]] double log_node_state_density() {
+		// One slot per clique, and not one per thread. A thread-indexed accumulator adds its
+		// cliques in whatever order the schedule handed them out, so the sum's rounding would move
+		// with the thread count and the trace would stop being reproducible from its seed.
+		std::vector<double> per_clique(_cliques.size(), 0.0);
+
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
+    schedule(dynamic) default(none) shared(per_clique)
+		for (size_t i = 0; i < _cliques.size(); ++i) {
+			auto states   = _cliques[i].open_node_state_window(_Z);
+			per_clique[i] = node_state_density::log_density_of_clique(
+			    _topology(), _cliques[i].transition_grid(), states,
+			    [this](size_t node) { return get_binned_branch_length(node); });
+			// The window is read and never written, so it buffers nothing. It is ended here all
+			// the same, so that no window reaches its storage from inside the parallel region
+			// (ADR-0006).
+			const std::vector<size_t> inserts = states.take_buffered_inserts();
+			DEBUG_ASSERT(inserts.empty());
+		}
+		// In clique order, so the answer does not depend on how the cliques were shared out.
+		return coretools::containerSum(per_clique);
 	}
 
 	/// Starts every internal node of this tree at the state its children make most likely. One

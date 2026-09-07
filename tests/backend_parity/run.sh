@@ -182,7 +182,8 @@ run_simulate() {
         --iterations "$ITERATIONS" --n_bins 6 \
         --epsilon_simple_model 0.1 --gamma 1.1 \
         --numThreads "$threads" --fixedSeed "$SEED" \
-        --write_Y --write_Z --write_Y_trace --write_Z_trace
+        --write_Y --write_Z --write_Y_trace --write_Z_trace \
+        --write_joint_log_prob_density
 }
 
 for index in "${!BACKENDS[@]}"; do
@@ -208,7 +209,8 @@ for index in "${!BACKENDS[@]}"; do
         --iterations "$ITERATIONS" --burnin 50 --numBurnin 2 --n_bins 6 \
         --epsilon_simple_model 0.1 --gamma 1.1 \
         --numThreads 1 --fixedSeed "$SEED" \
-        --write_Y_trace --write_Z_trace --write_joint_log_prob_density
+        --write_Y_trace --write_Z_trace --write_joint_log_prob_density \
+        --write_tree_field_posteriors
 
     # Everything compared below is written under the two --out prefixes, so anything that appears
     # beside them is an output the gate would not see. Today nothing does; `--write_branch_lengths`

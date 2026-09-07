@@ -94,7 +94,9 @@ void TDataModel::guessInitialValues() {
 	    " truncated to (0, 0.5).");
 }
 
-double TDataModel::getSumLogPriorDensity(const Storage &) const {
+double TDataModel::getSumLogPriorDensity(const Storage &) const { return data_log_likelihood(); }
+
+double TDataModel::data_log_likelihood() const {
 	double sum = 0.0;
 #ifdef USE_LOTUS
 	sum += _lotus.cur_LL();

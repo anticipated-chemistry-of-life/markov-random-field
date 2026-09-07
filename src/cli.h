@@ -21,6 +21,12 @@ public:
 
 	static inline bool WRITE_JOINT_LOG_PROB_DENSITY = false;
 
+	/// Whether to write the posterior of each tree field. It costs one counter per leaf pair per
+	/// tree, held for the whole chain, and a pass over the leaf-pair space on every counted
+	/// iteration. A run that chose the sparse field chose not to pay that for the field itself, so
+	/// it is asked for rather than assumed (ADR-0006).
+	static inline bool WRITE_TREE_FIELD_POSTERIORS = false;
+
 	static inline bool WRITE_BRANCH_LENGTHS = false;
 
 	static inline double EPSILON = 0.001;
@@ -97,6 +103,8 @@ public:
 		WRITE_Z_TRACE = params.exists("write_Z_trace");
 
 		WRITE_JOINT_LOG_PROB_DENSITY = params.exists("write_joint_log_prob_density");
+
+		WRITE_TREE_FIELD_POSTERIORS = params.exists("write_tree_field_posteriors");
 
 		WRITE_BRANCH_LENGTHS = params.exists("write_branch_lengths");
 
@@ -184,6 +192,12 @@ public:
 		std::cout << "--write_Z                      Write Z output\n";
 		std::cout << "--write_Z_trace                Write Z trace\n";
 		std::cout << "--write_branch_lengths         Output branch lengths\n";
+		std::cout << "--write_joint_log_prob_density  Trace the joint density, one row per "
+		             "thinned iteration. It costs a pass over both node states, so it is off "
+		             "unless asked for\n";
+		std::cout << "--write_tree_field_posteriors  Write the posterior of each tree field, one "
+		             "file per tree. It costs a counter per leaf pair per tree, so it is off "
+		             "unless asked for\n";
 		std::cout << "--lotus                        LOTUS data file (only with the 'lotus' build "
 		             "option)\n";
 		std::cout << "--simple_data                  Simple error model data file (only with the "

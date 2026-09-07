@@ -42,6 +42,10 @@ _Avoid_: internal state, ancestral state, hidden state
 The leaf block of one tree's node state — that tree's own view of the leaf-level field, before the two are reconciled. Written `Z_s` and `Z_m`, the leaf block of the node state written with the same letter. There is one per tree, and together they are what the field reconciles. A tree field and the field are addressed at the same `(row, column)` for a given leaf pair, so the correspondence between them is the identity rather than a conversion. See ADR-0005.
 _Avoid_: per-tree field, own field, leaf state, Z at the leaves
 
+**Tree field posterior**:
+How often each cell of one tree field was a one, over the counted iterations of a chain. One file per tree, `<prefix>_<tree>_tree_field_posterior.txt`, beside the field's own. The field's own cannot stand in for it: the field's expected density is the product of the two corrupted rates, so it says nothing about how the rate splits between the trees. The two tree fields moving in opposite directions along that ridge is what shows up first. A node state carries no counter, so this one stands beside it and counts the leaf block alone. `--write_tree_field_posteriors` decides whether a run holds one: it is a counter per leaf pair per tree, which a run that chose the sparse field chose not to pay for the field itself. `TTreeFieldPosterior`, `src/field/`. See ADR-0005.
+_Avoid_: Z posterior, leaf posterior, per-tree posterior
+
 **Error probability**:
 The probability that a tree field cell is corrupted before the two tree fields are reconciled into the field. Written `omega`. One scalar, shared by both trees, constrained to the open interval `(0, 0.5)`. It is estimated, under an exponential prior truncated to that interval, and its Metropolis move reads the link counters rather than the cells. See ADR-0005.
 _Avoid_: noise rate, flip probability, error rate (too easily confused with the simple error model's misreport probability)
@@ -91,6 +95,10 @@ _Avoid_: initial values, seed, guess, warm-up
 **Block update**:
 The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
 _Avoid_: Y update, field update, joint draw, eight-state sweep
+
+**Joint density**:
+The log density of the whole model at one configuration: `log p(Z_s | theta_s) + log p(Z_m | theta_m) + log p(Y | Z_s, Z_m, omega) + log p(L, D | Y)`. Every factor is a proper conditional density, so the sum is one too — which the sum of the two trees' likelihoods it replaces was not (ADR-0002). It is the no-drift instrument: one number an iteration, and a chain that drifts moves it. A tree's own factor scores each node once, against its parent or against the stationary distribution, so each branch is counted once. Each factor takes a column of `<prefix>_joint_density.txt`. `--write_joint_log_prob_density` decides whether the file is written at all, because the two tree factors cost a pass over every node. See ADR-0005.
+_Avoid_: likelihood, posterior, complete joint density
 
 **Cell uniform**:
 The one uniform a cell's update draws, derived by hashing the seed, the stream, the tree, the iteration and the cell's linear index instead of taken from a running generator. Two cells, two iterations, two containers and two seeds share one only by chance, and the number a cell gets does not move when the thread count changes or when an update visits the cells in another order. That last property is what lets the dense and the sparse backend traverse their storage differently and still run one chain. `TCellUniforms`, `src/random/`. See ADR-0007.

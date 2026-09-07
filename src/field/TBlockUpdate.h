@@ -28,7 +28,6 @@
 #include "random/TCellUniforms.h"
 #include "tree/TPhylogeny.h"
 #include <array>
-#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <vector>
@@ -81,21 +80,13 @@ concept BlockModel = requires(T &model, size_t species_leaf) {
 /// visits every leaf pair exactly once, so what one update tallies is the whole configuration
 /// rather than a delta. A thread can therefore hold its own tally without a count going negative.
 /// The caller merges them after the parallel region.
+/// The traversal keeps no running density. What one draw was worth is not what the configuration
+/// is worth: the leaf states move again in the same iteration, and so do the parameters. The joint
+/// density is asked of the configuration the iteration leaves behind instead
+/// (tree/node_state_density.h).
 struct TThreadTally {
 	field_math::TLinkCounters counters;
-	/// The two tree factors at the drawn states, summed over this thread's cells. The link's own
-	/// term is not here: it comes from the merged counters, in one call, for the whole field.
-	double log_density = 0.0;
 };
-
-/// The two tree factors at the states one draw assigned. Log of `P(Z_s = z_s | parent)` plus log of
-/// `P(Z_m = z_m | parent)`.
-[[nodiscard]] inline double log_tree_factors(const field_math::TBlockStates &drawn,
-                                             const TLeafPairFactors &factors) {
-	const double p_s = factors.prob_z_s_is_one.get();
-	const double p_m = factors.prob_z_m_is_one.get();
-	return std::log(drawn.z_s ? p_s : 1.0 - p_s) + std::log(drawn.z_m ? p_m : 1.0 - p_m);
-}
 
 /// Draws every leaf pair of one species leaf's row.
 ///
@@ -156,7 +147,6 @@ void update_row(size_t species_leaf, Field &Y, NodeState &Z_species, NodeState &
 		}
 
 		tally.counters.add(draw.to.bucket, draw.to.y);
-		tally.log_density += log_tree_factors(draw.drawn, factors);
 		row.record(molecule_leaf, factors, draw.drawn);
 	}
 

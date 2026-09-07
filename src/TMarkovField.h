@@ -13,6 +13,8 @@
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "field/TFieldMath.h"
+#include "field/joint_density.h"
+#include "field/tree_field_posterior.h"
 #include "mass_spec/msms_data.h"
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
@@ -64,11 +66,6 @@ private:
 	// iteration. Burn-in clears them.
 	field_math::TLinkCounters _traced_link_counters;
 
-	// The two tree factors of every leaf pair, at the states the last block update drew. The
-	// link's own term is not in here: it comes from the counters above, for the whole field at
-	// once.
-	double _block_log_density = 0.0;
-
 	/// Whether the chain has been started. The start runs on the first update and not in the
 	/// constructor. Initialising the internal nodes reads each clique's transition grid, and the
 	/// parameters build those.
@@ -77,6 +74,11 @@ private:
 	/// Whether --set_Y gave the field its states. The chain leaves such a field as it is, and does
 	/// not start it at the LOTUS records.
 	bool _field_came_from_a_file = false;
+
+	// The posterior of each tree field, one per tree, over the leaf-pair space the tree fields
+	// share with the field. The field's own posterior lives inside its storage; a node state
+	// carries no counter, so these stand beside them (field/tree_field_posterior.h).
+	std::vector<TTreeFieldPosterior> _tree_field_posteriors;
 
 	// output files
 	coretools::TOutputFile _Y_trace_file;
@@ -122,7 +124,25 @@ private:
 	void _hold_tree_fields_at_the_field();
 
 	void _simulate_Y();
-	double _calculate_complete_joint_density();
+
+	/// The joint density of the configuration the iteration leaves behind: both trees' node
+	/// states, the link, and the data (ADR-0005). The data term is what TDataModel sums, which is
+	/// the LOTUS records and the simple error model.
+	///
+	/// A simulated chain draws from the prior and scores no data, so its data term is zero.
+	[[nodiscard]] joint_density::TJointDensity
+	_calculate_joint_density(const TDataModel &data_model, bool is_simulation);
+
+	/// Writes one row of the joint density trace, opening the file on first use. Does nothing
+	/// unless the run asked for the trace: the density is a pass over both node states, which is
+	/// the cost `--write_joint_log_prob_density` exists to let a run skip.
+	void _trace_joint_density(size_t iteration, const TDataModel &data_model, bool is_simulation);
+
+	/// Counts every tree field cell that is a one now, on the iterations the field counts.
+	void _count_the_tree_fields(size_t iteration);
+
+	/// Writes the posterior of every tree field, one file per tree, beside the field's own.
+	void _write_tree_field_posteriors() const;
 
 	void _read_Y_from_file(const std::string &filename);
 

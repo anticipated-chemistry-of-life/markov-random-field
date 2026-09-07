@@ -150,8 +150,12 @@ public:
 	/// @param tree The tree.
 	/// @param uniforms the node state's stream for this iteration. Each node draws the one uniform
 	/// its own cell names, so the walk gives the same states whichever thread runs it.
-	void update_Z(std::vector<double> &joint_prob_density, TCliqueStates &states, const TTree *tree,
-	              const TCellUniforms &uniforms) const;
+	///
+	/// The walk keeps no running density. It used to add each drawn node's own log probability,
+	/// which scored that node against its parent *and* against every child, so each internal edge
+	/// counted twice. The joint density is a question about the configuration the walk leaves
+	/// behind, and tree/node_state_density.h answers it there.
+	void update_Z(TCliqueStates &states, const TTree *tree, const TCellUniforms &uniforms) const;
 
 	void initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const;
 

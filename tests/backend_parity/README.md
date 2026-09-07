@@ -47,9 +47,11 @@ Every file the runs write, except `*.log` -- which carries a fresh ntfy topic UU
 timings, and so differs between two runs of the *same* binary.
 
 - `simulate` writes the field and both node states in full, the LOTUS and simple-error data
-  drawn from them, and the per-iteration traces.
-- `infer` writes the parameter traces, the field and node-state traces, the joint density and
-  the posterior field.
+  drawn from them, and the per-iteration traces. The joint density is among them, so the
+  thread-count check below also gates that its reduction does not depend on how the cliques were
+  shared out.
+- `infer` writes the parameter traces, the field and node-state traces, the joint density, the
+  posterior field and the posterior of each tree field.
 
 Both backends run in the same working directory, one after the other, with the outputs moved aside
 in between: `acol.parameters` echoes the command line with every path resolved against the working

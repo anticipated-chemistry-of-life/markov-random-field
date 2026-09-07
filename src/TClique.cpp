@@ -37,8 +37,8 @@ TNodeStateStorage::TWindow TClique::open_node_state_window(TNodeStateStorage &Z)
 	return Z.open_window(first_cell(), _n_nodes, _increment);
 }
 
-void TClique::update_Z(std::vector<double> &joint_prob_density, TCliqueStates &states,
-                       const TTree *tree, const TCellUniforms &uniforms) const {
+void TClique::update_Z(TCliqueStates &states, const TTree *tree,
+                       const TCellUniforms &uniforms) const {
 	const double stationary_0 = transition_grid().stationary(false);
 
 	for (const auto index_in_tree : tree->get_internal_nodes()) {
@@ -64,12 +64,6 @@ void TClique::update_Z(std::vector<double> &joint_prob_density, TCliqueStates &s
 		const double log_prob_1 = sum_log[1].getSum();
 		bool new_state =
 		    sample(log_prob_0, log_prob_1, uniforms.at(states.linear_index_in_Z(index_in_tree)));
-
-		if (new_state) {
-			joint_prob_density[omp_get_thread_num()] += log_prob_1;
-		} else {
-			joint_prob_density[omp_get_thread_num()] += log_prob_0;
-		}
 
 		// The window writes the cell it already holds in place, and buffers the one it does not,
 		// because inserting reallocates a sparse row. A later read on this window sees the new

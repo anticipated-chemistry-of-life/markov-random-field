@@ -21,6 +21,7 @@
 #include "tree/TTree.h"
 #include "tree/io/node_state_columns.h"
 #include "tree/io/write_Z.h"
+#include "tree/io/write_tree_field.h"
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -55,6 +56,28 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 		num_leaves_per_dim[i] = _trees[i]->get_number_of_leaves();
 	}
 	_Y.initialize(n_iterations, num_leaves_per_dim);
+
+	// The block update is written for one species tree and one molecule tree, and a cell index
+	// holds two coordinates. A third tree would run past the end of both. The loop above is
+	// bounded by the array so that it reaches this line, which says so.
+	if (_trees.size() != NUMBER_OF_TREES) {
+		throw coretools::TUserError("The model is written for ", NUMBER_OF_TREES,
+		                            " trees, but the run has ", _trees.size(), ".");
+	}
+
+	// One posterior per tree, over the leaf-pair space, thinned the way the field thins its own.
+	// Both files then count the same iterations and their denominators agree.
+	//
+	// Only when the run asks. A counter per leaf pair per tree is what a run that chose the sparse
+	// field chose not to pay for the field itself (ADR-0006), so an empty list is what the counting
+	// and the writing below read as "not this run".
+	if (ProgramOptions::WRITE_TREE_FIELD_POSTERIORS) {
+		_tree_field_posteriors.resize(_trees.size());
+		for (auto &posterior : _tree_field_posteriors) {
+			posterior.initialize(_Y.total_size_of_container_space(), _Y.get_thinning_factor());
+		}
+	}
+
 	if (parameters().exists("set_Y")) {
 		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
 		_read_Y_from_file(filename);
@@ -248,12 +271,8 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	                               model, field_uniforms, tallies);
 
 	// The update covered every leaf pair, so the tally it built is the configuration itself.
-	_link_counters     = field_math::TLinkCounters();
-	_block_log_density = 0.0;
-	for (const auto &tally : tallies) {
-		_link_counters.merge(tally.counters);
-		_block_log_density += tally.log_density;
-	}
+	_link_counters = field_math::TLinkCounters();
+	for (const auto &tally : tallies) { _link_counters.merge(tally.counters); }
 
 	_trace_link_counters(iteration, IsSimulation);
 
@@ -265,15 +284,6 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 }
 
 void TMarkovField::update(TDataModel &data_model, size_t iteration) {
-	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration == 0 &&
-	    !_joint_density_file.isOpen()) {
-		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
-		                         {
-		                             "joint_density",
-		                         },
-		                         "\t");
-	}
-
 	// The chain is started before its first update, so that update reads a node state both trees
 	// have something to say about.
 	if (iteration == 0 && !_chain_started) {
@@ -291,11 +301,10 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 	}
 	if (_ms_data.has_value()) _ms_data->update_all_MS_assignments();
 	_Y.add_to_counter(iteration);
-	// calculate joint density
-	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY && iteration % _Y.get_thinning_factor() == 0) {
-		auto sum_log_field = _calculate_complete_joint_density();
-		_joint_density_file.writeln(sum_log_field);
-	}
+	_count_the_tree_fields(iteration);
+
+	// Last of all, because it is the density of the configuration this iteration leaves behind.
+	_trace_joint_density(iteration, data_model, /*is_simulation =*/false);
 }
 
 void TMarkovField::simulate(TDataModel &data_model) {
@@ -319,15 +328,6 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	// update Y where likelihood of data is always one so it doesn't matter.
 	size_t max_iteration = get_num_iterations_simulation();
 
-	// create the Markov field density file
-	if (ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) {
-		_joint_density_file.open(_prefix + "_simulated_joint_density.txt",
-		                         {
-		                             "joint_density",
-		                         },
-		                         "\t");
-	}
-
 	std::string report =
 	    "Running an MCMC chain of " + coretools::str::toString(max_iteration) + " iterations";
 	coretools::TProgressReporter prog(max_iteration, report);
@@ -341,13 +341,10 @@ void TMarkovField::simulate(TDataModel &data_model) {
 			_update_all_Z<true, false>(iteration);
 		}
 		_Y.add_to_counter(iteration);
-
-		// calculate joint density
-		if (iteration % _Y.get_thinning_factor() == 0 &&
-		    ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) {
-			auto sum_log_field = _calculate_complete_joint_density();
-			_joint_density_file.writeln(sum_log_field);
-		}
+		// The tree fields' posteriors are not counted here. MCMCHasFinished writes them, and
+		// stattools calls it for an inferred chain only, so a simulated one would pay for a count
+		// nothing reads. The states themselves go to the node-state files below.
+		_trace_joint_density(iteration, data_model, /*is_simulation =*/true);
 		prog.next();
 	}
 	prog.done();
@@ -399,6 +396,8 @@ void TMarkovField::_simulate_Y() {
 void TMarkovField::burninHasFinished() {
 	_Y.reset_counts();
 	_Y.remove_zeros();
+	// Every posterior reports the chain, not the burn-in that preceded it.
+	for (auto &posterior : _tree_field_posteriors) { posterior.reset_counts(); }
 	// The diagnostic reports the chain, not the burn-in that preceded it.
 	_traced_link_counters = field_math::TLinkCounters();
 }
@@ -408,26 +407,72 @@ void TMarkovField::oneBurninHasFinished() { _Y.remove_zeros(); }
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
 	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
+	// Each tree field's posterior stands beside it, in a file of its own. The field's own says
+	// nothing about how the two trees split the rate between them (ADR-0005, derivation 3).
+	_write_tree_field_posteriors();
 	_report_link_diagnostic();
 }
 
 const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }
 
-double TMarkovField::_calculate_complete_joint_density() {
-	// The leaf layer: the two tree factors of every leaf pair, at the states the block drew. The
-	// fixed-field path leaves this at zero, because no block ran to compute it.
-	double sum_log_field = _block_log_density;
+//-----------------------------------
+// The joint density, and the tree fields' posteriors
+//-----------------------------------
+
+joint_density::TJointDensity TMarkovField::_calculate_joint_density(const TDataModel &data_model,
+                                                                    bool is_simulation) {
+	// One column per tree, and the constructor has already said there are NUMBER_OF_TREES of them.
+	joint_density::TJointDensity density;
+
+	// Each tree's own factor, over its whole node state, leaves included. One term per node, so
+	// each branch is counted once and each factor is a density (tree/node_state_density.h).
+	for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+		density.node_states[tree_idx] = _trees[tree_idx]->log_node_state_density();
+	}
 
 	// The link, for the whole field at once. Its likelihood is a function of the six counters and
 	// the error probability alone, so this is six integers rather than a walk over the cells
 	// (ADR-0005).
-	sum_log_field += _link_log_likelihood();
+	density.link = _link_log_likelihood();
 
-	// now we loop over all Z to get the joint probability
-	for (const auto &tree : _trees) { sum_log_field += tree->get_complete_joint_density(); }
+	// A simulated chain draws from the prior. Every data term is neutral in the block update, and
+	// no source has scored the field, so there is nothing here to add.
+	if (!is_simulation) { density.data = data_model.data_log_likelihood(); }
 
-	// This is not yet the ADR-0005 factorisation. A tree's own term scores every node against its
-	// parent *and* against each child, so each edge is counted twice. That predates the block, and
-	// #41 rebuilds this trace.
-	return sum_log_field;
-};
+	return density;
+}
+
+void TMarkovField::_trace_joint_density(size_t iteration, const TDataModel &data_model,
+                                        bool is_simulation) {
+	if (!ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) { return; }
+	if (iteration % _Y.get_thinning_factor() != 0) { return; }
+
+	if (!_joint_density_file.isOpen()) {
+		std::vector<std::string> tree_names;
+		tree_names.reserve(_trees.size());
+		for (const auto &tree : _trees) { tree_names.push_back(tree->get_tree_name()); }
+		const std::string suffix =
+		    is_simulation ? "_simulated_joint_density.txt" : "_joint_density.txt";
+		_joint_density_file.open(_prefix + suffix, joint_density::trace_header(tree_names), "\t");
+	}
+
+	_joint_density_file.writeln(
+	    joint_density::trace_row(_calculate_joint_density(data_model, is_simulation)));
+}
+
+void TMarkovField::_count_the_tree_fields(size_t iteration) {
+	// Empty unless the run asked for the files, and then there is nothing to count.
+	for (size_t tree_idx = 0; tree_idx < _tree_field_posteriors.size(); ++tree_idx) {
+		_tree_field_posteriors[tree_idx].add_to_counter(iteration, _Y, _trees[tree_idx]->get_Z());
+	}
+}
+
+void TMarkovField::_write_tree_field_posteriors() const {
+	if (_tree_field_posteriors.empty()) { return; }
+	const auto columns = node_state_columns(_trees);
+	for (size_t tree_idx = 0; tree_idx < _tree_field_posteriors.size(); ++tree_idx) {
+		write_tree_field_posterior(
+		    _prefix + "_" + _trees[tree_idx]->get_tree_name() + "_tree_field_posterior.txt", _Y,
+		    _trees[tree_idx]->get_Z(), _tree_field_posteriors[tree_idx], columns);
+	}
+}
