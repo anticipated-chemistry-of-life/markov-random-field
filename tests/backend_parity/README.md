@@ -47,9 +47,8 @@ Every file the runs write, except `*.log` -- which carries a fresh ntfy topic UU
 timings, and so differs between two runs of the *same* binary.
 
 - `simulate` writes the field and both node states in full, the LOTUS and simple-error data
-  drawn from them, and the per-iteration traces. The joint density is among them, so the
-  thread-count check below also gates that its reduction does not depend on how the cliques were
-  shared out.
+  drawn from them, the six link counters and the joint density of the one draw it takes. There are
+  no per-iteration traces: a simulated configuration is a forward draw and not a chain.
 - `infer` writes the parameter traces, the field and node-state traces, the joint density, the
   posterior field and the posterior of each tree field.
 
@@ -82,10 +81,9 @@ threads (`ACOL_PARITY_THREADS`), and every file it writes has to match the one-t
 byte. `acol.parameters` is left out, because it echoes the command line and the command line is
 where the two runs differ on purpose.
 
-A cell's uniform is hashed from its position (ADR-0007), so a chain that draws nothing else gives
-one answer however many threads it runs on. `simulate` is that chain: `IsSimulation` compiles the
-alpha and nu moves out of the clique loop, and those moves hold the last draws still taken from the
-thread-local generator.
+A cell's uniform is hashed from its position (ADR-0007), so a draw that takes nothing from the
+thread-local generator gives one answer however many threads it runs on. `simulate` is that draw:
+it walks each tree's node state top-down and then the field, and no parameter moves.
 
 `infer` is therefore **not** checked this way, and it would fail if it were. That is the half of
 "reproducible at any thread count" that does not hold yet, and ADR-0007 records what a repair

@@ -43,6 +43,11 @@ private:
 	TFieldStorage _Y;
 	std::string _prefix;
 
+	/// Whether this run simulates. It decides what every file this class writes is called, and
+	/// nothing else: a simulated configuration and an inferred chain go to different names so that
+	/// one directory can hold both.
+	bool _simulate = false;
+
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
@@ -88,10 +93,13 @@ private:
 
 	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
 	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
-	template<bool IsSimulation> void _update_block(TDataModel &data_model, size_t iteration);
+	///
+	/// An inferred chain is the only caller. A simulated one draws its whole configuration forward
+	/// and runs no update at all (`simulate`).
+	void _update_block(TDataModel &data_model, size_t iteration);
 
 	/// Opens the field's trace file on the first iteration of a chain.
-	void _open_Y_trace_file(bool is_simulation);
+	void _open_Y_trace_file();
 
 	/// The error probability the chain holds now.
 	[[nodiscard]] field_math::TErrorProbability _error_probability() const;
@@ -99,12 +107,12 @@ private:
 	/// The link's log-likelihood, from the six counters and the current error probability.
 	[[nodiscard]] double _link_log_likelihood() const;
 
-	/// Writes the six counters of one iteration, and adds them to the tally the diagnostic reads.
+	/// Writes the six counters of one tally, and adds them to the total the diagnostic reads.
 	/// Opens the file on first use.
 	///
 	/// The trace is not behind a flag. Six integers an iteration is what the error probability's
 	/// whole likelihood rests on, and the AND diagnostic reads nothing else.
-	void _trace_link_counters(size_t iteration, bool is_simulation);
+	void _trace_link_counters(size_t iteration);
 
 	/// Reports the two parameter-free constraints to the log file. A violation means the link is
 	/// wrong, which is a finding rather than a defect, so this throws nothing and fails nothing.
@@ -131,12 +139,12 @@ private:
 	///
 	/// A simulated chain draws from the prior and scores no data, so its data term is zero.
 	[[nodiscard]] joint_density::TJointDensity
-	_calculate_joint_density(const TDataModel &data_model, bool is_simulation);
+	_calculate_joint_density(const TDataModel &data_model);
 
 	/// Writes one row of the joint density trace, opening the file on first use. Does nothing
 	/// unless the run asked for the trace: the density is a pass over both node states, which is
 	/// the cost `--write_joint_log_prob_density` exists to let a run skip.
-	void _trace_joint_density(size_t iteration, const TDataModel &data_model, bool is_simulation);
+	void _trace_joint_density(size_t iteration, const TDataModel &data_model);
 
 	/// Counts every tree field cell that is a one now, on the iterations the field counts.
 	void _count_the_tree_fields(size_t iteration);
@@ -146,7 +154,7 @@ private:
 
 	void _read_Y_from_file(const std::string &filename);
 
-	template<bool IsSimulation, bool FixZ> void _update_all_Z(size_t iteration) {
+	template<bool FixZ> void _update_all_Z(size_t iteration) {
 		if (iteration == 0 && ProgramOptions::WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
 			for (const auto &tree : _trees) {
 				std::vector<size_t> Z_trace_header;
@@ -160,7 +168,7 @@ private:
 		}
 
 		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(iteration);
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<FixZ>(iteration);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
@@ -227,7 +235,7 @@ private:
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
-	             TypeParamErrorProbability *omega, std::string _prefix);
+	             TypeParamErrorProbability *omega, std::string _prefix, bool simulate);
 	~TMarkovField() = default;
 
 	/// Puts the error probability's support at the open interval (0, 0.5).
@@ -262,8 +270,6 @@ public:
 	void burninHasFinished();
 	void MCMCHasFinished();
 	void oneBurninHasFinished();
-
-	static size_t get_num_iterations_simulation() { return ProgramOptions::NUM_ITERATIONS; }
 };
 
 #endif // ACOL_TMARKOVFIELD_H

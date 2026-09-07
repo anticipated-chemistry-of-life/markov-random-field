@@ -1,8 +1,11 @@
 """Score one rung's inference output against the independently simulated truth.
 
+Both trees are scored. Each draws its own node state and each is inferred, so a
+validator that read one of them would be blind to half the model (ADR-0005).
+
 Reports, and does not by default gate on:
 
-- **coverage** for `alpha` and `log_nu` — the fraction of the 128 cliques whose
+- **coverage** for `alpha` and `log_nu` — the fraction of a tree's cliques whose
   95% credible interval contains the truth. Coverage catches both bias and
   over-confident posteriors; RMSE alone catches only the first.
 - **Spearman and mean absolute error** for branch lengths, which are discrete and
@@ -29,23 +32,39 @@ from scipy.stats import spearmanr
 CREDIBLE_MASS = 0.95
 
 
-def _read_truth(path: pathlib.Path) -> dict[str, float]:
-    frame = pd.read_csv(path, sep="\t")
-    return dict(zip(frame["name"].astype(str), frame["value"].astype(float)))
+TREES = ("species", "molecules")
+
+# Each tree's own bins, under the name meta.json gives them.
+BINS_KEY = {"species": "species_bins", "molecules": "molecule_bins"}
+
+
+def _read_truth(base: pathlib.Path) -> dict[str, float]:
+    """Every tree's truth, from the one file per tree the scenario writes."""
+    truth: dict[str, float] = {}
+    for tree in TREES:
+        path = base / f"truth_{tree}.txt"
+        if not path.exists():
+            continue
+        frame = pd.read_csv(path, sep="\t")
+        truth.update(zip(frame["name"].astype(str), frame["value"].astype(float)))
+    if not truth:
+        raise click.ClickException(f"No truth_<tree>.txt in {base}.")
+    return truth
 
 
 def _read_trace(rung_dir: pathlib.Path, meta: dict) -> pd.DataFrame:
-    """The main trace plus the species tree's own, joined column-wise.
+    """The main trace plus each tree's own, joined column-wise.
 
     Branch lengths are updated by the tree rather than by a stattools updater, so
-    they are written to `acol_species_trace.txt` and appear nowhere in
-    `acol_trace.txt`. Both files share a thinning factor and row count.
+    they are written to `acol_<tree>_trace.txt` and appear nowhere in
+    `acol_trace.txt`. Every file shares a thinning factor and row count.
     """
     frames = [pd.read_csv(rung_dir / "acol_trace.txt", sep="\t")]
 
-    species_trace = rung_dir / "acol_species_trace.txt"
-    if species_trace.exists():
-        frames.append(pd.read_csv(species_trace, sep="\t"))
+    for tree in TREES:
+        tree_trace = rung_dir / f"acol_{tree}_trace.txt"
+        if tree_trace.exists():
+            frames.append(pd.read_csv(tree_trace, sep="\t"))
 
     if len({len(f) for f in frames}) != 1:
         raise click.ClickException(
@@ -114,8 +133,10 @@ def _coverage(trace: pd.DataFrame, truth: dict[str, float], prefix: str) -> dict
     }
 
 
-def _branch_lengths(trace: pd.DataFrame, truth: dict[str, float], meta: dict) -> dict:
-    prefix = "species_branch_lengths_"
+def _branch_lengths(
+    trace: pd.DataFrame, truth: dict[str, float], meta: dict, tree: str
+) -> dict:
+    prefix = f"{tree}_branch_lengths_"
     names = [n for n in truth if n.startswith(prefix) and n in trace.columns]
     if not names:
         return {"n": 0}
@@ -124,7 +145,7 @@ def _branch_lengths(trace: pd.DataFrame, truth: dict[str, float], meta: dict) ->
     mean = values.mean(axis=0)
     actual = np.array([truth[n] for n in names])
 
-    budget = sum(meta["species_bins"])
+    budget = sum(meta[BINS_KEY[tree]])
     sums = values.sum(axis=1)
     return {
         "n": len(names),
@@ -156,41 +177,43 @@ def _scalar(trace: pd.DataFrame, truth: dict[str, float], name: str) -> dict:
 def _report(summary: dict) -> None:
     click.echo(f"\n=== {summary['rung']} ===")
 
-    for label, key in (("alpha", "alpha"), ("log_nu", "log_nu")):
-        block = summary[key]
-        if not block["n"]:
-            click.echo(f"  {label:<16} absent from trace")
-            continue
-        click.echo(
-            f"  {label:<16} coverage {block['coverage']:6.1%}  "
-            f"rmse {block['rmse']:7.4f}  bias {block['bias']:+7.4f}  "
-            f"corr {block['correlation']:5.3f}  moved {block['moved']:5.1%}"
-            f"   (n={block['n']})"
-        )
-
-    branches = summary["branch_lengths"]
-    if branches["n"]:
-        click.echo(
-            f"  {'branch lengths':<16} spearman {branches['spearman']:5.3f}  "
-            f"mae {branches['mae']:6.3f}  moved {branches['moved']:5.1%}"
-            f"   (n={branches['n']})"
-        )
-        if not branches["budget_conserved"]:
+    for tree in TREES:
+        click.echo(f"\n  -- {tree} --")
+        for label in ("alpha", "log_nu"):
+            block = summary[tree][label]
+            if not block["n"]:
+                click.echo(f"  {label:<16} absent from trace")
+                continue
             click.echo(
-                f"    ! branch-length budget not conserved: expected "
-                f"{branches['budget_expected']}, saw {branches['budget_observed']}"
+                f"  {label:<16} coverage {block['coverage']:6.1%}  "
+                f"rmse {block['rmse']:7.4f}  bias {block['bias']:+7.4f}  "
+                f"corr {block['correlation']:5.3f}  moved {block['moved']:5.1%}"
+                f"   (n={block['n']})"
             )
 
-    for name in ("species_mean_log_nu", "species_var_log_nu"):
-        block = summary[name]
-        if not block["present"]:
-            continue
-        mark = "ok " if block["covered"] else "MISS"
-        click.echo(
-            f"  {name:<22} {mark} truth {block['truth']:+.4f}  "
-            f"mean {block['mean']:+.4f}  "
-            f"95% [{block['lower']:+.4f}, {block['upper']:+.4f}]"
-        )
+        branches = summary[tree]["branch_lengths"]
+        if branches["n"]:
+            click.echo(
+                f"  {'branch lengths':<16} spearman {branches['spearman']:5.3f}  "
+                f"mae {branches['mae']:6.3f}  moved {branches['moved']:5.1%}"
+                f"   (n={branches['n']})"
+            )
+            if not branches["budget_conserved"]:
+                click.echo(
+                    f"    ! branch-length budget not conserved: expected "
+                    f"{branches['budget_expected']}, saw {branches['budget_observed']}"
+                )
+
+        for scalar in ("mean_log_nu", "var_log_nu"):
+            block = summary[tree][scalar]
+            if not block["present"]:
+                continue
+            mark = "ok " if block["covered"] else "MISS"
+            click.echo(
+                f"  {tree + '_' + scalar:<22} {mark} truth {block['truth']:+.4f}  "
+                f"mean {block['mean']:+.4f}  "
+                f"95% [{block['lower']:+.4f}, {block['upper']:+.4f}]"
+            )
 
     for warning in summary["warnings"]:
         click.echo(f"  ! {warning}")
@@ -201,20 +224,21 @@ def _apply_gates(summary: dict, gates_path: pathlib.Path) -> bool:
     reference = json.loads(gates_path.read_text())
     failures = []
 
-    for key in ("alpha", "log_nu"):
-        if summary[key]["n"] and reference[key]["n"]:
-            if summary[key]["coverage"] < reference[key]["coverage"] - 0.10:
+    for tree in TREES:
+        for key in ("alpha", "log_nu"):
+            here, there = summary[tree][key], reference[tree][key]
+            if here["n"] and there["n"] and here["coverage"] < there["coverage"] - 0.10:
                 failures.append(
-                    f"{key} coverage {summary[key]['coverage']:.1%} is more than "
-                    f"10 points below the reference {reference[key]['coverage']:.1%}"
+                    f"{tree} {key} coverage {here['coverage']:.1%} is more than "
+                    f"10 points below the reference {there['coverage']:.1%}"
                 )
 
-    here, there = summary["branch_lengths"], reference["branch_lengths"]
-    if here["n"] and there["n"] and here["spearman"] < there["spearman"] - 0.15:
-        failures.append(
-            f"branch-length spearman {here['spearman']:.3f} is well below the "
-            f"reference {there['spearman']:.3f}"
-        )
+        here, there = summary[tree]["branch_lengths"], reference[tree]["branch_lengths"]
+        if here["n"] and there["n"] and here["spearman"] < there["spearman"] - 0.15:
+            failures.append(
+                f"{tree} branch-length spearman {here['spearman']:.3f} is well below "
+                f"the reference {there['spearman']:.3f}"
+            )
 
     click.echo(f"\n  gates vs {gates_path.name}:")
     for failure in failures:
@@ -243,7 +267,7 @@ def main(scenario_dir: str, rung: str, gates: str | None) -> None:
         )
 
     meta = json.loads((base / "meta.json").read_text())
-    truth = _read_truth(base / "truth_species.txt")
+    truth = _read_truth(base)
     trace = _read_trace(rung_dir, meta)
 
     warnings = []
@@ -261,13 +285,16 @@ def main(scenario_dir: str, rung: str, gates: str | None) -> None:
         "rung": rung,
         "scenario": str(base),
         "retained_samples": len(trace),
-        "alpha": _coverage(trace, truth, "species_alpha_"),
-        "log_nu": _coverage(trace, truth, "species_log_nu_"),
-        "branch_lengths": _branch_lengths(trace, truth, meta),
-        "species_mean_log_nu": _scalar(trace, truth, "species_mean_log_nu"),
-        "species_var_log_nu": _scalar(trace, truth, "species_var_log_nu"),
         "warnings": warnings,
     }
+    for tree in TREES:
+        summary[tree] = {
+            "alpha": _coverage(trace, truth, f"{tree}_alpha_"),
+            "log_nu": _coverage(trace, truth, f"{tree}_log_nu_"),
+            "branch_lengths": _branch_lengths(trace, truth, meta, tree),
+            "mean_log_nu": _scalar(trace, truth, f"{tree}_mean_log_nu"),
+            "var_log_nu": _scalar(trace, truth, f"{tree}_var_log_nu"),
+        }
 
     _report(summary)
 

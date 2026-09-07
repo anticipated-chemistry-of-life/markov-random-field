@@ -18,9 +18,9 @@ A tree's own dimension spans *every* node of it, leaves included, since ADR-0005
 (`node_state_dimensions`, src/tree/node_state_shape.h); the other dimension
 always carries leaves. The node orderings involved are defined in `indexing`.
 
-This module still writes only the internal rows, which load correctly because
-resolution is by node name, and leave the leaf rows at zero. Nothing reads those
-rows yet; rebuilding this writer for the new model is issue #42.
+The leaf block of a node state is that tree's **tree field**, and the field is a
+noisy AND of the two (`link`). So a written node state carries every node of its
+own tree, leaves included: the leaf rows are the half of it the link reads.
 
 File shapes, as the C++ readers expect them:
 
@@ -124,7 +124,7 @@ def write_field(
     ).to_csv(path, sep="\t", index=False)
 
 
-def write_internal_states(
+def write_node_states(
     path: pathlib.Path,
     states: np.ndarray,
     species: TreeIndex,
@@ -134,12 +134,14 @@ def write_internal_states(
     """Write one tree's node states as the C++ 4-column format.
 
     `dimension` is 0 for the species tree and 1 for the molecules tree; that tree
-    contributes internal nodes to `states`, the other contributes leaves.
+    contributes *every* node to `states`, leaves included, and the other
+    contributes its leaves. The leaf block of what this writes is that tree's tree
+    field, which is what the link reads.
     """
     if dimension == 0:
-        row_names, col_names = species.internal_names(), molecules.leaf_names()
+        row_names, col_names = list(species.names), molecules.leaf_names()
     else:
-        row_names, col_names = species.leaf_names(), molecules.internal_names()
+        row_names, col_names = species.leaf_names(), list(molecules.names)
 
     if states.shape != (len(row_names), len(col_names)):
         raise ValueError(
@@ -180,3 +182,20 @@ def read_field(path: pathlib.Path, n_molecule_leaves: int) -> np.ndarray:
     frame = pd.read_csv(path, sep="\t", usecols=["position", "Y_state"])
     frame = frame.sort_values("position")
     return frame["Y_state"].to_numpy(dtype=bool).reshape(-1, n_molecule_leaves)
+
+
+def read_node_states(path: pathlib.Path, n_columns: int) -> np.ndarray:
+    """Read a 4-column node-state file back into a `[row, column]` array.
+
+    Positional, by the `position` column, which is the linear index into that node
+    state's own container space. `n_columns` is the size of its second dimension:
+    the molecule leaf count for the species tree's node state, and the molecule
+    node count for the molecules tree's.
+
+    The C++ reader resolves cells by *name* and ignores this column; reading it
+    here is what makes a written file interpretable without a name lookup, and it
+    is checked against the names by `test_independent`.
+    """
+    frame = pd.read_csv(path, sep="\t", usecols=["position", "Z_state"])
+    frame = frame.sort_values("position")
+    return frame["Z_state"].to_numpy(dtype=bool).reshape(-1, n_columns)

@@ -1,9 +1,9 @@
 """Generate a validation scenario whose field owes nothing to the C++ binary.
 
-The field is sampled by one pass down the species tree — root from the stationary
-distribution, then every node given its parent — with no molecules tree involved
-at all. The molecules dimension is then pinned neutral so the C++ model reduces
-exactly to that process (see ADR-0001).
+Both trees are active. Each is sampled by one pass down its own nodes — root from
+the stationary distribution, then every node given its parent, leaves included —
+and the field is a noisy AND of the two leaf blocks. Nothing is neutralised: the
+reference is exact with both trees running (see ADR-0005).
 
     uv run python simulate_independent.py --seed 42
     bash <scenario>/rung1_pin_field_and_states.sh
@@ -40,6 +40,13 @@ from src.independent.scenario import RUNGS, ScenarioConfig, build_scenario
     default=0.25,
     show_default=True,
     help="Variance, not standard deviation.",
+)
+@click.option(
+    "--error_probability",
+    type=float,
+    default=0.05,
+    show_default=True,
+    help="Omega: the rate a tree field cell is corrupted before the AND, in (0, 0.5).",
 )
 @click.option(
     "--epsilon",
@@ -84,6 +91,7 @@ def main(out: str | None, **kwargs) -> None:
         n_molecule_nodes=kwargs["number_of_molecules"],
         mean_log_nu=kwargs["mean_log_nu"],
         var_log_nu=kwargs["var_log_nu"],
+        error_probability=kwargs["error_probability"],
         epsilon=kwargs["epsilon"],
         gamma=kwargs["gamma"],
         error_rate=kwargs["error_rate"],
@@ -104,11 +112,18 @@ def main(out: str | None, **kwargs) -> None:
     click.echo(f"Scenario written to {path.resolve()}")
     click.echo(
         f"  {meta['n_species_leaves']} x {meta['n_molecule_leaves']} field, "
-        f"{meta['field_ones_fraction']:.1%} present"
+        f"{meta['field_ones_fraction']:.1%} present "
+        f"(the two adjusted rates predict {meta['expected_field_ones_fraction']:.1%})"
     )
     click.echo(
-        f"  {meta['n_cliques']} cliques, {meta['n_species_branches']} branches, "
-        f"branch-length budget {sum(meta['species_bins'])}"
+        f"  tree fields {meta['species_tree_field_ones_fraction']:.1%} and "
+        f"{meta['molecule_tree_field_ones_fraction']:.1%} present, "
+        f"omega {meta['error_probability']}"
+    )
+    click.echo(
+        f"  {meta['n_species_branches']} species branches and "
+        f"{meta['n_molecule_branches']} molecule branches, budgets "
+        f"{sum(meta['species_bins'])} and {sum(meta['molecule_bins'])}"
     )
     click.echo(
         f"  {meta['lotus_records']} LOTUS records, "
@@ -117,7 +132,6 @@ def main(out: str | None, **kwargs) -> None:
     if not meta["true_branch_lengths"]:
         click.echo("  branch lengths start flat: the chain has to find them")
     click.echo("\nRun in order, stopping at the first failure:")
-    click.echo(f"  bash {path}/check_neutrality_invariant.sh")
     for name, _, _, _ in RUNGS:
         click.echo(
             f"  bash {path}/{name}.sh && "

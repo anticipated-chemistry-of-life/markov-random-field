@@ -14,11 +14,11 @@
 #include "coretools/Types/probability.h"
 #include "tree/io/node_state_columns.h"
 #include "tree/io/read_Z.h"
+#include "tree/node_state_draw.h"
 #include "tree/node_state_shape.h"
 
 #include <cstddef>
 #include <cstdlib>
-#include <queue>
 #include <string>
 #include <vector>
 
@@ -143,51 +143,20 @@ void TTree::simulate_Z() {
 	// A stream of its own, so this draw and the chain's first update are two draws (ADR-0007).
 	const TCellUniforms uniforms(run_seed(), TCellStream::node_state_at_start, 0, _dimension);
 
+	// The bin each branch sits in. Never asked of a root, which has no branch.
+	const auto bin_of = [this](size_t node) { return get_binned_branch_length(node); };
+
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
 
-		// we sample the roots
-		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
-
-		// This clique's column of the node state. The simulation runs top-down, so every node
-		// reads the state its parent was given through the window that wrote it. The window closes
-		// with the clique's turn and commits what it buffered, which is safe here because the
-		// simulation runs on one thread.
-		auto nodes        = clique.open_node_state_window(_Z);
-		double proba_root = clique.transition_grid().stationary(true);
-		coretools::Probability p(proba_root);
-
-		// we can also prepare the queue for the DFS
-		std::queue<size_t> node_queue;
-		for (const auto root_index_in_tree : this->get_root_nodes()) {
-			bool root_state = sample(p, uniforms.at(nodes.linear_index(root_index_in_tree)));
-			nodes.set_state(root_index_in_tree, root_state);
-			for (const auto child : this->children_of(root_index_in_tree)) {
-				if (!this->isLeaf(child)) { node_queue.push(child); }
-			} // those are the first children of the tree (children of the roots).
-		} // roots done, we go to the internal nodes
-
-		// sampling the internal nodes
-		while (!node_queue.empty()) {
-			size_t node_index = node_queue.front();
-			node_queue.pop();
-
-			// we want to sample the state of the node given its parent (and independently of its
-			// children since we haven't sampled them yet).
-			std::array<coretools::TSumLogProbability, 2> sum_log;
-			clique.calculate_log_prob_parent_to_node(
-			    (TypeBinnedBranchLengths)_binned_branch_lengths->value(
-			        _topology().branch_index(node_index)),
-			    nodes.is_one(parent_of(node_index)), sum_log);
-			bool internal_node_state = sample(sum_log, uniforms.at(nodes.linear_index(node_index)));
-			nodes.set_state(node_index, internal_node_state);
-
-			for (size_t child_index : this->children_of(node_index)) {
-				if (!this->isLeaf(child_index)) {
-					node_queue.push(child_index);
-				} // as long as your are not a leaf we can continue sampling Z
-			}
-		} // internal nodes done, we go to the leaves
+		// This clique's column of the node state, every node of it. Every node reads the state
+		// its parent was given, through the window that wrote it. The window closes with the
+		// clique's turn and commits what it buffered, which is safe on one thread.
+		//
+		// The leaves are drawn with the rest. Their block is this tree's tree field (ADR-0005).
+		auto nodes = clique.open_node_state_window(_Z);
+		node_state_draw::draw_clique(_topology(), clique.transition_grid(), bin_of, uniforms,
+		                             nodes);
 	}
 }

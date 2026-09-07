@@ -5,8 +5,11 @@ across cliques (= leaves of the *other* tree). A branch carries information abou
 its length only when parent and child differ in state. This script reports the
 fraction of (branch, clique) pairs where parent state != child state:
 
-    - internal node states come from acol_simulated_Z_<tree>.txt
-    - leaf node states come from the Y field (acol_simulated_Y.txt)
+Every state comes from acol_simulated_Z_<tree>.txt. That file spans every node of
+its own tree, leaves included, since ADR-0005: the leaf block of a node state is
+that tree's tree field, and it is the variable the tree process runs over. The
+field is a different variable -- a noisy AND of the two tree fields -- so splicing
+it in here would score a branch against a state its own process never drew.
 
 A density near 0 means the latent process is almost frozen, so individual branch
 lengths have essentially no likelihood signal and cannot be inferred.
@@ -27,22 +30,19 @@ def _load_edges(path: pathlib.Path) -> tuple[pd.DataFrame, set[str]]:
 
 def _build_states(
     z_path: pathlib.Path,
-    y_path: pathlib.Path,
     node_col: str,
     clique_col: str,
 ) -> pd.DataFrame:
     """Long table [clique, node, state] for one tree.
 
-    Internal-node states come from the Z file; leaf states from the Y field.
-    `node_col` is this tree's dimension, `clique_col` is the other tree's leaf.
+    Every state comes from the node-state file, which spans every node of this
+    tree. `node_col` is this tree's dimension, `clique_col` is the other tree's
+    leaf.
     """
-    z = pd.read_csv(z_path, sep="\t", usecols=[node_col, clique_col, "Z_state"])
-    z = z.rename(columns={node_col: "node", clique_col: "clique", "Z_state": "state"})
-
-    y = pd.read_csv(y_path, sep="\t", usecols=[node_col, clique_col, "Y_state"])
-    y = y.rename(columns={node_col: "node", clique_col: "clique", "Y_state": "state"})
-
-    states = pd.concat([z, y], ignore_index=True)
+    states = pd.read_csv(z_path, sep="\t", usecols=[node_col, clique_col, "Z_state"])
+    states = states.rename(
+        columns={node_col: "node", clique_col: "clique", "Z_state": "state"}
+    )
     states["node"] = states["node"].astype(str)
     states["clique"] = states["clique"].astype(str)
     states["state"] = states["state"].astype(int)
@@ -110,9 +110,6 @@ def _report(tree_name: str, stats: dict[str, float]) -> None:
 def main(scenario_dir: str) -> None:
     """Report per-branch transition density for both trees of a scenario."""
     base = pathlib.Path(scenario_dir)
-    y_path = base / "acol_simulated_Y.txt"
-    if not y_path.exists():
-        raise click.ClickException(f"Missing Y field: {y_path}")
 
     configs = [
         (
@@ -139,7 +136,7 @@ def main(scenario_dir: str) -> None:
             continue
 
         edges, leaves = _load_edges(edge_path)
-        states = _build_states(z_path, y_path, node_col, clique_col)
+        states = _build_states(z_path, node_col, clique_col)
         stats = _transition_stats(edges, leaves, states)
         _report(tree_name, stats)
 

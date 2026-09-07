@@ -13,7 +13,7 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
                        TMarkovField::TypeParamErrorProbability *omega, size_t n_iterations,
                        const MarkovFieldParams &markov_field_stattools_param, std::string prefix,
                        bool simulate)
-    : _trees(trees), _markov_field(n_iterations, trees, omega, prefix), _omega(omega),
+    : _trees(trees), _markov_field(n_iterations, trees, omega, prefix, simulate), _omega(omega),
       _markov_field_stattools_param(markov_field_stattools_param),
 #ifdef USE_LOTUS
       _lotus(trees, sources.gamma, sources.error_rate), _gamma(sources.gamma),

@@ -16,6 +16,7 @@ from scipy.linalg import expm
 
 from src.independent import field as F
 from src.independent import io
+from src.independent import link as L
 from src.independent import scenario
 from src.independent import toy_normaliser as TN
 from src.independent.data import research_effort, simulate_simple_error
@@ -352,11 +353,15 @@ def test_sibling_disagreement_matches_simulation(bin_left, bin_right):
 
 # --------------------------------------------------------------------------
 # Neutrality of a pinned dimension
+#
+# No scenario neutralises anything any more: the reference is exact with both
+# trees active (ADR-0005). What a neutral dimension *is* is still worth pinning
+# down, because ADR-0001's rung survives as a cheap regression check.
 # --------------------------------------------------------------------------
 
 
 def test_neutral_parameters_give_exactly_uninformative_rows():
-    """The assumption the whole validation rests on (ADR-0001)."""
+    """What makes a dimension neutral: transition rows of exactly (0.5, 0.5)."""
     nu = np.exp(5.0)
     assert nu > F.STATIONARY_NU_THRESHOLD
     matrix = F.transition_matrix(0.5, nu, F.grid_branch_lengths()[0])
@@ -372,6 +377,244 @@ def test_neutral_rows_are_identical_across_every_bin():
 
 
 # --------------------------------------------------------------------------
+# The link, and the field it draws
+# --------------------------------------------------------------------------
+
+OMEGAS = [1e-4, 0.01, 0.05, 0.2, 0.4999]
+
+
+def _brute_force_link(z_s: bool, z_m: bool, omega: float) -> float:
+    """`P(Y = 1 | Z_s, Z_m)` by summing over both corruption events.
+
+    The closed form in `link` is a product of two independent factors. This is the
+    definition it came from: corrupt each cell, then AND the results. Nothing here
+    is derived from that product, so agreement is a check and not a restatement.
+    """
+    total = 0.0
+    for corrupted_s in (False, True):
+        for corrupted_m in (False, True):
+            probability = (omega if corrupted_s else 1.0 - omega) * (
+                omega if corrupted_m else 1.0 - omega
+            )
+            read_s = (not z_s) if corrupted_s else z_s
+            read_m = (not z_m) if corrupted_m else z_m
+            if read_s and read_m:
+                total += probability
+    return total
+
+
+@pytest.mark.parametrize("omega", OMEGAS)
+def test_the_link_is_an_and_over_two_independently_corrupted_reads(omega):
+    for z_s in (False, True):
+        for z_m in (False, True):
+            expected = _brute_force_link(z_s, z_m, omega)
+            got = float(L.prob_field_is_one(np.array([z_s]), np.array([z_m]), omega)[0])
+            assert got == pytest.approx(expected), (z_s, z_m, omega)
+
+
+@pytest.mark.parametrize("omega", OMEGAS)
+def test_the_bucket_pools_the_two_mixed_cells(omega):
+    """The table depends on the two tree fields only through their sum."""
+    mixed = float(L.prob_field_is_one(np.array([True]), np.array([False]), omega)[0])
+    other = float(L.prob_field_is_one(np.array([False]), np.array([True]), omega)[0])
+    assert mixed == pytest.approx(other)
+    assert float(L.prob_for_bucket(1, omega)) == pytest.approx(mixed)
+
+
+@pytest.mark.parametrize("omega", OMEGAS)
+def test_both_parameter_free_constraints_hold_at_every_error_probability(omega):
+    """Three Bernoulli rates pinned by one parameter (ADR-0005, derivation 2)."""
+    p_0, p_1, p_2 = L.prob_for_bucket(np.arange(3), omega)
+    assert p_1**2 == pytest.approx(p_0 * p_2, abs=1e-15)
+    assert np.sqrt(p_0) + np.sqrt(p_2) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("omega", [0.0, -0.1, 0.5, 0.9, 1.0])
+def test_the_error_probability_must_lie_inside_the_open_interval(omega):
+    """At 0 the link is deterministic; at 0.5 and above the tree fields are
+    anti-correlated with the field. Both are statements about the model."""
+    with pytest.raises(ValueError):
+        L.check_error_probability(omega)
+
+
+def test_the_field_is_drawn_at_the_rate_the_link_names():
+    rng = np.random.default_rng(20260907)
+    omega = 0.15
+    z_s = np.array([[True, True], [False, False]])
+    z_m = np.array([[True, False], [True, False]])
+
+    draws = np.mean(
+        [L.sample_field(rng, z_s, z_m, omega) for _ in range(20000)], axis=0
+    )
+    assert draws == pytest.approx(L.prob_field_is_one(z_s, z_m, omega), abs=0.01)
+
+
+def test_the_counters_tally_every_cell_once():
+    rng = np.random.default_rng(20260908)
+    z_s = rng.random((17, 13)) < 0.4
+    z_m = rng.random((17, 13)) < 0.6
+    field = L.sample_field(rng, z_s, z_m, 0.1)
+
+    counters = L.link_counters(z_s, z_m, field)
+    assert counters.sum() == z_s.size
+    for bucket in range(L.N_BUCKETS):
+        holding = L.buckets(z_s, z_m) == bucket
+        assert counters[bucket, 1] == int(field[holding].sum())
+        assert counters[bucket, 0] == int((~field[holding]).sum())
+
+
+def test_the_marginal_field_rate_is_the_product_of_the_two_adjusted_rates():
+    """ADR-0005, derivation 3. The field's density says nothing about the split.
+
+    Two very different pairs of alphas with the same product of adjusted rates
+    give the same field density, which is the identifiability limit the rung
+    ladder is meant to report rather than be surprised by.
+    """
+    rng = np.random.default_rng(20260909)
+    omega = 0.1
+    shape = (400, 400)
+
+    def density(alpha_s: float, alpha_m: float) -> float:
+        z_s = rng.random(shape) < alpha_s
+        z_m = rng.random(shape) < alpha_m
+        return float(L.sample_field(rng, z_s, z_m, omega).mean())
+
+    for alpha_s, alpha_m in ((0.8, 0.3), (0.3, 0.8), (0.5, 0.5)):
+        expected = float(
+            L.adjusted_rate(alpha_s, omega) * L.adjusted_rate(alpha_m, omega)
+        )
+        assert density(alpha_s, alpha_m) == pytest.approx(expected, abs=0.005)
+
+
+# --------------------------------------------------------------------------
+# The scenario, with both trees active
+# --------------------------------------------------------------------------
+
+
+def _small_scenario(tmp: str, **overrides):
+    out = pathlib.Path(tmp) / "scenario"
+    config = scenario.ScenarioConfig(
+        n_species_nodes=63, n_molecule_nodes=31, **overrides
+    )
+    return out, config, scenario.build_scenario(out, config)
+
+
+def _indices_of(out: pathlib.Path):
+    """The two tree indices, read back from the tree files the scenario wrote."""
+
+    def index(name: str):
+        frame = pd.read_csv(out / f"{name}.txt", sep="\t")
+        return build_tree_index(
+            list(zip(frame["child"].astype(str), frame["parent"].astype(str)))
+        )
+
+    return index("species"), index("molecules")
+
+
+def test_the_scenario_draws_every_node_of_both_trees():
+    """A node state spans every node of its own tree, leaves included (ADR-0005).
+
+    The leaf rows are the half of it the link reads, and the writer used to leave
+    them at zero.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp)
+        species, molecules = _indices_of(out)
+
+        species_states = io.read_node_states(
+            out / "simulated_Z_species.txt", molecules.n_leaves
+        )
+        molecule_states = io.read_node_states(
+            out / "simulated_Z_molecules.txt", molecules.n_nodes
+        )
+
+    assert species_states.shape == (species.n_nodes, molecules.n_leaves)
+    assert molecule_states.shape == (species.n_leaves, molecules.n_nodes)
+    # Both leaf blocks carry states rather than the zeros the old writer left.
+    assert species_states[species.leaves].any()
+    assert molecule_states[:, molecules.leaves].any()
+
+
+def test_the_field_is_the_and_of_the_two_tree_fields_it_was_drawn_from():
+    """The written field, the written node states and the link agree.
+
+    Every one of the three files is read back and the link's counters recomputed
+    from them, so a transposed tree field or a mis-shaped node-state file shows up
+    as a field density that the buckets cannot explain.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        out, config, meta = _small_scenario(tmp)
+        species, molecules = _indices_of(out)
+        field = io.read_field(out / "simulated_Y.txt", molecules.n_leaves)
+        species_field = io.read_node_states(
+            out / "simulated_Z_species.txt", molecules.n_leaves
+        )[species.leaves]
+        molecule_field = io.read_node_states(
+            out / "simulated_Z_molecules.txt", molecules.n_nodes
+        )[:, molecules.leaves]
+
+    counters = L.link_counters(species_field, molecule_field, field)
+    assert counters.tolist() == meta["link_counters"]
+    assert field.mean() == pytest.approx(meta["field_ones_fraction"])
+
+    # The rate at which the field reads 1 in each bucket, against the link's own
+    # P_k. Bucket 0 is rare at a small omega, so only the buckets that hold cells
+    # are judged.
+    for bucket in range(L.N_BUCKETS):
+        total = counters[bucket].sum()
+        if total < 200:
+            continue
+        observed = counters[bucket, 1] / total
+        predicted = float(L.prob_for_bucket(bucket, config.error_probability))
+        assert observed == pytest.approx(predicted, abs=0.05), bucket
+
+
+def test_the_simulate_parameters_carry_both_trees():
+    """The replicate comparison runs the C++ under the reference's own draw, so
+    every parameter of *both* trees has to be in the one file it is given."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp)
+        names = set(
+            pd.read_csv(out / scenario.SIMULATE_PARAMETERS, sep="\t")["name"].astype(
+                str
+            )
+        )
+
+    for tree in ("species", "molecules"):
+        for parameter in ("alpha", "log_nu", "branch_lengths"):
+            assert any(n.startswith(f"{tree}_{parameter}_") for n in names), (
+                f"{tree}_{parameter} is missing"
+            )
+        for scalar in ("mean_log_nu", "var_log_nu"):
+            assert f"{tree}_{scalar}" in names
+
+
+def test_no_run_script_neutralises_a_tree():
+    """Neutralisation is retired. A rung that pinned one tree would reach the
+    error probability through one tree where the model has two (ADR-0005), and
+    the reference no longer needs it to be exact.
+
+    The rung ladder itself is issue #44's; what this pins is that nothing the
+    scenario writes still points at a neutralised molecules dimension.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp)
+        bodies = {path.name: path.read_text() for path in sorted(out.glob("*.sh"))}
+
+    assert set(bodies) == {f"{name}.sh" for name, _, _, _ in scenario.RUNGS} | {
+        "replicates.sh"
+    }
+    for name, body in bodies.items():
+        assert "pinned_molecules" not in body, name
+        if name == "replicates.sh":
+            # The one script that legitimately hands the C++ the truth, because
+            # both implementations have to run the same parameters.
+            continue
+        for parameter in ("alpha", "log_nu", "mean_log_nu", "var_log_nu"):
+            assert f"--molecules_{parameter} " not in body, f"{name} pins {parameter}"
+
+
+# --------------------------------------------------------------------------
 # Observation models
 # --------------------------------------------------------------------------
 
@@ -384,24 +627,9 @@ def test_initial_value_filenames_keep_their_reader_marker():
     rejects it. Renaming these files without keeping a marker breaks every run
     script, so fail here rather than in a C++ stack trace.
     """
-    for filename in (scenario.PINNED_MOLECULES, scenario.SIMULATE_PARAMETERS):
-        assert any(m in filename for m in scenario.INITIAL_VALUE_MARKERS), filename
-
-
-def test_neutral_pinning_covers_every_molecules_parameter():
-    """Leaving one free would let a meaningless chain wander into the traces."""
-    pinned = {
-        flag.lstrip("-").split(".")[0]
-        for flag in scenario._PIN_MOLECULES.split()
-        if flag.startswith("--molecules_")
-    }
-    assert pinned == {
-        "molecules_alpha",
-        "molecules_log_nu",
-        "molecules_mean_log_nu",
-        "molecules_var_log_nu",
-        "molecules_branch_lengths",
-    }
+    assert any(
+        m in scenario.SIMULATE_PARAMETERS for m in scenario.INITIAL_VALUE_MARKERS
+    ), scenario.SIMULATE_PARAMETERS
 
 
 def test_research_effort_uses_log_paper_counts():
@@ -485,7 +713,9 @@ def test_neutral_molecules_make_the_constant_independent_of_species(depth):
     that is exactly why the independent-field harness is unbiased and also why
     it cannot see the effect this module isolates.
     """
-    neutral = TN.leaf_pattern_probabilities(0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth)
+    neutral = TN.leaf_pattern_probabilities(
+        0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth
+    )
     constants = [
         TN.normalising_constant(
             TN.leaf_pattern_probabilities(0.4, nu, depth), neutral, depth
@@ -546,7 +776,9 @@ def test_targeted_objective_is_biased_downward_off_neutrality(depth):
 def test_the_two_objectives_coincide_under_neutrality():
     """No bias to find when the molecules dimension is switched off."""
     depth = 2
-    neutral = TN.leaf_pattern_probabilities(0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth)
+    neutral = TN.leaf_pattern_probabilities(
+        0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth
+    )
     truth = TN.field_distribution(
         TN.leaf_pattern_probabilities(0.5, np.exp(-0.5), depth), neutral, depth
     )

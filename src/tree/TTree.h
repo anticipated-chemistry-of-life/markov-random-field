@@ -276,7 +276,7 @@ public:
 	/// the leaf block of this tree's node state. So the walk below, and the alpha and nu moves
 	/// after it, read one tree and nothing else. See ADR-0005. The leaves themselves are drawn
 	/// with the field, as one eight-state block, before this runs.
-	template<bool IsSimulation, bool FixZ>
+	template<bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
@@ -293,7 +293,7 @@ public:
 		    ProgramOptions::NUMBER_OF_THREADS, std::vector<coretools::TSumLogProbability>(n_pairs));
 
 		// propose new branch lengths
-		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
+		_propose_new_branch_lengths(pairs);
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
     schedule(dynamic) shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms)
@@ -306,13 +306,11 @@ public:
 			if constexpr (!FixZ) { _cliques[i].update_Z(states, this, node_state_uniforms); }
 
 			// update nu and alpha
-			if constexpr (!IsSimulation) {
-				_update_nu_or_alpha<true>(states, i, _alpha_c);
-				_update_nu_or_alpha<false>(states, i, _log_nu_c);
+			_update_nu_or_alpha<true>(states, i, _alpha_c);
+			_update_nu_or_alpha<false>(states, i, _log_nu_c);
 
-				// add to likelihood ratio for branch length
-				_add_to_LL_branch_lengths(i, states, log_sum_local, pairs);
-			}
+			// add to likelihood ratio for branch length
+			_add_to_LL_branch_lengths(i, states, log_sum_local, pairs);
 
 			// The window ends here, inside the parallel region, so it hands its inserts out
 			// rather than making them (ADR-0006). The list is taken whether or not the walk ran.
@@ -321,10 +319,8 @@ public:
 		}
 
 		// update branch lengths
-		if constexpr (!IsSimulation) {
-			auto log_sum_b = TTree::_reduce_log_sum_per_thread(log_sum_per_thread, n_pairs);
-			_evalute_update_branch_length(log_sum_b, pairs);
-		}
+		auto log_sum_b = TTree::_reduce_log_sum_per_thread(log_sum_per_thread, n_pairs);
+		_evalute_update_branch_length(log_sum_b, pairs);
 
 		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 	}

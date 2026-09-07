@@ -195,8 +195,10 @@ void TCore::infer() {
 
 void TCore::simulate() {
 	_started            = true;
-	std::string prefix  = parameters().get("out", "acol");
-	size_t n_iterations = TMarkovField::get_num_iterations_simulation();
+	std::string prefix = parameters().get("out", "acol");
+	// A simulated field is drawn once and counted once, so this sizes the field's counter and
+	// decides nothing about the draw.
+	size_t n_iterations = ProgramOptions::NUM_ITERATIONS;
 
 	// build model
 	TModel model(n_iterations, prefix, true);

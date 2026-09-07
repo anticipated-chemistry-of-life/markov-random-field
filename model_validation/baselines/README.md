@@ -1,5 +1,11 @@
 # Acceptance baseline for the pinned runs
 
+> **The committed manifests are stale.** They were recorded under the shared
+> field, which ADR-0005 retired. Every output moved with the model, and the rung
+> ladder is rebuilt by issue #44. Re-record with `./verify.sh --record` once that
+> ladder settles; until then `verify.sh` reports a difference it is right to
+> report.
+
 Some changes to the model are supposed to leave its output alone, bit for bit.
 This directory holds the baseline that claim is measured against: a SHA-256 per
 output file, for each of two pinned runs.
@@ -76,8 +82,9 @@ timings, neither of which say anything about the model.
 
 A consequence worth knowing outside this directory: **a multi-threaded acol
 `infer` run is not reproducible from its seed.** A `simulate` run is, at any
-thread count, because `IsSimulation` compiles the alpha and nu moves out of the
-clique loop; `just parity` gates that. Both are properties of the harness, not of
+thread count, because it is a forward draw and takes nothing from the
+thread-local generator; `just parity` gates that. Both are properties of the
+harness, not of
 any one refactor.
 
 ## Scope of the gate

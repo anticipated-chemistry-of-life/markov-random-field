@@ -6,6 +6,7 @@
 #define ACOL_TCELLUNIFORMS_H
 
 #include "coretools/Main/TRandomGenerator.h"
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 
@@ -70,6 +71,15 @@ public:
 		// reaches 1. A uniform of exactly 1 would make a probability of 1 reject.
 		return static_cast<double>(bits >> 11U) * 0x1.0p-53;
 	}
+};
+
+/// The uniform a cell draws, addressed by that cell's linear index.
+///
+/// `TCellUniforms` satisfies it, and so does a stream a test writes by hand. Everything that draws
+/// a cell takes this rather than the class, so a test names the number a cell gets.
+template<typename T>
+concept CellUniforms = requires(const T &uniforms, size_t linear_index) {
+	{ uniforms.at(linear_index) } -> std::convertible_to<double>;
 };
 
 /// The seed the run was started with.

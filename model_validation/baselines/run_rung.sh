@@ -18,6 +18,10 @@
 # whole species trace diverges. With --numThreads 1 the run is byte-stable.
 # This is an infer run, so it is the half that is still affected; a simulate run
 # is now byte-stable at any thread count, and `just parity` gates that.
+#
+# Nothing is neutralised. Both trees are active, so the rung infers both of them
+# (ADR-0005). The manifests in this directory predate that change and have to be
+# re-recorded before they mean anything again.
 set -euo pipefail
 RUNG="${1:?usage: run_rung.sh rung1|rung2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -65,9 +69,5 @@ rm -rf "${RUNG}_gate" && mkdir -p "${RUNG}_gate"
     --numThreads 1 \
     --writeBurnin \
     --write_joint_log_prob_density \
-    --molecules_branch_lengths simulated_pinned_molecules.txt --molecules_branch_lengths.update false \
-    --molecules_mean_log_nu simulated_pinned_molecules.txt --molecules_mean_log_nu.update false \
-    --molecules_var_log_nu simulated_pinned_molecules.txt --molecules_var_log_nu.update false \
-    --molecules_log_nu simulated_pinned_molecules.txt --molecules_log_nu.update false \
-    --molecules_alpha simulated_pinned_molecules.txt --molecules_alpha.update false \
+    --error_probability 0.05 \
     "${pinned[@]}"

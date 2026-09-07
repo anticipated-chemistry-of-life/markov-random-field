@@ -10,9 +10,6 @@ class ProgramOptions {
 public:
 	static inline size_t NUMBER_OF_THREADS = 1;
 
-	static inline bool SIMULATION_NO_Z_INITIALIZATION = false;
-	static inline bool SIMULATION_NO_Y_INITIALIZATION = false;
-
 	static inline bool WRITE_Y       = false;
 	static inline bool WRITE_Y_TRACE = false;
 
@@ -91,10 +88,6 @@ public:
 		auto &params = coretools::instances::parameters();
 
 		NUMBER_OF_THREADS = coretools::getNumThreads();
-
-		SIMULATION_NO_Z_INITIALIZATION = params.exists("simulation_no_Z_initilisation");
-
-		SIMULATION_NO_Y_INITIALIZATION = params.exists("simulation_no_Y_initilisation");
 
 		WRITE_Y       = params.exists("write_Y");
 		WRITE_Y_TRACE = params.exists("write_Y_trace");

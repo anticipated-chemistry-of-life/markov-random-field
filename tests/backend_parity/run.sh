@@ -19,7 +19,7 @@
 # file one run wrote is compared with the other's byte for byte:
 #
 #   simulate -> the field and both node states, in full, plus the LOTUS and simple-error data
-#               drawn from them and the per-iteration traces.
+#               drawn from them, the six link counters and the joint density of the one draw.
 #   infer    -> the parameter traces, the field and node-state traces, the joint density and
 #               the posterior field.
 #
@@ -159,7 +159,8 @@ RUNDIR="$WORKDIR/run"
 rm -rf "$WORKDIR"
 
 # Both chains below pass `--numThreads 1`. Every cell draw is now hashed from the cell's position
-# (ADR-0007), so `simulate` gives the same bytes at any thread count. `infer` does not: the alpha
+# (ADR-0007), so `simulate` gives the same bytes at any thread count -- and it is a forward draw on
+# one thread anyway. `infer` does not: the alpha
 # and nu moves run inside the same parallel loop over cliques and still draw from the thread-local
 # generator, which no option seeds on a worker thread. Pinning one thread keeps the gate about the
 # storage backend and nothing else. What that costs is the multi-batch commit of the deferred
@@ -180,9 +181,9 @@ run_simulate() {
         --species_paper_counts species_papers.txt \
         --molecules_paper_counts molecules_papers.txt \
         --iterations "$ITERATIONS" --n_bins 6 \
-        --epsilon_simple_model 0.1 --gamma 1.1 \
+        --epsilon_simple_model 0.1 --gamma 1.1 --error_probability 0.05 \
         --numThreads "$threads" --fixedSeed "$SEED" \
-        --write_Y --write_Z --write_Y_trace --write_Z_trace \
+        --write_Y --write_Z \
         --write_joint_log_prob_density
 }
 
@@ -288,12 +289,11 @@ compare_backends infer || divergences=1
 # ---------------------------------------------------------------------------
 # One backend, two thread counts
 #
-# Every cell draw is hashed from the cell's position (ADR-0007), so a chain that draws nothing else
-# gives one answer however many threads it runs on. `simulate` is that chain: IsSimulation compiles
-# the alpha and nu moves out of the clique loop, and those moves are the last draws still taken
-# from the thread-local generator. So this gates the half of "reproducible at any thread count"
-# that holds today. `infer` is the other half and is not gated, which is why both chains above stay
-# at one thread.
+# Every cell draw is hashed from the cell's position (ADR-0007), so a draw that takes nothing from
+# the thread-local generator gives one answer however many threads it runs on. `simulate` is that
+# draw: it walks each tree's node state top-down and then the field, and no parameter moves. So
+# this gates the half of "reproducible at any thread count" that holds today. `infer` is the other
+# half and is not gated, which is why both chains above stay at one thread.
 #
 # The dense pair is the default build, so it is the one this runs again.
 # ---------------------------------------------------------------------------

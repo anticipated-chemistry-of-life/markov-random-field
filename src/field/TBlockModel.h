@@ -111,8 +111,9 @@ public:
 /// Both trees have something to say from the first update on, because the chain is given a
 /// starting node state before it (TMarkovField::_start_the_chain).
 ///
-/// @tparam IsSimulation   a simulated chain draws from the prior, so every data term is neutral.
-template<bool IsSimulation> class TBlockModel {
+/// An inferred chain is the only one that has a model to ask. A simulated one draws its whole
+/// configuration forward and runs no update (TMarkovField::simulate).
+class TBlockModel {
 private:
 	const TTree &_species_tree;
 	const TTree &_molecule_tree;
@@ -177,25 +178,23 @@ public:
 			    *_molecule_clique, _model->_molecule_tree.get_binned_branch_length(molecule_leaf),
 			    molecule_parent);
 
-			// 1.0 is the neutral value, adding log(1) = 0. A simulated chain keeps it, and so does
-			// a build that left a source out.
+			// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps
+			// it.
 			leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};
 			leaf_pair.simple_error = {coretools::P(1.0), coretools::P(1.0)};
-			if constexpr (!IsSimulation) {
 #ifdef USE_LOTUS
-				std::array<double, 2> prob_lotus{1.0, 1.0};
-				_model->_data_model.get_lotus().calculate_LL_update_Y(
-				    cell, _lotus_row.is_one(molecule_leaf), prob_lotus);
-				leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
+			std::array<double, 2> prob_lotus{1.0, 1.0};
+			_model->_data_model.get_lotus().calculate_LL_update_Y(
+			    cell, _lotus_row.is_one(molecule_leaf), prob_lotus);
+			leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
-				std::array<double, 2> prob_simple{};
-				_model->_data_model.get_simple_error_model().probabilities_for_Y_update(
-				    _simple_data_row.is_one(molecule_leaf), prob_simple);
-				leaf_pair.simple_error = {coretools::P(prob_simple[0]),
-				                          coretools::P(prob_simple[1])};
+			std::array<double, 2> prob_simple{};
+			_model->_data_model.get_simple_error_model().probabilities_for_Y_update(
+			    _simple_data_row.is_one(molecule_leaf), prob_simple);
+			leaf_pair.simple_error = {coretools::P(prob_simple[0]),
+			                          coretools::P(prob_simple[1])};
 #endif
-			}
 			return leaf_pair;
 		}
 
@@ -204,16 +203,14 @@ public:
 		void record([[maybe_unused]] size_t molecule_leaf,
 		            [[maybe_unused]] const block_update::TLeafPairFactors &factors,
 		            [[maybe_unused]] const field_math::TBlockStates &drawn) {
-			if constexpr (!IsSimulation) {
-				TCellOutcome outcome;
+			TCellOutcome outcome;
 #ifdef USE_LOTUS
-				outcome.prob_lotus_new_state = factors.lotus[static_cast<size_t>(drawn.y)].get();
+			outcome.prob_lotus_new_state = factors.lotus[static_cast<size_t>(drawn.y)].get();
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
-				outcome.simple_model_disagrees = _simple_data_row.is_one(molecule_leaf) != drawn.y;
+			outcome.simple_model_disagrees = _simple_data_row.is_one(molecule_leaf) != drawn.y;
 #endif
-				_model->_accumulator.add(_thread, outcome);
-			}
+			_model->_accumulator.add(_thread, outcome);
 		}
 	};
 
