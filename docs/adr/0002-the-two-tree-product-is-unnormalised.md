@@ -22,6 +22,8 @@ Under a neutral molecules dimension (ADR-0001) `p_m(Y)` is the same for every fi
 
 `model_validation/diagnose_normaliser.py` enumerates every field for two balanced trees, so `C` is computed exactly rather than estimated. With the molecules dimension neutral, the C++'s objective and the correctly normalised one peak at the same place. As molecules leaves neutrality the two separate, and the gap grows with both the strength of the molecules dimension and the size of the field: at `log_nu_molecules = -3` the peak sits 0.58 below the truth for a 2x2 field and 1.38 below for a 4x4 one. A Metropolis chain started at the truth reproduces the drift and stops drifting when `-log C` is added to the ratio, with nothing else changed.
 
+That script is gone. ADR-0005 repurposed the enumeration to assert that the new joint sums to one, and it now runs in the validation suite. `git log -- model_validation/diagnose_normaliser.py` holds the version that produced these numbers.
+
 ## Consequences
 
 The drift is a property of the target, not of the sampler, so it will not yield to more iterations, better proposals, or a tighter prior on `mean_log_nu`. Any run with two active trees is affected; the more phylogenetic signal the molecules tree carries, the worse it is.

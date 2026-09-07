@@ -14,11 +14,11 @@ import pandas as pd
 import pytest
 from scipy.linalg import expm
 
+from src.independent import enumeration as E
 from src.independent import field as F
 from src.independent import io
 from src.independent import link as L
 from src.independent import scenario
-from src.independent import toy_normaliser as TN
 from src.independent.data import research_effort, simulate_simple_error
 from src.independent.indexing import build_tree_index
 from src.tree import Tree, TreeType
@@ -668,147 +668,179 @@ def test_simple_error_flips_at_the_stated_rate(epsilon):
 
 
 # ---------------------------------------------------------------------------
-# The normalising constant of the two-tree product
+# The joint sums to one
 # ---------------------------------------------------------------------------
+#
+# ADR-0005 argues that the joint sums to one by construction. These enumerate a
+# model small enough to list every (Z_s, Z_m, Y) and check it. Both trees stay
+# active, for the reason ADR-0005 gives.
+#
+# The total reads the two node-state densities, and it reads whether a variable
+# is scored twice. It is blind to the shape of the link and to the orientation of
+# a leaf block, which the field rate and the reference draw below pin instead.
+# `enumeration` says why.
+
+# Each entry is (species tree, molecule tree), as (node count, type). The shapes
+# differ on purpose: a species tree with two roots, and a pair whose leaf counts
+# disagree. Enumerability caps the trees at a handful of leaves, so the third
+# pair is lopsided rather than large.
+SMALL_MODELS = [
+    ((3, TreeType.balanced), (3, TreeType.balanced)),
+    ((4, TreeType.grass), (3, TreeType.balanced)),
+    ((4, TreeType.star), (2, TreeType.grass)),
+]
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-@pytest.mark.parametrize("alpha,nu", [(0.5, 0.6), (0.2, 2.0), (0.8, 0.1)])
-def test_leaf_patterns_are_a_distribution(depth, alpha, nu):
-    patterns = TN.leaf_pattern_probabilities(alpha, nu, depth)
-    assert len(patterns) == 2 ** (2**depth)
-    assert patterns.sum() == pytest.approx(1.0)
-    assert (patterns > 0.0).all()
+def _process(index, n_cliques: int, seed: int) -> E.TreeProcess:
+    """One tree's process, with an alpha and a nu per clique."""
+    rng = np.random.default_rng(seed)
+    return E.TreeProcess(
+        index=index,
+        bins=F.sample_binned_branch_lengths(rng, index.n_branches),
+        alphas=rng.uniform(0.2, 0.8, n_cliques),
+        nus=np.exp(rng.normal(-0.5, 0.5, n_cliques)),
+    )
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-def test_leaf_marginal_is_stationary(depth):
-    """Marginalising all but one leaf must return the stationary probability."""
-    alpha, n_leaves = 0.3, 2**depth
-    patterns = TN.leaf_pattern_probabilities(alpha, 0.7, depth)
-    codes = np.arange(len(patterns))
-    for leaf in range(n_leaves):
-        on = ((codes >> leaf) & 1).astype(bool)
-        assert patterns[on].sum() == pytest.approx(alpha)
+def _both_trees(model, seed: int = 20260907):
+    """Both trees of one model. A clique of each is named by a leaf of the other."""
+    species_spec, molecule_spec = model
+    species_index = build_tree_index(edges_of(Tree(*species_spec, "species")))
+    molecule_index = build_tree_index(edges_of(Tree(*molecule_spec, "molecules")))
+    return (
+        _process(species_index, molecule_index.n_leaves, seed),
+        _process(molecule_index, species_index.n_leaves, seed + 1),
+    )
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-def test_pattern_codes_agree_with_a_transpose(depth):
-    """Row codes of a field are the column codes of its transpose."""
-    rows, cols = TN.pattern_codes(depth)
-    n_leaves = 2**depth
-    bits = (
-        (np.arange(len(rows))[:, None] >> np.arange(n_leaves * n_leaves)[None, :]) & 1
-    ).reshape(-1, n_leaves, n_leaves)
-    powers = 2 ** np.arange(n_leaves)
-    assert (cols == (bits.transpose(0, 2, 1) * powers[None, None, :]).sum(2)).all()
-    assert rows.shape == cols.shape == (len(rows), n_leaves)
+@pytest.mark.parametrize("model", SMALL_MODELS)
+@pytest.mark.parametrize("omega", [0.02, 0.15, 0.4])
+def test_the_joint_sums_to_one(model, omega):
+    """ADR-0005's claim, enumerated rather than argued."""
+    species, molecules = _both_trees(model)
+    mass = E.joint(species, molecules, omega).mass
+    assert mass == pytest.approx(1.0, abs=1e-12), f"the joint sums to {mass!r}"
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-def test_neutral_molecules_make_the_constant_independent_of_species(depth):
-    """ADR-0001's assumption, stated as an equation.
+@pytest.mark.parametrize("model", SMALL_MODELS)
+def test_neither_tree_is_neutral_where_the_joint_is_summed(model):
+    """The parameters the sum runs under, pinned. A neutral tree carries no
+    phylogenetic signal, and the sum above must not be read under one."""
+    for process in _both_trees(model):
+        rows = F.transition_matrices(
+            process.alphas, process.nus, F.grid_branch_lengths()
+        )
+        assert np.abs(rows - 0.5).max() > 0.05
+        assert np.abs(process.alphas - 0.5).max() > 0.05
 
-    With neutral molecules `C` must not move when the species parameters do —
-    that is exactly why the independent-field harness is unbiased and also why
-    it cannot see the effect this module isolates.
+
+@pytest.mark.parametrize("model", SMALL_MODELS)
+def test_each_node_state_is_a_distribution(model):
+    """The two tree factors, each on its own. A transposed transition matrix
+    leaves one of them, which is what the total then reports."""
+    for process in _both_trees(model):
+        _, probability = E.node_state_distribution(process)
+        assert probability.sum() == pytest.approx(1.0)
+        assert (probability > 0.0).all()
+
+
+@pytest.mark.parametrize("model", SMALL_MODELS)
+def test_summing_the_field_out_returns_the_two_node_states(model):
+    """The link is a conditional distribution at every pair of tree fields."""
+    species, molecules = _both_trees(model)
+    enumeration = E.joint(species, molecules, 0.1)
+    assert enumeration.table.sum(axis=2) == pytest.approx(
+        np.outer(enumeration.species_probability, enumeration.molecule_probability)
+    )
+
+
+def test_a_factor_counted_twice_leaves_the_sum():
+    """The defect class ADR-0002 records is a variable scored twice, and the sum
+    is what sees it. A check that cannot fail is not a check."""
+    species, molecules = _both_trees(SMALL_MODELS[0])
+    tree_fields = E.species_tree_fields(species)
+
+    # One species leaf, scored a second time under its own stationary rate.
+    alpha = species.alphas[0]
+    cell = tree_fields.tree_fields[:, 0, 0]
+    twice = tree_fields.probability * np.where(cell, alpha, 1.0 - alpha)
+
+    deformed = E.joint_over_tree_fields(
+        E.TreeFieldDistribution(tree_fields.tree_fields, twice),
+        E.molecule_tree_fields(molecules),
+        0.1,
+    )
+    assert deformed.mass == pytest.approx(alpha**2 + (1.0 - alpha) ** 2)
+    assert deformed.mass < 0.99
+
+
+def test_the_enumerated_field_rate_is_the_product_of_the_two_adjusted_rates():
+    """ADR-0005, derivation 3, read off the enumeration rather than a simulation.
+
+    A species clique is named by a molecule leaf and a molecule clique by a
+    species leaf, so the two alphas enter the cell at (species leaf, molecule
+    leaf) from opposite sides. This is one of the two tests that pin the
+    orientation of a leaf block; the sum itself cannot.
     """
-    neutral = TN.leaf_pattern_probabilities(
-        0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth
-    )
-    constants = [
-        TN.normalising_constant(
-            TN.leaf_pattern_probabilities(0.4, nu, depth), neutral, depth
+    species, molecules = _both_trees(SMALL_MODELS[1])
+    omega = 0.12
+    assert E.joint(species, molecules, omega).field_rate == pytest.approx(
+        np.outer(
+            L.adjusted_rate(molecules.alphas, omega),
+            L.adjusted_rate(species.alphas, omega),
         )
-        for nu in (0.1, 0.5, 2.0, 10.0)
-    ]
-    assert constants == pytest.approx([constants[0]] * len(constants))
+    )
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-def test_non_neutral_molecules_make_the_constant_move(depth):
-    """The converse: without neutrality the omitted term is not a constant."""
-    molecules = TN.leaf_pattern_probabilities(0.5, 0.2, depth)
-    constants = [
-        TN.normalising_constant(
-            TN.leaf_pattern_probabilities(0.5, nu, depth), molecules, depth
+def test_the_enumerated_field_matches_the_reference_draw():
+    """The enumeration and the harness's own draw describe the same model.
+
+    Without this the joint could sum to one and still be a statement about a
+    model that nothing simulates.
+    """
+    species, molecules = _both_trees(SMALL_MODELS[0])
+    omega, n_draws = 0.1, 20_000
+    enumeration = E.joint(species, molecules, omega)
+
+    rng = np.random.default_rng(4)
+    counts = np.zeros(len(enumeration.fields))
+    for _ in range(n_draws):
+        z_s = F.sample_states(
+            rng, species.index, species.bins, species.alphas, species.nus
         )
-        for nu in (0.1, 0.5, 2.0, 10.0)
-    ]
-    assert max(constants) > min(constants) * 1.05
+        z_m = F.sample_states(
+            rng, molecules.index, molecules.bins, molecules.alphas, molecules.nus
+        )
+        field = L.sample_field(
+            rng, z_s[species.index.leaves], z_m[molecules.index.leaves].T, omega
+        )
+        counts[E.code_of(field)] += 1
 
-
-@pytest.mark.parametrize("depth", [1, 2])
-def test_field_distribution_sums_to_one(depth):
-    species = TN.leaf_pattern_probabilities(0.4, 0.9, depth)
-    molecules = TN.leaf_pattern_probabilities(0.6, 0.3, depth)
-    assert TN.field_distribution(species, molecules, depth).sum() == pytest.approx(1.0)
-
-
-@pytest.mark.parametrize("depth", [1, 2])
-def test_correct_objective_is_maximised_at_the_truth(depth):
-    """Gibbs' inequality, which is what licenses reading the gap as bias."""
-    true_log_nu = -0.5
-    molecules = TN.leaf_pattern_probabilities(0.5, np.exp(-1.0), depth)
-    truth = TN.field_distribution(
-        TN.leaf_pattern_probabilities(0.5, np.exp(true_log_nu), depth), molecules, depth
+    assert counts / n_draws == pytest.approx(
+        enumeration.table.sum(axis=(0, 1)), abs=0.01
     )
-    grid = np.linspace(-4.0, 2.0, 121)
-    _, correct = TN.expected_log_likelihood_profile(truth, grid, 0.5, molecules, depth)
-    assert grid[int(np.argmax(correct))] == pytest.approx(true_log_nu, abs=0.05)
 
 
-@pytest.mark.parametrize("depth", [1, 2])
-def test_targeted_objective_is_biased_downward_off_neutrality(depth):
-    """The C++'s objective peaks below the truth once molecules are active."""
-    true_log_nu = -0.5
-    molecules = TN.leaf_pattern_probabilities(0.5, np.exp(-2.0), depth)
-    truth = TN.field_distribution(
-        TN.leaf_pattern_probabilities(0.5, np.exp(true_log_nu), depth), molecules, depth
-    )
-    grid = np.linspace(-4.0, 2.0, 121)
-    targeted, correct = TN.expected_log_likelihood_profile(
-        truth, grid, 0.5, molecules, depth
-    )
-    assert grid[int(np.argmax(targeted))] < grid[int(np.argmax(correct))] - 0.2
+@pytest.mark.parametrize("shape", [(2, 2), (3, 1), (1, 4)])
+def test_a_code_names_the_array_the_enumeration_lists(shape):
+    """`code_of` inverts `enumerate_binary_arrays`, so the draw above and the
+    enumeration index a field the same way."""
+    arrays = E.enumerate_binary_arrays(shape)
+    assert [E.code_of(array) for array in arrays] == list(range(len(arrays)))
 
 
-def test_the_two_objectives_coincide_under_neutrality():
-    """No bias to find when the molecules dimension is switched off."""
-    depth = 2
-    neutral = TN.leaf_pattern_probabilities(
-        0.5, np.exp(F.STATIONARY_NU_THRESHOLD), depth
+def test_a_clique_that_names_no_leaf_of_the_other_tree_is_refused():
+    species, molecules = _both_trees(SMALL_MODELS[0])
+    one_clique = E.TreeProcess(
+        index=species.index,
+        bins=species.bins,
+        alphas=species.alphas[:1],
+        nus=species.nus[:1],
     )
-    truth = TN.field_distribution(
-        TN.leaf_pattern_probabilities(0.5, np.exp(-0.5), depth), neutral, depth
-    )
-    grid = np.linspace(-3.0, 1.0, 41)
-    targeted, correct = TN.expected_log_likelihood_profile(
-        truth, grid, 0.5, neutral, depth
-    )
-    assert np.argmax(targeted) == np.argmax(correct)
+    with pytest.raises(ValueError, match="named by a molecule leaf"):
+        E.joint(one_clique, molecules, 0.1)
 
 
-def test_correcting_the_chain_removes_the_drift():
-    """End to end: the same chain, drifting and not drifting."""
-    shared = dict(
-        true_log_nu_species=-0.5,
-        log_nu_molecules=-2.0,
-        alpha_species=0.5,
-        alpha_molecules=0.5,
-        depth=2,
-        n_iterations=600,
-    )
-    drifting = TN.run_chain(
-        np.random.default_rng(7), correct_normaliser=False, **shared
-    )
-    corrected = TN.run_chain(
-        np.random.default_rng(7), correct_normaliser=True, **shared
-    )
-    assert corrected[-300:].mean() == pytest.approx(-0.5, abs=0.2)
-    assert drifting[-300:].mean() < corrected[-300:].mean() - 0.4
-
-
-def test_depth_beyond_enumeration_is_refused():
+def test_a_model_beyond_enumeration_is_refused():
     with pytest.raises(ValueError, match="intractable"):
-        TN.pattern_codes(TN.MAX_ENUMERABLE_DEPTH + 1)
+        E.enumerate_binary_arrays((8, 4))

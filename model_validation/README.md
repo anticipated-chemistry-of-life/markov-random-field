@@ -73,19 +73,25 @@ formula, because the cells of one replicate are correlated along the trees.
 
 ### The enumerable case
 
-A chain cannot reach the normalising constant of the whole model, so
-`diagnose_normaliser.py` shrinks the field until every configuration can be
-enumerated and computes it exactly:
+Under [ADR-0005](../docs/adr/0005-each-tree-owns-its-leaf-level-field.md) the
+joint sums to one by construction. A chain cannot check that. The sum runs over
+every `(Z_s, Z_m, Y)`. So `src/independent/enumeration.py` shrinks both trees
+until every configuration can be listed, and the suite asserts the total:
 
 ```bash
-uv run python diagnose_normaliser.py
+uv run pytest tests/test_independent.py
 ```
 
-It reports where the C++'s objective peaks against where the correctly
-normalised one does, for a molecules dimension swept from neutral to strongly
-non-neutral, and then reproduces the drift as an MCMC and removes it. See
-[ADR-0002](../docs/adr/0002-the-two-tree-product-is-unnormalised.md). Repurposing
-it to assert that the new joint sums to one is issue #43.
+Both trees stay active, and a test pins that they are. The same enumeration used
+to measure how far
+[ADR-0002](../docs/adr/0002-the-two-tree-product-is-unnormalised.md)'s constant
+moved with the parameters, and it ran by hand. It runs in the suite now.
+
+Read the total for what it is. It reads the two node-state densities, and it
+reads whether a variable is scored twice, which is ADR-0002's defect. It is blind
+to the shape of the link, to the error probability and to the orientation of a
+leaf block. The field rate and the reference draw pin those. The module header
+says so at more length.
 
 ### Remarks
 
