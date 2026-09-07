@@ -31,7 +31,7 @@ std::vector<std::string> node_names_of(const IndexArray &multidim_index,
 
 void write_Z_to_file(const std::string &filename, const TTree &tree,
                      const std::vector<std::unique_ptr<TTree>> &trees,
-                     size_t dimension_number_of_tree, bool write_full_Z) {
+                     size_t dimension_number_of_tree) {
 	std::vector<std::string> header;
 	header.reserve(trees.size() + 2);
 	for (const auto &t : trees) { header.push_back(t->get_tree_name()); }
@@ -51,15 +51,7 @@ void write_Z_to_file(const std::string &filename, const TTree &tree,
 	// Which cells, and nothing else, is what the two write paths differ in: the whole container
 	// space, where a missing cell reads as state 0 and so a point lookup covers both cases, or
 	// only the stored entries, which come in ascending linear-index order.
-	if (write_full_Z) {
-		for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) {
-			write_cell(i, Z.is_one(i));
-		}
-	} else {
-		for (const auto &[linear_index_in_Z_space, storage] : Z.get_stored_entries()) {
-			write_cell(linear_index_in_Z_space, storage.is_one());
-		}
-	}
+	for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) { write_cell(i, Z.is_one(i)); }
 }
 
 void write_branch_length_grid(const TTree &tree) {

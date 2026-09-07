@@ -101,10 +101,6 @@ bin *args:
 dir *args:
     @just _drive dir "$@"
 
-# Build both storage backends and check they produce byte-identical output.
-parity *args:
-    @bash tests/backend_parity/run.sh "$@"
-
 # Open a shell inside the micromamba environment.
 shell:
     @"${MAMBA_EXE:-micromamba}" run -n "{{ conda_env }}" "${SHELL:-bash}"

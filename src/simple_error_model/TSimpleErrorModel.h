@@ -18,10 +18,10 @@
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 
-#include "TCurrentState.h"
 #include "Types.h"
 #include "constants.h"
 #include "stattools/ParametersObservations/TParameter.h"
+#include "storages/TSparseState.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
@@ -39,7 +39,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	/// the observed data, same dimensions as Y
-	TFieldStorage _D;
+	TSparseBinaryArray _D;
 
 	/// error rate; owned by TModel, updated by stattools
 	TypeParamEpsilon *_epsilon = nullptr;
@@ -50,15 +50,10 @@ private:
 	size_t _n_disagree  = 0;
 	size_t _total_cells = 0;
 
-	/// Cache of the D cells of the current sheet, filled once per sheet by the Y sweep. Mirrors
-	/// TLotus's cache: it turns the per-cell lookup inside the OpenMP loop into an array read.
-	TCurrentState _tmp_state_along_last_dim;
-
 	[[nodiscard]] double _eps() const { return (double)_epsilon->value(); }
 
 public:
 	TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamEpsilon *epsilon);
-	~TSimpleErrorModel() = default;
 
 	/// Sizes D from the trees. Called in both inference and simulation: during simulation D starts
 	/// empty and is filled by simulate_D_from_Y.
@@ -70,20 +65,16 @@ public:
 	/// likelihood evaluation, and after anything that changes Y outside of a sweep.
 	void guess_initial_values(const TFieldStorage &Y);
 
-	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
-
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space, size_t K);
-
 	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1) for the cell at position
 	/// `index_for_tmp_state` within the current sheet.
 	void probabilities_for_Y_update(size_t index_for_tmp_state, std::array<double, 2> &prob) const {
-		simple_error_model::probabilities_for_both_Y_states(
-		    _tmp_state_along_last_dim.get_Y(index_for_tmp_state), _eps(), prob);
+		simple_error_model::probabilities_for_both_Y_states(_D.is_one(index_for_tmp_state), _eps(),
+		                                                    prob);
 	}
 
 	/// Whether the observed cell contradicts the state Y was just set to.
 	[[nodiscard]] bool disagrees_with(size_t index_for_tmp_state, bool new_state) const {
-		return _tmp_state_along_last_dim.get_Y(index_for_tmp_state) != new_state;
+		return _D.is_one(index_for_tmp_state) != new_state;
 	}
 
 	/// Installs the disagreement count accumulated over a full Y sweep.
@@ -114,7 +105,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TFieldStorage &get_D() const { return _D; }
+	[[nodiscard]] const TSparseBinaryArray &get_D() const { return _D; }
 	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
 };
 

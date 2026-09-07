@@ -16,14 +16,12 @@
 
 #ifdef USE_LOTUS
 
-#include "TCollapser.h"
-#include "TCurrentState.h"
 #include "cli.h"
 #include "constants.h"
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/storage_backend.h"
+#include "storages/TSparseState.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -43,7 +41,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
-	TFieldStorage _L;
+	TSparseBinaryArray _L;
 
 	/// Raw publication counts per (kept dimension, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
@@ -54,9 +52,6 @@ private:
 	/// to revert.
 	std::optional<lotus_math::TReportingModel> _reporting_model;
 
-	// how to collapse
-	TCollapser _collapser;
-
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
 
@@ -66,7 +61,6 @@ private:
 	// temporary values
 	double _oldLL = 0.0;
 	double _curLL = 0.0;
-	TCurrentState _tmp_state_along_last_dim;
 
 	// private functions
 	/// Gather the raw paper counts of every kept dimension. Both the inference path and the
@@ -77,12 +71,11 @@ private:
 	[[nodiscard]] const lotus_math::TReportingModel &_reporting() const {
 		return _reporting_model.value();
 	}
-	[[nodiscard]] double _calculate_log_likelihood_of_L_no_collapsing(const TFieldStorage &Y) const;
+	[[nodiscard]] double _calculate_log_likelihood_of_L(const TFieldStorage &Y) const;
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
 	       TypeParamErrorRate *error_rate);
-	~TLotus() = default;
 
 	/// Reads the LOTUS file (inference only) and sizes the parameter storages. `box` is the
 	/// TDataModel the parameters hang off; it has to be passed in because this class is no longer
@@ -96,10 +89,8 @@ public:
 
 	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
 
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-	                                   size_t K);
-	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
-	                           bool old_state, std::array<double, 2> &prob) const;
+	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space,
+	                           std::array<double, 2> &prob) const;
 	/// The Y sweep accumulates the new likelihood as it goes and installs it here at the end.
 	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }
 
@@ -124,7 +115,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TFieldStorage &get_L() const { return _L; }
+	[[nodiscard]] const TSparseBinaryArray &get_L() const { return _L; }
 	[[nodiscard]] std::vector<std::string> kept_tree_names() const;
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;

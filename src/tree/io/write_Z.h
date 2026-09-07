@@ -25,7 +25,7 @@ class TTree;
 /// or only the stored ones. Simulation, the only caller today, asks for the whole space.
 void write_Z_to_file(const std::string &filename, const TTree &tree,
                      const std::vector<std::unique_ptr<TTree>> &trees,
-                     size_t dimension_number_of_tree, bool write_full_Z);
+                     size_t dimension_number_of_tree);
 
 /// Write the branch-length grid of `tree`, one row per bin.
 ///

@@ -2,10 +2,8 @@
 // Created by Marco Visani on 26.06.23.
 //
 
-#ifndef METABOLITE_INFERENCE_TREE_H
-#define METABOLITE_INFERENCE_TREE_H
+#pragma once
 
-#include "TClique.h"
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
@@ -20,6 +18,7 @@
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
+#include "tree/branch/TTransitionGrid.h"
 #include <cstddef>
 #include <optional>
 #include <span>
@@ -63,7 +62,8 @@ private:
 	[[nodiscard]] const TBinGrid &_grid() const { return _bin_grid.value(); }
 
 	// cliques
-	std::vector<TClique> _cliques;
+	std::vector<TTransitionGrid> _transition_grid_per_clique;
+	size_t _n_cliques;
 	IndexArray _dimension_cliques;
 	std::vector<std::string> _clique_names;
 
@@ -75,7 +75,7 @@ private:
 	TypeParamAlpha *_alpha_c = nullptr;
 
 	// Set Z
-	TInternalStateStorage _Z;
+	TTreeStateStorage _Z;
 
 	// Joint probability density
 	std::vector<double> _joint_log_prob_density;
@@ -91,97 +91,107 @@ private:
 	void _bin_branch_lengths_from_tree();
 	void _initialize_grid_branch_lengths();
 	void _initialize_Z(IndexArray num_leaves_per_tree,
-	                   const std::vector<std::unique_ptr<TTree>> &all_trees);
+	                   [[maybe_unused]] const std::vector<std::unique_ptr<TTree>> &all_trees);
 	void _initialize_cliques(const IndexArray &num_leaves_per_tree,
 	                         const std::vector<std::unique_ptr<TTree>> &all_trees);
 	/// @brief Load tree from file
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
-	void _simulation_prepare_cliques(size_t c, TClique &clique) const;
-	void _simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
-	                   size_t node_index_in_tree);
 
 	// updating branch lengths
 	[[nodiscard]] stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
 	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
 	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
-	void _add_to_LL_branch_lengths(size_t c, const TCurrentState &current_state,
+	void _add_to_LL_branch_lengths(size_t clique_index,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
 	[[nodiscard]] double
 	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-	                                          const TClique &clique,
-	                                          const TCurrentState &current_state) const;
+	                                          size_t clique_index) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
 	/// One node's contribution to a clique's log-likelihood under `process`. Called twice per
 	/// node, once with the clique's current grid and once with the proposal's candidate.
-	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
+	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, IndexArray index,
 	                                         bool state_of_node, coretools::TSumLogProbability &LL,
-	                                         const TCurrentState &current_state,
 	                                         std::optional<size_t> branch_len_bin,
 	                                         const TTransitionGrid &process) const {
 		if (_topology().is_root(index_in_tree)) {
 			LL.add(process.stationary(state_of_node));
 		} else {
-			double prob = clique.calculate_prob_to_parent(
-			    index_in_tree, this, branch_len_bin.value(), current_state, process);
+			double prob = _calculate_prob_to_parent(index_in_tree, index, state_of_node,
+			                                        branch_len_bin.value(), process);
 			LL.add(prob);
 		}
 	}
 
+	[[nodiscard]] double _calculate_prob_to_parent(size_t index_in_tree, IndexArray index,
+	                                               bool node_state,
+	                                               TypeBinnedBranchLengths binned_branch_length,
+	                                               const TTransitionGrid &process) const {
+		size_t parent_index              = parent_of(index_in_tree);
+		IndexArray parent_index_in_tree  = index;
+		parent_index_in_tree[_dimension] = parent_index;
+		bool parent_state                = _Z.is_one(parent_index_in_tree);
+		return process.probability(binned_branch_length, parent_state, node_state);
+	}
+
 	template<bool IsAlpha, typename TypeParam>
-	void _update_nu_or_alpha(const TCurrentState &current_state, size_t c, TypeParam *param) {
+	void _update_nu_or_alpha(size_t clique_index, TypeParam *param) {
 		// propose a new value
-		param->propose(coretools::TRange(c));
+		param->propose(coretools::TRange(clique_index));
 
 		double new_value;
 		if constexpr (IsAlpha) {
-			new_value = param->value(c);
+			new_value = param->value(clique_index);
 		} else {
-			new_value = std::exp(param->value(c));
+			new_value = std::exp(param->value(clique_index));
 		}
 
 		// No need to mutate anything: the candidate is a second grid built from the proposed value,
 		// and the clique keeps whichever of the two is accepted. The old value is not read back
 		// from the parameter either -- the clique's current grid still carries it.
-		const auto &clique              = _cliques[c];
-		const auto &current             = clique.transition_grid();
+		const auto &current             = _transition_grid_per_clique[clique_index];
 		const TTransitionGrid candidate = [&] {
 			if constexpr (IsAlpha) {
-				return TTransitionGrid(new_value, _nu_c[c], _grid());
+				return TTransitionGrid(new_value, _nu_c[clique_index], _grid());
 			} else {
-				return TTransitionGrid(_alpha_c->value(c), new_value, _grid());
+				return TTransitionGrid(_alpha_c->value(clique_index), new_value, _grid());
 			}
 		}();
 
 		coretools::TSumLogProbability LL_old;
 		coretools::TSumLogProbability LL_new;
 		const auto &topology = _topology();
+		IndexArray multi_dim_index{};
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
-			bool state_of_node = current_state.get(i);
+			// the _dimension tells along which axis we are going so multi_dim_index[_dimension] =
+			// i; the other dimension is the clique_index
+			multi_dim_index[_dimension]     = i;
+			multi_dim_index[1 - _dimension] = clique_index;
+			bool state_of_node              = _Z.is_one(multi_dim_index);
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
 			std::optional<size_t> branch_len_bin;
 			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
 
-			_compute_LL_old_and_new_nu_or_alpha(i, clique, state_of_node, LL_old, current_state,
+			_compute_LL_old_and_new_nu_or_alpha(i, multi_dim_index, state_of_node, LL_old,
 			                                    branch_len_bin, current);
-			_compute_LL_old_and_new_nu_or_alpha(i, clique, state_of_node, LL_new, current_state,
+			_compute_LL_old_and_new_nu_or_alpha(i, multi_dim_index, state_of_node, LL_new,
 			                                    branch_len_bin, candidate);
 		}
 
 		// calculate Hastings ratio
 		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
-		const double logPriorRatio = param->getLogDensityRatio(c);
+		const double logPriorRatio = param->getLogDensityRatio(clique_index);
 		const double logH          = LLRatio + logPriorRatio;
 
 		// accept or reject
-		bool accepted = param->acceptOrReject(logH, coretools::TRange(c));
+		bool accepted = param->acceptOrReject(logH, coretools::TRange(clique_index));
 		if (accepted) {
-			_cliques[c].set_transition_grid(candidate);
-			if constexpr (!IsAlpha) { _nu_c[c] = new_value; }
+			_transition_grid_per_clique[clique_index] = candidate;
+			if constexpr (!IsAlpha) { _nu_c[clique_index] = new_value; }
 		}
 	}
 
@@ -285,18 +295,18 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	std::vector<TClique> &get_cliques();
-	[[nodiscard]] const TClique &get_clique(const IndexArray &index_in_leaves_space) const;
-	TClique &get_clique(const IndexArray &index_in_leaves_space);
-	[[nodiscard]] const TInternalStateStorage &get_Z() const;
-	TInternalStateStorage &get_Z();
+	[[nodiscard]] const TTreeStateStorage &get_Z() const;
+	TTreeStateStorage &get_Z();
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
+
+	void update_Z_clique(size_t clique_index, std::vector<double> &joint_prob_density,
+	                     const TFieldStorage &Y);
+	void _simulation_prepare_cliques(size_t c);
 
 	template<bool IsSimulation, bool FixZ>
 	void update_Z_and_nus_and_alphas_and_branch_lengths(const TFieldStorage &Y) {
 		_reset_joint_log_prob_density();
-		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 		// build pairs of branch lengths to update
 		auto pairs         = _build_pairs_branch_lengths();
@@ -308,24 +318,19 @@ public:
 		if constexpr (!IsSimulation) { _propose_new_branch_lengths(pairs); }
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, Y, indices_to_insert)
-		for (size_t i = 0; i < _cliques.size(); ++i) {
+    schedule(dynamic) shared(pairs, log_sum_per_thread, Y)
+		for (size_t i = 0; i < _transition_grid_per_clique.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
-			// fill the current state for this clique
-			auto current_state  = _cliques[i].create_current_state(Y, _Z, _topology());
 			// update Z
-			if constexpr (!FixZ) {
-				indices_to_insert[i] =
-				    _cliques[i].update_Z(_joint_log_prob_density, current_state, _Z, this);
-			}
+			if constexpr (!FixZ) { update_Z_clique(i, _joint_log_prob_density, Y); }
 
 			// update nu and alpha
 			if constexpr (!IsSimulation) {
-				_update_nu_or_alpha<true>(current_state, i, _alpha_c);
-				_update_nu_or_alpha<false>(current_state, i, _log_nu_c);
+				_update_nu_or_alpha<true>(i, _alpha_c);
+				_update_nu_or_alpha<false>(i, _log_nu_c);
 
 				// add to likelihood ratio for branch length
-				_add_to_LL_branch_lengths(i, current_state, log_sum_local, pairs);
+				_add_to_LL_branch_lengths(i, log_sum_local, pairs);
 			}
 		}
 
@@ -334,8 +339,6 @@ public:
 			auto log_sum_b = TTree::_reduce_log_sum_per_thread(log_sum_per_thread, n_pairs);
 			_evalute_update_branch_length(log_sum_b, pairs);
 		}
-
-		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 	}
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
@@ -359,27 +362,25 @@ public:
 		return _grid().grid_branch_lengths();
 	}
 
-	void simulate_Z(size_t tree_index);
+	void simulate_Z();
 
 	[[nodiscard]] double get_complete_joint_density() const {
 		return coretools::containerSum(_joint_log_prob_density);
 	}
 
-	void initialize_Z_from_children(const TFieldStorage &Y) {
-		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
-		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
-
-		// Each clique is independent of each other so we should be able to parallelize this
-		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
-
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(dynamic) default(none) shared(indices_to_insert, Y)
-		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto current_state   = _cliques[i].create_current_state(Y, _Z, _topology());
-			indices_to_insert[i] = _cliques[i].initialize_Z_from_children(current_state, _Z, this);
-		}
-
-		_Z.insert_in_Z(indices_to_insert);
-	};
+	void initialize_Z_from_children(const TFieldStorage &Y);
+	void
+	calculate_log_prob_parent_to_node(size_t index_in_tree, size_t clique_index,
+	                                  TypeBinnedBranchLengths binned_branch_length,
+	                                  std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 };
-#endif // METABOLITE_INFERENCE_TREE_H
+
+bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {
+	const double log_Q = sum_log[1].getSum() - sum_log[0].getSum();
+	return coretools::TAcceptOddsRatio::accept(log_Q);
+}
+
+bool sample(double log_prob_0, double log_prob_1) {
+	const double log_Q = log_prob_1 - log_prob_0;
+	return coretools::TAcceptOddsRatio::accept(log_Q);
+}

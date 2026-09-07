@@ -21,6 +21,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Types/probability.h"
+#include "storages/TSparseState.h"
 #include "storages/storage_backend.h"
 #include <array>
 #include <cmath>
@@ -75,7 +76,8 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 /// merge-joined over their ones in ascending linear-index order (the same technique as
 /// TLotus::_calculate_log_likelihood_of_L_no_collapsing), which costs O(ones(Y) + ones(D)) rather
 /// than O(total cells).
-[[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y, const TFieldStorage &D) {
+[[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y,
+                                                const TSparseBinaryArray &D) {
 	if (Y.dimensions() != D.dimensions()) {
 		throw coretools::TDevError(
 		    "Cannot compare Y and the simple error model data D: they have different dimensions (Y "
@@ -84,28 +86,9 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 		    D.dimensions()[1], ").");
 	}
 
-	const size_t total = Y.total_size_of_container_space();
-	auto y_cur         = Y.ones_cursor();
-	auto d_cur         = D.ones_cursor();
-
-	size_t n_disagree = 0;
-	while (y_cur.valid() || d_cur.valid()) {
-		const size_t yi = y_cur.valid() ? y_cur.linear_index() : total;
-		const size_t di = d_cur.valid() ? d_cur.linear_index() : total;
-		const size_t i  = std::min(yi, di);
-
-		bool state_of_Y = false;
-		bool state_of_D = false;
-		if (yi == i) {
-			state_of_Y = true; // the cursor yields only ones
-			y_cur.advance();
-		}
-		if (di == i) {
-			state_of_D = true;
-			d_cur.advance();
-		}
-		if (state_of_Y != state_of_D) { ++n_disagree; }
-	}
+	[[maybe_unused]] const size_t total = Y.total_size_of_container_space();
+	// TODO: implement function
+	size_t n_disagree                   = 0;
 	return n_disagree;
 }
 

@@ -19,16 +19,16 @@
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZMatrix.h"
 
-using TFieldStorage         = TStorageYMatrix;
-using TInternalStateStorage = TStorageZMatrix;
+using TFieldStorage     = TStorageYMatrix;
+using TTreeStateStorage = TStorageZMatrix;
 
 #elif defined(ACOL_STORAGE_DENSE)
 
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/z_storage/TStorageZDense.h"
 
-using TFieldStorage         = TStorageYDense;
-using TInternalStateStorage = TStorageZDense;
+using TFieldStorage     = TStorageYDense;
+using TTreeStateStorage = TStorageZDense;
 
 #else
 #error                                                                                             \
@@ -38,5 +38,5 @@ using TInternalStateStorage = TStorageZDense;
 static_assert(FieldStorage<TFieldStorage>,
               "The selected field backend does not implement the field storage interface.");
 static_assert(
-    BinaryFieldStorage<TInternalStateStorage>,
+    BinaryFieldStorage<TTreeStateStorage>,
     "The selected internal-state backend does not implement the binary storage interface.");

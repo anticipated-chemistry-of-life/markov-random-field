@@ -62,13 +62,19 @@ public:
 		return _states[linear_index] != 0;
 	}
 
+	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
+		const size_t linear_index = get_linear_index_in_container_space(multidim_index);
+		DEBUG_ASSERT(linear_index < _states.size());
+		return _states[linear_index] != 0;
+	}
+
 	void set_state(size_t linear_index, bool state) {
 		DEBUG_ASSERT(linear_index < _states.size());
 		_states[linear_index] = state ? 1 : 0;
 	}
 
 	void insert_one(size_t linear_index) {
-		_throw_if_outside_container_space(linear_index);
+		DEBUG_ASSERT(linear_index < _states.size());
 		_states[linear_index] = 1;
 	}
 
@@ -77,7 +83,7 @@ public:
 	}
 
 	void insert_zero(size_t linear_index) {
-		_throw_if_outside_container_space(linear_index);
+		DEBUG_ASSERT(linear_index < _states.size());
 		_states[linear_index] = 0;
 	}
 
@@ -104,66 +110,9 @@ public:
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index) const {
 		return coretools::getSubscriptsAsArray(linear_index, _dimensions);
 	}
-
-	/// The current state of a clique of `K` cells starting at `start_index` and running
-	/// `increment` apart. Where the sparse implementation walks a row or a column to find which of
-	/// those cells it holds, this one indexes straight into the array, and reports every cell as
-	/// existing because every cell does.
-	void fill_current_state(const IndexArray &start_index, size_t K, size_t increment,
-	                        std::vector<uint8_t> &current_state, std::vector<uint8_t> &exists,
-	                        std::vector<size_t> &linear_index) const {
-		const size_t start_linear = coretools::getLinearIndex(start_index, _dimensions);
-		DEBUG_ASSERT(K == 0 || start_linear + (K - 1) * increment < _states.size());
-
-		current_state.assign(K, 0);
-		exists.assign(K, 1);
-		linear_index.assign(K, 0);
-		for (size_t k = 0; k < K; ++k) {
-			const size_t linear = start_linear + k * increment;
-			linear_index[k]     = linear;
-			current_state[k]    = _states[linear];
-		}
-	}
 };
 
 static_assert(BinaryFieldStorage<TDenseStateArray>,
               "The dense state array must satisfy the binary storage interface.");
 static_assert(!FieldStorage<TDenseStateArray>,
               "A state array carries no posterior counter, so it is not a field.");
-
-// -------------------------------------------------------------------------------------------
-// The two bulk paths the dense field and the dense internal state have in common.
-//
-// Each storage has to answer to a name of its own -- `insert_in_Y` beside `insert_in_Z`,
-// `get_full_Y_binary_vector` beside `get_full_Z_binary_vector`, because that is what the sparse
-// implementations are called and what the sampler asks for -- so the shape they share lives here
-// rather than in a member either could inherit.
-// -------------------------------------------------------------------------------------------
-
-/// Writes a one at every index of every batch. The sparse implementations merge the per-thread
-/// batches the sweep hands over and re-sort the matrix once; a dense array has nothing to sort, so
-/// this is the writes and nothing else.
-///
-/// It goes through the storage rather than through its state array because the field's insert does
-/// something the array's does not: it starts the cell's counter over, which is what the sparse
-/// form's whole-new-entry write also does.
-template<BinaryFieldStorage Storage>
-void insert_ones_in_batches(Storage &storage, const std::vector<std::vector<size_t>> &batches) {
-	for (const auto &batch : batches) {
-		for (const size_t linear_index : batch) { storage.insert_one(linear_index); }
-	}
-}
-
-/// The state of every cell of the container space, in ascending linear-index order.
-///
-/// The element type is the caller's because the two sparse implementations disagree on it -- the
-/// field dumps a vector of bytes and the internal state a vector of words -- and a trace line is
-/// written from whatever they return.
-template<typename T, BinaryFieldStorage Storage>
-[[nodiscard]] std::vector<T> whole_space_states(const Storage &storage) {
-	const size_t total = storage.total_size_of_container_space();
-	std::vector<T> states;
-	states.reserve(total);
-	for (size_t i = 0; i < total; ++i) { states.push_back(static_cast<T>(storage.is_one(i))); }
-	return states;
-}

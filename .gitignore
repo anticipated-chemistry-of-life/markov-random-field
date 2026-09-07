@@ -67,3 +67,4 @@ inference_test/
 inference_test_small/
 CLAUDE.md
 .rtk/
+core/

@@ -55,12 +55,6 @@ concept BinaryFieldStorage =
 		    const_storage.get_linear_index_in_container_space(multidim_index)
 	    } -> std::same_as<size_t>;
 	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
-
-	    // One clique's current state, in one call.
-	    {
-		    const_storage.fill_current_state(multidim_index, n_cells, increment, states, exists,
-		                                     linear_indices)
-	    } -> std::same_as<void>;
     };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

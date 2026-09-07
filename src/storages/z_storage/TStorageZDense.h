@@ -26,26 +26,6 @@ class TStorageZDense : public TDenseStateArray {
 public:
 	TStorageZDense() = default;
 	explicit TStorageZDense(const IndexArray &dimensions) : TDenseStateArray(dimensions) {}
-
-	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZMatrix::insert_in_Z.
-	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
-		insert_ones_in_batches(*this, linear_indices_to_insert);
-	}
-
-	/// The state of every cell of the container space, in ascending linear-index order.
-	[[nodiscard]] std::vector<size_t> get_full_Z_binary_vector() const {
-		return whole_space_states<size_t>(*this);
-	}
-
-	/// Every stored cell as (linear index in Z space, value), in ascending linear-index order --
-	/// which here is every cell of the container space.
-	[[nodiscard]] std::vector<std::pair<size_t, TStorageZ>> get_stored_entries() const {
-		const size_t total = total_size_of_container_space();
-		std::vector<std::pair<size_t, TStorageZ>> entries;
-		entries.reserve(total);
-		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, TStorageZ(is_one(i))); }
-		return entries;
-	}
 };
 
 static_assert(BinaryFieldStorage<TStorageZDense>,

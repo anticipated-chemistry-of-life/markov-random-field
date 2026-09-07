@@ -3,7 +3,6 @@
 //
 
 #include "TTree.h"
-#include "TClique.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
@@ -65,14 +64,14 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 
 void TTree::initialize() {
 	// stattools initialization function
-	_alpha_c->initStorage(this, {_cliques.size()},
+	_alpha_c->initStorage(this, {_n_cliques},
 	                      {std::make_shared<coretools::TNamesStrings>(_clique_names)});
 
 	// now we initialize the mu_c_1
-	_log_nu_c->initStorage(this, {_cliques.size()},
+	_log_nu_c->initStorage(this, {_n_cliques},
 	                       {std::make_shared<coretools::TNamesStrings>(_clique_names)});
-	_nu_c.resize(_cliques.size());
-	for (size_t c = 0; c < _cliques.size(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
+	_nu_c.resize(_n_cliques);
+	for (size_t c = 0; c < _n_cliques; ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
 
 	// number of branches = number of leaves + number of internal nodes without roots
 	std::vector<std::string> branch_names;
@@ -85,7 +84,7 @@ void TTree::initialize() {
 }
 
 void TTree::guessInitialValues() {
-	for (size_t c = 0; c < _cliques.size(); ++c) {
+	for (size_t c = 0; c < _n_cliques; ++c) {
 		// Draw log_nu[c] ~ Normal(LOG_NU_C, LOG_NU_C_INIT_SD^2) instead of setting every clique to
 		// the same constant. Identical initial values would make the MLE that seeds var_log_nu 0,
 		// yielding a degenerate prior that freezes log_nu, mean_log_nu and var_log_nu (their
@@ -94,8 +93,8 @@ void TTree::guessInitialValues() {
 		    ProgramOptions::LOG_NU_C, ProgramOptions::LOG_NU_C_INIT_SD);
 		_log_nu_c->set(c, log_nu_init);
 		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
-		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_nu_c[c]                       = std::exp(_log_nu_c->value(c));
+		_transition_grid_per_clique[c] = TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid());
 	}
 
 	_set_initial_branch_lengths(false);
@@ -114,38 +113,51 @@ double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const {
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
 	_set_initial_branch_lengths(true);
-	for (size_t c = 0; c < _cliques.size(); ++c) {
-		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+	for (size_t c = 0; c < _n_cliques; ++c) {
+		_nu_c[c]                       = std::exp(_log_nu_c->value(c));
+		_transition_grid_per_clique[c] = TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid());
 	}
 }
 
 void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
-                          const std::vector<std::unique_ptr<TTree>> &all_trees) {
-	num_leaves_per_tree[_dimension] = this->get_number_of_internal_nodes();
+                          [[maybe_unused]] const std::vector<std::unique_ptr<TTree>> &all_trees) {
+	num_leaves_per_tree[_dimension] = this->get_number_of_nodes();
 
 	_Z.initialize_dimensions(num_leaves_per_tree);
 
 	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
-		read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z, all_trees,
-		                 _dimension);
+		throw std::runtime_error("set_" + get_tree_name() + "_Z is not supported yet");
+		// read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z,
+		// all_trees, _dimension);
 	}
 }
 
-const TInternalStateStorage &TTree::get_Z() const { return _Z; };
-TInternalStateStorage &TTree::get_Z() { return _Z; };
+const TTreeStateStorage &TTree::get_Z() const { return _Z; };
+TTreeStateStorage &TTree::get_Z() { return _Z; };
 
-void TTree::simulate_Z(size_t tree_index) {
-	for (size_t c = 0; c < _cliques.size(); ++c) {
-		auto &clique = _cliques[c];
-		_simulation_prepare_cliques(c, clique);
-		TCurrentState current_state(_topology(), clique.get_increment(), get_number_of_leaves(),
-		                            get_number_of_internal_nodes());
+void TTree::calculate_log_prob_parent_to_node(
+    size_t index_in_tree, size_t clique_index, TypeBinnedBranchLengths binned_branch_length,
+    std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+	const auto &process       = _transition_grid_per_clique.at(clique_index);
+	const size_t parent_index = parent_of(index_in_tree);
+	IndexArray index{};
+	index[_dimension]     = parent_index;
+	index[1 - _dimension] = clique_index;
+	for (size_t i = 0; i < 2; ++i) {
+		const bool parent_state = _Z.is_one(index);
+		sum_log[i].add(process.probability(binned_branch_length, parent_state, i));
+	}
+};
+
+void TTree::simulate_Z() {
+	IndexArray index{};
+	for (size_t c = 0; c < _n_cliques; ++c) {
+		_simulation_prepare_cliques(c);
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
-		double proba_root = clique.transition_grid().stationary(true);
+		double proba_root = _transition_grid_per_clique[c].stationary(true);
 		coretools::Probability p(proba_root);
 
 		// we can also prepare the queue for the DFS
@@ -153,10 +165,12 @@ void TTree::simulate_Z(size_t tree_index) {
 		for (const auto root_index_in_tree : this->get_root_nodes()) {
 			bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
 			if (root_state) {
-				_simulate_one(clique, current_state, tree_index, root_index_in_tree);
+				index[_dimension]     = root_index_in_tree;
+				index[1 - _dimension] = c;
+				_Z.insert_one(index);
 			}
 			for (const auto child : this->children_of(root_index_in_tree)) {
-				if (!this->isLeaf(child)) { node_queue.push(child); }
+				node_queue.push(child);
 			} // those are the first children of the tree (children of the roots).
 		} // roots done, we go to the internal nodes
 
@@ -168,29 +182,21 @@ void TTree::simulate_Z(size_t tree_index) {
 			// we want to sample the state of the node given its parent (and independently of its
 			// children since we haven't sampled them yet).
 			std::array<coretools::TSumLogProbability, 2> sum_log;
-			clique.calculate_log_prob_parent_to_node(
-			    node_index,
+			calculate_log_prob_parent_to_node(
+			    node_index, c,
 			    (TypeBinnedBranchLengths)_binned_branch_lengths->value(
 			        _topology().branch_index(node_index)),
-			    this, 0, current_state, sum_log);
+			    sum_log);
 			bool internal_node_state = sample(sum_log);
 			if (internal_node_state) {
-				_simulate_one(clique, current_state, tree_index, node_index);
+				index[_dimension]     = node_index;
+				index[1 - _dimension] = c;
+				_Z.insert_one(index);
 			}
 
 			for (size_t child_index : this->children_of(node_index)) {
-				if (!this->isLeaf(child_index)) {
-					node_queue.push(child_index);
-				} // as long as your are not a leaf we can continue sampling Z
+				node_queue.push(child_index);
 			}
-		} // internal nodes done, we go to the leaves
+		}
 	}
-}
-
-void TTree::_simulate_one(const TClique &clique, TCurrentState &current_state, size_t tree_index,
-                          size_t node_index_in_tree) {
-	auto index_in_leaves_space        = clique.get_start_index_in_leaf_space();
-	index_in_leaves_space[tree_index] = this->get_index_within_internal_nodes(node_index_in_tree);
-	_Z.insert_one(index_in_leaves_space);
-	current_state.set(node_index_in_tree, true);
 }

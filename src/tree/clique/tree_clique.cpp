@@ -3,26 +3,6 @@
 #include "coretools/algorithms.h"
 #include <utility>
 
-std::vector<TClique> &TTree::get_cliques() { return _cliques; }
-
-const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const {
-	size_t ix_clique = 0;
-	size_t stride    = 1;
-
-	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
-		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
-		ix_clique += idx * stride;
-		stride *= _dimension_cliques[i];
-	}
-
-	return _cliques[ix_clique];
-}
-
-TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) {
-	// One copy of the stride arithmetic: the const overload above is the implementation.
-	return const_cast<TClique &>(std::as_const(*this).get_clique(index_in_leaves_space));
-}
-
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
                                 const std::vector<std::unique_ptr<TTree>> &all_trees) {
 	// clique of a tree: runs along that dimension
@@ -34,23 +14,12 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	// we then caclulate how many cliques we will have in total for that tree. Which is the product
 	// of the number of leaves in each tree except the one we are working on (that is why we set it
 	// to 1 before).
-	const size_t n_cliques = coretools::containerProduct(_dimension_cliques);
-
-	// calculate increment: product of the number of leaves of all subsequent dimensions
-	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) {
-		increment *= all_trees[i]->get_number_of_leaves();
-	}
+	_n_cliques = coretools::containerProduct(_dimension_cliques);
 
 	// initialize cliques
-	for (size_t i = 0; i < n_cliques; ++i) {
+	for (size_t i = 0; i < _n_cliques; ++i) {
 		// get start index of each clique in leaves space
 		auto start_index_in_leaves_space = coretools::getSubscriptsAsArray(i, _dimension_cliques);
-		// The transition grid is not installed here: it needs alpha and nu, which stattools has not
-		// drawn yet. TTree::guessInitialValues does it, and asking a clique for its grid before
-		// then throws instead of reading the zero-filled matrices this used to leave behind.
-		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _topology().n_nodes(),
-		                      increment);
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;
@@ -65,6 +34,6 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	}
 }
 
-void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
-	clique.set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+void TTree::_simulation_prepare_cliques(size_t c) {
+	_transition_grid_per_clique[c] = TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid());
 };

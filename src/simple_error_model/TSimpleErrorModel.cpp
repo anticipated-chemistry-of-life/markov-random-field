@@ -16,7 +16,7 @@
 
 TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees,
                                      TypeParamEpsilon *epsilon)
-    : _trees(trees), _epsilon(epsilon), _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
+    : _trees(trees), _epsilon(epsilon) {}
 
 void TSimpleErrorModel::initialize_storage() {
 	// D lives in the same space as Y: one dimension per tree, sized by that tree's leaf count.
@@ -24,8 +24,7 @@ void TSimpleErrorModel::initialize_storage() {
 	num_leaves_per_dim.reserve(_trees.size());
 	for (const auto &tree : _trees) { num_leaves_per_dim.push_back(tree->get_number_of_leaves()); }
 
-	// n_iterations = 1: D is data, its per-cell counters are never used.
-	_D.initialize(1, num_leaves_per_dim);
+	_D.initialize(num_leaves_per_dim);
 	_total_cells = _D.total_size_of_container_space();
 }
 
@@ -63,13 +62,6 @@ void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
 }
 
-void TSimpleErrorModel::fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                                      size_t K) {
-	// D has the same dimensions as Y, so the index needs no translation (in contrast to LOTUS,
-	// where the collapser maps Y space to L space first).
-	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, K, _D);
-}
-
 void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
 	if (Y.dimensions() != _D.dimensions()) {
 		throw coretools::TDevError("Cannot simulate the simple error model data: Y is ",
@@ -95,13 +87,13 @@ void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
 	coretools::TOutputFile file(file_name, sparse_data_file::header_from_trees(_trees), "\t");
 
 	std::vector<std::string> line(_trees.size());
-	for (const auto &[linear_index, storage] : _D.get_stored_entries()) {
-		if (!storage.is_one()) { continue; }
-		const auto index_in_D_space = _D.get_multi_dimensional_index(linear_index);
-		for (size_t i = 0; i < _trees.size(); ++i) {
+	for (size_t i = 0; i < _D.total_size_of_container_space(); ++i) {
+		if (!_D.is_one(i)) { continue; }
+		const auto index_in_D_space = _D.get_multi_dimensional_index(i);
+		for (size_t j = 0; j < _trees.size(); ++j) {
 			const size_t node_index =
-			    _trees[i]->get_node_index_from_leaf_index(index_in_D_space[i]);
-			line[i] = _trees[i]->get_node_id(node_index);
+			    _trees[j]->get_node_index_from_leaf_index(index_in_D_space[j]);
+			line[j] = _trees[j]->get_node_id(node_index);
 		}
 		file.writeln(line);
 	}
