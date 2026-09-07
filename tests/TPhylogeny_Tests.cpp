@@ -13,15 +13,12 @@
 
 #include "coretools/Main/TError.h"
 #include "phylogeny_generators.h"
+#include "temp_file.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <random>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -179,37 +176,6 @@ TEST(PhylogenyGolden, unknown_node_is_an_error) {
 // -------------------------------------------------------------------------
 // Layer 2b: file shape
 // -------------------------------------------------------------------------
-
-/// A file that only exists for the duration of one test, and never inside the source tree: a
-/// failing test must not leave a stray fixture behind for the next run to trip over.
-class TTempFile {
-private:
-	std::filesystem::path _path;
-
-public:
-	TTempFile(const std::string &name, const std::string &content) {
-		// A per-process salt and a counter, because two test binaries running side by side would
-		// otherwise write the same path and read each other's content.
-		static const auto salt = std::to_string(std::random_device{}());
-		static std::atomic<unsigned> counter{0};
-		_path = std::filesystem::temp_directory_path() /
-		        ("acol_" + salt + "_" + std::to_string(counter++) + "_" + name);
-		std::ofstream out(_path);
-		// Without this, a test that could not write its own fixture reads an absent file, the
-		// reader throws, and the test passes for entirely the wrong reason. gtest assertions are
-		// not usable in a constructor, so this throws instead.
-		if (!out.is_open()) { throw std::runtime_error("could not create temp file " + path()); }
-		out << content;
-	}
-	~TTempFile() {
-		std::error_code ignored;
-		std::filesystem::remove(_path, ignored);
-	}
-	TTempFile(const TTempFile &)            = delete;
-	TTempFile &operator=(const TTempFile &) = delete;
-
-	[[nodiscard]] std::string path() const { return _path.string(); }
-};
 
 TEST(PhylogenyReader, rejects_a_file_without_three_columns) {
 	const TTempFile file("acol_phylogeny_two_columns.tsv", "child\tparent\na\tb\n");

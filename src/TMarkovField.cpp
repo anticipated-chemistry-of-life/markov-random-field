@@ -19,6 +19,7 @@
 #include "random/TCellUniforms.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
+#include "tree/io/node_state_columns.h"
 #include "tree/io/write_Z.h"
 #include <array>
 #include <cmath>
@@ -353,8 +354,8 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	if (ProgramOptions::WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
 	if (ProgramOptions::WRITE_Z) {
 		for (const auto &tree : _trees) {
-			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt", *tree,
-			                _trees, /*write_full_Z =*/true);
+			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt",
+			                tree->get_Z(), node_state_columns(_trees), /*write_full_Z =*/true);
 			if (ProgramOptions::WRITE_BRANCH_LENGTHS) { write_branch_length_grid(*tree); }
 		}
 	}

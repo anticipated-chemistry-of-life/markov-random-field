@@ -30,7 +30,7 @@ File shapes, as the C++ readers expect them:
   not just the ones. So the field file is addressed purely positionally, and a
   change to leaf order changes what it means.
 - node states: 4 columns, `species molecules position Z_state`. The reader
-  (`read_Z_from_file`, src/tree/io/read_Z.cpp:33) checks for 4 and resolves the
+  (`read_Z_cells_from_file`, src/tree/io/read_Z.cpp) checks for 4 and resolves the
   cell from the two *name* columns, ignoring `position` -- which is what makes a
   file written before a node reordering still mean what it said (ADR-0004).
 - observations: 2 columns naming one leaf per tree, one row per *positive* cell.

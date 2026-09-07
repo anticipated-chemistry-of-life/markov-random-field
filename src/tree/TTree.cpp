@@ -12,6 +12,7 @@
 #include "coretools/Main/TRandomGenerator.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
+#include "tree/io/node_state_columns.h"
 #include "tree/io/read_Z.h"
 #include "tree/node_state_shape.h"
 
@@ -130,8 +131,8 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 
 	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
-		read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z, all_trees,
-		                 _dimension);
+		read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z,
+		                 node_state_columns(all_trees), _dimension);
 	}
 }
 
