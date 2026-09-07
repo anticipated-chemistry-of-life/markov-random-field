@@ -39,12 +39,12 @@ public:
 
 	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
 		const auto it = _states.find(linear_index);
-		return {it != _states.end() && it->second.is_one(), it != _states.end(), it};
+		return {it != _states.end() && it->second.is_one(), it != _states.end(), linear_index, it};
 	}
 
 	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
 		auto it = _states.find(linear_index);
-		return {it != _states.end() && it->second.is_one(), it != _states.end(), it};
+		return {it != _states.end() && it->second.is_one(), it != _states.end(), linear_index, it};
 	}
 
 	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &multidim_index) const {
@@ -112,6 +112,13 @@ public:
 			state.update_counter();
 		}
 		++_total_counts;
+	}
+
+	void
+	insert_ones_in_container(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		for (const auto &indices : linear_indices_to_insert) {
+			for (size_t linear_index : indices) { insert_one(linear_index); }
+		}
 	}
 };
 static_assert(FieldStorage<TStorageYSparse>);

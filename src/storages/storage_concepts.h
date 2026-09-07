@@ -13,6 +13,7 @@
 template<typename It> struct IsOneResult {
 	bool is_one;
 	bool in_container;
+	size_t linear_index;
 	It iterator;
 };
 
@@ -44,9 +45,11 @@ concept BinaryFieldStorage =
     requires(T &storage, const T &const_storage, size_t linear_index, bool state,
              const IndexArray &multidim_index, size_t n_cells, size_t increment,
              std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
-             std::vector<size_t> &linear_indices) {
+             std::vector<size_t> &linear_indices, const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
 	    // State.
-	    { const_storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::const_iterator>>;
+	    {
+		    const_storage.is_one(linear_index)
+	    } -> std::same_as<IsOneResult<typename T::const_iterator>>;
 	    { storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::iterator>>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
@@ -62,6 +65,8 @@ concept BinaryFieldStorage =
 		    const_storage.get_linear_index_in_container_space(multidim_index)
 	    } -> std::same_as<size_t>;
 	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
+
+		{ storage.insert_ones_in_container(linear_indices_to_insert) } -> std::same_as<void>;
     };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

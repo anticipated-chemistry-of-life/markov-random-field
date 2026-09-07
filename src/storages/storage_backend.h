@@ -24,11 +24,11 @@ using TTreeStateStorage = TStorageZMatrix;
 
 #elif defined(ACOL_STORAGE_DENSE)
 
+#include "storages/TDenseStateArray.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/z_storage/TStorageZDense.h"
 
 using TFieldStorage     = TStorageYDense;
-using TTreeStateStorage = TStorageZDense;
+using TTreeStateStorage = TDenseStateArray;
 
 #else
 #error                                                                                             \

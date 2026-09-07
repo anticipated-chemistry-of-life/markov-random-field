@@ -48,8 +48,8 @@ private:
 	}
 
 public:
-	TDenseStateArray() = default;
-	using iterator = std::vector<uint8_t>::iterator;
+	TDenseStateArray()   = default;
+	using iterator       = std::vector<uint8_t>::iterator;
 	using const_iterator = std::vector<uint8_t>::const_iterator;
 	explicit TDenseStateArray(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
 
@@ -61,27 +61,27 @@ public:
 
 	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _states.size());
-		return {_states[linear_index] != 0, linear_index < _states.size(),
+		return {_states[linear_index] != 0, linear_index < _states.size(), linear_index,
 		        _states.cbegin() + linear_index};
 	}
 
 	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
 		DEBUG_ASSERT(linear_index < _states.size());
-		return {_states[linear_index] != 0, linear_index < _states.size(),
+		return {_states[linear_index] != 0, linear_index < _states.size(), linear_index,
 		        _states.begin() + linear_index};
 	}
 
 	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &multidim_index) const {
 		const size_t linear_index = get_linear_index_in_container_space(multidim_index);
 		DEBUG_ASSERT(linear_index < _states.size());
-		return {_states[linear_index] != 0, linear_index < _states.size(),
+		return {_states[linear_index] != 0, linear_index < _states.size(), linear_index,
 		        _states.cbegin() + linear_index};
 	}
 
 	[[nodiscard]] IsOneResult<iterator> is_one(const IndexArray &multidim_index) {
 		const size_t linear_index = get_linear_index_in_container_space(multidim_index);
 		DEBUG_ASSERT(linear_index < _states.size());
-		return {_states[linear_index] != 0, linear_index < _states.size(),
+		return {_states[linear_index] != 0, linear_index < _states.size(), linear_index,
 		        _states.begin() + linear_index};
 	}
 
@@ -126,6 +126,16 @@ public:
 
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index) const {
 		return coretools::getSubscriptsAsArray(linear_index, _dimensions);
+	}
+
+	void
+	insert_ones_in_container(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		for (const auto &indices : linear_indices_to_insert) {
+			for (size_t linear_index : indices) {
+				DEBUG_ASSERT(linear_index < _states.size());
+				_states[linear_index] = 1;
+			}
+		}
 	}
 };
 

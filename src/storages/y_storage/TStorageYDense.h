@@ -42,13 +42,25 @@ public:
 	[[nodiscard]] bool empty() const { return _vec.empty(); }
 	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _vec.size());
-		return {_vec[linear_index].is_one(), linear_index < _vec.size(),
-		        _vec.begin() + linear_index};
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
+		        _vec.cbegin() + linear_index};
+	}
+
+	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &index) const {
+		const size_t linear_index = get_linear_index_in_container_space(index);
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
+		        _vec.cbegin() + linear_index};
 	}
 
 	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
 		DEBUG_ASSERT(linear_index < _vec.size());
-		return {_vec[linear_index].is_one(), linear_index < _vec.size(),
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
+		        _vec.begin() + linear_index};
+	}
+
+	[[nodiscard]] IsOneResult<iterator> is_one(const IndexArray &index) {
+		const size_t linear_index = get_linear_index_in_container_space(index);
+		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
 		        _vec.begin() + linear_index};
 	}
 
@@ -107,5 +119,16 @@ public:
 	}
 
 	[[nodiscard]] const IndexArray &dimensions() const { return _dimensions_Y_space; }
+
+	void
+	insert_ones_in_container(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		for (const auto &indices : linear_indices_to_insert) {
+			for (size_t linear_index : indices) {
+				DEBUG_ASSERT(linear_index < _vec.size());
+				DEBUG_ASSERT(_vec[linear_index].get_counter() == 0);
+				_vec[linear_index].set_state(true);
+			}
+		}
+	}
 };
 static_assert(FieldStorage<TStorageYDense>);

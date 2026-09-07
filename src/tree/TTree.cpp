@@ -13,8 +13,10 @@
 #include "coretools/Types/probability.h"
 #include "tree/io/read_Z.h"
 
+#include <coretools/algorithms.h>
 #include <cstddef>
 #include <cstdlib>
+#include <fmt/base.h>
 #include <queue>
 #include <string>
 #include <vector>
@@ -141,9 +143,8 @@ void TTree::calculate_log_prob_parent_to_node(
     std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	const auto &process       = _transition_grid_per_clique.at(clique_index);
 	const size_t parent_index = parent_of(index_in_tree);
-	IndexArray index{};
-	index[_dimension]     = parent_index;
-	index[1 - _dimension] = clique_index;
+	IndexArray index          = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
+	index[_dimension]         = parent_index;
 	for (size_t i = 0; i < 2; ++i) {
 		const bool parent_state = _Z.is_one(index).is_one;
 		sum_log[i].add(process.probability(binned_branch_length, parent_state, i));
@@ -154,6 +155,7 @@ void TTree::simulate_Z() {
 	IndexArray index{};
 	for (size_t c = 0; c < _n_cliques; ++c) {
 		_simulation_prepare_cliques(c);
+		index = coretools::getSubscriptsAsArray(c, _dimension_cliques);
 
 		// we sample the roots
 		if (ProgramOptions::SIMULATION_NO_Z_INITIALIZATION) { continue; }
@@ -165,8 +167,7 @@ void TTree::simulate_Z() {
 		for (const auto root_index_in_tree : this->get_root_nodes()) {
 			bool root_state = coretools::instances::randomGenerator().pickOneOfTwo(p);
 			if (root_state) {
-				index[_dimension]     = root_index_in_tree;
-				index[1 - _dimension] = c;
+				index[_dimension] = root_index_in_tree;
 				_Z.insert_one(index);
 			}
 			for (const auto child : this->children_of(root_index_in_tree)) {
@@ -189,14 +190,80 @@ void TTree::simulate_Z() {
 			    sum_log);
 			bool internal_node_state = sample(sum_log);
 			if (internal_node_state) {
-				index[_dimension]     = node_index;
-				index[1 - _dimension] = c;
+				index[_dimension] = node_index;
 				_Z.insert_one(index);
 			}
 
 			for (size_t child_index : this->children_of(node_index)) {
 				node_queue.push(child_index);
 			}
+		}
+	}
+}
+
+size_t TTree::clique_index(const IndexArray &index_in_leaves_space) const {
+	IndexArray index  = index_in_leaves_space;
+	index[_dimension] = 1;
+	return coretools::containerProduct(index);
+}
+
+void TTree::update_Z_clique(size_t clique_index, std::vector<double> &joint_prob_density,
+                            const TFieldStorage &Y) {
+
+	const double stationary_0 = _transition_grid_per_clique.at(clique_index).stationary(false);
+	for (size_t index_in_tree = 0; index_in_tree < get_number_of_nodes(); ++index_in_tree) {
+		// prepare log probabilities for the two possible states
+		std::array<coretools::TSumLogProbability, 2> sum_log;
+
+		if (this->is_root(index_in_tree)) { // calculate stationary
+			_calculate_log_prob_root(stationary_0, sum_log);
+		} else { // calculate P(node = 0 | parent) and P(node = 1 | parent)
+			// note: for compatibility with update of Y, we need to pass
+			// leaf_index_in_tree_of_last_dim, but this doesn't matter for this update (just pass 0)
+			// Note: the *previous* bin, because branch lengths are proposed before the loop starts
+			const auto bin_branch_len = this->get_previous_binned_branch_length(index_in_tree);
+			calculate_log_prob_parent_to_node(index_in_tree, clique_index, bin_branch_len, sum_log);
+		}
+
+		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
+		if (!this->isLeaf(index_in_tree)) {
+			_calculate_log_prob_node_to_children(index_in_tree, sum_log);
+		}
+		if (this->isLeaf(index_in_tree)) {}
+
+		// sample new state and update Z accordingly
+		const double log_prob_0 = sum_log[0].getSum();
+		const double log_prob_1 = sum_log[1].getSum();
+		bool new_state          = sample(log_prob_0, log_prob_1);
+
+		if (new_state) {
+			joint_prob_density[omp_get_thread_num()] += log_prob_1;
+		} else {
+			joint_prob_density[omp_get_thread_num()] += log_prob_0;
+		}
+
+		_update_state();
+	}
+}
+
+void TTree::_calculate_log_prob_root(double stationary_0,
+                                     std::array<coretools::TSumLogProbability, 2> &sum_log) {
+	sum_log[0].add(stationary_0);
+	sum_log[1].add(1.0 - stationary_0);
+}
+
+void TTree::_calculate_log_prob_node_to_children(
+    size_t index_in_tree, size_t clique_index,
+    std::array<coretools::TSumLogProbability, 2> &sum_log) const {
+	const auto &process = _transition_grid_per_clique.at(clique_index);
+	for (const auto &child_index : children_of(index_in_tree)) {
+		// Note: the *previous* bin, because new values were proposed before the loop started
+		auto bin_length        = get_previous_binned_branch_length(child_index);
+		IndexArray index       = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
+		index[_dimension]      = child_index;
+		const bool child_state = _Z.is_one(child_index).is_one;
+		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
+			sum_log[i].add(process.probability(bin_length, i, child_state));
 		}
 	}
 }

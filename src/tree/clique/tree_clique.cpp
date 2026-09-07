@@ -15,6 +15,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	// of the number of leaves in each tree except the one we are working on (that is why we set it
 	// to 1 before).
 	_n_cliques = coretools::containerProduct(_dimension_cliques);
+	_transition_grid_per_clique.resize(_n_cliques);
 
 	// initialize cliques
 	for (size_t i = 0; i < _n_cliques; ++i) {

@@ -163,13 +163,13 @@ private:
 		coretools::TSumLogProbability LL_old;
 		coretools::TSumLogProbability LL_new;
 		const auto &topology = _topology();
-		IndexArray multi_dim_index{};
+		IndexArray multi_dim_index =
+		    coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
 			// the _dimension tells along which axis we are going so multi_dim_index[_dimension] =
 			// i; the other dimension is the clique_index
-			multi_dim_index[_dimension]     = i;
-			multi_dim_index[1 - _dimension] = clique_index;
-			bool state_of_node              = _Z.is_one(multi_dim_index).is_one;
+			multi_dim_index[_dimension] = i;
+			bool state_of_node          = _Z.is_one(multi_dim_index).is_one;
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
@@ -210,6 +210,15 @@ private:
 		}
 		return log_sum_b;
 	};
+
+	/// @brief Calculates the log probability of the root given the stationary distribution
+	static void _calculate_log_prob_root(double stationary_0,
+	                                     std::array<coretools::TSumLogProbability, 2> &sum_log);
+
+	/// @brief Calculates the log probability of a node to its children
+	void _calculate_log_prob_node_to_children(
+	    size_t index_in_tree, size_t clique_index,
+	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name,
@@ -373,6 +382,8 @@ public:
 	calculate_log_prob_parent_to_node(size_t index_in_tree, size_t clique_index,
 	                                  TypeBinnedBranchLengths binned_branch_length,
 	                                  std::array<coretools::TSumLogProbability, 2> &sum_log) const;
+
+	[[nodiscard]] size_t clique_index(const IndexArray &index_in_leaves_space) const;
 };
 
 inline bool sample(std::array<coretools::TSumLogProbability, 2> &sum_log) {

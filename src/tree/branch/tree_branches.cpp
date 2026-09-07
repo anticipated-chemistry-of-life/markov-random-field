@@ -1,6 +1,7 @@
 #include "../TTree.h"
 #include "cli.h"
 #include "constants.h"
+#include <coretools/algorithms.h>
 
 void TTree::_initialize_grid_branch_lengths() {
 	// read a, b and K from command-line
@@ -64,9 +65,9 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 	const auto &process = _transition_grid_per_clique.at(clique_index);
 
 	// calculate probability of parent to node for old branch length
-	IndexArray index{};
-	index[_dimension]     = index_in_tree;
-	index[1 - _dimension] = clique_index;
+	IndexArray index  = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
+	index[_dimension] = index_in_tree;
+
 	const bool node_state = _Z.is_one(index).is_one;
 	double prob_old       = _calculate_prob_to_parent(
 	    index_in_tree, index, node_state,

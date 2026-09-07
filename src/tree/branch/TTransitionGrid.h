@@ -71,7 +71,8 @@ private:
 	}
 
 public:
-	TTransitionGrid(double alpha, double nu, const TBinGrid &bins) : _alpha(alpha) {
+	TTransitionGrid() = default;
+	explicit TTransitionGrid(double alpha, double nu, const TBinGrid &bins) : _alpha(alpha) {
 		_matrices.resize(bins.n_bins());
 
 		if (nu > STATIONARY_NU_THRESHOLD) {
