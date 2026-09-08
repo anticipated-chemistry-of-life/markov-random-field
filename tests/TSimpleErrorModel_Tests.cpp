@@ -10,21 +10,29 @@ namespace {
 
 using namespace simple_error_model;
 
-/// A matrix laid out as a single row {1, N}, so that the linear index of a cell equals its column.
+/// A field laid out as a single row {1, N}, so that the linear index of a cell equals its column.
 /// Same convention as TStorageY_Tests.
 ///
 /// The field is spelled `TFieldStorage` rather than one implementation, so these run against
-/// whichever backend the suite was built with -- which is what count_disagreements takes.
+/// whichever backend the suite was built with -- which is what production hands the likelihood.
 TFieldStorage make_row(size_t n_cols, const std::vector<size_t> &ones) {
 	TFieldStorage m(1000, {1, n_cols});
 	for (const auto &i : ones) { m.insert_one(i); }
 	return m;
 }
 
+/// The same row as the data holds it. D carries no posterior counter, so it is a binary storage
+/// and not a field, and it is sized from its dimensions alone.
+TBinaryStorage make_data_row(size_t n_cols, const std::vector<size_t> &ones) {
+	TBinaryStorage d(IndexArray{1, n_cols});
+	for (const auto &i : ones) { d.insert_one(i); }
+	return d;
+}
+
 /// The definition the closed form is a shortcut for: sum over every cell of log P(D | Y).
 /// Deliberately walks all cells (including the absent ones) so it shares no code with
 /// count_disagreements.
-double brute_force_log_likelihood(const TFieldStorage &Y, const TFieldStorage &D, double eps) {
+double brute_force_log_likelihood(const TFieldStorage &Y, const TBinaryStorage &D, double eps) {
 	double sum = 0.0;
 	for (size_t i = 0; i < Y.total_size_of_container_space(); ++i) {
 		sum += std::log(probability_of_D_given_Y(Y.is_one(i), D.is_one(i), eps));
@@ -88,7 +96,7 @@ TEST(SimpleErrorModel_Tests, log_likelihood_more_disagreements_than_cells_throws
 TEST(SimpleErrorModel_Tests, log_likelihood_matches_cellwise_product) {
 	constexpr double eps    = 0.2;
 	const auto Y            = make_row(6, {0, 2, 5});
-	const auto D            = make_row(6, {0, 3});
+	const auto D            = make_data_row(6, {0, 3});
 	// Y = 1 0 1 0 0 1, D = 1 0 0 1 0 0 -> disagreements at cells 2, 3 and 5
 	const size_t n_disagree = count_disagreements(Y, D);
 	ASSERT_EQ(n_disagree, 3u);
@@ -121,20 +129,20 @@ TEST(SimpleErrorModel_Tests, log_likelihood_ratio_matches_the_difference) {
 }
 
 //-----------------------------------
-// count_disagreements (merge-join over two sparse matrices)
+// count_disagreements (merge-join over the field and the data)
 //-----------------------------------
 
 TEST(SimpleErrorModel_Tests, count_disagreements_both_empty) {
-	EXPECT_EQ(count_disagreements(make_row(5, {}), make_row(5, {})), 0u);
+	EXPECT_EQ(count_disagreements(make_row(5, {}), make_data_row(5, {})), 0u);
 }
 
 TEST(SimpleErrorModel_Tests, count_disagreements_identical_ones) {
-	EXPECT_EQ(count_disagreements(make_row(5, {1, 3}), make_row(5, {1, 3})), 0u);
+	EXPECT_EQ(count_disagreements(make_row(5, {1, 3}), make_data_row(5, {1, 3})), 0u);
 }
 
 TEST(SimpleErrorModel_Tests, count_disagreements_disjoint_ones) {
 	// Y ones at {0, 3}, D ones at {1, 3} -> cells 0 and 1 disagree, cell 3 agrees
-	EXPECT_EQ(count_disagreements(make_row(5, {0, 3}), make_row(5, {1, 3})), 2u);
+	EXPECT_EQ(count_disagreements(make_row(5, {0, 3}), make_data_row(5, {1, 3})), 2u);
 }
 
 /// A cell stored with state 0 is not the same as a cell that is one, but it *is* the same as a cell
@@ -142,20 +150,20 @@ TEST(SimpleErrorModel_Tests, count_disagreements_disjoint_ones) {
 /// merge-join over sparse matrices, so it gets its own test.
 TEST(SimpleErrorModel_Tests, count_disagreements_stored_zero_is_an_agreement) {
 	TFieldStorage Y(1000, {1, 5});
-	TFieldStorage D(1000, {1, 5});
+	TBinaryStorage D(IndexArray{1, 5});
 	D.insert_zero(2); // stored in D, absent in Y, both read as state 0
 	EXPECT_EQ(count_disagreements(Y, D), 0u);
 }
 
 TEST(SimpleErrorModel_Tests, count_disagreements_D_full_Y_empty) {
-	const auto D = make_row(4, {0, 1, 2, 3});
+	const auto D = make_data_row(4, {0, 1, 2, 3});
 	EXPECT_EQ(count_disagreements(make_row(4, {}), D), D.total_size_of_container_space());
 }
 
 TEST(SimpleErrorModel_Tests, count_disagreements_spans_multiple_rows) {
 	// A 3x4 layout exercises the cursor's row-skipping: linear index = row * 4 + col.
 	TFieldStorage Y(1000, {3, 4});
-	TFieldStorage D(1000, {3, 4});
+	TBinaryStorage D(IndexArray{3, 4});
 	Y.insert_one(1);                          // row 0
 	Y.insert_one(7);                          // row 1
 	D.insert_one(7);                          // agrees
@@ -165,7 +173,7 @@ TEST(SimpleErrorModel_Tests, count_disagreements_spans_multiple_rows) {
 
 TEST(SimpleErrorModel_Tests, count_disagreements_dimension_mismatch_throws) {
 	TFieldStorage Y(1000, {2, 3});
-	TFieldStorage D(1000, {3, 2}); // same number of cells, different layout
+	TBinaryStorage D(IndexArray{3, 2}); // same number of cells, different layout
 	EXPECT_ANY_THROW((void)count_disagreements(Y, D));
 }
 
@@ -207,7 +215,7 @@ TEST(SimpleErrorModel_Tests, simulated_disagreement_fraction_matches_epsilon) {
 	// 50k cells keeps the sampling error at sd = sqrt(eps(1-eps)/n) ~ 0.0018, so the 0.01 bound
 	// below sits at ~5.5 sd and stays comfortable even if the seed changes.
 	TFieldStorage Y(1000, {200, 250});
-	TFieldStorage D(1000, {200, 250});
+	TBinaryStorage D(IndexArray{200, 250});
 	const size_t total = Y.total_size_of_container_space();
 
 	for (size_t i = 0; i < total; ++i) {

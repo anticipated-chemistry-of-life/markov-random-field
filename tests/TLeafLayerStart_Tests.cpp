@@ -10,6 +10,7 @@
 #include "backend_pairings.h"
 #include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
+#include "storages/TSparseBinaryArray.h"
 #include "gtest/gtest.h"
 
 #include <cstddef>
@@ -26,10 +27,9 @@ using backends::species_shape;
 using backends::tree_pairs;
 
 /// The records the start reads: every third cell, so that the smallest container space the tree
-/// pairs ask for still holds both a record and a cell without one. The sparse backends hold only
-/// what is put in them, so a cell left out is one the start has to insert rather than write in
-/// place.
-template<typename Field> void seed_records(Field &records) {
+/// pairs ask for still holds both a record and a cell without one. The records hold only what is
+/// put in them, so a cell left out is one the start has to insert rather than write in place.
+void seed_records(TSparseBinaryArray &records) {
 	for (size_t i = 0; i < records.total_size_of_container_space(); ++i) {
 		if (i % 3U == 0U) { records.insert_one(i); }
 	}
@@ -49,7 +49,7 @@ template<typename F> void expect_dev_error(F &&f) {
 }
 
 /// Whether the records hold this leaf pair, read the way the field's own index reads it.
-template<typename Field> bool records_hold(const Field &records, size_t s, size_t m) {
+bool records_hold(const TSparseBinaryArray &records, size_t s, size_t m) {
 	return records.is_one(records.get_linear_index_in_container_space(IndexArray{s, m}));
 }
 
@@ -72,7 +72,7 @@ TYPED_TEST(LeafLayerStart, starts_all_three_at_the_records) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		auto records    = make_storage<Field>(field_shape(pair));
+		auto records    = TSparseBinaryArray(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
 		auto Z_species  = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
@@ -112,7 +112,7 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		const auto records = make_storage<Field>(field_shape(pair));
+		const auto records = TSparseBinaryArray(field_shape(pair));
 		auto Y             = make_storage<Field>(field_shape(pair));
 		auto Z_species     = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule    = make_storage<NodeState>(molecule_shape(pair));
@@ -150,7 +150,7 @@ TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		auto records    = make_storage<Field>(field_shape(pair));
+		auto records    = TSparseBinaryArray(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
 		auto Z_species  = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
@@ -184,7 +184,7 @@ TYPED_TEST(LeafLayerStart, refuses_records_of_another_shape) {
 
 	const auto &pair = tree_pairs().front();
 	const auto records =
-	    make_storage<Field>(IndexArray{pair.species.n_leaves() + 1, pair.molecule.n_leaves()});
+	    TSparseBinaryArray(IndexArray{pair.species.n_leaves() + 1, pair.molecule.n_leaves()});
 	auto Y = make_storage<Field>(field_shape(pair));
 
 	expect_dev_error([&] { leaf_layer_start::start_the_field_at(records, Y); });
@@ -196,7 +196,7 @@ TYPED_TEST(LeafLayerStart, refuses_a_field_that_already_holds_states) {
 	using Field = typename TestFixture::Field;
 
 	const auto &pair = tree_pairs().front();
-	auto records     = make_storage<Field>(field_shape(pair));
+	auto records     = TSparseBinaryArray(field_shape(pair));
 	auto Y           = make_storage<Field>(field_shape(pair));
 	seed_records(records);
 	seed_ones(Y, 7);

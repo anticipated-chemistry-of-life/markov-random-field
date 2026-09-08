@@ -108,13 +108,7 @@ public:
 	[[nodiscard]] const IndexArray &dimensions() const { return _states.dimensions(); }
 	[[nodiscard]] bool empty() const { return _states.empty(); }
 
-	[[nodiscard]] size_t number_of_ones() const {
-		size_t count = 0;
-		for (size_t i = 0; i < _states.total_size_of_container_space(); ++i) {
-			if (_states.is_one(i)) { ++count; }
-		}
-		return count;
-	}
+	[[nodiscard]] size_t number_of_ones() const { return _states.number_of_ones(); }
 
 	[[nodiscard]] size_t
 	get_linear_index_in_container_space(const IndexArray &multidim_index) const {
@@ -216,39 +210,9 @@ public:
 		return entries;
 	}
 
-	/// Allocation-free forward walk over the cells that are *one*, in ascending linear-index order,
-	/// with the shape TStorageYMatrix::OnesCursor has, so that the merge-joins written against the
-	/// sparse field (TLotus, the simple error model) read this one unchanged.
-	///
-	/// The ones and not the stored cells: this field stores the whole container space, so a cursor
-	/// over what it stores would visit every cell and hand the caller's closed-form term a
-	/// different share of the same sum than the sparse field does -- see the note on OnesCursor.
-	class OnesCursor {
-		const TStorageYDense *_field = nullptr;
-		size_t _index                = 0;
-
-		void _advance_to_next_one() {
-			const size_t total = _field->total_size_of_container_space();
-			while (_index < total && !_field->is_one(_index)) { ++_index; }
-		}
-
-	public:
-		OnesCursor() = default;
-		explicit OnesCursor(const TStorageYDense &field) : _field(&field) {
-			_advance_to_next_one();
-		}
-
-		[[nodiscard]] bool valid() const {
-			return _field != nullptr && _index < _field->total_size_of_container_space();
-		}
-		[[nodiscard]] size_t linear_index() const { return _index; }
-		void advance() {
-			++_index;
-			_advance_to_next_one();
-		}
-	};
-
-	[[nodiscard]] OnesCursor ones_cursor() const { return OnesCursor(*this); }
+	/// The cells that are *one*, in ascending linear-index order -- the state array's own walk.
+	/// The counter takes no part in it, so there is nothing here the array does not already do.
+	[[nodiscard]] TDenseStateArray::OnesCursor ones_cursor() const { return _states.ones_cursor(); }
 };
 
 static_assert(FieldStorage<TStorageYDense>,

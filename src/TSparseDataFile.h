@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "tree/TTree.h"
@@ -24,6 +25,21 @@
 #include <vector>
 
 namespace sparse_data_file {
+
+/// The container space a sparse data source lives in: one dimension per tree, sized by that
+/// tree's leaf count. Both sources are indexed on every tree, so the shape follows from the trees
+/// alone -- and it is the field's shape, cell for cell.
+[[nodiscard]] inline IndexArray leaf_shape(const std::vector<std::unique_ptr<TTree>> &trees) {
+	if (trees.size() != NUMBER_OF_TREES) {
+		throw coretools::TDevError(
+		    "A sparse data source is indexed on every tree, so it holds one dimension per tree. "
+		    "There are ",
+		    trees.size(), " trees and ", NUMBER_OF_TREES, " dimensions.");
+	}
+	IndexArray shape{};
+	for (size_t i = 0; i < NUMBER_OF_TREES; ++i) { shape[i] = trees[i]->get_number_of_leaves(); }
+	return shape;
+}
 
 /// Tree names in tree order -- the header of a sparse data file that names every tree.
 [[nodiscard]] inline std::vector<std::string>

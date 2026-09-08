@@ -1,15 +1,19 @@
 //
-// Which storage backs the field, and which backs the node state.
+// Which storage backs the field, which backs the node state, and which backs the observed data.
 //
 
 #pragma once
 
 #include "storages/storage_concepts.h"
 
+#include "storages/TDenseStateArray.h"
+#include "storages/TSparseBinaryArray.h"
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "storages/z_storage/TStorageZDense.h"
 #include "storages/z_storage/TStorageZMatrix.h"
+
+#include <type_traits>
 
 // The field and the node state choose their storage independently. Each choice is one alias below.
 // Changing one is an edit to one line. No build option and no build directory take part.
@@ -38,6 +42,25 @@ using TNodeStateStorage = ACOL_NODE_STATE_STORAGE;
 using TNodeStateStorage = TStorageZDense;
 #endif
 
+/// The storage the simple error model data takes.
+///
+/// It makes no choice of its own. The field's flag decides both, because the two are the same
+/// shape and are read cell for cell against each other. A run that wants the sparse field wants
+/// this sparse too. A third define would also be a third pairing for the parity gate to cover.
+using TBinaryStorage = std::conditional_t<std::is_same_v<TFieldStorage, TStorageYDense>,
+                                          TDenseStateArray, TSparseBinaryArray>;
+
+// The alias above reads the field's choice as a type, so it has to know every type that choice can
+// be. A define naming a third field storage would fall to the sparse side without saying so.
+static_assert(std::is_same_v<TFieldStorage, TStorageYDense> ||
+                  std::is_same_v<TFieldStorage, TStorageYMatrix>,
+              "The binary storage follows the field, so the field has to be one of the two "
+              "storages it knows. Add the new one to TBinaryStorage before selecting it here.");
+
+// The LOTUS records take no alias at all. They are always a TSparseBinaryArray, whatever the build
+// selects above. A run reads them in once and never writes them again. They hold a few ones per
+// thousand cells under any backend.
+
 // All four pairings compile. Continuous integration gates two of them:
 //
 //     field   node state   gated
@@ -52,5 +75,18 @@ using TNodeStateStorage = TStorageZDense;
 
 static_assert(FieldStorage<TFieldStorage>,
               "The selected field storage does not implement the field storage interface.");
-static_assert(BinaryFieldStorage<TNodeStateStorage>,
-              "The selected node-state storage does not implement the binary storage interface.");
+
+// The counted storage is the field and nothing else. Everything else the sampler holds is a plain
+// binary storage: a state per cell, and no posterior counter that is never incremented and never
+// read.
+static_assert(BinaryStorage<TNodeStateStorage> && !FieldStorage<TNodeStateStorage>,
+              "The selected node-state storage must be a binary storage and not a field.");
+static_assert(BinaryStorage<TBinaryStorage> && !FieldStorage<TBinaryStorage>,
+              "The selected binary storage must be a binary storage and not a field.");
+// The LOTUS records are the third, and TSparseBinaryArray.h asserts them where the type is
+// defined, because they are pinned to that type rather than selected here.
+
+// The two the update loops still reach through a window. The observed data opens none, so the
+// binary storage above is asserted no further than a storage.
+static_assert(WindowedStorage<TFieldStorage> && WindowedStorage<TNodeStateStorage>,
+              "The field and the node state are read and written through a window.");

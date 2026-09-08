@@ -20,6 +20,12 @@ ADR-0006 gives the argument. The default build is dense against dense, so it is 
 chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE` on the
 compiler command line, which is how an external define overrides an alias.
 
+The observed data follows those two rather than choosing. The LOTUS records are always a
+`TSparseBinaryArray`, whatever the build selects, so both binaries read them the same way. The
+simple error model data takes the binary-storage alias, which the field's own choice decides. Each
+gated pair therefore also compares one binary storage against the other, and there is no third
+define to pass.
+
 ## The fixture
 
 Four files, small enough that both chains run in well under a second:

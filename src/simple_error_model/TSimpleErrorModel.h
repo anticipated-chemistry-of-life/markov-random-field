@@ -38,7 +38,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	/// the observed data, same dimensions as Y
-	TFieldStorage _D;
+	TBinaryStorage _D;
 
 	/// error rate; owned by TModel, updated by stattools
 	TypeParamEpsilon *_epsilon = nullptr;
@@ -67,15 +67,14 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	/// D's cells for one row of the field, as a window: `n_cells` cells from `start_index`, one
-	/// after the other. D has the field's dimensions, so the field's index is already D's. The
-	/// update opens one window per species leaf and reads it. Nothing writes D.
-	[[nodiscard]] TFieldStorage::TWindow open_row(const IndexArray &start_index, size_t n_cells) {
-		return _D.open_window(start_index, n_cells, /*stride=*/1);
+	/// The state D holds for one cell of the field. D has the field's dimensions, so the field's
+	/// index is already D's. The update asks this one cell at a time. Nothing writes D.
+	[[nodiscard]] bool observed_state_of(const IndexArray &index_in_leaves_space) const {
+		return _D.is_one(_D.get_linear_index_in_container_space(index_in_leaves_space));
 	}
 
 	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1). `observed_state` is the state D
-	/// holds for the cell, which the caller reads from the window above.
+	/// holds for the cell, which the caller reads through the accessor above.
 	void probabilities_for_Y_update(bool observed_state, std::array<double, 2> &prob) const {
 		simple_error_model::probabilities_for_both_Y_states(observed_state, _eps(), prob);
 	}
@@ -108,7 +107,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TFieldStorage &get_D() const { return _D; }
+	[[nodiscard]] const TBinaryStorage &get_D() const { return _D; }
 	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
 };
 

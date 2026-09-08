@@ -41,7 +41,7 @@ void TLotus::load_from_file(const std::string &filename) {
 	// L names every tree, in tree order, so column i is tree i.
 	sparse_data_file::validate_header_against_trees(file, _trees, filename);
 
-	_L.initialize(1, _leaf_counts());
+	_L.initialize_dimensions(sparse_data_file::leaf_shape(_trees));
 	_gather_paper_counts();
 
 	IndexArray index_in_L_space{};
@@ -60,13 +60,6 @@ std::vector<std::string> TLotus::tree_names() const {
 	names.reserve(_trees.size());
 	for (const auto &tree : _trees) { names.push_back(tree->get_tree_name()); }
 	return names;
-}
-
-std::vector<size_t> TLotus::_leaf_counts() const {
-	std::vector<size_t> counts;
-	counts.reserve(_trees.size());
-	for (const auto &tree : _trees) { counts.push_back(tree->get_number_of_leaves()); }
-	return counts;
 }
 
 std::vector<TNtfyNotifier::ParamStats> TLotus::gamma_stats() const {
@@ -187,7 +180,7 @@ double TLotus::calculate_log_likelihood_of_L(const TFieldStorage &Y) const {
 
 void TLotus::prepare_for_simulation() {
 	// L is indexed on every tree, so its shape follows from the trees alone.
-	_L.initialize(1, _leaf_counts());
+	_L.initialize_dimensions(sparse_data_file::leaf_shape(_trees));
 
 	// initialize the error rate
 	const auto error_rate =
@@ -226,10 +219,12 @@ void TLotus::write_simulated_L(const std::string &prefix) const {
 
 	coretools::TOutputFile file(file_name, header, "\t");
 	std::vector<std::string> line(_trees.size());
-	for (const auto &[linear_index, storage] : _L.get_stored_entries()) {
-		if (!storage.is_one()) { continue; }
+	// The records that are one, in ascending linear-index order. A record is a one by definition,
+	// so the walk needs no test of what it is handed.
+	for (auto record = _L.ones_cursor(); record.valid(); record.advance()) {
 		// for each draw we need to get the node name of the leaf in the correct tree and write it
-		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(linear_index);
+		const auto multi_dim_index_in_L_space =
+		    _L.get_multi_dimensional_index(record.linear_index());
 		for (size_t j = 0; j < _trees.size(); ++j) {
 			const size_t node_index_in_tree =
 			    _trees[j]->get_node_index_from_leaf_index(multi_dim_index_in_L_space[j]);

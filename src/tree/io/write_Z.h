@@ -27,7 +27,7 @@ class TTree;
 ///
 /// `write_full_Z` picks the cells: the whole container space, a missing cell reading as state 0,
 /// or only the stored ones. Simulation, the only caller today, asks for the whole space.
-template<BinaryFieldStorage NodeState>
+template<BinaryStorage NodeState>
 void write_Z_to_file(const std::string &filename, const NodeState &Z,
                      const std::vector<TNodeStateColumn> &columns, bool write_full_Z) {
 	throw_unless_one_column_per_tree(columns);

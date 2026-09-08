@@ -48,7 +48,7 @@ void read_Z_cells_from_file(const std::string &filename,
 /// The leaf rows of a file written now are read the same way, and the chain start writes over them
 /// too. A written node state is the run's record of one, and not yet a full warm start. ADR-0004's
 /// closing consequence and #40 carry the argument.
-template<BinaryFieldStorage NodeState>
+template<BinaryStorage NodeState>
 void read_Z_from_file(const std::string &filename, NodeState &Z,
                       const std::vector<TNodeStateColumn> &columns,
                       size_t dimension_number_of_tree) {

@@ -71,11 +71,16 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 
 /// Number of cells where Y and D differ.
 ///
-/// A cell that is zero in both always agrees and need not be visited, so the two fields are
-/// merge-joined over their ones in ascending linear-index order (the same technique as
+/// A cell that is zero in both always agrees and need not be visited, so the field and the data
+/// are merge-joined over their ones in ascending linear-index order (the same technique as
 /// TLotus::calculate_log_likelihood_of_L), which costs O(ones(Y) + ones(D)) rather
 /// than O(total cells).
-[[nodiscard]] inline size_t count_disagreements(const TFieldStorage &Y, const TFieldStorage &D) {
+///
+/// The field and the data no longer share a type -- D carries no posterior counter -- so this
+/// takes one of each rather than two of one. Both are named by their concept, which is also what
+/// lets a test drive it with a storage the build did not select.
+template<FieldStorage Field, BinaryStorage Binary>
+[[nodiscard]] inline size_t count_disagreements(const Field &Y, const Binary &D) {
 	if (Y.dimensions() != D.dimensions()) {
 		throw coretools::TDevError(
 		    "Cannot compare Y and the simple error model data D: they have different dimensions (Y "

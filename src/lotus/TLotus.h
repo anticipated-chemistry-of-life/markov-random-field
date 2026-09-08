@@ -21,6 +21,7 @@
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
+#include "storages/TSparseBinaryArray.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
@@ -41,7 +42,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
-	TFieldStorage _L;
+	TSparseBinaryArray _L;
 
 	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
@@ -63,9 +64,6 @@ private:
 	double _curLL = 0.0;
 
 	// private functions
-	/// The number of leaves of each tree, which is the shape of L: records are indexed on every
-	/// tree, so L has the same dimensions as the field.
-	[[nodiscard]] std::vector<size_t> _leaf_counts() const;
 	/// Gather the raw paper counts of every tree. Both the inference path and the simulation path
 	/// need this.
 	void _gather_paper_counts();
@@ -92,15 +90,15 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	/// L's cells for one row of the field, as a window: `n_cells` cells from `start_index`, one
-	/// after the other. L has the field's dimensions, so the field's index is already L's. The
-	/// update opens one window per species leaf and reads it. Nothing writes L.
-	[[nodiscard]] TFieldStorage::TWindow open_row(const IndexArray &start_index, size_t n_cells) {
-		return _L.open_window(start_index, n_cells, /*stride=*/1);
+	/// Whether LOTUS holds a record for one cell of the field. L has the field's dimensions, so
+	/// the field's index is already L's. The update asks this one cell at a time. Nothing writes
+	/// L.
+	[[nodiscard]] bool holds_a_record(const IndexArray &index_in_leaves_space) const {
+		return _L.is_one(_L.get_linear_index_in_container_space(index_in_leaves_space));
 	}
 
 	/// prob[0] = P(L_cell | Y = 0), prob[1] = P(L_cell | Y = 1). `reports_the_cell` is whether
-	/// LOTUS holds a record for it, which the caller reads from the window above.
+	/// LOTUS holds a record for it, which the caller reads through the accessor above.
 	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
 	                           std::array<double, 2> &prob) const;
 	/// The field update accumulates the new likelihood as it goes and installs it here at the end.
@@ -128,7 +126,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TFieldStorage &get_L() const { return _L; }
+	[[nodiscard]] const TSparseBinaryArray &get_L() const { return _L; }
 	[[nodiscard]] std::vector<std::string> tree_names() const;
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;

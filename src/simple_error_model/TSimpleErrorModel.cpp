@@ -19,13 +19,8 @@ TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &
     : _trees(trees), _epsilon(epsilon) {}
 
 void TSimpleErrorModel::initialize_storage() {
-	// D lives in the same space as Y: one dimension per tree, sized by that tree's leaf count.
-	std::vector<size_t> num_leaves_per_dim;
-	num_leaves_per_dim.reserve(_trees.size());
-	for (const auto &tree : _trees) { num_leaves_per_dim.push_back(tree->get_number_of_leaves()); }
-
-	// n_iterations = 1: D is data, its per-cell counters are never used.
-	_D.initialize(1, num_leaves_per_dim);
+	// D lives in the same space as Y, which is the shape both sparse data sources take.
+	_D.initialize_dimensions(sparse_data_file::leaf_shape(_trees));
 	_total_cells = _D.total_size_of_container_space();
 }
 
@@ -80,9 +75,10 @@ void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
 	coretools::TOutputFile file(file_name, sparse_data_file::header_from_trees(_trees), "\t");
 
 	std::vector<std::string> line(_trees.size());
-	for (const auto &[linear_index, storage] : _D.get_stored_entries()) {
-		if (!storage.is_one()) { continue; }
-		const auto index_in_D_space = _D.get_multi_dimensional_index(linear_index);
+	// The cells that are one, in ascending linear-index order. The file lists the ones and nothing
+	// else, so the walk needs no test of what it is handed.
+	for (auto cell = _D.ones_cursor(); cell.valid(); cell.advance()) {
+		const auto index_in_D_space = _D.get_multi_dimensional_index(cell.linear_index());
 		for (size_t i = 0; i < _trees.size(); ++i) {
 			const size_t node_index =
 			    _trees[i]->get_node_index_from_leaf_index(index_in_D_space[i]);

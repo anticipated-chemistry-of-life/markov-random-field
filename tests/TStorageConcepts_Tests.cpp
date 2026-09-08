@@ -39,7 +39,7 @@ struct UnclosableWindow {
 static_assert(!StorageWindow<UnclosableWindow>, "a window that cannot close must not conform");
 
 /// Everything the shared concept asks for except `remove_zeros`.
-struct AlmostBinaryStorage {
+struct AlmostAStorage {
 	[[nodiscard]] bool is_one(size_t) const { return false; }
 	void set_state(size_t, bool) {}
 	void insert_one(size_t) {}
@@ -48,39 +48,55 @@ struct AlmostBinaryStorage {
 	[[nodiscard]] bool empty() const { return true; }
 	[[nodiscard]] size_t get_linear_index_in_container_space(const IndexArray &) const { return 0; }
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t) const { return {}; }
+};
+static_assert(!BinaryStorage<AlmostAStorage>, "a missing member must not conform");
+
+struct FullStorage : AlmostAStorage {
+	void remove_zeros() {}
+};
+static_assert(BinaryStorage<FullStorage>, "the full shared surface must conform");
+static_assert(!FieldStorage<FullStorage>, "no counter means it is not a field");
+static_assert(!WindowedStorage<FullStorage>, "a storage with no window is not a windowed one");
+
+/// The same storage, with the window the update loops reach the field and the node state through.
+struct FullWindowedStorage : FullStorage {
 	using TWindow = Window;
 	TWindow open_window(const IndexArray &, size_t, size_t) { return {}; }
 };
-static_assert(!BinaryFieldStorage<AlmostBinaryStorage>, "a missing member must not conform");
-
-struct BinaryStorage : AlmostBinaryStorage {
-	void remove_zeros() {}
-};
-static_assert(BinaryFieldStorage<BinaryStorage>, "the full shared surface must conform");
-static_assert(!FieldStorage<BinaryStorage>, "no counter means it is not a field");
+static_assert(WindowedStorage<FullWindowedStorage>, "the full windowed surface must conform");
 
 /// `is_one` returning something convertible to bool is not the same as returning bool: a storage
 /// answering with a count would read as "is one" for every stored cell.
-struct WrongReturnType : BinaryStorage {
+struct WrongReturnType : FullStorage {
 	[[nodiscard]] int is_one(size_t) const { return 0; }
 };
-static_assert(!BinaryFieldStorage<WrongReturnType>, "the return types are part of the interface");
+static_assert(!BinaryStorage<WrongReturnType>, "the return types are part of the interface");
 
-/// The window a storage hands out is part of what makes it a storage: the sampler reads and
-/// writes through it, so a storage whose window falls short is a storage the sampler cannot use.
-struct StorageWithAWindowThatFallsShort : BinaryStorage {
+/// The window a storage hands out is part of what makes it a *windowed* storage: the update loops
+/// read and write through it, so a storage whose window falls short is one they cannot use. It is
+/// no part of being a storage, because a data source opens no window at all.
+struct StorageWithAWindowThatFallsShort : FullStorage {
 	using TWindow = UnclosableWindow;
 	TWindow open_window(const IndexArray &, size_t, size_t) { return {}; }
 };
-static_assert(!BinaryFieldStorage<StorageWithAWindowThatFallsShort>,
-              "the window is part of the storage interface");
+static_assert(BinaryStorage<StorageWithAWindowThatFallsShort>,
+              "a window is not what makes a storage a storage");
+static_assert(!WindowedStorage<StorageWithAWindowThatFallsShort>,
+              "the window is part of the windowed storage interface");
 
 } // namespace
 // NOLINTEND(readability-convert-member-functions-to-static)
 
 // The refinement is a real one in both directions: the node state carries no posterior counter
 // and must not pass for a field, while the field satisfies both.
-static_assert(BinaryFieldStorage<TNodeStateStorage>);
+static_assert(BinaryStorage<TNodeStateStorage>);
 static_assert(!FieldStorage<TNodeStateStorage>);
-static_assert(BinaryFieldStorage<TFieldStorage>);
+static_assert(BinaryStorage<TFieldStorage>);
 static_assert(FieldStorage<TFieldStorage>);
+
+// The observations are storages and no more. Neither opens a window, and neither carries a counter.
+static_assert(BinaryStorage<TBinaryStorage>);
+static_assert(!FieldStorage<TBinaryStorage>);
+static_assert(BinaryStorage<TSparseBinaryArray>);
+static_assert(!WindowedStorage<TSparseBinaryArray>);
+static_assert(!FieldStorage<TSparseBinaryArray>);

@@ -36,7 +36,7 @@ namespace simulate_field {
 ///
 /// A tree field and the field are addressed at the same `(row, column)` for a given leaf pair, so
 /// each tree field cell is found by the field's own subscript rather than by a conversion.
-template<typename Link, FieldStorage Field, BinaryFieldStorage NodeState, CellUniforms Uniforms>
+template<typename Link, FieldStorage Field, BinaryStorage NodeState, CellUniforms Uniforms>
 [[nodiscard]] field_math::TLinkCounters
 draw_from_the_tree_fields(Field &field, const NodeState &species_field,
                           const NodeState &molecule_field,

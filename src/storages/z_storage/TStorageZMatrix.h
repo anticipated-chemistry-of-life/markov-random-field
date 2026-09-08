@@ -157,7 +157,7 @@ public:
 	[[nodiscard]] size_t size() const { return _mat.nNonZero(); }
 };
 
-static_assert(BinaryFieldStorage<TStorageZMatrix>,
-              "The sparse node state must satisfy the binary storage interface.");
+static_assert(WindowedStorage<TStorageZMatrix>,
+              "The sparse node state must satisfy the binary storage interface, window and all.");
 
 #endif // TStorageZMatrix_H

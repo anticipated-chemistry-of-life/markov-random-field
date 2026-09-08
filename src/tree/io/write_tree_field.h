@@ -34,7 +34,7 @@
 /// A cell that is not a one now and was never counted a one carries no posterior, and is left out
 /// -- the rule the field's posterior file follows, so that both files say the same thing under
 /// either backend.
-template<FieldStorage Field, BinaryFieldStorage NodeState>
+template<FieldStorage Field, BinaryStorage NodeState>
 void write_tree_field_posterior(const std::string &filename, const Field &Y, const NodeState &Z,
                                 const TTreeFieldPosterior &posterior,
                                 const std::vector<TNodeStateColumn> &columns) {

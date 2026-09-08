@@ -164,6 +164,44 @@ public:
 		return coretools::getSubscriptsAsArray(linear_index, _dimensions);
 	}
 
+	[[nodiscard]] size_t number_of_ones() const {
+		return static_cast<size_t>(
+		    std::count_if(_states.begin(), _states.end(), [](uint8_t s) { return s != 0; }));
+	}
+
+	/// Allocation-free forward walk over the cells that are *one*, in ascending linear-index order.
+	/// TSparseBinaryArray::OnesCursor has the same shape, so a merge join reads either unchanged.
+	///
+	/// The ones, and not the stored cells. Which cells a storage holds is a property of the
+	/// backend, and a sum split by that reaches a Metropolis ratio. tests/backend_parity/README.md
+	/// records what that cost to find out.
+	class OnesCursor {
+		const TDenseStateArray *_array = nullptr;
+		size_t _index                  = 0;
+
+		void _advance_to_next_one() {
+			const size_t total = _array->total_size_of_container_space();
+			while (_index < total && !_array->is_one(_index)) { ++_index; }
+		}
+
+	public:
+		OnesCursor() = default;
+		explicit OnesCursor(const TDenseStateArray &array) : _array(&array) {
+			_advance_to_next_one();
+		}
+
+		[[nodiscard]] bool valid() const {
+			return _array != nullptr && _index < _array->total_size_of_container_space();
+		}
+		[[nodiscard]] size_t linear_index() const { return _index; }
+		void advance() {
+			++_index;
+			_advance_to_next_one();
+		}
+	};
+
+	[[nodiscard]] OnesCursor ones_cursor() const { return OnesCursor(*this); }
+
 	using TWindow = TDenseWindow;
 
 	/// A strided window over `n_cells` cells, the first at `start_index` and the rest `stride`
@@ -177,8 +215,8 @@ public:
 	}
 };
 
-static_assert(BinaryFieldStorage<TDenseStateArray>,
-              "The dense state array must satisfy the binary storage interface.");
+static_assert(WindowedStorage<TDenseStateArray>,
+              "The dense state array must satisfy the binary storage interface, window and all.");
 static_assert(!FieldStorage<TDenseStateArray>,
               "A state array carries no posterior counter, so it is not a field.");
 
@@ -198,7 +236,7 @@ static_assert(!FieldStorage<TDenseStateArray>,
 /// It goes through the storage rather than through its state array because the field's insert does
 /// something the array's does not: it starts the cell's counter over, which is what the sparse
 /// form's whole-new-entry write also does.
-template<BinaryFieldStorage Storage>
+template<BinaryStorage Storage>
 void insert_ones_in_batches(Storage &storage, const std::vector<std::vector<size_t>> &batches) {
 	for (const auto &batch : batches) {
 		for (const size_t linear_index : batch) { storage.insert_one(linear_index); }
@@ -210,7 +248,7 @@ void insert_ones_in_batches(Storage &storage, const std::vector<std::vector<size
 /// The element type is the caller's because the two sparse implementations disagree on it -- the
 /// field dumps a vector of bytes and the internal state a vector of words -- and a trace line is
 /// written from whatever they return.
-template<typename T, BinaryFieldStorage Storage>
+template<typename T, BinaryStorage Storage>
 [[nodiscard]] std::vector<T> whole_space_states(const Storage &storage) {
 	const size_t total = storage.total_size_of_container_space();
 	std::vector<T> states;

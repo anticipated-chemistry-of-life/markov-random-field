@@ -28,8 +28,10 @@ namespace leaf_layer_start {
 /// empty rather than on the caller.
 ///
 /// The records and the field are addressed the same way -- both are indexed in leaf space, one
-/// dimension per tree -- so a record's linear index is already the field's.
-template<FieldStorage Field> void start_the_field_at(const Field &records, Field &field) {
+/// dimension per tree -- so a record's linear index is already the field's. They are two types all
+/// the same: the records carry no posterior counter, and are a binary storage rather than a field.
+template<BinaryStorage Records, FieldStorage Field>
+void start_the_field_at(const Records &records, Field &field) {
 	if (records.total_size_of_container_space() != field.total_size_of_container_space()) {
 		throw coretools::TDevError("Cannot start the field at the records: the records hold ",
 		                           records.total_size_of_container_space(),
@@ -51,7 +53,7 @@ template<FieldStorage Field> void start_the_field_at(const Field &records, Field
 /// falls in bucket 0 or in bucket 2, and bucket 1 holds nothing. The AND diagnostic therefore says
 /// nothing about it. That is the truth of this configuration and not an approximation of it. What
 /// a caller does about it is the caller's business.
-template<typename Link, FieldStorage Field, BinaryFieldStorage NodeState>
+template<typename Link, FieldStorage Field, BinaryStorage NodeState>
 [[nodiscard]] field_math::TLinkCounters hold_tree_fields_at_the_field(const Field &field,
                                                                       NodeState &species_field,
                                                                       NodeState &molecule_field) {

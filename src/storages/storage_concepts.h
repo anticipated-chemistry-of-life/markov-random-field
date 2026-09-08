@@ -39,58 +39,55 @@ concept StorageWindow = requires(T &window, const T &const_window, size_t k, boo
 	{ window.close() } -> std::same_as<void>;
 };
 
-/// The surface the field (`Y`) and the internal state (`Z`) share: a binary state per cell,
-/// the size of the space that state lives in, and the conversion between a linear index and a
-/// multi-dimensional one.
+/// The surface every binary storage shares: a binary state per cell, the size of the space that
+/// state lives in, and the conversion between a linear index and a multi-dimensional one.
 ///
-/// "Field" here is the Markov-random-field sense -- both `Y` and `Z` are binary fields over their
-/// own space -- and not CONTEXT.md's *Field*, which is `Y` alone. That narrower one is what
-/// `FieldStorage` below names, and `Z` deliberately does not satisfy it.
+/// Three kinds of thing satisfy it. The field carries a posterior counter on top (`FieldStorage`
+/// below). A node state carries a bare state. The observed data -- the LOTUS records and the
+/// simple error model data -- carries a bare state and never changes after it is read in.
 ///
 /// A cell that is not stored reads as state 0, so `is_one` is total over the container space and
 /// there is no "does this cell exist" question on this interface. Which cells a storage holds is
-/// its own business: the sparse window reads that off the line it walks on open, and the dense
-/// window never asks. `insert_one` and `insert_zero` are the bounds-checked way in for a cell that
+/// its own business. `insert_one` and `insert_zero` are the bounds-checked way in for a cell that
 /// may be absent; `set_state` is the in-place write for one that is already known to be
 /// addressable.
 ///
-/// `open_window` is the traversal the storage brings with it: a strided view the sampler reads and
-/// writes through, described at `StorageWindow` above. It is the only way in to a run of cells. The
-/// clique fill this concept used to name is now the sparse window's constructor.
-///
-/// Deliberately outside the concept: the bulk-insert and whole-space dump paths, which the two
-/// implementations still spell with `Y` and `Z` in their names, and the field-only reporting
-/// accessors. An implementation still has to provide whatever production code calls of those --
-/// the compiler says so -- but they are not part of what makes a storage a storage.
+/// Three things stay deliberately outside the concept. The bulk-insert and whole-space dump paths
+/// still spell `Y` and `Z` in their names. The ones cursor is offered by the field and the
+/// observed data alone. The reporting accessors belong to the field. An implementation still has
+/// to provide whatever production code calls of those, and the compiler says so, but none of them
+/// is what makes a storage a storage.
 template<typename T>
-concept BinaryFieldStorage =
-    requires(T &storage, const T &const_storage, size_t linear_index, bool state,
-             const IndexArray &multidim_index, size_t n_cells, size_t stride) {
-	    // State.
-	    { const_storage.is_one(linear_index) } -> std::same_as<bool>;
-	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
-	    { storage.insert_one(linear_index) } -> std::same_as<void>;
-	    { storage.insert_zero(linear_index) } -> std::same_as<void>;
-	    { storage.remove_zeros() } -> std::same_as<void>;
+concept BinaryStorage = requires(T &storage, const T &const_storage, size_t linear_index,
+                                 bool state, const IndexArray &multidim_index) {
+	// State.
+	{ const_storage.is_one(linear_index) } -> std::same_as<bool>;
+	{ storage.set_state(linear_index, state) } -> std::same_as<void>;
+	{ storage.insert_one(linear_index) } -> std::same_as<void>;
+	{ storage.insert_zero(linear_index) } -> std::same_as<void>;
+	{ storage.remove_zeros() } -> std::same_as<void>;
 
-	    // Dimensions.
-	    { const_storage.total_size_of_container_space() } -> std::same_as<size_t>;
-	    { const_storage.empty() } -> std::same_as<bool>;
+	// Dimensions.
+	{ const_storage.total_size_of_container_space() } -> std::same_as<size_t>;
+	{ const_storage.empty() } -> std::same_as<bool>;
 
-	    // Index conversion.
-	    {
-		    const_storage.get_linear_index_in_container_space(multidim_index)
-	    } -> std::same_as<size_t>;
-	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
+	// Index conversion.
+	{ const_storage.get_linear_index_in_container_space(multidim_index) } -> std::same_as<size_t>;
+	{ const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
+};
 
-	    // The strided window the sampler reads and writes through. The field update walks a row of
-	    // it, and the node-state walk a column of it.
-	    typename T::TWindow;
-	    requires StorageWindow<typename T::TWindow>;
-	    {
-		    storage.open_window(multidim_index, n_cells, stride)
-	    } -> std::same_as<typename T::TWindow>;
-    };
+/// A storage the sampler reads and writes through a window: the field and the node states.
+///
+/// `open_window` is the traversal such a storage brings with it, described at `StorageWindow`
+/// above. It is the only way in to a run of cells. The observed data does not satisfy this and
+/// does not need to: a data source reads one cell at a time.
+template<typename T>
+concept WindowedStorage = BinaryStorage<T> && requires(T &storage, const IndexArray &multidim_index,
+                                                       size_t n_cells, size_t stride) {
+	typename T::TWindow;
+	requires StorageWindow<typename T::TWindow>;
+	{ storage.open_window(multidim_index, n_cells, stride) } -> std::same_as<typename T::TWindow>;
+};
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the
 /// posterior fraction of ones is read off at the end of a chain.
@@ -109,8 +106,8 @@ concept BinaryFieldStorage =
 /// sized. Counting removes both questions: the denominator is the numerator's ceiling by
 /// construction, so the fraction stays a probability.
 template<typename T>
-concept FieldStorage = BinaryFieldStorage<T> && requires(T &field, const T &const_field,
-                                                         size_t iteration, size_t linear_index) {
+concept FieldStorage = BinaryStorage<T> && requires(T &field, const T &const_field,
+                                                    size_t iteration, size_t linear_index) {
 	{ field.add_to_counter(iteration) } -> std::same_as<void>;
 	{ field.reset_counts() } -> std::same_as<void>;
 	{ const_field.get_fraction_of_ones(linear_index) } -> std::same_as<double>;

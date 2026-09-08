@@ -47,7 +47,7 @@ public:
 	}
 };
 
-static_assert(BinaryFieldStorage<TStorageZDense>,
-              "The dense internal state must satisfy the binary storage interface.");
+static_assert(WindowedStorage<TStorageZDense>,
+              "The dense node state must satisfy the binary storage interface, window and all.");
 static_assert(!FieldStorage<TStorageZDense>,
-              "The internal state carries no posterior counter, so it is not a field.");
+              "The node state carries no posterior counter, so it is not a field.");

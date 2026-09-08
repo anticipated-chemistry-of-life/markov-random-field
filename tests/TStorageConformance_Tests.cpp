@@ -13,9 +13,12 @@
 // "linear index round-trips" whatever the layout; a container one cell wide, which is what a tree
 // with a single leaf asks for, does not.
 //
-// The window each storage opens over itself is asserted the same way, and for the same reason: the
-// dense window indexes the state vector while the sparse window materialises its line, so the two
-// run different code behind one interface (ADR-0006). What they owe in common is here.
+// Three lists, because not every storage answers everything. `Storages` holds every one of them
+// and carries the shared surface. `WindowedStorages` holds the four the update loops read and write
+// through a window. The dense window indexes the state vector and the sparse window materialises
+// its line, so the two run different code behind one interface (ADR-0006). What they owe in common
+// is here. `StoragesWithACursor` holds the four the merge joins walk. Adding a storage means adding
+// a type to the lists it answers to.
 //
 // What is deliberately *not* asserted equal between the backends is which cells a storage holds.
 // Dense holds the whole container space, sparse holds what it was given. Nothing outside a storage
@@ -26,6 +29,8 @@
 
 #include "constants.h"
 #include "phylogeny_generators.h"
+#include "storages/TDenseStateArray.h"
+#include "storages/TSparseBinaryArray.h"
 #include "storages/storage_concepts.h"
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/y_storage/TStorageYMatrix.h"
@@ -309,6 +314,10 @@ public:
 			return "dense_node_state";
 		} else if constexpr (std::is_same_v<Storage, TStorageYMatrix>) {
 			return "sparse_field";
+		} else if constexpr (std::is_same_v<Storage, TSparseBinaryArray>) {
+			return "sparse_binary_array";
+		} else if constexpr (std::is_same_v<Storage, TDenseStateArray>) {
+			return "dense_state_array";
 		} else {
 			return "dense_field";
 		}
@@ -358,8 +367,25 @@ void check_the_leaf_block_needs_no_conversion(const TPhylogeny &first, const TPh
 }
 
 template<typename Storage> class StorageConformance : public ::testing::Test {};
-using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense>;
+/// Every storage the sampler holds: the two node states, the two fields, and the two arrays the
+/// observed data is held in.
+using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense,
+                                  TSparseBinaryArray, TDenseStateArray>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
+
+template<typename Storage> class WindowConformance : public ::testing::Test {};
+/// The storages the update loops read and write through a window. The observed data is not one of
+/// them. A data source reads one cell at a time and opens no window.
+using WindowedStorages =
+    ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense>;
+TYPED_TEST_SUITE(WindowConformance, WindowedStorages, StorageNames);
+
+template<typename Storage> class OnesCursorConformance : public ::testing::Test {};
+/// The storages that offer a ones cursor: the field, and the observed data it is joined against.
+/// A node state offers none, because nothing joins one.
+using StoragesWithACursor =
+    ::testing::Types<TStorageYMatrix, TStorageYDense, TSparseBinaryArray, TDenseStateArray>;
+TYPED_TEST_SUITE(OnesCursorConformance, StoragesWithACursor, StorageNames);
 
 // -------------------------------------------------------------------------
 // The leaf block of a node state is the field, index for index
@@ -431,7 +457,7 @@ TYPED_TEST(StorageConformance, every_cell_holds_the_state_it_was_last_written) {
 // The window a storage opens over itself
 // -------------------------------------------------------------------------
 
-TYPED_TEST(StorageConformance, a_window_reads_what_the_point_lookups_read) {
+TYPED_TEST(WindowConformance, a_window_reads_what_the_point_lookups_read) {
 	// Everything an update reads comes through a window, so a window has to answer what a point
 	// lookup answers -- for the sparse implementation that means the line walk has to find every
 	// stored cell of the line. Over every line of every generated shape, both ways round: along
@@ -467,7 +493,7 @@ TYPED_TEST(StorageConformance, a_window_reads_what_the_point_lookups_read) {
 	}
 }
 
-TYPED_TEST(StorageConformance, a_window_shows_its_own_write_to_a_later_read) {
+TYPED_TEST(WindowConformance, a_window_shows_its_own_write_to_a_later_read) {
 	// The readback contract of ADR-0006. A node-state walk goes in post-order, so it reads a
 	// parent after writing its children. The sparse window buffers a write to a cell it does not
 	// hold, and a read that returned the old state would send the two backends down different
@@ -498,7 +524,7 @@ TYPED_TEST(StorageConformance, a_window_shows_its_own_write_to_a_later_read) {
 	}
 }
 
-TYPED_TEST(StorageConformance, a_window_write_reaches_the_storage_when_the_window_closes) {
+TYPED_TEST(WindowConformance, a_window_write_reaches_the_storage_when_the_window_closes) {
 	std::mt19937_64 rng(20260828);
 	for (const auto &shape : generated_shapes()) {
 		auto storage         = make_storage<TypeParam>(shape);
@@ -530,7 +556,7 @@ TYPED_TEST(StorageConformance, a_window_write_reaches_the_storage_when_the_windo
 	}
 }
 
-TYPED_TEST(StorageConformance, a_window_that_leaves_scope_still_writes_what_it_was_given) {
+TYPED_TEST(WindowConformance, a_window_that_leaves_scope_still_writes_what_it_was_given) {
 	// The sampler opens a window for a loop and lets it go. Closing is what commits the buffer, so
 	// leaving scope has to close it.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
@@ -545,7 +571,7 @@ TYPED_TEST(StorageConformance, a_window_that_leaves_scope_still_writes_what_it_w
 	EXPECT_FALSE(storage.is_one(7));
 }
 
-TYPED_TEST(StorageConformance, a_window_writes_a_held_cell_at_once_and_defers_the_rest) {
+TYPED_TEST(WindowConformance, a_window_writes_a_held_cell_at_once_and_defers_the_rest) {
 	// The one place the two windows are allowed to differ, and the reason they may: the dense
 	// window indexes the state vector, so its write is already in the storage. The sparse window
 	// cannot insert a cell it does not hold without reallocating a row, so that write waits for
@@ -572,7 +598,7 @@ TYPED_TEST(StorageConformance, a_window_writes_a_held_cell_at_once_and_defers_th
 	EXPECT_TRUE(storage.is_one(5));
 }
 
-TYPED_TEST(StorageConformance, a_column_window_writes_a_held_cell_at_once_and_defers_the_rest) {
+TYPED_TEST(WindowConformance, a_column_window_writes_a_held_cell_at_once_and_defers_the_rest) {
 	// The same split, down a column. The sparse window walks a matrix row for a stride of one and a
 	// matrix column otherwise, so the two strides run different code to decide which cells the
 	// matrix holds. A column window that called a held cell absent would defer the write, and the
@@ -599,7 +625,7 @@ TYPED_TEST(StorageConformance, a_column_window_writes_a_held_cell_at_once_and_de
 	EXPECT_TRUE(storage.is_one(8));
 }
 
-TYPED_TEST(StorageConformance, a_window_hands_out_the_inserts_it_could_not_write_in_place) {
+TYPED_TEST(WindowConformance, a_window_hands_out_the_inserts_it_could_not_write_in_place) {
 	// The other way a window ends. The clique walk runs in parallel, and an insert writes one row
 	// and one column of a sparse matrix, so no window in that loop may insert. It hands the cells
 	// out instead, and one bulk insert commits them after the loop. The dense window hands out
@@ -633,7 +659,7 @@ TYPED_TEST(StorageConformance, a_window_hands_out_the_inserts_it_could_not_write
 	EXPECT_FALSE(storage.is_one(6));
 }
 
-TYPED_TEST(StorageConformance, a_window_runs_down_a_container_that_is_one_cell_wide) {
+TYPED_TEST(WindowConformance, a_window_runs_down_a_container_that_is_one_cell_wide) {
 	// A window along the first dimension steps by the width of a row, so in a container one cell
 	// wide it steps by one -- the stride a window along the last dimension has. The shape tells
 	// them apart, not the stride. A chain gives its container a single leaf, and so a single
@@ -659,7 +685,7 @@ TYPED_TEST(StorageConformance, a_window_runs_down_a_container_that_is_one_cell_w
 	EXPECT_FALSE(storage.is_one(3));
 }
 
-TYPED_TEST(StorageConformance, a_window_over_no_cells_holds_nothing_and_closes) {
+TYPED_TEST(WindowConformance, a_window_over_no_cells_holds_nothing_and_closes) {
 	// A tree with one node gives a clique of one cell, and a window of none is one step further.
 	// Nothing to materialise and nothing to flush, on either backend.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
@@ -711,6 +737,72 @@ TYPED_TEST(StorageConformance, remove_zeros_changes_no_cell_state) {
 			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 		}
 	}
+}
+
+// -------------------------------------------------------------------------
+// The cursor the merge joins walk
+// -------------------------------------------------------------------------
+
+/// The ones of a storage, read one cell at a time. The cursor is checked against this rather than
+/// against a second cursor, so a cursor that skipped a one has something to be wrong about.
+template<typename Storage> std::vector<size_t> ones_by_point_lookup(const Storage &storage) {
+	std::vector<size_t> ones;
+	for (size_t i = 0; i < storage.total_size_of_container_space(); ++i) {
+		if (storage.is_one(i)) { ones.push_back(i); }
+	}
+	return ones;
+}
+
+/// The ones the cursor yields, in the order it yields them.
+template<typename Storage> std::vector<size_t> ones_by_cursor(const Storage &storage) {
+	std::vector<size_t> ones;
+	for (auto cursor = storage.ones_cursor(); cursor.valid(); cursor.advance()) {
+		ones.push_back(cursor.linear_index());
+	}
+	return ones;
+}
+
+TYPED_TEST(OnesCursorConformance, the_cursor_yields_exactly_the_ones_in_ascending_order) {
+	// The three merge joins depend on this and on nothing else about a storage. A cursor that
+	// yielded the *stored* cells would hand the caller's closed-form term a different share of the
+	// same sum under each backend, which is the defect the parity gate caught first.
+	std::mt19937_64 rng(20260828);
+	for (const auto &shape : generated_shapes()) {
+		auto storage         = make_storage<TypeParam>(shape);
+		const size_t n_cells = storage.total_size_of_container_space();
+		TExpectedCells expected(n_cells);
+		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
+
+		const auto yielded = ones_by_cursor(storage);
+		ASSERT_EQ(yielded, ones_by_point_lookup(storage))
+		    << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_TRUE(std::is_sorted(yielded.begin(), yielded.end()))
+		    << "shape " << shape[0] << "x" << shape[1];
+	}
+}
+
+TYPED_TEST(OnesCursorConformance, the_cursor_follows_every_mutator_with_nothing_called_by_hand) {
+	// The sparse array serves the cursor from a sorted vector it keeps beside the map. That cache
+	// is the storage's own business: a caller asks for a cursor and gets the ones as they are now.
+	// So each mutator is followed by a cursor, and nothing else is called in between.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	EXPECT_TRUE(ones_by_cursor(storage).empty()) << "a storage nothing was written to holds no one";
+
+	storage.insert_one(7);
+	EXPECT_EQ(ones_by_cursor(storage), std::vector<size_t>({7})) << "after insert_one";
+
+	storage.set_state(2, true);
+	EXPECT_EQ(ones_by_cursor(storage), std::vector<size_t>({2, 7})) << "after set_state(true)";
+
+	storage.set_state(7, false);
+	EXPECT_EQ(ones_by_cursor(storage), std::vector<size_t>({2})) << "after set_state(false)";
+
+	storage.insert_zero(2);
+	EXPECT_TRUE(ones_by_cursor(storage).empty()) << "after insert_zero";
+
+	storage.insert_one(11);
+	storage.remove_zeros();
+	EXPECT_EQ(ones_by_cursor(storage), std::vector<size_t>({11})) << "after remove_zeros";
 }
 
 // -------------------------------------------------------------------------
