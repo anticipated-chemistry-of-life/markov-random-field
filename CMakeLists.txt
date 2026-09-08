@@ -178,8 +178,8 @@ function(acol_add_common_sources target)
   target_compile_features(${target} PRIVATE cxx_std_20)
   set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
 
-  target_compile_definitions(
-    ${target} PRIVATE ACOL_STORAGE_${ACOL_STORAGE_BACKEND_MACRO})
+  target_compile_definitions(${target}
+                             PRIVATE ACOL_STORAGE_${ACOL_STORAGE_BACKEND_MACRO})
 
   if(LOTUS)
     target_compile_definitions(${target} PRIVATE USE_LOTUS)
