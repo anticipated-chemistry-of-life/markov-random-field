@@ -35,6 +35,22 @@ private:
 		return coretools::getSubscriptsAsArray(linear_index_in_Z_space, _dimensions_in_Z_space);
 	}
 
+	/// Whether the row of this cell holds it.
+	///
+	/// A sparse matrix keeps every cell twice, once in its row and once in its column, and the two
+	/// can part company: `cleanUp` drops a cell whose value is the default one, and it leaves a
+	/// line of one entry alone. The row is the copy a run of cells along the last dimension walks,
+	/// so the row is what "held" means here.
+	///
+	/// The write below then puts the cell back in both. It appends one entry to a column, which is
+	/// the one restructuring a write in place can still make.
+	[[nodiscard]] bool _row_holds(size_t row, size_t col) const {
+		for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
+			if (it->index == col) { return true; }
+		}
+		return false;
+	}
+
 	void _insert(size_t linear_index_in_Z_space, bool state) {
 		if (linear_index_in_Z_space >= this->total_size_of_container_space()) {
 			throw coretools::TDevError(
@@ -73,6 +89,20 @@ public:
 		auto s        = _mat.get(md[0], md[1]);
 		s.set_state(state);
 		_mat.set(md[0], md[1], s);
+	}
+
+	/// Writes the state of a cell this matrix already holds, and says whether it held it.
+	///
+	/// A cell the matrix does not hold is left alone. Inserting one restructures a row and a
+	/// column, which is what a caller inside a parallel region has to defer. This is the matrix's
+	/// half of `write_or_defer` (storages/cell_write.h), and it stands in for the handle a
+	/// sorted-vector matrix cannot give: it keeps every cell twice, so it has no single cell to
+	/// point at.
+	[[nodiscard]] bool write_state_if_held(size_t linear_index_in_Z_space, bool state) {
+		const auto md = _row_col(linear_index_in_Z_space);
+		if (!_row_holds(md[0], md[1])) { return false; }
+		set_state(linear_index_in_Z_space, state);
+		return true;
 	}
 
 	void insert_one(size_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }

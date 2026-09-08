@@ -6,10 +6,11 @@
 // and field/TFieldMath.h carries the arithmetic.
 //
 // This file is the loop and nothing else. The probabilities and the counter move come from the
-// kernel. The cells come and go through windows. Everything else comes from a model the loop asks
-// one row at a time (field/TBlockModel.h). What is left is a loop a test can state properties
-// against: every leaf pair visited once, the right neighbours read, the writes landing, and one
-// chain at any thread count.
+// kernel. The cells are read and written one at a time, straight from the storages
+// (storages/cell_write.h). Everything else comes from a model the loop asks one leaf pair at a
+// time (field/TBlockModel.h). What is left is a loop a test can state properties against: every
+// leaf pair visited once, the right neighbours read, the writes landing, and one chain at any
+// thread count.
 //
 // A thread takes a species leaf. A leaf pair's Markov blanket holds no cell of another leaf pair.
 // It holds the two tree parents and the two data terms. So the rows are conditionally independent.
@@ -21,11 +22,11 @@
 
 #include "cli.h"
 #include "constants.h"
-#include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
 #include "field/TFieldMath.h"
 #include "omp.h"
 #include "random/TCellUniforms.h"
+#include "storages/cell_write.h"
 #include "tree/TPhylogeny.h"
 #include <array>
 #include <concepts>
@@ -35,12 +36,12 @@
 namespace block_update {
 
 // The update names the two trees. A thread takes a species leaf and walks the molecule leaves of
-// its row. A third tree would be a third window and a third factor, so this says so here rather
+// its row. A third tree would be a third storage and a third factor, so this says so here rather
 // than looping over a dimension count that cannot change.
 static_assert(NUMBER_OF_TREES == 2,
               "The block update is written for one species tree and one molecule tree.");
 
-/// The factors at one leaf pair that the update's own windows do not hold: what each tree's
+/// The factors at one leaf pair that the update does not read from its storages: what each tree's
 /// process says about its own tree field cell, and what each data source says about the field cell.
 struct TLeafPairFactors {
 	/// P(Z_s = 1 | the species parent's state), from the species tree's transition grid.
@@ -53,25 +54,24 @@ struct TLeafPairFactors {
 	std::array<coretools::Probability, 2> simple_error;
 };
 
-/// The model at one row of the field: one species leaf against every molecule leaf.
+/// Everything the traversal reads that is not a state in one of its three storages.
 ///
 /// `factors` is asked once per leaf pair, and is handed the two parent states the traversal read
-/// through its own windows. `record` is told what the leaf pair was given, so each data source can
+/// from the node states. `record` is told what the leaf pair was given, so each data source can
 /// carry its own bookkeeping forward. The factors come back with it, because a source that scored
 /// the cell scored both field states and only now knows which one to keep.
+///
+/// The model answers one leaf pair at a time. Threads ask it at once, so `factors` reads and
+/// writes nothing a second thread also touches.
 template<typename T>
-concept BlockRow = requires(T &row, size_t molecule_leaf, bool species_parent, bool molecule_parent,
-                            const TLeafPairFactors &factors,
-                            const field_math::TBlockStates &drawn) {
-	{ row.factors(molecule_leaf, species_parent, molecule_parent) } -> std::same_as<TLeafPairFactors>;
-	{ row.record(molecule_leaf, factors, drawn) } -> std::same_as<void>;
-};
-
-/// Everything the traversal reads that is not a state in one of its own windows. It hands out one
-/// row per species leaf, which is a thread's whole share of the update.
-template<typename T>
-concept BlockModel = requires(T &model, size_t species_leaf) {
-	{ model.open_row(species_leaf) } -> BlockRow;
+concept BlockModel = requires(T &model, size_t species_leaf, size_t molecule_leaf,
+                              bool species_parent, bool molecule_parent,
+                              const TLeafPairFactors &factors,
+                              const field_math::TBlockStates &drawn) {
+	{
+		model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent)
+	} -> std::same_as<TLeafPairFactors>;
+	{ model.record(species_leaf, molecule_leaf, factors, drawn) } -> std::same_as<void>;
 };
 
 /// What one thread's share of a block update added up to.
@@ -90,13 +90,13 @@ struct TThreadTally {
 
 /// Draws every leaf pair of one species leaf's row.
 ///
-/// The row is a thread's whole share of the update. It opens four windows on state: the field's
-/// row, the species tree field's row, the species parent's row, and the molecule node state's row
-/// over every molecule node. The last of those covers both that tree field and every molecule
-/// parent the row reads, because a molecule parent is a column of that one row.
+/// The row is a thread's whole share of the update. It reads five cells per leaf pair -- the three
+/// the draw moves, and the two tree parents -- and writes back the ones the draw changed. A leaf
+/// pair sits at the same multidimensional index in all three containers (ADR-0005), so one
+/// subscript names its cell in each; the linear indices differ, because the container shapes do.
 ///
-/// The three written windows hand out the cells they could not write in place. That is the only
-/// exit a window inside a parallel region may take (ADR-0006).
+/// A write reaches the storage in place, or comes back as a deferred insert. That is the only exit
+/// a write inside a parallel region may take (ADR-0006).
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
 void update_row(size_t species_leaf, Field &Y, NodeState &Z_species, NodeState &Z_molecule,
                 const TPhylogeny &species, const TPhylogeny &molecule,
@@ -105,59 +105,53 @@ void update_row(size_t species_leaf, Field &Y, NodeState &Z_species, NodeState &
                 std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
                 std::vector<size_t> &molecule_inserts) {
 	const size_t n_molecule_leaves = molecule.n_leaves();
-	const IndexArray row_start{species_leaf, 0};
 
-	// The field's row, and the species tree field's row beside it. A leaf pair sits at the same
-	// (row, column) in both (ADR-0005), so one subscript addresses both.
-	auto field_row   = Y.open_window(row_start, n_molecule_leaves, /*stride=*/1);
-	auto species_row = Z_species.open_window(row_start, n_molecule_leaves, /*stride=*/1);
-
-	// The species parent's row. A leaf is never a root, so its parent is an internal node, and an
-	// internal node is never a leaf -- so no thread writes the row another thread reads here.
-	auto species_parent_row = Z_species.open_window(IndexArray{species.parent_of(species_leaf), 0},
-	                                                n_molecule_leaves, /*stride=*/1);
-
-	// The molecule node state's row, over every molecule node. A cell's molecule parent is a
-	// column of this one row, so one window covers the tree field and every parent read.
-	auto molecule_row = Z_molecule.open_window(row_start, molecule.n_nodes(), /*stride=*/1);
-
-	auto row = model.open_row(species_leaf);
+	// A leaf is never a root, so its parent is an internal node, and an internal node is never a
+	// leaf -- so no thread writes the cells this row reads there.
+	const size_t species_parent_node = species.parent_of(species_leaf);
 
 	for (size_t molecule_leaf = 0; molecule_leaf < n_molecule_leaves; ++molecule_leaf) {
-		const bool species_parent  = species_parent_row.is_one(molecule_leaf);
-		const bool molecule_parent = molecule_row.is_one(molecule.parent_of(molecule_leaf));
-		const TLeafPairFactors factors = row.factors(molecule_leaf, species_parent, molecule_parent);
+		const IndexArray leaf_pair{species_leaf, molecule_leaf};
+		const size_t field_cell    = Y.get_linear_index_in_container_space(leaf_pair);
+		const size_t species_cell  = Z_species.get_linear_index_in_container_space(leaf_pair);
+		const size_t molecule_cell = Z_molecule.get_linear_index_in_container_space(leaf_pair);
 
-		const field_math::TBlockStates current{.y   = field_row.is_one(molecule_leaf),
-		                                       .z_s = species_row.is_one(molecule_leaf),
-		                                       .z_m = molecule_row.is_one(molecule_leaf)};
+		// The species parent is the cell above this one in the species node state. The molecule
+		// parent is the cell beside it in the molecule node state.
+		const bool species_parent = Z_species.is_one(Z_species.get_linear_index_in_container_space(
+		    IndexArray{species_parent_node, molecule_leaf}));
+		const bool molecule_parent =
+		    Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space(
+		        IndexArray{species_leaf, molecule.parent_of(molecule_leaf)}));
+
+		const TLeafPairFactors factors =
+		    model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent);
+
+		const field_math::TBlockStates current{.y   = Y.is_one(field_cell),
+		                                       .z_s = Z_species.is_one(species_cell),
+		                                       .z_m = Z_molecule.is_one(molecule_cell)};
 
 		// The cell names the uniform it draws, so the thread that happens to reach this cell does
 		// not decide what it gets.
 		const auto draw = field_math::draw_block<Policy>(
 		    factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega, factors.lotus,
-		    factors.simple_error, current, uniforms.at(field_row.linear_index(molecule_leaf)));
+		    factors.simple_error, current, uniforms.at(field_cell));
 
-		// Write each cell back through the window it was read from. A window that holds the cell
-		// writes it in place, and one that does not buffers the insert for the caller.
-		if (current.y != draw.drawn.y) { field_row.set_state(molecule_leaf, draw.drawn.y); }
-		if (current.z_s != draw.drawn.z_s) { species_row.set_state(molecule_leaf, draw.drawn.z_s); }
+		// Write each cell back where it was read from. A storage that holds the cell takes the
+		// write in place, and one that does not hands the cell back for a later insert.
+		if (current.y != draw.drawn.y) {
+			write_or_defer(Y, field_cell, draw.drawn.y, field_inserts);
+		}
+		if (current.z_s != draw.drawn.z_s) {
+			write_or_defer(Z_species, species_cell, draw.drawn.z_s, species_inserts);
+		}
 		if (current.z_m != draw.drawn.z_m) {
-			molecule_row.set_state(molecule_leaf, draw.drawn.z_m);
+			write_or_defer(Z_molecule, molecule_cell, draw.drawn.z_m, molecule_inserts);
 		}
 
 		tally.counters.add(draw.to.bucket, draw.to.y);
-		row.record(molecule_leaf, factors, draw.drawn);
+		model.record(species_leaf, molecule_leaf, factors, draw.drawn);
 	}
-
-	field_inserts    = field_row.take_buffered_inserts();
-	species_inserts  = species_row.take_buffered_inserts();
-	molecule_inserts = molecule_row.take_buffered_inserts();
-
-	// The parent's row is read and never written, so it buffers nothing. It is ended here all the
-	// same, so that no window of the four reaches its storage on the way out.
-	const std::vector<size_t> parent_inserts = species_parent_row.take_buffered_inserts();
-	DEBUG_ASSERT(parent_inserts.empty());
 }
 
 /// One block update: every leaf pair, one species leaf per thread.
@@ -169,9 +163,9 @@ template<field_math::LinkPolicy Policy, typename Field, typename NodeState, Bloc
 void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
          const TPhylogeny &molecule, const field_math::TErrorProbability &omega, Model &model,
          const TCellUniforms &uniforms, std::vector<TThreadTally> &tallies) {
-	// One list per species leaf, filled by the window that leaf's row is written through. No two
-	// leaves share a list, so the lists need neither a thread index nor a lock, and nothing has to
-	// be drained inside the region.
+	// One list per species leaf, filled by the writes of that leaf's row. No two leaves share a
+	// list, so the lists need neither a thread index nor a lock, and nothing has to be drained
+	// inside the region.
 	// Not const: OpenMP made a const variable predetermined shared before version 4.0 and does not
 	// now, so a `default(none)` clause that names one is right under some compilers and wrong under
 	// others.
@@ -180,9 +174,7 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	std::vector<std::vector<size_t>> species_inserts(n_species_leaves);
 	std::vector<std::vector<size_t>> molecule_inserts(n_species_leaves);
 
-	// The species tree's leaf count is the widest this team can run. Splitting the other way would
-	// give a thread a column, and a column of a sparse container is what no window may insert into
-	// (ADR-0006).
+	// The species tree's leaf count is the widest this team can run.
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(static) default(none)                                                                 \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, tallies,           \

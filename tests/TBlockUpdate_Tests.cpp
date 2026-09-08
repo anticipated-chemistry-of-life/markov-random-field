@@ -1,7 +1,7 @@
 //
 // The block update's loop, over every pairing of the two storages.
 //
-// The kernel is pure and tested against brute force (TFieldMath_Tests.cpp), and the windows are
+// The kernel is pure and tested against brute force (TFieldMath_Tests.cpp), and the storages are
 // conformance-tested against each other (TStorageConformance_Tests.cpp). What is left belongs to
 // the loop alone, and that is what this file asserts: every leaf pair visited exactly once, the two
 // tree parents read being the right cells, the two data terms landing on the leaf pair they were
@@ -91,41 +91,30 @@ public:
 		field_math::TBlockStates drawn;
 	};
 
-	class TRow {
-	private:
-		TForcingModel *_model;
-		size_t _species_leaf;
-
-	public:
-		TRow(TForcingModel &model, size_t species_leaf)
-		    : _model(&model), _species_leaf(species_leaf) {}
-
-		[[nodiscard]] block_update::TLeafPairFactors factors(size_t molecule_leaf, bool species_parent,
-		                                                 bool molecule_parent) const {
-			TVisit &visit         = _model->visit(_species_leaf, molecule_leaf);
-			++visit.n_asked;
-			visit.species_parent  = species_parent;
-			visit.molecule_parent = molecule_parent;
-
-			const auto target = target_at(_species_leaf, molecule_leaf);
-			return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
-			        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
-			        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
-			        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
-		}
-
-		void record(size_t molecule_leaf, const block_update::TLeafPairFactors &,
-		            const field_math::TBlockStates &drawn) const {
-			TVisit &visit = _model->visit(_species_leaf, molecule_leaf);
-			++visit.n_recorded;
-			visit.drawn = drawn;
-		}
-	};
-
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
 	    : _n_molecule_leaves(n_molecule_leaves), _visits(n_species_leaves * n_molecule_leaves) {}
 
-	[[nodiscard]] TRow open_row(size_t species_leaf) { return TRow(*this, species_leaf); }
+	[[nodiscard]] block_update::TLeafPairFactors factors(size_t species_leaf, size_t molecule_leaf,
+	                                                     bool species_parent,
+	                                                     bool molecule_parent) {
+		TVisit &recorded         = visit(species_leaf, molecule_leaf);
+		++recorded.n_asked;
+		recorded.species_parent  = species_parent;
+		recorded.molecule_parent = molecule_parent;
+
+		const auto target = target_at(species_leaf, molecule_leaf);
+		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
+		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
+		        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
+		        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
+	}
+
+	void record(size_t species_leaf, size_t molecule_leaf, const block_update::TLeafPairFactors &,
+	            const field_math::TBlockStates &drawn) {
+		TVisit &recorded = visit(species_leaf, molecule_leaf);
+		++recorded.n_recorded;
+		recorded.drawn = drawn;
+	}
 
 	[[nodiscard]] TVisit &visit(size_t species_leaf, size_t molecule_leaf) {
 		return _visits[species_leaf * _n_molecule_leaves + molecule_leaf];
@@ -147,29 +136,19 @@ static_assert(block_update::BlockModel<TForcingModel>,
 /// it safe to run on many threads.
 class TFreeModel {
 public:
-	class TRow {
-	private:
-		size_t _species_leaf;
+	[[nodiscard]] static block_update::TLeafPairFactors
+	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+		// Values that depend on both the leaf pair and the parents, so that a read of the wrong
+		// parent, or of the wrong cell, moves the chain.
+		const double drift = 0.1 * static_cast<double>((species_leaf + molecule_leaf) % 4U);
+		return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
+		        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
+		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
+		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
+	}
 
-	public:
-		explicit TRow(size_t species_leaf) : _species_leaf(species_leaf) {}
-
-		[[nodiscard]] block_update::TLeafPairFactors factors(size_t molecule_leaf, bool species_parent,
-		                                                 bool molecule_parent) const {
-			// Values that depend on both the leaf pair and the parents, so that a read of the
-			// wrong parent, or of the wrong cell, moves the chain.
-			const double drift = 0.1 * static_cast<double>((_species_leaf + molecule_leaf) % 4U);
-			return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
-			        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
-			        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
-			        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
-		}
-
-		void record(size_t, const block_update::TLeafPairFactors &,
-		            const field_math::TBlockStates &) const {}
-	};
-
-	[[nodiscard]] static TRow open_row(size_t species_leaf) { return TRow(species_leaf); }
+	static void record(size_t, size_t, const block_update::TLeafPairFactors &,
+	                   const field_math::TBlockStates &) {}
 };
 
 static_assert(block_update::BlockModel<TFreeModel>,
@@ -420,6 +399,50 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 				SCOPED_TRACE("bucket " + std::to_string(bucket) + ", field state " +
 				             std::to_string(static_cast<int>(y)));
 				EXPECT_EQ(kept.count(bucket, y), expected.count(bucket, y));
+			}
+		}
+	}
+}
+
+/// The two backends leave the same three containers and the same six counters.
+///
+/// The whole-binary gate (`just parity`) asserts this of a chain. Here it is asserted of one
+/// update, where a failure names the loop rather than the run that diverged from it. The sparse
+/// storages hold only the cells they were given, so this is also where a deferred insert is
+/// compared against the write the dense storages take in place.
+TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+
+		const auto run_once = [&pair]<typename Field, typename NodeState>() {
+			auto Y          = make_storage<Field>(field_shape(pair));
+			auto Z_species  = make_storage<NodeState>(species_shape(pair));
+			auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+			seed_ones(Y, 1);
+			seed_ones(Z_species, 2);
+			seed_ones(Z_molecule, 3);
+
+			TFreeModel model;
+			std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+			const TCellUniforms uniforms(4242, TCellStream::field, 13);
+			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			                               field_math::TErrorProbability(OMEGA), model, uniforms,
+			                               tallies);
+			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
+			                  merged(tallies)};
+		};
+
+		const auto [dense_Y, dense_species, dense_molecule, dense_counters] =
+		    run_once.template operator()<TStorageYDense, TStorageZDense>();
+		const auto [sparse_Y, sparse_species, sparse_molecule, sparse_counters] =
+		    run_once.template operator()<TStorageYMatrix, TStorageZMatrix>();
+
+		EXPECT_EQ(dense_Y, sparse_Y);
+		EXPECT_EQ(dense_species, sparse_species);
+		EXPECT_EQ(dense_molecule, sparse_molecule);
+		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+			for (const bool y : {false, true}) {
+				EXPECT_EQ(dense_counters.count(bucket, y), sparse_counters.count(bucket, y));
 			}
 		}
 	}

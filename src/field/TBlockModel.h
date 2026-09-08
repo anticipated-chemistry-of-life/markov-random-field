@@ -1,10 +1,10 @@
 //
 // What the block update asks about a leaf pair: the two trees' processes, and the data.
 //
-// The traversal in field/TBlockUpdate.h reads three states and two tree parents through windows of
-// its own. It asks this for the rest. Each tree says what its own tree field cell should be, given
-// that tree's parent. Each compiled-in data source says what it makes of the field cell, one cell
-// at a time: an observation is not a field, and opens no row.
+// The traversal in field/TBlockUpdate.h reads three states and two tree parents from its storages.
+// It asks this for the rest. Each tree says what its own tree field cell should be, given that
+// tree's parent. Each compiled-in data source says what it makes of the field cell. Every answer
+// is about one leaf pair, because that is the unit the traversal works in.
 //
 // This is the whole of what the traversal must not know about. So the traversal keeps no tree, no
 // clique and no data source, and a test can run its loop against a model of its own.
@@ -113,6 +113,10 @@ public:
 ///
 /// An inferred chain is the only one that has a model to ask. A simulated one draws its whole
 /// configuration forward and runs no update (TMarkovField::simulate).
+///
+/// Every thread of the update asks this one object. `factors` therefore reads and writes nothing
+/// another thread also touches, and `record` writes the accumulator slot of the calling thread
+/// alone.
 class TBlockModel {
 private:
 	const TTree &_species_tree;
@@ -121,85 +125,65 @@ private:
 	TDataUpdateAccumulator &_accumulator;
 
 public:
-	/// One species leaf's row: the two things that are the same for every leaf pair in it -- the
-	/// branch down to the species leaf, and the molecule tree's clique, which a species leaf
-	/// names.
-	class TRow {
-	private:
-		TBlockModel *_model;
-		size_t _species_leaf;
-		size_t _thread;
-		TypeBinnedBranchLengths _species_branch;
-		const TClique *_molecule_clique;
-
-	public:
-		TRow(TBlockModel &model, size_t species_leaf)
-		    : _model(&model), _species_leaf(species_leaf),
-		      _thread(static_cast<size_t>(omp_get_thread_num())),
-		      _species_branch(model._species_tree.get_binned_branch_length(species_leaf)),
-		      _molecule_clique(&model._molecule_tree.get_clique(IndexArray{species_leaf, 0})) {}
-
-		/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
-		[[nodiscard]] static coretools::Probability
-		prob_of_one(const TClique &clique, TypeBinnedBranchLengths branch, bool parent_state) {
-			return coretools::P(clique.transition_grid().probability(branch, parent_state,
-			                                                         /*to=*/true));
-		}
-
-		[[nodiscard]] block_update::TLeafPairFactors
-		factors(size_t molecule_leaf, bool species_parent, bool molecule_parent) const {
-			const IndexArray cell{_species_leaf, molecule_leaf};
-
-			block_update::TLeafPairFactors leaf_pair;
-			// The species tree's clique is named by the molecule leaf, so it changes along the
-			// row. The molecule tree's is named by the species leaf, so it does not.
-			leaf_pair.prob_z_s_is_one = prob_of_one(_model->_species_tree.get_clique(cell),
-			                                        _species_branch, species_parent);
-			leaf_pair.prob_z_m_is_one = prob_of_one(
-			    *_molecule_clique, _model->_molecule_tree.get_binned_branch_length(molecule_leaf),
-			    molecule_parent);
-
-			// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps
-			// it.
-			leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};
-			leaf_pair.simple_error = {coretools::P(1.0), coretools::P(1.0)};
-#ifdef USE_LOTUS
-			const TLotus &lotus = _model->_data_model.get_lotus();
-			std::array<double, 2> prob_lotus{1.0, 1.0};
-			lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(cell), prob_lotus);
-			leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-			const TSimpleErrorModel &simple = _model->_data_model.get_simple_error_model();
-			std::array<double, 2> prob_simple{};
-			simple.probabilities_for_Y_update(simple.observed_state_of(cell), prob_simple);
-			leaf_pair.simple_error = {coretools::P(prob_simple[0]), coretools::P(prob_simple[1])};
-#endif
-			return leaf_pair;
-		}
-
-		/// Each source scored both field states before the draw, and only now knows which one to
-		/// keep. This writes the accumulator, so it is not const.
-		void record([[maybe_unused]] size_t molecule_leaf,
-		            [[maybe_unused]] const block_update::TLeafPairFactors &factors,
-		            [[maybe_unused]] const field_math::TBlockStates &drawn) {
-			TCellOutcome outcome;
-#ifdef USE_LOTUS
-			outcome.prob_lotus_new_state = factors.lotus[static_cast<size_t>(drawn.y)].get();
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-			const TSimpleErrorModel &simple = _model->_data_model.get_simple_error_model();
-			const IndexArray cell{_species_leaf, molecule_leaf};
-			outcome.simple_model_disagrees = simple.observed_state_of(cell) != drawn.y;
-#endif
-			_model->_accumulator.add(_thread, outcome);
-		}
-	};
-
 	TBlockModel(const std::vector<std::unique_ptr<TTree>> &trees, TDataModel &data_model,
 	            TDataUpdateAccumulator &accumulator)
 	    : _species_tree(*trees.front()), _molecule_tree(*trees.back()), _data_model(data_model),
 	      _accumulator(accumulator) {}
 
-	[[nodiscard]] TRow open_row(size_t species_leaf) { return TRow(*this, species_leaf); }
+	/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
+	[[nodiscard]] static coretools::Probability
+	prob_of_one(const TClique &clique, TypeBinnedBranchLengths branch, bool parent_state) {
+		return coretools::P(clique.transition_grid().probability(branch, parent_state,
+		                                                        /*to=*/true));
+	}
+
+	[[nodiscard]] block_update::TLeafPairFactors factors(size_t species_leaf, size_t molecule_leaf,
+	                                                     bool species_parent,
+	                                                     bool molecule_parent) const {
+		const IndexArray cell{species_leaf, molecule_leaf};
+
+		block_update::TLeafPairFactors leaf_pair;
+		// A clique of one tree carries a leaf of every other tree, so the species tree's clique is
+		// named by the molecule leaf and the molecule tree's by the species leaf.
+		leaf_pair.prob_z_s_is_one =
+		    prob_of_one(_species_tree.get_clique(cell),
+		                _species_tree.get_binned_branch_length(species_leaf), species_parent);
+		leaf_pair.prob_z_m_is_one =
+		    prob_of_one(_molecule_tree.get_clique(IndexArray{species_leaf, 0}),
+		                _molecule_tree.get_binned_branch_length(molecule_leaf), molecule_parent);
+
+		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
+		leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};
+		leaf_pair.simple_error = {coretools::P(1.0), coretools::P(1.0)};
+#ifdef USE_LOTUS
+		const TLotus &lotus = _data_model.get_lotus();
+		std::array<double, 2> prob_lotus{1.0, 1.0};
+		lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(cell), prob_lotus);
+		leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+		const TSimpleErrorModel &simple = _data_model.get_simple_error_model();
+		std::array<double, 2> prob_simple{};
+		simple.probabilities_for_Y_update(simple.observed_state_of(cell), prob_simple);
+		leaf_pair.simple_error = {coretools::P(prob_simple[0]), coretools::P(prob_simple[1])};
+#endif
+		return leaf_pair;
+	}
+
+	/// Each source scored both field states before the draw, and only now knows which one to keep.
+	/// This writes the accumulator, so it is not const.
+	void record([[maybe_unused]] size_t species_leaf, [[maybe_unused]] size_t molecule_leaf,
+	            [[maybe_unused]] const block_update::TLeafPairFactors &factors,
+	            [[maybe_unused]] const field_math::TBlockStates &drawn) {
+		TCellOutcome outcome;
+#ifdef USE_LOTUS
+		outcome.prob_lotus_new_state = factors.lotus[static_cast<size_t>(drawn.y)].get();
+#endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+		const TSimpleErrorModel &simple = _data_model.get_simple_error_model();
+		const IndexArray cell{species_leaf, molecule_leaf};
+		outcome.simple_model_disagrees = simple.observed_state_of(cell) != drawn.y;
+#endif
+		_accumulator.add(static_cast<size_t>(omp_get_thread_num()), outcome);
+	}
 };

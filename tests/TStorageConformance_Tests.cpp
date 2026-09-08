@@ -33,6 +33,7 @@
 #include "storages/TDenseStateArray.h"
 #include "storages/TSparseBinaryArray.h"
 #include "storages/cell_handle.h"
+#include "storages/cell_write.h"
 #include "storages/storage_concepts.h"
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/y_storage/TStorageYMatrix.h"
@@ -217,21 +218,22 @@ void replay(Storage &storage, const std::vector<TWrite> &writes, TExpectedCells 
 	}
 }
 
-/// The same script, written through handles rather than through `set_state`.
+/// The same script, written the way an update inside a parallel region writes.
 ///
-/// A `set_state` becomes a `locate` and one call to the deferred-insert helper. Everything else is
-/// the direct path, because an insert and a compaction are not what a handle is for.
+/// A `set_state` becomes one call to `write_or_defer`: a handle where the storage gives one, and
+/// the storage's own write where it does not. Everything else is the direct path, because an
+/// insert and a compaction are not what that write is for.
 ///
 /// The commit sits inside the loop. The sampler commits after a pass that visits each cell once,
 /// where a script can write one cell twice, and a deferred cell has to be in the storage before
 /// the next write finds it.
 template<typename Storage>
-void replay_through_handles(Storage &storage, const std::vector<TWrite> &writes) {
+void replay_through_write_or_defer(Storage &storage, const std::vector<TWrite> &writes) {
 	std::vector<size_t> deferred_inserts;
 	for (const auto &write : writes) {
 		switch (write.kind) {
 		case TWrite::Kind::set_state:
-			write_or_defer(storage.locate(write.linear_index), write.state, deferred_inserts);
+			write_or_defer(storage, write.linear_index, write.state, deferred_inserts);
 			break;
 		case TWrite::Kind::insert:
 			if (write.state) {
@@ -868,12 +870,12 @@ TYPED_TEST(HandleConformance, the_helper_writes_a_held_cell_at_once_and_defers_t
 	EXPECT_FALSE(storage.is_one(6));
 }
 
-TYPED_TEST(HandleConformance,
-           a_write_through_a_handle_leaves_the_storage_where_a_direct_write_does) {
-	// The property the whole handle exists for: `locate` plus the helper leaves every cell in the
-	// state `set_state` leaves it in, and leaves a field's counters where `set_state` leaves them
-	// -- a state write must not disturb a counter, through a handle no more than through
-	// `set_state`.
+TYPED_TEST(StorageConformance,
+           a_write_through_write_or_defer_leaves_the_storage_where_a_direct_write_does) {
+	// The property the update's write exists for: `write_or_defer` plus the deferred inserts leave
+	// every cell in the state `set_state` leaves it in, and leave a field's counters where
+	// `set_state` leaves them -- a state write must not disturb a counter, through that write no
+	// more than through `set_state`.
 	//
 	// Which cells the storage *holds* is not compared, and the two paths do differ over one: a
 	// zero written to a cell the sparse array does not hold stores nothing, where `set_state`
@@ -881,9 +883,9 @@ TYPED_TEST(HandleConformance,
 	// one answer that reads it. See the head of this file.
 	std::mt19937_64 rng(20260828);
 	for (const auto &shape : generated_shapes()) {
-		auto written_directly        = make_storage<TypeParam>(shape);
-		auto written_through_handles = make_storage<TypeParam>(shape);
-		const size_t n_cells         = written_directly.total_size_of_container_space();
+		auto written_directly  = make_storage<TypeParam>(shape);
+		auto written_by_update = make_storage<TypeParam>(shape);
+		const size_t n_cells   = written_directly.total_size_of_container_space();
 		TExpectedCells expected(n_cells);
 
 		// Several short passes rather than one long one, so that a field counts iterations between
@@ -892,22 +894,22 @@ TYPED_TEST(HandleConformance,
 		for (size_t iteration = 0; iteration < N_PASSES; ++iteration) {
 			const auto writes = random_writes(rng, n_cells, 1 + n_writes_for(n_cells) / N_PASSES);
 			replay(written_directly, writes, expected);
-			replay_through_handles(written_through_handles, writes);
+			replay_through_write_or_defer(written_by_update, writes);
 			if constexpr (FieldStorage<TypeParam>) {
 				written_directly.add_to_counter(iteration);
-				written_through_handles.add_to_counter(iteration);
+				written_by_update.add_to_counter(iteration);
 			}
 		}
 
 		for (size_t i = 0; i < n_cells; ++i) {
 			// Against the direct write, and against what the script says the cell holds. The
 			// second is what names the guilty path when the two disagree.
-			ASSERT_EQ(written_through_handles.is_one(i), written_directly.is_one(i))
+			ASSERT_EQ(written_by_update.is_one(i), written_directly.is_one(i))
 			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 			ASSERT_EQ(written_directly.is_one(i), expected.states[i] != 0)
 			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 			if constexpr (FieldStorage<TypeParam>) {
-				ASSERT_EQ(counter_of(written_through_handles, i), counter_of(written_directly, i))
+				ASSERT_EQ(counter_of(written_by_update, i), counter_of(written_directly, i))
 				    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 			}
 		}
@@ -1304,17 +1306,45 @@ TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes_
 	}
 }
 
+/// How a run of cells is written: through the window the storage opens, or one cell at a time.
+///
+/// The sampler does both. The simulation's forward draw and the clique view's sparse path open a
+/// window; the block update addresses one cell at a time. Either way the storage hands back the
+/// cells it could not take, and one bulk insert commits them afterwards.
+enum class TWritePath : uint8_t { through_a_window, one_cell_at_a_time };
+
+/// Writes one run of cells, and hands back the cells the storage could not take.
+template<typename Storage>
+std::vector<size_t> write_run(Storage &storage, const TWindowShape &request,
+                              const std::vector<uint8_t> &states, TWritePath path) {
+	if (path == TWritePath::through_a_window) {
+		auto window = storage.open_window(request.start, request.n_cells, request.stride);
+		for (size_t k = 0; k < request.n_cells; ++k) { window.set_state(k, states[k] != 0); }
+		return window.take_buffered_inserts();
+	}
+	const size_t start = storage.get_linear_index_in_container_space(request.start);
+	std::vector<size_t> deferred_inserts;
+	for (size_t k = 0; k < request.n_cells; ++k) {
+		write_or_defer(storage, start + k * request.stride, states[k] != 0, deferred_inserts);
+	}
+	return deferred_inserts;
+}
+
 TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_committed_in_bulk) {
-	// The shape the node-state update takes, end to end: every window writes, hands out what it
-	// could not insert, and one bulk insert commits the lot afterwards. The dense window hands out
+	// The shape an update takes, end to end: every run of cells writes, hands out what it could
+	// not insert, and one bulk insert commits the lot afterwards. A dense storage hands out
 	// nothing, so the same loop body drives both backends.
 	//
-	// The windows of one pass do not overlap, exactly as one clique per column and one species
-	// leaf per row do not. Overlapping windows would be a different question: a deferred insert
-	// commits after a later window has written the same cell to zero, and the two backends would
-	// then be asked to agree about an order the sampler never asks for.
+	// Both ways in are driven, because both ship. A cell the sparse matrix holds in its row but
+	// not in its column is written in place by one and deferred by the other, and the two backends
+	// have to end in the same place either way.
+	//
+	// The runs of one pass do not overlap, exactly as one clique per column and one species leaf
+	// per row do not. Overlapping runs would be a different question: a deferred insert commits
+	// after a later write has set the same cell to zero, and the two backends would then be asked
+	// to agree about an order the sampler never asks for.
 	std::mt19937_64 rng(20260828);
-	size_t n_cells_the_sparse_windows_handed_out = 0;
+	size_t n_cells_the_sparse_storages_handed_out = 0;
 	for (const auto &shape : generated_shapes()) {
 		const size_t n_cells = shape[0] * shape[1];
 		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
@@ -1329,7 +1359,7 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 		replay(sparse_Y, writes, ignored);
 		replay(dense_Y, writes, ignored);
 
-		const auto run_one_pass = [&](const std::vector<TWindowShape> &requests) {
+		const auto run_one_pass = [&](const std::vector<TWindowShape> &requests, TWritePath path) {
 			std::vector<std::vector<uint8_t>> written;
 			written.reserve(requests.size());
 			for (const auto &request : requests) {
@@ -1339,12 +1369,7 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 				std::vector<std::vector<size_t>> batches;
 				batches.reserve(requests.size());
 				for (size_t r = 0; r < requests.size(); ++r) {
-					auto window = storage.open_window(requests[r].start, requests[r].n_cells,
-					                                  requests[r].stride);
-					for (size_t k = 0; k < requests[r].n_cells; ++k) {
-						window.set_state(k, written[r][k] != 0);
-					}
-					batches.push_back(window.take_buffered_inserts());
+					batches.push_back(write_run(storage, requests[r], written[r], path));
 				}
 				return batches;
 			};
@@ -1354,13 +1379,13 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 			const auto dense_Y_batches  = write_and_hand_out(dense_Y);
 
 			for (const auto &batch : sparse_Z_batches) {
-				n_cells_the_sparse_windows_handed_out += batch.size();
+				n_cells_the_sparse_storages_handed_out += batch.size();
 			}
 			for (const auto &batch : dense_Z_batches) {
-				ASSERT_TRUE(batch.empty()) << "the dense window writes every cell in place";
+				ASSERT_TRUE(batch.empty()) << "a dense storage writes every cell in place";
 			}
 			for (const auto &batch : dense_Y_batches) {
-				ASSERT_TRUE(batch.empty()) << "the dense window writes every cell in place";
+				ASSERT_TRUE(batch.empty()) << "a dense storage writes every cell in place";
 			}
 
 			sparse_Z.insert_in_Z(sparse_Z_batches);
@@ -1381,16 +1406,18 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 		for (size_t col = 0; col < std::min<size_t>(shape[1], 4); ++col) {
 			columns.push_back({IndexArray{0, col}, shape[0], shape[1]});
 		}
-		run_one_pass(rows);
-		run_one_pass(columns);
+		for (const auto path : {TWritePath::through_a_window, TWritePath::one_cell_at_a_time}) {
+			run_one_pass(rows, path);
+			run_one_pass(columns, path);
+		}
 
 		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
 	}
 
 	// Without this the body above would pass just as happily on windows that handed out nothing,
 	// which is the one case in which the bulk commit proves nothing.
-	EXPECT_GT(n_cells_the_sparse_windows_handed_out, 0u)
-	    << "no sparse window handed an insert out, so the bulk commit was never asked to do "
+	EXPECT_GT(n_cells_the_sparse_storages_handed_out, 0u)
+	    << "no sparse storage handed an insert out, so the bulk commit was never asked to do "
 	       "anything";
 }
 
