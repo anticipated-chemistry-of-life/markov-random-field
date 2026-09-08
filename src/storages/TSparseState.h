@@ -15,8 +15,9 @@ private:
 
 public:
 	TSparseBinaryArray() = default;
-	using iterator       = std::unordered_map<size_t, bool>::iterator;
-	using const_iterator = std::unordered_map<size_t, bool>::const_iterator;
+	using TCell          = bool;
+	using TCellConst     = const TCell;
+
 	explicit TSparseBinaryArray(const IndexArray &dimensions) { initialize(dimensions); }
 	/// Sizes the array to the container space and puts every cell in state 0.
 	void initialize(const IndexArray &dimensions) { _dimensions = dimensions; }
@@ -38,21 +39,23 @@ public:
 		return coretools::getSubscriptsAsArray(linear_index, _dimensions);
 	}
 
-	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
-		const auto it = _states.find(linear_index);
-		return {it != _states.end() && it->second, it != _states.end(), linear_index, it};
+	[[nodiscard]] IsOneResult<TCell> is_one(size_t linear_index) {
+		auto stored = _states.find(linear_index);
+		if (stored == _states.end()) { return {false, false, linear_index, nullptr}; }
+		return {stored->second != 0, true, linear_index, &stored->second};
 	}
 
-	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
-		auto it = _states.find(linear_index);
-		return {it != _states.end() && it->second, it != _states.end(), linear_index, it};
-	}
-
-	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &multidim_index) const {
+	[[nodiscard]] IsOneResult<TCell> is_one(const IndexArray &multidim_index) {
 		return is_one(get_linear_index_in_container_space(multidim_index));
 	}
 
-	[[nodiscard]] IsOneResult<iterator> is_one(const IndexArray &multidim_index) {
+	[[nodiscard]] IsOneResult<TCellConst> is_one(size_t linear_index) const {
+		const auto stored = _states.find(linear_index);
+		if (stored == _states.end()) { return {false, false, linear_index, nullptr}; }
+		return {stored->second != 0, true, linear_index, &stored->second};
+	}
+
+	[[nodiscard]] IsOneResult<TCellConst> is_one(const IndexArray &multidim_index) const {
 		return is_one(get_linear_index_in_container_space(multidim_index));
 	}
 

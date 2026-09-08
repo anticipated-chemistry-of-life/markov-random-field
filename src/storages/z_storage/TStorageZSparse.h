@@ -1,10 +1,10 @@
 //
-// The dense internal state.
+// The sparse internal state.
 //
 
 #pragma once
 
-#include "storages/TDenseStateArray.h"
+#include "storages/TSparseState.h"
 
 #include <cstddef>
 
@@ -19,13 +19,13 @@
 /// difference from the sparse implementation that is visible in output: `write_Z_to_file` asked for
 /// only the stored cells writes the whole container space under this backend. Production only ever
 /// asks it for the whole space anyway.
-class TStorageZDense : public TDenseStateArray {
+class TStorageZSparse : public TSparseBinaryArray {
 public:
-	TStorageZDense() = default;
-	explicit TStorageZDense(const IndexArray &dimensions) : TDenseStateArray(dimensions) {}
+	TStorageZSparse() = default;
+	explicit TStorageZSparse(const IndexArray &dimensions) : TSparseBinaryArray(dimensions) {}
 };
 
-static_assert(BinaryFieldStorage<TStorageZDense>,
+static_assert(BinaryFieldStorage<TStorageZSparse>,
               "The dense internal state must satisfy the binary storage interface.");
-static_assert(!FieldStorage<TStorageZDense>,
+static_assert(!FieldStorage<TStorageZSparse>,
               "The internal state carries no posterior counter, so it is not a field.");

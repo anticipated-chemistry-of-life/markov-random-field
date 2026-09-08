@@ -198,6 +198,10 @@ private:
 	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
 	                                   const stattools::TPairIndexSampler &pairs);
 
+	void _calculate_log_prob_leaf_to_Y(size_t index_in_tree, size_t clique_index,
+	                                   std::array<coretools::TSumLogProbability, 2> &sum_log,
+	                                   const TFieldStorage &Y);
+
 	/// @brief Helper function to reduce the parallelized log_sum into a log_sum
 	static std::vector<coretools::TSumLogProbability> _reduce_log_sum_per_thread(
 	    std::vector<std::vector<coretools::TSumLogProbability>> &log_sum_per_thread,

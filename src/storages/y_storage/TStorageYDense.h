@@ -16,13 +16,13 @@ private:
 	IndexArray _dimensions_Y_space{};
 
 public:
-	using iterator       = typename std::vector<TStorageY>::iterator;
-	using const_iterator = typename std::vector<TStorageY>::const_iterator;
+	using TCell      = TStorageY;
+	using TCellConst = const TCell;
 
 	void initialize(size_t n_iterations, const IndexArray &dimensions) {
 		_thinning_factor = std::max<size_t>(
 		    1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
-		                                     static_cast<double>(TStorageY::MAX_COUNTER))));
+			                                 static_cast<double>(TStorageY::MAX_COUNTER))));
 
 		_total_counts       = 0;
 		_dimensions_Y_space = dimensions;
@@ -40,28 +40,25 @@ public:
 	}
 
 	[[nodiscard]] bool empty() const { return _vec.empty(); }
-	[[nodiscard]] IsOneResult<const_iterator> is_one(size_t linear_index) const {
+
+	[[nodiscard]] IsOneResult<TCell> is_one(size_t linear_index) {
 		DEBUG_ASSERT(linear_index < _vec.size());
 		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
-		        _vec.cbegin() + linear_index};
+		        &_vec[linear_index]};
 	}
 
-	[[nodiscard]] IsOneResult<const_iterator> is_one(const IndexArray &index) const {
-		const size_t linear_index = get_linear_index_in_container_space(index);
-		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
-		        _vec.cbegin() + linear_index};
+	[[nodiscard]] IsOneResult<TCell> is_one(const IndexArray &index) {
+		return is_one(get_linear_index_in_container_space(index));
 	}
 
-	[[nodiscard]] IsOneResult<iterator> is_one(size_t linear_index) {
+	[[nodiscard]] IsOneResult<TCellConst> is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _vec.size());
 		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
-		        _vec.begin() + linear_index};
+		        &_vec[linear_index]};
 	}
 
-	[[nodiscard]] IsOneResult<iterator> is_one(const IndexArray &index) {
-		const size_t linear_index = get_linear_index_in_container_space(index);
-		return {_vec[linear_index].is_one(), linear_index < _vec.size(), linear_index,
-		        _vec.begin() + linear_index};
+	[[nodiscard]] IsOneResult<TCellConst> is_one(const IndexArray &index) const {
+		return is_one(get_linear_index_in_container_space(index));
 	}
 
 	void set_state(size_t linear_index, bool state) {

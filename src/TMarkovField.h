@@ -160,13 +160,13 @@ private:
 
 	template<FieldStorage Field>
 	void _set_new_Y(std::vector<size_t> &linear_indices_in_Y_space_to_insert,
-	                IsOneResult<typename Field::iterator> &current_state, bool new_state) {
+	                IsOneResult<typename Field::TCell> &current_state, bool new_state) {
 		bool cur_state = current_state.is_one;
 		if (cur_state && !new_state) {
-			current_state.iterator->set_state(false);
+			current_state.cell->set_state(false);
 		} else if (!cur_state && new_state) {
 			if (current_state.in_container) {
-				current_state.iterator->set_state(true);
+				current_state.cell->set_state(true);
 			} else {
 				linear_indices_in_Y_space_to_insert.emplace_back(current_state.linear_index);
 			}
@@ -267,7 +267,7 @@ private:
 			// default.
 
 			auto storage = _Y.is_one(i);
-			if (!storage.is_one && storage.iterator->get_counter() == 0) { continue; }
+			if (!storage.is_one && storage.cell->get_counter() == 0) { continue; }
 			line                 = {storage.linear_index, storage.is_one};
 			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
 			std::vector<std::string> node_names;

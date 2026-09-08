@@ -16,11 +16,11 @@
 // what ships.
 #if defined(ACOL_STORAGE_SPARSE)
 
-#include "storages/y_storage/TStorageYMatrix.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h".h "
+#include "storages/z_storage/TStorageZSparse.h"
 
-using TFieldStorage     = TStorageYMatrix;
-using TTreeStateStorage = TStorageZMatrix;
+using TFieldStorage     = TStorageYSparse;
+using TTreeStateStorage = TStorageZSparse;
 
 #elif defined(ACOL_STORAGE_DENSE)
 

@@ -10,11 +10,11 @@
 #include <cstdint>
 #include <vector>
 
-template<typename It> struct IsOneResult {
-	bool is_one;
-	bool in_container;
-	size_t linear_index;
-	It iterator;
+template<typename Cell> struct IsOneResult {
+	bool is_one         = false;
+	bool in_container   = false;
+	size_t linear_index = 0;
+	Cell *cell          = nullptr;
 };
 
 /// The surface the field (`Y`) and the internal state (`Z`) share: a binary state per cell,
@@ -43,14 +43,17 @@ template<typename It> struct IsOneResult {
 template<typename T>
 concept BinaryFieldStorage =
     requires(T &storage, const T &const_storage, size_t linear_index, bool state,
-             const IndexArray &multidim_index, size_t n_cells, size_t increment,
-             std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
-             std::vector<size_t> &linear_indices, const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+	         const IndexArray &multidim_index, size_t n_cells, size_t increment,
+	         std::vector<uint8_t> &states, std::vector<uint8_t> &exists,
+	         std::vector<size_t> &linear_indices,
+	         const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
 	    // State.
+	    { storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
+	    { storage.is_one(multidim_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
+	    { const_storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::TCellConst>>;
 	    {
-		    const_storage.is_one(linear_index)
-	    } -> std::same_as<IsOneResult<typename T::const_iterator>>;
-	    { storage.is_one(linear_index) } -> std::same_as<IsOneResult<typename T::iterator>>;
+		    const_storage.is_one(multidim_index)
+	    } -> std::same_as<IsOneResult<typename T::TCellConst>>;
 	    { storage.set_state(linear_index, state) } -> std::same_as<void>;
 	    { storage.insert_one(linear_index) } -> std::same_as<void>;
 	    { storage.insert_zero(linear_index) } -> std::same_as<void>;
@@ -66,7 +69,7 @@ concept BinaryFieldStorage =
 	    } -> std::same_as<size_t>;
 	    { const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
 
-		{ storage.insert_ones_in_container(linear_indices_to_insert) } -> std::same_as<void>;
+	    { storage.insert_ones_in_container(linear_indices_to_insert) } -> std::same_as<void>;
     };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

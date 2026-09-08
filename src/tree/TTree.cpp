@@ -227,9 +227,11 @@ void TTree::update_Z_clique(size_t clique_index, std::vector<double> &joint_prob
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
 		if (!this->isLeaf(index_in_tree)) {
-			_calculate_log_prob_node_to_children(index_in_tree, sum_log);
+			_calculate_log_prob_node_to_children(index_in_tree, clique_index, sum_log);
 		}
-		if (this->isLeaf(index_in_tree)) {}
+		if (this->isLeaf(index_in_tree)) {
+			_calculate_log_prob_leaf_to_Y(index_in_tree, clique_index, sum_log, Y);
+		}
 
 		// sample new state and update Z accordingly
 		const double log_prob_0 = sum_log[0].getSum();
@@ -259,11 +261,24 @@ void TTree::_calculate_log_prob_node_to_children(
 	for (const auto &child_index : children_of(index_in_tree)) {
 		// Note: the *previous* bin, because new values were proposed before the loop started
 		auto bin_length        = get_previous_binned_branch_length(child_index);
-		IndexArray index       = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
+		auto index             = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
 		index[_dimension]      = child_index;
 		const bool child_state = _Z.is_one(child_index).is_one;
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			sum_log[i].add(process.probability(bin_length, i, child_state));
 		}
+	}
+}
+
+void TTree::_calculate_log_prob_leaf_to_Y(size_t index_in_tree, size_t clique_index,
+                                          std::array<coretools::TSumLogProbability, 2> &sum_log,
+                                          const TFieldStorage &Y) {
+	auto index         = coretools::getSubscriptsAsArray(clique_index, _dimension_cliques);
+	index[_dimension]  = index_in_tree;
+	// since the trees are in topological order, the index of the Y state is exactly the same as the
+	// leaf index of both trees.
+	const bool y_state = Y.is_one(index).is_one;
+	for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
+		sum_log[i].add(0.0);
 	}
 }
