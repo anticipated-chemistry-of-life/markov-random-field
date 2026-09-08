@@ -55,7 +55,7 @@ The number of tree fields in state 1 at one leaf pair, so 0, 1 or 2. The link ta
 _Avoid_: class, category, sum of the tree fields
 
 **Link counters**:
-The link's sufficient statistic: six integers, `n(bucket, field state)`, counting the leaf pairs of the whole field. The link's whole likelihood is a function of them and the error probability, so the error probability's move costs the same whatever the size of the field. The block update tallies them as it goes. Traced to `<prefix>_link_counters_trace.txt`, which is what the AND diagnostic reads. See ADR-0005.
+The link's sufficient statistic: six integers, `n(bucket, field state)`, counting the leaf pairs of the whole field. The link's whole likelihood is a function of them and the error probability, so the error probability's move costs the same whatever the size of the field. The field update retallies them over every leaf pair as it goes. Traced to `<prefix>_link_counters_trace.txt`, which is what the AND diagnostic reads. See ADR-0005.
 _Avoid_: sufficient statistics, the six counts, contingency table
 
 **Clique**:
@@ -85,16 +85,20 @@ _Avoid_: partition function, Z (that is the node state), evidence
 ## The chain
 
 **Update**:
-One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every internal node of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: block-update every leaf pair, update each tree's internal node state, then the parameters.
+One full pass over a set of variables. A tree's node-state update visits every node of every clique of that tree, leaves included; the field update visits every leaf pair. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: the species tree's node state, the molecule tree's node state, the field, then the parameters.
 _Avoid_: sweep, pass, scan
 
 **Chain start**:
 The configuration a chain holds before its first update. Both tree fields start at one wherever a LOTUS record exists, and zero elsewhere. The field starts matching them. Each tree then initialises every internal node from its children, in one forward pass. Every state is a mode and not a draw. Under the AND a record is strong evidence that both tree fields are one at that cell, so the chain starts near the posterior mode. With no record anywhere the start is all zeros. `leaf_layer_start` in `src/field/` starts the leaf layer, and `TTree::initialize_Z_from_children` the nodes above it. See ADR-0005.
 _Avoid_: initial values, seed, guess, warm-up
 
+**Field update**:
+The field's own pass over its cells. It visits every leaf pair and draws that cell from the two tree field cells at that pair, and from the data that observes the field. It retallies the six link counters as it goes. It is the last state update of an iteration, so the counters describe the configuration the error probability then proposes against. The tree fields are not its to draw: each is drawn by its own tree, as the leaf block of that tree's node state.
+_Avoid_: Y update, Y sweep, leaf pair update
+
 **Block update**:
-The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. Exact, not an approximation. It is what escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. See ADR-0005.
-_Avoid_: Y update, field update, joint draw, eight-state sweep
+The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The term survives only to name what ADR-0005 built and ADR-0008 retired. Each tree now draws its own leaf states, and the field has an update of its own, so the three variables move one at a time. ADR-0005 built the block to escape the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 records what dropping it costs. See ADR-0008.
+_Avoid_: joint draw, eight-state sweep
 
 **Joint density**:
 The log density of the whole model at one configuration: `log p(Z_s | theta_s) + log p(Z_m | theta_m) + log p(Y | Z_s, Z_m, omega) + log p(L, D | Y)`. Every factor is a proper conditional density, so the sum is one too — which the sum of the two trees' likelihoods it replaces was not (ADR-0002). It is the no-drift instrument: one number an iteration, and a chain that drifts moves it. A tree's own factor scores each node once, against its parent or against the stationary distribution, so each branch is counted once. Each factor takes a column of `<prefix>_joint_density.txt`. `--write_joint_log_prob_density` decides whether the file is written at all, because the two tree factors cost a pass over every node. See ADR-0005.
@@ -103,10 +107,6 @@ _Avoid_: likelihood, posterior, complete joint density
 **Cell uniform**:
 The one uniform a cell's update draws, derived by hashing the seed, the stream, the tree, the iteration and the cell's linear index instead of taken from a running generator. Two cells, two iterations, two containers and two seeds share one only by chance, and the number a cell gets does not move when the thread count changes or when an update visits the cells in another order. That last property is what lets the dense and the sparse backend traverse their storage differently and still run one chain. `TCellUniforms`, `src/random/`. See ADR-0007.
 _Avoid_: random number, uniform variate, the cell's random draw
-
-**Window**:
-The strided view a storage opens over itself, given a start, a count and a stride. An update reads and writes its cells through a window rather than through a cache of its own, so each storage brings the traversal that suits it: the dense window indexes the state vector, and the sparse window walks its line once and buffers the inserts it cannot make in place. A window shows its own write to a later read on the same window. It ends once: it either commits its buffered inserts or hands them to the caller, which is the only exit open to a window inside a parallel region. `TDenseWindow` and `TSparseWindow`, `src/storages/`. See ADR-0006.
-_Avoid_: slice, view, buffer, current state
 
 ## Branch lengths
 
