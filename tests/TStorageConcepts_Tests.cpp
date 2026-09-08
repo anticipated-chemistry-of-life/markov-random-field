@@ -1,6 +1,7 @@
 
 #include "storages/storage_backend.h"
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 // The storage concepts are checked entirely at compile time: TStorageYMatrix.h and
@@ -65,6 +66,26 @@ struct FullWindowedStorage : FullStorage {
 };
 static_assert(WindowedStorage<FullWindowedStorage>, "the full windowed surface must conform");
 
+/// A storage that answers `locate` as well: the state, whether it holds the cell, the linear index
+/// and where the cell is.
+struct FullLocatableStorage : FullStorage {
+	using TCell = uint8_t;
+	IsOneResult<TCell> locate(size_t) { return {}; }
+	IsOneResult<TCell> locate(const IndexArray &) { return {}; }
+};
+static_assert(LocatableStorage<FullLocatableStorage>, "the full locatable surface must conform");
+static_assert(!LocatableStorage<FullStorage>,
+              "a storage that cannot point at a cell is not locatable");
+
+/// The same storage, locating by linear index alone. An updater that holds a multidimensional
+/// index would have to convert it first, and that arithmetic is what `locate` keeps in one place.
+struct LocatableByLinearIndexAlone : FullStorage {
+	using TCell = uint8_t;
+	IsOneResult<TCell> locate(size_t) { return {}; }
+};
+static_assert(!LocatableStorage<LocatableByLinearIndexAlone>,
+              "both index forms are part of the interface");
+
 /// `is_one` returning something convertible to bool is not the same as returning bool: a storage
 /// answering with a count would read as "is one" for every stored cell.
 struct WrongReturnType : FullStorage {
@@ -93,6 +114,16 @@ static_assert(BinaryStorage<TNodeStateStorage>);
 static_assert(!FieldStorage<TNodeStateStorage>);
 static_assert(BinaryStorage<TFieldStorage>);
 static_assert(FieldStorage<TFieldStorage>);
+
+// The four storages that point an updater at one of their cells, and the two that do not. A
+// sorted-vector matrix keeps every cell twice, once in its row and once in its column, so it has no
+// single cell to point at.
+static_assert(LocatableStorage<TDenseStateArray>);
+static_assert(LocatableStorage<TSparseBinaryArray>);
+static_assert(LocatableStorage<TStorageYDense>);
+static_assert(LocatableStorage<TStorageZDense>);
+static_assert(!LocatableStorage<TStorageYMatrix>);
+static_assert(!LocatableStorage<TStorageZMatrix>);
 
 // The observations are storages and no more. Neither opens a window, and neither carries a counter.
 static_assert(BinaryStorage<TBinaryStorage>);

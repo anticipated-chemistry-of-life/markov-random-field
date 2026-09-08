@@ -5,6 +5,7 @@
 #pragma once
 
 #include "constants.h"
+#include "storages/cell_handle.h"
 #include <concepts>
 #include <cstddef>
 #include <vector>
@@ -74,6 +75,26 @@ concept BinaryStorage = requires(T &storage, const T &const_storage, size_t line
 	// Index conversion.
 	{ const_storage.get_linear_index_in_container_space(multidim_index) } -> std::same_as<size_t>;
 	{ const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
+};
+
+/// A storage that can point an updater at one of its cells.
+///
+/// `locate` answers the four questions a write asks at once -- the state, whether the storage
+/// holds the cell, its linear index and where it is -- so that an in-place write and a deferred
+/// insert are one branch apart. `write_or_defer` in cell_handle.h is that branch.
+///
+/// `is_one` is untouched and still returns a `bool`. The many read-only call sites ask a question
+/// with one answer, and they say so.
+///
+/// The two sorted-vector matrix storages do not satisfy this. A sparse matrix keeps every cell
+/// twice, once in its row and once in its column, so it has no single cell to point at. They
+/// answer `locate` once they own their cells.
+template<typename T>
+concept LocatableStorage = BinaryStorage<T> && requires(T &storage, size_t linear_index,
+                                                        const IndexArray &multidim_index) {
+	typename T::TCell;
+	{ storage.locate(linear_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
+	{ storage.locate(multidim_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
 };
 
 /// A storage the sampler reads and writes through a window: the field and the node states.

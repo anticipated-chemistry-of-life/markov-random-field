@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "storages/TDenseStateArray.h"
+#include "storages/cell_handle.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
 #include <cmath>
@@ -72,6 +73,20 @@ public:
 		return _states.is_one(_states.get_linear_index_in_container_space(multidim_index));
 	}
 	void set_state(size_t linear_index, bool state) { _states.set_state(linear_index, state); }
+
+	/// The state array's cell: one byte, and the counter is not in it. A write through a handle
+	/// therefore leaves the counter alone, which is the rule `set_state` follows too.
+	using TCell = TDenseStateArray::TCell;
+
+	/// Where a cell is, for a caller that is about to write it. The array holds every cell, so the
+	/// handle is always in the container.
+	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
+		return _states.locate(linear_index);
+	}
+
+	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
+		return _states.locate(multidim_index);
+	}
 
 	void insert_one(size_t linear_index) {
 		_states.insert_one(linear_index);
@@ -182,17 +197,21 @@ public:
 		return whole_space_states<uint8_t>(*this);
 	}
 
-	/// One cell as the stored-entry walks below report it. The sparse field hands back its packed
-	/// entry type, whose counter is 15 bits; this one is not that type precisely because the dense
-	/// counter is 16, and returning a `TStorageY` would mean either dropping the top bit or
-	/// throwing on a count the dense field is entitled to hold.
-	class TCell {
+	/// One cell as the stored-entry walks below report it: a state and the counter beside it. Not
+	/// `TCell`, which is the state alone -- the byte a handle points at, and the only half of a
+	/// cell a write through a handle touches.
+	///
+	/// The sparse field hands back its packed entry type, whose counter is 15 bits; this one is
+	/// not that type precisely because the dense counter is 16, and returning a `TStorageY` would
+	/// mean either dropping the top bit or throwing on a count the dense field is entitled to
+	/// hold.
+	class TStoredCell {
 		bool _state       = false;
 		uint16_t _counter = 0;
 
 	public:
-		TCell() = default;
-		TCell(bool state, uint16_t counter) : _state(state), _counter(counter) {}
+		TStoredCell() = default;
+		TStoredCell(bool state, uint16_t counter) : _state(state), _counter(counter) {}
 
 		[[nodiscard]] bool is_one() const { return _state; }
 		[[nodiscard]] uint16_t get_counter() const { return _counter; }
@@ -200,12 +219,12 @@ public:
 
 	/// Every stored cell as (linear index, value), in ascending linear-index order -- which here
 	/// is every cell of the container space, since the dense field stores all of them.
-	[[nodiscard]] std::vector<std::pair<size_t, TCell>> get_stored_entries() const {
+	[[nodiscard]] std::vector<std::pair<size_t, TStoredCell>> get_stored_entries() const {
 		const size_t total = total_size_of_container_space();
-		std::vector<std::pair<size_t, TCell>> entries;
+		std::vector<std::pair<size_t, TStoredCell>> entries;
 		entries.reserve(total);
 		for (size_t i = 0; i < total; ++i) {
-			entries.emplace_back(i, TCell(_states.is_one(i), _counts[i]));
+			entries.emplace_back(i, TStoredCell(_states.is_one(i), _counts[i]));
 		}
 		return entries;
 	}
@@ -217,3 +236,5 @@ public:
 
 static_assert(FieldStorage<TStorageYDense>,
               "The dense field must satisfy the field storage interface.");
+static_assert(LocatableStorage<TStorageYDense>,
+              "The dense field must point an updater at one of its cells.");

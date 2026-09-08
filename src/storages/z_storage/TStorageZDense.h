@@ -17,6 +17,9 @@
 /// and the stored-entry walk, none of which the storage concept covers (see storage_concepts.h) and
 /// all of which the sparse implementation spells with a `Z` in the name too.
 ///
+/// `locate` comes with the array too, so the node state points an updater at one of its cells
+/// without a member of its own.
+///
 /// Every cell of the container space is stored here, so "the stored entries" is "every cell". That
 /// is the one difference from the sparse implementation that is visible in output:
 /// `write_Z_to_file` asked for only the stored cells writes the whole container space under this
@@ -49,5 +52,7 @@ public:
 
 static_assert(WindowedStorage<TStorageZDense>,
               "The dense node state must satisfy the binary storage interface, window and all.");
+static_assert(LocatableStorage<TStorageZDense>,
+              "The dense node state must point an updater at one of its cells.");
 static_assert(!FieldStorage<TStorageZDense>,
               "The node state carries no posterior counter, so it is not a field.");

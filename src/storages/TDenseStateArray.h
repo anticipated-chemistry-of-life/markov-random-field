@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
+#include "storages/cell_handle.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
 #include <cstddef>
@@ -121,6 +122,22 @@ public:
 		return _states[linear_index] != 0;
 	}
 
+	/// One byte per cell, which is what a handle from this array points at.
+	using TCell = uint8_t;
+
+	/// Where a cell is, for a caller that is about to write it. A dense array holds every cell of
+	/// its container space from the moment it is sized, so the handle is always in the container
+	/// and its pointer is never null.
+	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
+		DEBUG_ASSERT(linear_index < _states.size());
+		TCell *cell = &_states[linear_index];
+		return {*cell != 0, true, linear_index, cell};
+	}
+
+	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
+		return locate(get_linear_index_in_container_space(multidim_index));
+	}
+
 	void set_state(size_t linear_index, bool state) {
 		DEBUG_ASSERT(linear_index < _states.size());
 		_states[linear_index] = state ? 1 : 0;
@@ -217,6 +234,8 @@ public:
 
 static_assert(WindowedStorage<TDenseStateArray>,
               "The dense state array must satisfy the binary storage interface, window and all.");
+static_assert(LocatableStorage<TDenseStateArray>,
+              "The dense state array must point an updater at one of its cells.");
 static_assert(!FieldStorage<TDenseStateArray>,
               "A state array carries no posterior counter, so it is not a field.");
 

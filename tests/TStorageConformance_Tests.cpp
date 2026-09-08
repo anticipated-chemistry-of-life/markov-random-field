@@ -13,12 +13,13 @@
 // "linear index round-trips" whatever the layout; a container one cell wide, which is what a tree
 // with a single leaf asks for, does not.
 //
-// Three lists, because not every storage answers everything. `Storages` holds every one of them
+// Four lists, because not every storage answers everything. `Storages` holds every one of them
 // and carries the shared surface. `WindowedStorages` holds the four the update loops read and write
 // through a window. The dense window indexes the state vector and the sparse window materialises
 // its line, so the two run different code behind one interface (ADR-0006). What they owe in common
-// is here. `StoragesWithACursor` holds the four the merge joins walk. Adding a storage means adding
-// a type to the lists it answers to.
+// is here. `StoragesWithACursor` holds the four the merge joins walk. `LocatableStorages` holds the
+// four that point an updater at one of their cells. Adding a storage means adding a type to the
+// lists it answers to.
 //
 // What is deliberately *not* asserted equal between the backends is which cells a storage holds.
 // Dense holds the whole container space, sparse holds what it was given. Nothing outside a storage
@@ -31,6 +32,7 @@
 #include "phylogeny_generators.h"
 #include "storages/TDenseStateArray.h"
 #include "storages/TSparseBinaryArray.h"
+#include "storages/cell_handle.h"
 #include "storages/storage_concepts.h"
 #include "storages/y_storage/TStorageYDense.h"
 #include "storages/y_storage/TStorageYMatrix.h"
@@ -215,6 +217,36 @@ void replay(Storage &storage, const std::vector<TWrite> &writes, TExpectedCells 
 	}
 }
 
+/// The same script, written through handles rather than through `set_state`.
+///
+/// A `set_state` becomes a `locate` and one call to the deferred-insert helper. Everything else is
+/// the direct path, because an insert and a compaction are not what a handle is for.
+///
+/// The commit sits inside the loop. The sampler commits after a pass that visits each cell once,
+/// where a script can write one cell twice, and a deferred cell has to be in the storage before
+/// the next write finds it.
+template<typename Storage>
+void replay_through_handles(Storage &storage, const std::vector<TWrite> &writes) {
+	std::vector<size_t> deferred_inserts;
+	for (const auto &write : writes) {
+		switch (write.kind) {
+		case TWrite::Kind::set_state:
+			write_or_defer(storage.locate(write.linear_index), write.state, deferred_inserts);
+			break;
+		case TWrite::Kind::insert:
+			if (write.state) {
+				storage.insert_one(write.linear_index);
+			} else {
+				storage.insert_zero(write.linear_index);
+			}
+			break;
+		case TWrite::Kind::remove_zeros: storage.remove_zeros(); break;
+		}
+		for (const size_t linear_index : deferred_inserts) { storage.insert_one(linear_index); }
+		deferred_inserts.clear();
+	}
+}
+
 /// One script per iteration, so that both backends can be driven through the *same* chain rather
 /// than through two chains drawn from the same generator.
 std::vector<std::vector<TWrite>> random_script(std::mt19937_64 &rng, size_t total_size,
@@ -379,6 +411,14 @@ template<typename Storage> class WindowConformance : public ::testing::Test {};
 using WindowedStorages =
     ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense>;
 TYPED_TEST_SUITE(WindowConformance, WindowedStorages, StorageNames);
+
+template<typename Storage> class HandleConformance : public ::testing::Test {};
+/// The storages that point an updater at one of their cells. The two sorted-vector matrix storages
+/// are not among them. That matrix keeps every cell twice, once in its row and once in its column,
+/// so it has no single cell to point at. They join the list when they own their cells.
+using LocatableStorages =
+    ::testing::Types<TStorageZDense, TStorageYDense, TSparseBinaryArray, TDenseStateArray>;
+TYPED_TEST_SUITE(HandleConformance, LocatableStorages, StorageNames);
 
 template<typename Storage> class OnesCursorConformance : public ::testing::Test {};
 /// The storages that offer a ones cursor: the field, and the observed data it is joined against.
@@ -740,6 +780,141 @@ TYPED_TEST(StorageConformance, remove_zeros_changes_no_cell_state) {
 }
 
 // -------------------------------------------------------------------------
+// The handle a storage hands an updater
+// -------------------------------------------------------------------------
+
+TYPED_TEST(HandleConformance, a_handle_says_of_every_cell_what_is_one_says) {
+	// `locate` is `is_one` for a caller that is about to write, so the two have to agree cell for
+	// cell. Over a storage that has been written, because an untouched one agrees for the one
+	// reason worth nothing: every cell is zero.
+	std::mt19937_64 rng(20260828);
+	for (const auto &shape : generated_shapes()) {
+		auto storage         = make_storage<TypeParam>(shape);
+		const size_t n_cells = storage.total_size_of_container_space();
+		TExpectedCells expected(n_cells);
+		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
+
+		for (size_t i = 0; i < n_cells; ++i) {
+			const auto by_linear_index = storage.locate(i);
+			ASSERT_EQ(by_linear_index.is_one, storage.is_one(i))
+			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
+			ASSERT_EQ(by_linear_index.linear_index, i);
+			// The one invariant that binds the two halves of the handle: a caller tests the flag
+			// and dereferences the pointer, so a flag that is true has to come with a cell.
+			ASSERT_EQ(by_linear_index.in_container, by_linear_index.cell != nullptr)
+			    << "cell " << i;
+
+			// The same cell, addressed the other way. A caller that already holds a
+			// multidimensional index should not have to convert it first.
+			const auto by_multidim = storage.locate(storage.get_multi_dimensional_index(i));
+			ASSERT_EQ(by_multidim.is_one, by_linear_index.is_one) << "cell " << i;
+			ASSERT_EQ(by_multidim.in_container, by_linear_index.in_container) << "cell " << i;
+			ASSERT_EQ(by_multidim.linear_index, i);
+			ASSERT_EQ(by_multidim.cell, by_linear_index.cell) << "cell " << i;
+		}
+	}
+}
+
+TYPED_TEST(HandleConformance, a_dense_storage_holds_every_cell_and_a_sparse_one_holds_what_it_got) {
+	// The one place the handles differ, and the reason they may: a dense storage holds every cell
+	// of its container space, so it can always point at one. A sparse storage holds the cells it
+	// was given. Both read an untouched cell as zero, which is what keeps the difference off the
+	// read-only paths.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_one(2);
+
+	const auto held  = storage.locate(2);
+	const auto other = storage.locate(3);
+	EXPECT_TRUE(held.in_container);
+	EXPECT_NE(held.cell, nullptr);
+	EXPECT_TRUE(held.is_one);
+
+	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+		EXPECT_FALSE(other.in_container) << "the sparse array was never given this cell";
+		EXPECT_EQ(other.cell, nullptr);
+	} else {
+		EXPECT_TRUE(other.in_container) << "a dense storage holds every cell";
+		EXPECT_NE(other.cell, nullptr);
+	}
+	EXPECT_FALSE(other.is_one) << "a cell the storage does not hold reads as zero";
+}
+
+TYPED_TEST(HandleConformance, the_helper_writes_a_held_cell_at_once_and_defers_the_rest) {
+	// The branch the update loops take. A held cell is written where it lies. A cell the storage
+	// does not hold waits, because the insert restructures the container and the loop runs in
+	// parallel. The dense storages defer nothing, so one loop body serves both backends.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_zero(4); // held by both, in state 0
+
+	std::vector<size_t> deferred_inserts;
+	write_or_defer(storage.locate(4), true, deferred_inserts);  // held by both
+	write_or_defer(storage.locate(5), true, deferred_inserts);  // held by the dense storages alone
+	write_or_defer(storage.locate(6), false, deferred_inserts); // absent, and written to zero
+
+	EXPECT_TRUE(storage.is_one(4)) << "a write to a held cell goes in place";
+	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+		EXPECT_EQ(deferred_inserts, (std::vector<size_t>{5}))
+		    << "the sparse array defers the cell it does not hold, and only that one";
+		EXPECT_FALSE(storage.is_one(5)) << "the helper deferred the insert rather than making it";
+	} else {
+		EXPECT_TRUE(deferred_inserts.empty()) << "a dense storage writes every cell in place";
+		EXPECT_TRUE(storage.is_one(5));
+	}
+	EXPECT_FALSE(storage.is_one(6)) << "an absent cell written to zero already reads as zero";
+
+	for (const size_t linear_index : deferred_inserts) { storage.insert_one(linear_index); }
+	EXPECT_TRUE(storage.is_one(4));
+	EXPECT_TRUE(storage.is_one(5));
+	EXPECT_FALSE(storage.is_one(6));
+}
+
+TYPED_TEST(HandleConformance,
+           a_write_through_a_handle_leaves_the_storage_where_a_direct_write_does) {
+	// The property the whole handle exists for: `locate` plus the helper leaves every cell in the
+	// state `set_state` leaves it in, and leaves a field's counters where `set_state` leaves them
+	// -- a state write must not disturb a counter, through a handle no more than through
+	// `set_state`.
+	//
+	// Which cells the storage *holds* is not compared, and the two paths do differ over one: a
+	// zero written to a cell the sparse array does not hold stores nothing, where `set_state`
+	// stores a zero. Storedness is a backend decision throughout this suite, and `empty()` is the
+	// one answer that reads it. See the head of this file.
+	std::mt19937_64 rng(20260828);
+	for (const auto &shape : generated_shapes()) {
+		auto written_directly        = make_storage<TypeParam>(shape);
+		auto written_through_handles = make_storage<TypeParam>(shape);
+		const size_t n_cells         = written_directly.total_size_of_container_space();
+		TExpectedCells expected(n_cells);
+
+		// Several short passes rather than one long one, so that a field counts iterations between
+		// them and its counters differ from cell to cell by the time they are compared.
+		constexpr size_t N_PASSES = 8;
+		for (size_t iteration = 0; iteration < N_PASSES; ++iteration) {
+			const auto writes = random_writes(rng, n_cells, 1 + n_writes_for(n_cells) / N_PASSES);
+			replay(written_directly, writes, expected);
+			replay_through_handles(written_through_handles, writes);
+			if constexpr (FieldStorage<TypeParam>) {
+				written_directly.add_to_counter(iteration);
+				written_through_handles.add_to_counter(iteration);
+			}
+		}
+
+		for (size_t i = 0; i < n_cells; ++i) {
+			// Against the direct write, and against what the script says the cell holds. The
+			// second is what names the guilty path when the two disagree.
+			ASSERT_EQ(written_through_handles.is_one(i), written_directly.is_one(i))
+			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
+			ASSERT_EQ(written_directly.is_one(i), expected.states[i] != 0)
+			    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
+			if constexpr (FieldStorage<TypeParam>) {
+				ASSERT_EQ(counter_of(written_through_handles, i), counter_of(written_directly, i))
+				    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
+			}
+		}
+	}
+}
+
+// -------------------------------------------------------------------------
 // The cursor the merge joins walk
 // -------------------------------------------------------------------------
 
@@ -803,6 +978,26 @@ TYPED_TEST(OnesCursorConformance, the_cursor_follows_every_mutator_with_nothing_
 	storage.insert_one(11);
 	storage.remove_zeros();
 	EXPECT_EQ(ones_by_cursor(storage), std::vector<size_t>({11})) << "after remove_zeros";
+}
+
+TYPED_TEST(HandleConformance, the_ones_cursor_yields_what_a_handle_wrote) {
+	// A write through a handle does not pass through the storage, so a storage that caches the
+	// order of its ones cannot see the write and has to stop trusting the cache. Reading the
+	// cursor between the `locate` and the write is what catches a cache that clears itself at the
+	// `locate` instead.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_one(2);
+	storage.insert_zero(5);
+
+	std::vector<size_t> deferred_inserts;
+	const auto handle = storage.locate(5);
+	ASSERT_TRUE(handle.in_container) << "every storage here holds a cell it was given";
+	ASSERT_EQ(ones_by_cursor(storage), (std::vector<size_t>{2})) << "the cursor sorts, and caches";
+
+	write_or_defer(handle, true, deferred_inserts);
+	EXPECT_TRUE(deferred_inserts.empty()) << "the cell is held, so the write goes in place";
+	EXPECT_EQ(ones_by_cursor(storage), (std::vector<size_t>{2, 5}));
+	EXPECT_EQ(ones_by_cursor(storage), ones_by_point_lookup(storage));
 }
 
 // -------------------------------------------------------------------------

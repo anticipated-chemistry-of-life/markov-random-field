@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
+#include "storages/cell_handle.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
 #include <cstddef>
@@ -42,6 +43,16 @@ private:
 	/// setting the flag is one rule. An exemption per mutator is a rule per mutator, and the next
 	/// one added gets it wrong.
 	mutable bool _ones_are_stale = true;
+	/// Whether this array has ever handed out a handle. `locate` sets it, and nothing clears it.
+	///
+	/// A write through a handle does not pass through this class, so from the first `locate` the
+	/// array can no longer tell when its ones changed. The cursor then rebuilds on every call. The
+	/// flag above cannot carry this: a cursor taken between the `locate` and the write would clear
+	/// it, and the write would leave a cache the array believes in.
+	///
+	/// An immutable observation locates nothing and still sorts once, which is what the flag above
+	/// is for. A storage that is written every iteration rebuilds every iteration either way.
+	bool _handed_out_a_handle    = false;
 
 	void _throw_if_outside_container_space(size_t linear_index) const {
 		if (linear_index >= _total_size) {
@@ -85,6 +96,29 @@ public:
 		DEBUG_ASSERT(linear_index < _total_size);
 		const auto stored = _states.find(linear_index);
 		return stored != _states.end() && stored->second != 0;
+	}
+
+	/// One byte per stored cell, which is what a handle from this array points at.
+	using TCell = uint8_t;
+
+	/// Where a cell is, for a caller that is about to write it. The map holds the cells it was
+	/// given, so a cell it does not hold reads as state 0 and comes back with a null pointer. That
+	/// is the cell `write_or_defer` defers.
+	///
+	/// This hands out a write the array cannot see, so from here on the ones cursor rebuilds on
+	/// every call. Two threads must not call this on one array at once, because it writes that
+	/// decision -- the same reason `ones_cursor` may not be called from two. The observed data,
+	/// which is what this array holds, is read one cell at a time and never located.
+	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
+		DEBUG_ASSERT(linear_index < _total_size);
+		const auto stored = _states.find(linear_index);
+		if (stored == _states.end()) { return {false, false, linear_index, nullptr}; }
+		_handed_out_a_handle = true;
+		return {stored->second != 0, true, linear_index, &stored->second};
+	}
+
+	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
+		return locate(get_linear_index_in_container_space(multidim_index));
 	}
 
 	/// Writes the state of a cell, and stores the cell if the map does not hold it yet.
@@ -160,13 +194,18 @@ public:
 	/// A write before this call makes it sort again, so it writes the cache it reads. Two threads
 	/// must therefore not call it on one array at once. No caller does, because the merge joins
 	/// run outside the parallel regions.
+	///
+	/// An array that has handed out a handle sorts again every call. It cannot see what a handle
+	/// wrote, so it trusts nothing it sorted before.
 	[[nodiscard]] OnesCursor ones_cursor() const {
-		if (_ones_are_stale) { _rebuild_sorted_ones(); }
+		if (_ones_are_stale || _handed_out_a_handle) { _rebuild_sorted_ones(); }
 		return OnesCursor(_sorted_ones);
 	}
 };
 
 static_assert(BinaryStorage<TSparseBinaryArray>,
               "The sparse binary array must satisfy the binary storage interface.");
+static_assert(LocatableStorage<TSparseBinaryArray>,
+              "The sparse binary array must point an updater at one of its cells.");
 static_assert(!FieldStorage<TSparseBinaryArray>,
               "A binary array carries no posterior counter, so it is not a field.");
