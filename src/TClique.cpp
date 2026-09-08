@@ -12,32 +12,20 @@
 #include <cstddef>
 #include <vector>
 
-TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t variable_dimension,
-                 size_t n_nodes, size_t increment) {
+TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t n_nodes, size_t increment) {
 	_start_index_in_leaves_space = start_index_in_leaves_space;
-	_variable_dimension          = variable_dimension;
 	_n_nodes                     = n_nodes;
 	_increment                   = increment;
 }
 
 // The window opens at the clique's first cell and steps by its increment, over every node of the
-// tree. The leaf block of that column is this tree's tree field, at the same (row, column) as the
-// field itself (ADR-0005), so the walk needs no second window to reach a leaf's state.
-TCliqueStates::TCliqueStates(TNodeStateStorage &Z, const TClique &clique,
-                             const TPhylogeny &topology)
-    : _nodes(
-          Z.open_window(clique.first_cell(), clique.get_number_of_nodes(), clique.get_increment())),
-      _topology(&topology) {}
-
-TCliqueStates TClique::open_states(TNodeStateStorage &Z, const TPhylogeny &topology) const {
-	return {Z, *this, topology};
-}
-
+// tree. The forward draw of a simulation writes leaves as well, which is the one write a clique
+// view refuses, so this is the last clique walk on a window.
 TNodeStateStorage::TWindow TClique::open_node_state_window(TNodeStateStorage &Z) const {
-	return Z.open_window(first_cell(), _n_nodes, _increment);
+	return Z.open_window(clique_index(), _n_nodes, _increment);
 }
 
-void TClique::update_Z(TCliqueStates &states, const TTree *tree,
+void TClique::update_Z(TNodeStateCliqueView &states, const TTree *tree,
                        const TCellUniforms &uniforms) const {
 	const double stationary_0 = transition_grid().stationary(false);
 
@@ -51,8 +39,8 @@ void TClique::update_Z(TCliqueStates &states, const TTree *tree,
 			// The parent comes after this node in post-order, so the walk has not touched it and
 			// its state is still the one this update started from.
 			const auto bin_branch_len = tree->get_previous_binned_branch_length(index_in_tree);
-			calculate_log_prob_parent_to_node(bin_branch_len,
-			                                  states.get(tree->parent_of(index_in_tree)), sum_log);
+			calculate_log_prob_parent_to_node(
+			    bin_branch_len, states.is_one(tree->parent_of(index_in_tree)), sum_log);
 		}
 
 		// calculate P(child | node = 0) and P(child | node = 1) for all children of node
@@ -63,16 +51,16 @@ void TClique::update_Z(TCliqueStates &states, const TTree *tree,
 		const double log_prob_0 = sum_log[0].getSum();
 		const double log_prob_1 = sum_log[1].getSum();
 		bool new_state =
-		    sample(log_prob_0, log_prob_1, uniforms.at(states.linear_index_in_Z(index_in_tree)));
+		    sample(log_prob_0, log_prob_1, uniforms.at(states.linear_index(index_in_tree)));
 
-		// The window writes the cell it already holds in place, and buffers the one it does not,
-		// because inserting reallocates a sparse row. A later read on this window sees the new
-		// state either way, which is what the parent of this node needs.
-		states.set(index_in_tree, new_state);
+		// The view writes the cell the node state already holds in place. It defers the one the
+		// node state cannot take. See ADR-0006. A later read on this view sees the new state
+		// either way, which is what the parent of this node needs.
+		states.set_state(index_in_tree, new_state);
 	}
 }
 
-void TClique::initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const {
+void TClique::initialize_Z_from_children(TNodeStateCliqueView &states, const TTree *tree) const {
 	// Bottom-up start of Z, as one forward walk. The internal nodes are stored as the non-root
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
@@ -84,7 +72,7 @@ void TClique::initialize_Z_from_children(TCliqueStates &states, const TTree *tre
 	}
 }
 
-void TClique::_initialize_node_from_children(size_t node_index, TCliqueStates &states,
+void TClique::_initialize_node_from_children(size_t node_index, TNodeStateCliqueView &states,
                                              const TTree *tree) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
@@ -95,7 +83,7 @@ void TClique::_initialize_node_from_children(size_t node_index, TCliqueStates &s
 
 	// The mode, not a draw: this is where the chain starts, and the first update moves it.
 	const bool most_likely_state = log_prob_1 > log_prob_0;
-	states.set(node_index, most_likely_state);
+	states.set_state(node_index, most_likely_state);
 }
 
 void TClique::_calculate_log_prob_root(double stationary_0,
@@ -105,15 +93,15 @@ void TClique::_calculate_log_prob_root(double stationary_0,
 }
 
 void TClique::_calculate_log_prob_node_to_children(
-    size_t index_in_tree, const TTree *tree, const TCliqueStates &states,
+    size_t index_in_tree, const TTree *tree, const TNodeStateCliqueView &states,
     std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 	const auto &process = transition_grid();
 	for (const auto &child_index : tree->children_of(index_in_tree)) {
 		// Note: the *previous* bin, because new values were proposed before the loop started.
 		// Children come before their parent in post-order, so this reads a state the walk has
-		// already assigned -- which the window shows even where it could not write it in place.
+		// already assigned -- which the view shows even where it could not write it in place.
 		auto bin_length        = tree->get_previous_binned_branch_length(child_index);
-		const bool child_state = states.get(child_index);
+		const bool child_state = states.is_one(child_index);
 		for (size_t i = 0; i < 2; ++i) { // loop over possible values (0 or 1) of the node
 			sum_log[i].add(process.probability(bin_length, i, child_state));
 		}

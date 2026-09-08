@@ -97,13 +97,13 @@ private:
 	[[nodiscard]] stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
 	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
 	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
-	void _add_to_LL_branch_lengths(size_t c, const TCliqueStates &states,
+	void _add_to_LL_branch_lengths(size_t c, const TNodeStateCliqueView &states,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
 	[[nodiscard]] double
 	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
 	                                          const TClique &clique,
-	                                          const TCliqueStates &states) const;
+	                                          const TNodeStateCliqueView &states) const;
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -111,7 +111,7 @@ private:
 	/// node, once with the clique's current grid and once with the proposal's candidate.
 	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, const TClique &clique,
 	                                         bool state_of_node, coretools::TSumLogProbability &LL,
-	                                         const TCliqueStates &states,
+	                                         const TNodeStateCliqueView &states,
 	                                         std::optional<size_t> branch_len_bin,
 	                                         const TTransitionGrid &process) const {
 		if (_topology().is_root(index_in_tree)) {
@@ -124,7 +124,7 @@ private:
 	}
 
 	template<bool IsAlpha, typename TypeParam>
-	void _update_nu_or_alpha(const TCliqueStates &states, size_t c, TypeParam *param) {
+	void _update_nu_or_alpha(const TNodeStateCliqueView &states, size_t c, TypeParam *param) {
 		// propose a new value
 		param->propose(coretools::TRange(c));
 
@@ -152,7 +152,7 @@ private:
 		coretools::TSumLogProbability LL_new;
 		const auto &topology = _topology();
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
-			bool state_of_node = states.get(i);
+			bool state_of_node = states.is_one(i);
 
 			// Note: need to take oldValue because we update _binned_branch_length before
 			// starting the loop!!!
@@ -176,6 +176,12 @@ private:
 			_cliques[c].set_transition_grid(candidate);
 			if constexpr (!IsAlpha) { _nu_c[c] = new_value; }
 		}
+	}
+
+	/// The cells of clique `c`, addressed by node index. One place holds the three things a view
+	/// is built from, so the loops below cannot drift apart.
+	[[nodiscard]] TNodeStateCliqueView _clique_view(size_t c) {
+		return {_Z, _topology(), _cliques[c].clique_index(), _dimension};
 	}
 
 	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
@@ -276,8 +282,10 @@ public:
 	/// the leaf block of this tree's node state. So the walk below, and the alpha and nu moves
 	/// after it, read one tree and nothing else. See ADR-0005. The leaves themselves are drawn
 	/// with the field, as one eight-state block, before this runs.
-	template<bool FixZ>
-	void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
+	///
+	/// Every read and write of a cell goes through the clique's view, which is the one place a
+	/// node index becomes a cell of the node state.
+	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
 		std::vector<std::vector<size_t>> indices_to_insert(this->_cliques.size());
 
 		// The stream this tree's node state draws from this iteration, built before the parallel
@@ -299,9 +307,9 @@ public:
     schedule(dynamic) shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
-			// The window this clique reads and writes through. It stays open across the moves
-			// below, because those moves read the states the walk assigns (ADR-0006).
-			auto states         = _cliques[i].open_states(_Z, _topology());
+			// The cells this clique reads and writes. The view lives across the moves below,
+			// because those moves read the states the walk assigns.
+			auto states         = _clique_view(i);
 			// update Z
 			if constexpr (!FixZ) { _cliques[i].update_Z(states, this, node_state_uniforms); }
 
@@ -312,10 +320,9 @@ public:
 			// add to likelihood ratio for branch length
 			_add_to_LL_branch_lengths(i, states, log_sum_local, pairs);
 
-			// The window ends here, inside the parallel region, so it hands its inserts out
-			// rather than making them (ADR-0006). The list is taken whether or not the walk ran.
-			// A window that is dropped instead commits what it holds.
-			indices_to_insert[i] = states.take_buffered_inserts();
+			// The view ends here, inside the parallel region, so it hands its inserts out rather
+			// than making them. The list is taken whether or not the walk ran.
+			indices_to_insert[i] = states.take_deferred_inserts();
 		}
 
 		// update branch lengths
@@ -367,14 +374,13 @@ public:
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(per_clique)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto states   = _cliques[i].open_node_state_window(_Z);
+			auto states   = _clique_view(i);
 			per_clique[i] = node_state_density::log_density_of_clique(
 			    _topology(), _cliques[i].transition_grid(), states,
 			    [this](size_t node) { return get_binned_branch_length(node); });
-			// The window is read and never written, so it buffers nothing. It is ended here all
-			// the same, so that no window reaches its storage from inside the parallel region
-			// (ADR-0006).
-			const std::vector<size_t> inserts = states.take_buffered_inserts();
+			// The view is read and never written, so it defers nothing. Its list is taken here
+			// all the same, so that no view reaches its storage from inside the parallel region.
+			const std::vector<size_t> inserts = states.take_deferred_inserts();
 			DEBUG_ASSERT(inserts.empty());
 		}
 		// In clique order, so the answer does not depend on how the cliques were shared out.
@@ -395,9 +401,9 @@ public:
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(indices_to_insert)
 		for (size_t i = 0; i < _cliques.size(); ++i) {
-			auto states = _cliques[i].open_states(_Z, _topology());
+			auto states = _clique_view(i);
 			_cliques[i].initialize_Z_from_children(states, this);
-			indices_to_insert[i] = states.take_buffered_inserts();
+			indices_to_insert[i] = states.take_deferred_inserts();
 		}
 
 		_Z.insert_in_Z(indices_to_insert);

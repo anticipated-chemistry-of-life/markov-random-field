@@ -14,62 +14,18 @@
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/clique/TCliqueView.h"
 #include <cstddef>
 #include <optional>
 #include <utility>
 #include <vector>
 
 class TTree;
-class TClique;
-
-/// The states of one clique's nodes, read and written through a window.
-///
-/// The window runs over every node of the clique, leaves included. Nothing here reads the field.
-/// A tree field is the leaf block of this very run of cells, so the walk below, and the alpha and
-/// nu moves after it, read one tree alone. See ADR-0005.
-///
-/// The walk keeps no copy of the states it assigns. It reads them back from the window it wrote
-/// them through. The window stays open across the moves that follow the walk, which read those
-/// states too. ADR-0006 gives the argument for both.
-class TCliqueStates {
-private:
-	/// This clique's cells of the node state: every node of the tree.
-	TNodeStateStorage::TWindow _nodes;
-	const TPhylogeny *_topology;
-
-public:
-	/// Opens the window over this clique's cells of the node state.
-	TCliqueStates(TNodeStateStorage &Z, const TClique &clique, const TPhylogeny &topology);
-
-	/// The state of `node`, from this tree's own node state.
-	[[nodiscard]] bool get(size_t node) const { return _nodes.is_one(node); }
-
-	/// Gives `node` its new state. A write of the state the cell already carries is dropped. The
-	/// sparse window would otherwise buffer an insert for a cell it does not hold, and then throw
-	/// that insert away.
-	void set(size_t node, bool state) {
-		// The walk assigns internal nodes. A leaf's state is drawn with the field and the other
-		// tree's leaf, as one eight-state block, and not here (ADR-0005).
-		DEBUG_ASSERT(!_topology->is_leaf(node));
-		if (_nodes.is_one(node) != state) { _nodes.set_state(node, state); }
-	}
-
-	/// The linear index, in the node state's container space, of the cell `node` occupies. This is
-	/// the cell's name to the stream of uniforms.
-	[[nodiscard]] size_t linear_index_in_Z(size_t node) const { return _nodes.linear_index(node); }
-
-	/// Hands out the cells the window could not write in place, as linear indices, and ends the
-	/// window. The caller commits them after the parallel region. That is the only exit a window
-	/// inside one may take (ADR-0006).
-	[[nodiscard]] std::vector<size_t> take_buffered_inserts() {
-		return _nodes.take_buffered_inserts();
-	}
-};
 
 /** Class representing a clique in our model. A clique is defined as having a set of nodes that are
- * all leaves in all dimensions except one. Each clique has a transition grid, and the start index
- * of the nodes in the tree. The start index, the variable dimension, and the number of nodes are
- * needed to get the correct indices in our multidimensional space Y and Z.
+ * all leaves in all dimensions except one. Each clique has a transition grid and its own
+ * multidimensional index. Turning that index into the cell a node occupies is TCliqueView's, and
+ * nothing here does it.
  */
 class TClique {
 private:
@@ -80,7 +36,6 @@ private:
 
 	// info about size and dimensionality of clique
 	IndexArray _start_index_in_leaves_space;
-	size_t _variable_dimension;
 	size_t _n_nodes;
 	size_t _increment;
 
@@ -90,33 +45,22 @@ private:
 
 	/// @brief Calculates the log probability of a node to its children
 	void _calculate_log_prob_node_to_children(
-	    size_t index_in_tree, const TTree *tree, const TCliqueStates &states,
+	    size_t index_in_tree, const TTree *tree, const TNodeStateCliqueView &states,
 	    std::array<coretools::TSumLogProbability, 2> &sum_log) const;
 
 	/// @brief Starts one internal node at the state its children make most likely. This is
 	/// initialisation and not a sampler move: it runs once, before the chain's first update, and
 	/// it takes the mode rather than a draw.
 	/// @param node_index The index of the internal node we want to start
-	/// @param states The states of this clique's nodes, read and written through its windows.
+	/// @param states This clique's cells of the node state, read and written through its view.
 	/// @param tree the tree of interest
-	void _initialize_node_from_children(size_t node_index, TCliqueStates &states,
+	void _initialize_node_from_children(size_t node_index, TNodeStateCliqueView &states,
 	                                    const TTree *tree) const;
 
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
-	/// The cell node `node` of this clique occupies, in the column the clique runs at. Setting the
-	/// last dimension first and the variable one second is what makes this right for a clique along
-	/// either dimension: when they are the same dimension, the node wins.
-	[[nodiscard]] IndexArray cell_of(size_t node, size_t leaf_index_in_tree_of_last_dim) const {
-		IndexArray cell           = _start_index_in_leaves_space;
-		cell.back()               = leaf_index_in_tree_of_last_dim;
-		cell[_variable_dimension] = node;
-		return cell;
-	}
-
 public:
-	TClique(const IndexArray &start_index, size_t variable_dimension, size_t n_nodes,
-	        size_t increment);
+	TClique(const IndexArray &start_index, size_t n_nodes, size_t increment);
 	~TClique() = default;
 
 	/// @brief Install this clique's process. Called once the parameters exist, and again whenever a
@@ -129,24 +73,17 @@ public:
 		return _transition_grid.value();
 	}
 
-	/// The window this clique's turn reads and writes through: the node state's column. The caller
-	/// keeps it open for the whole of that turn, because the parameter and branch-length moves that
-	/// follow the node-state walk have to see the states that walk assigned.
-	[[nodiscard]] TCliqueStates open_states(TNodeStateStorage &Z,
-	                                        const TPhylogeny &topology) const;
-
-	/// The node state's column for this clique, on its own. The simulation draws every node from
-	/// its parent and reads no leaf, so it needs no window on the field.
+	/// This clique's cells of the node state, on their own. The forward draw of a simulation
+	/// writes every node, leaves included, which is the one write a clique view refuses.
 	[[nodiscard]] TNodeStateStorage::TWindow open_node_state_window(TNodeStateStorage &Z) const;
 
-	/// The cell this clique's first node occupies. A window over the clique opens here and steps
-	/// by the increment.
-	[[nodiscard]] IndexArray first_cell() const {
-		return cell_of(0, _start_index_in_leaves_space.back());
-	}
+	/// This clique's own multidimensional index: a leaf in every dimension but its tree's own,
+	/// which carries a 0. Setting that dimension to a node index gives that node's cell, which is
+	/// what TCliqueView does and what nothing else does any more.
+	[[nodiscard]] const IndexArray &clique_index() const { return _start_index_in_leaves_space; }
 
 	/// @brief Update the Z dimension for this clique.
-	/// @param states The states of this clique's nodes, read and written through its windows.
+	/// @param states This clique's cells of the node state, read and written through its view.
 	/// @param tree The tree.
 	/// @param uniforms the node state's stream for this iteration. Each node draws the one uniform
 	/// its own cell names, so the walk gives the same states whichever thread runs it.
@@ -155,13 +92,10 @@ public:
 	/// which scored that node against its parent *and* against every child, so each internal edge
 	/// counted twice. The joint density is a question about the configuration the walk leaves
 	/// behind, and tree/node_state_density.h answers it there.
-	void update_Z(TCliqueStates &states, const TTree *tree, const TCellUniforms &uniforms) const;
+	void update_Z(TNodeStateCliqueView &states, const TTree *tree,
+	              const TCellUniforms &uniforms) const;
 
-	void initialize_Z_from_children(TCliqueStates &states, const TTree *tree) const;
-
-	/// @brief Return the number of nodes in the clique
-	/// @return Return the number of nodes in the clique
-	[[nodiscard]] size_t get_number_of_nodes() const { return _n_nodes; }
+	void initialize_Z_from_children(TNodeStateCliqueView &states, const TTree *tree) const;
 
 	/// @brief Calculates the log probability of a node to its parent, under this clique's current
 	/// process.
@@ -178,19 +112,16 @@ public:
 		}
 	}
 
-	/// @return Returns the jump size of the clique
-	[[nodiscard]] size_t get_increment() const { return _increment; }
-
 	/// @brief P(node | parent) under an explicitly given process, so a Metropolis proposal can ask
 	/// the same question of the current grid and of its candidate.
 	double calculate_prob_to_parent(size_t index_in_tree, const TTree *tree,
 	                                TypeBinnedBranchLengths binned_branch_length,
-	                                const TCliqueStates &states,
+	                                const TNodeStateCliqueView &states,
 	                                const TTransitionGrid &process) const {
 		size_t parent_index = _get_parent_index(index_in_tree, tree);
 
-		bool parent_state = states.get(parent_index);
-		bool child_state  = states.get(index_in_tree);
+		bool parent_state = states.is_one(parent_index);
+		bool child_state  = states.is_one(index_in_tree);
 		return process.probability(binned_branch_length, parent_state, child_state);
 	}
 };
