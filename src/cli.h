@@ -46,11 +46,11 @@ public:
 	/// The error probability omega: the rate at which one tree field cell is corrupted before the
 	/// two are reconciled into the field (ADR-0005). Used as the simulated truth when simulating
 	/// and as the starting value of the inferred omega parameter when inferring.
-	static inline double ERROR_PROBABILITY = 0.05;
+	static inline double ERROR_PROBABILITY = 0.005;
 
 	/// The rate of the exponential prior on the error probability, truncated to (0, 0.5). A rate of
 	/// 20 puts the prior mean at 0.05. A larger rate concentrates the prior harder on small values.
-	static inline double ERROR_PROBABILITY_PRIOR_RATE = 20.0;
+	static inline double ERROR_PROBABILITY_PRIOR_RATE = 200.0;
 
 	static inline double GAMMA = 1.1;
 
