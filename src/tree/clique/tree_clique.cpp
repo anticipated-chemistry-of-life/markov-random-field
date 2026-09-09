@@ -58,7 +58,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 		for (size_t d = 0; d < all_trees.size(); ++d) {
 			if (d == _dimension) continue;
 			size_t node_idx = all_trees[d]->get_node_index_from_leaf_index(clique_index[d]);
-			if (!name.empty()) name += "_";
+			if (!name.empty()) name += '_';
 			name += all_trees[d]->get_node_id(node_idx);
 		}
 		_clique_names.push_back(name);
