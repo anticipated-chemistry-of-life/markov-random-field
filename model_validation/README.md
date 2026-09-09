@@ -120,3 +120,25 @@ says so at more length.
   internal nodes _excluding_ roots, while `TPhylogeny::n_internal_nodes()`
   _includes_ them. Neither sizes the node state any more: since ADR-0005 that
   dimension spans every node of its tree, leaves included.
+
+## The mixing cost of dropping the block update
+
+ADR-0005 argued for the leaf layer's eight-state block update on the grounds
+that the field and both tree fields are metastable under single-variable draws at
+a small error probability, and that the failure would present as slow mixing
+rather than as a bug. Issue #68 deleted that block update. `mixing_cost/`
+measures what that costs, since slow mixing is not something a test suite trips
+over.
+
+```bash
+bash mixing_cost/run.sh
+```
+
+Two binaries — the revision before the block update was deleted, and the working
+tree — infer from one data set the reference binary simulated. The data set is
+fixed and the seed is not: the pattern of random-number consumption changed, so
+the two cannot be compared seed for seed.
+`compare_mixing.py` reads the joint density trace's autocorrelation time and both
+tree field posteriors, the second as a point on the ADR-0005 ridge.
+[`mixing_cost/README.md`](./mixing_cost/README.md) says how, and
+[`mixing_cost/findings.md`](./mixing_cost/findings.md) is the recorded result.
