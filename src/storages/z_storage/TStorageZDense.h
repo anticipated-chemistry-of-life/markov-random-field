@@ -50,8 +50,8 @@ public:
 	}
 };
 
-static_assert(WindowedStorage<TStorageZDense>,
-              "The dense node state must satisfy the binary storage interface, window and all.");
+static_assert(BinaryStorage<TStorageZDense>,
+              "The dense node state must satisfy the binary storage interface.");
 static_assert(LocatableStorage<TStorageZDense>,
               "The dense node state must point an updater at one of its cells.");
 static_assert(!FieldStorage<TStorageZDense>,

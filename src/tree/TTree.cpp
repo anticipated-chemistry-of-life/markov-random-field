@@ -146,17 +146,27 @@ void TTree::simulate_Z() {
 	// The bin each branch sits in. Never asked of a root, which has no branch.
 	const auto bin_of = [this](size_t node) { return get_binned_branch_length(node); };
 
+	// One list per clique, committed in one batch below. Not per clique: a sparse node state
+	// re-sorts every row and every column of the whole matrix on commit, which is the right cost
+	// to pay once over every list at once and the wrong one to pay once per clique (ADR-0006).
+	std::vector<std::vector<size_t>> indices_to_insert(_cliques.size());
+
 	for (size_t c = 0; c < _cliques.size(); ++c) {
 		auto &clique = _cliques[c];
 		_simulation_prepare_cliques(c, clique);
 
-		// This clique's column of the node state, every node of it. Every node reads the state
-		// its parent was given, through the window that wrote it. The window closes with the
-		// clique's turn and commits what it buffered, which is safe on one thread.
+		// This clique's cells of the node state, every node of them. Every node reads the state
+		// its parent was given, which the view shows even where the node state could not take
+		// the write.
 		//
 		// The leaves are drawn with the rest. Their block is this tree's tree field (ADR-0005).
-		auto nodes = clique.open_node_state_window(_Z);
+		TNodeStateSimulationView nodes(_Z, _topology(), clique.clique_index(), _dimension);
 		node_state_draw::draw_clique(_topology(), clique.transition_grid(), bin_of, uniforms,
 		                             nodes);
+		indices_to_insert[c] = nodes.take_deferred_inserts();
 	}
+
+	// Cliques are disjoint runs, and a view reads back its own deferred write, so no clique
+	// needed another clique's inserts to have landed first.
+	_Z.insert_in_Z(indices_to_insert);
 }

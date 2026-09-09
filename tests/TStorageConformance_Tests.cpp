@@ -13,19 +13,19 @@
 // "linear index round-trips" whatever the layout; a container one cell wide, which is what a tree
 // with a single leaf asks for, does not.
 //
-// Four lists, because not every storage answers everything. `Storages` holds every one of them
-// and carries the shared surface. `WindowedStorages` holds the four the update loops read and write
-// through a window. The dense window indexes the state vector and the sparse window materialises
-// its line, so the two run different code behind one interface (ADR-0006). What they owe in common
-// is here. `StoragesWithACursor` holds the four the merge joins walk. `LocatableStorages` holds the
-// four that point an updater at one of their cells. Adding a storage means adding a type to the
-// lists it answers to.
+// Three lists, because not every storage answers everything. `Storages` holds every one of them
+// and carries the shared surface -- including the run of cells an update writes, which every
+// storage answers through `write_or_defer` (storages/cell_write.h). `StoragesWithACursor` holds
+// the four the merge joins walk. `LocatableStorages` holds the four that point an updater at one
+// of their cells; the two sorted-vector matrix storages make that write themselves instead, and
+// the run tests cover both spellings without naming either. Adding a storage means adding a type
+// to the lists it answers to.
 //
 // What is deliberately *not* asserted equal between the backends is which cells a storage holds.
-// Dense holds the whole container space, sparse holds what it was given. Nothing outside a storage
-// asks any more: the sparse window answers it from the line it walked on open. What is left to
-// check is that both backends end at the same state, which is what the equivalence tests below do.
-// `empty()` is the same story and has a test of its own.
+// Dense holds the whole container space, sparse holds what it was given. It reaches an update
+// through one answer only: whether a write lands in place or waits for a bulk insert. What is
+// left to check is that both backends end at the same state, which is what the equivalence tests
+// below do. `empty()` is the same story and has a test of its own.
 //
 
 #include "constants.h"
@@ -41,7 +41,6 @@
 #include "storages/z_storage/TStorageZMatrix.h"
 #include "tree/TPhylogeny.h"
 #include "tree/node_state_shape.h"
-#include "window_contents.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -286,48 +285,82 @@ void run_chain(Field &field, const std::vector<std::vector<TWrite>> &script,
 size_t n_writes_for(size_t total_size) { return std::min<size_t>(4 * total_size, 1000); }
 
 // -------------------------------------------------------------------------
-// The windows a shape offers
+// The runs of cells a shape offers
 // -------------------------------------------------------------------------
+//
+// A run is what an update walks: a start, a count and a stride. A clique is a run down one
+// dimension of a node state, and a species leaf's share of the field update is a run along the
+// other. Nothing addresses a run as an object any more -- the caller does the arithmetic and asks
+// the storage cell by cell -- so a run here is a test fixture and no longer a type under test.
 
-/// One window: where it starts, how many cells it holds, and how far apart they are.
-struct TWindowShape {
+/// One run: where it starts, which dimension it varies, how many cells it holds, and how far
+/// apart they are.
+///
+/// The dimension is carried rather than read off the stride, because the stride cannot say. A run
+/// along the first dimension steps by the width of a row, which is one cell in a container one
+/// column wide -- the stride a run along the last dimension has. A caller always knows which
+/// dimension it is walking; the shape is what turns that into a stride.
+struct TRunShape {
 	IndexArray start{0, 0};
-	size_t n_cells = 0;
-	size_t stride  = 1;
+	size_t varying_dimension = 1;
+	size_t n_cells           = 0;
+	size_t stride            = 1;
 };
 
-/// Every line of a container, as a window: one per row and one per column, each taken whole and
-/// again from halfway along, because a window need not start at the beginning of its line.
-std::vector<TWindowShape> every_window_over(const IndexArray &shape) {
-	std::vector<TWindowShape> windows;
+/// Every line of a container, as a run: one per row and one per column, each taken whole and
+/// again from halfway along, because a run need not start at the beginning of its line.
+std::vector<TRunShape> every_run_over(const IndexArray &shape) {
+	std::vector<TRunShape> runs;
 	for (size_t row = 0; row < shape[0]; ++row) {
 		const size_t half = shape[1] / 2;
-		windows.push_back({IndexArray{row, 0}, shape[1], 1});
-		windows.push_back({IndexArray{row, half}, shape[1] - half, 1});
+		runs.push_back({IndexArray{row, 0}, 1, shape[1], 1});
+		runs.push_back({IndexArray{row, half}, 1, shape[1] - half, 1});
 	}
 	for (size_t col = 0; col < shape[1]; ++col) {
 		const size_t half = shape[0] / 2;
-		windows.push_back({IndexArray{0, col}, shape[0], shape[1]});
-		windows.push_back({IndexArray{half, col}, shape[0] - half, shape[1]});
+		runs.push_back({IndexArray{0, col}, 0, shape[0], shape[1]});
+		runs.push_back({IndexArray{half, col}, 0, shape[0] - half, shape[1]});
 	}
-	return windows;
+	return runs;
 }
 
-/// Four of the windows above: a whole row, a row from halfway along, a whole column, and a column
+/// Four of the runs above: a whole row, a row from halfway along, a whole column, and a column
 /// from halfway down. The tests that *write* take these rather than every line, because writing
 /// every line of the largest generated shape turns the suite into a benchmark.
-std::vector<TWindowShape> a_few_windows_over(const IndexArray &shape) {
+std::vector<TRunShape> a_few_runs_over(const IndexArray &shape) {
 	const size_t middle_row = shape[0] / 2;
 	const size_t middle_col = shape[1] / 2;
 	return {
-	    {IndexArray{0, 0}, shape[1], 1},
-	    {IndexArray{middle_row, middle_col}, shape[1] - middle_col, 1},
-	    {IndexArray{0, 0}, shape[0], shape[1]},
-	    {IndexArray{middle_row, middle_col}, shape[0] - middle_row, shape[1]},
+	    {IndexArray{0, 0}, 1, shape[1], 1},
+	    {IndexArray{middle_row, middle_col}, 1, shape[1] - middle_col, 1},
+	    {IndexArray{0, 0}, 0, shape[0], shape[1]},
+	    {IndexArray{middle_row, middle_col}, 0, shape[0] - middle_row, shape[1]},
 	};
 }
 
-/// A state per cell of a window, drawn so that both states are asked for.
+/// Writes one run of cells the way an update inside a parallel region writes one: one call to
+/// `write_or_defer` per cell, and the cells the storage could not take handed back so that the
+/// caller can commit them once the region ends.
+template<typename Storage>
+std::vector<size_t> write_run(Storage &storage, const TRunShape &request,
+                              const std::vector<uint8_t> &states) {
+	const size_t start = storage.get_linear_index_in_container_space(request.start);
+	std::vector<size_t> deferred_inserts;
+	for (size_t k = 0; k < request.n_cells; ++k) {
+		write_or_defer(storage, start + k * request.stride, states[k] != 0, deferred_inserts);
+	}
+	return deferred_inserts;
+}
+
+/// Whether a storage holds every cell of its container space from the moment it is sized. That is
+/// what "dense" means here, and it is the one thing a write to a run behaves differently for: a
+/// storage that holds every cell never defers.
+template<typename Storage>
+constexpr bool holds_every_cell =
+    std::is_same_v<Storage, TStorageYDense> || std::is_same_v<Storage, TStorageZDense> ||
+    std::is_same_v<Storage, TDenseStateArray>;
+
+/// A state per cell of a run, drawn so that both states are asked for.
 std::vector<uint8_t> random_states(std::mt19937_64 &rng, size_t n_cells) {
 	std::uniform_real_distribution<double> unit(0.0, 1.0);
 	std::vector<uint8_t> states(n_cells, 0);
@@ -407,17 +440,11 @@ using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatr
                                   TSparseBinaryArray, TDenseStateArray>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
 
-template<typename Storage> class WindowConformance : public ::testing::Test {};
-/// The storages the update loops read and write through a window. The observed data is not one of
-/// them. A data source reads one cell at a time and opens no window.
-using WindowedStorages =
-    ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense>;
-TYPED_TEST_SUITE(WindowConformance, WindowedStorages, StorageNames);
-
 template<typename Storage> class HandleConformance : public ::testing::Test {};
 /// The storages that point an updater at one of their cells. The two sorted-vector matrix storages
 /// are not among them. That matrix keeps every cell twice, once in its row and once in its column,
-/// so it has no single cell to point at. They join the list when they own their cells.
+/// so it has no single cell to point at. They join the list when they own their cells; until then
+/// the run tests above reach them through `write_or_defer`, which covers both spellings.
 using LocatableStorages =
     ::testing::Types<TStorageZDense, TStorageYDense, TSparseBinaryArray, TDenseStateArray>;
 TYPED_TEST_SUITE(HandleConformance, LocatableStorages, StorageNames);
@@ -496,16 +523,21 @@ TYPED_TEST(StorageConformance, every_cell_holds_the_state_it_was_last_written) {
 }
 
 // -------------------------------------------------------------------------
-// The window a storage opens over itself
+// The run of cells an update walks
 // -------------------------------------------------------------------------
+//
+// These were the window's conformance tests. A window owned the traversal, so it owned the
+// answers; now the caller does the arithmetic and the storage answers one cell at a time, and the
+// same properties are asked of the storage directly. Which of the two spellings of a write a
+// storage brings -- a handle, or a write it makes itself -- is `write_or_defer`'s business and no
+// test names it here.
 
-TYPED_TEST(WindowConformance, a_window_reads_what_the_point_lookups_read) {
-	// Everything an update reads comes through a window, so a window has to answer what a point
-	// lookup answers -- for the sparse implementation that means the line walk has to find every
-	// stored cell of the line. Over every line of every generated shape, both ways round: along
-	// the last dimension, where the cells are consecutive, and along the first, where they are a
-	// whole row apart. Each line is taken whole and again from halfway along, because a window
-	// need not start at the beginning of its line.
+TYPED_TEST(StorageConformance, a_run_addresses_the_cells_the_multidimensional_index_addresses) {
+	// The arithmetic a clique and a field row are both written as: start plus k strides. It is the
+	// storage's own index conversion that says which cell that is, and a run has to agree with it
+	// -- over every line of every generated shape, both ways round. Along the last dimension the
+	// cells are consecutive; along the first they are a whole row apart, and in a container one
+	// cell wide those two are the same step, which is why the shapes and not the stride decide.
 	std::mt19937_64 rng(20260828);
 
 	for (const auto &shape : generated_shapes()) {
@@ -514,20 +546,17 @@ TYPED_TEST(WindowConformance, a_window_reads_what_the_point_lookups_read) {
 		TExpectedCells expected(n_cells);
 		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
 
-		for (const auto &request : every_window_over(shape)) {
-			const size_t start_linear = request.start[0] * shape[1] + request.start[1];
-			auto window = storage.open_window(request.start, request.n_cells, request.stride);
-			ASSERT_EQ(window.size(), request.n_cells);
+		for (const auto &request : every_run_over(shape)) {
+			const size_t start = storage.get_linear_index_in_container_space(request.start);
 			for (size_t k = 0; k < request.n_cells; ++k) {
-				ASSERT_EQ(window.linear_index(k), start_linear + k * request.stride)
-				    << "window cell " << k;
-				ASSERT_EQ(window.is_one(k), storage.is_one(window.linear_index(k)))
-				    << "window cell " << k;
-				ASSERT_EQ(window.is_one(k), expected.states[window.linear_index(k)] != 0)
-				    << "window cell " << k;
+				const size_t linear = start + k * request.stride;
+				IndexArray cell     = request.start;
+				cell[request.varying_dimension] += k;
+				ASSERT_EQ(storage.get_multi_dimensional_index(linear), cell) << "run cell " << k;
+				ASSERT_EQ(storage.is_one(linear), expected.states[linear] != 0) << "run cell " << k;
 			}
 			if (::testing::Test::HasFailure()) {
-				FAIL() << "window at " << request.start[0] << "," << request.start[1] << " of "
+				FAIL() << "run at " << request.start[0] << "," << request.start[1] << " of "
 				       << request.n_cells << " cells, stride " << request.stride << ", shape "
 				       << shape[0] << "x" << shape[1];
 			}
@@ -535,205 +564,128 @@ TYPED_TEST(WindowConformance, a_window_reads_what_the_point_lookups_read) {
 	}
 }
 
-TYPED_TEST(WindowConformance, a_window_shows_its_own_write_to_a_later_read) {
-	// The readback contract of ADR-0006. A node-state walk goes in post-order, so it reads a
-	// parent after writing its children. The sparse window buffers a write to a cell it does not
-	// hold, and a read that returned the old state would send the two backends down different
-	// chains inside one update.
+TYPED_TEST(StorageConformance, a_write_that_lands_is_read_back_and_a_deferred_one_is_not) {
+	// What the window's readback contract became. A write the storage takes is there the moment it
+	// is made; a write it could not take is not, and stays absent until the deferred list is
+	// committed. A walk that reads what it has just written -- a post-order walk does, at every
+	// parent -- has to carry that itself, and TCliqueView is where it does (ADR-0006).
 	std::mt19937_64 rng(20260828);
 	for (const auto &shape : generated_shapes()) {
 		auto storage         = make_storage<TypeParam>(shape);
 		const size_t n_cells = storage.total_size_of_container_space();
 		TExpectedCells expected(n_cells);
-		// Written first, so that a window covers cells the sparse storage holds and cells it does
-		// not. The second kind is where a buffered write is the only thing to read back.
+		// Written first, so that a run covers cells the sparse storage holds and cells it does
+		// not. The second kind is what a write can be deferred for.
 		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
 
-		for (const auto &request : a_few_windows_over(shape)) {
-			const auto written = random_states(rng, request.n_cells);
-			auto window = storage.open_window(request.start, request.n_cells, request.stride);
-			for (size_t k = 0; k < request.n_cells; ++k) { window.set_state(k, written[k] != 0); }
+		for (const auto &request : a_few_runs_over(shape)) {
+			const auto written  = random_states(rng, request.n_cells);
+			const size_t start  = storage.get_linear_index_in_container_space(request.start);
+			const auto deferred = write_run(storage, request, written);
 
-			// Read back through the same window, and before it closes.
 			for (size_t k = 0; k < request.n_cells; ++k) {
-				ASSERT_EQ(window.is_one(k), written[k] != 0) << "window cell " << k;
+				const size_t linear = start + k * request.stride;
+				const bool waiting =
+				    std::find(deferred.begin(), deferred.end(), linear) != deferred.end();
+				ASSERT_EQ(storage.is_one(linear), written[k] != 0 && !waiting) << "run cell " << k;
+			}
+			for (const size_t linear : deferred) { storage.insert_one(linear); }
+			for (size_t k = 0; k < request.n_cells; ++k) {
+				ASSERT_EQ(storage.is_one(start + k * request.stride), written[k] != 0)
+				    << "run cell " << k;
 			}
 			if (::testing::Test::HasFailure()) {
-				FAIL() << "window at " << request.start[0] << "," << request.start[1] << ", shape "
+				FAIL() << "run at " << request.start[0] << "," << request.start[1] << ", shape "
 				       << shape[0] << "x" << shape[1];
 			}
 		}
 	}
 }
 
-TYPED_TEST(WindowConformance, a_window_write_reaches_the_storage_when_the_window_closes) {
-	std::mt19937_64 rng(20260828);
-	for (const auto &shape : generated_shapes()) {
-		auto storage         = make_storage<TypeParam>(shape);
-		const size_t n_cells = storage.total_size_of_container_space();
-		TExpectedCells expected(n_cells);
-		replay(storage, random_writes(rng, n_cells, n_writes_for(n_cells)), expected);
-
-		for (const auto &request : a_few_windows_over(shape)) {
-			const auto written = random_states(rng, request.n_cells);
-			std::vector<size_t> linear(request.n_cells, 0);
-			{
-				auto window = storage.open_window(request.start, request.n_cells, request.stride);
-				for (size_t k = 0; k < request.n_cells; ++k) {
-					window.set_state(k, written[k] != 0);
-					linear[k] = window.linear_index(k);
-				}
-				window.close();
-			}
-			// The windows of one shape overlap, so the storage is read while this one's writes are
-			// the last ones made.
-			for (size_t k = 0; k < request.n_cells; ++k) {
-				ASSERT_EQ(storage.is_one(linear[k]), written[k] != 0) << "window cell " << k;
-			}
-			if (::testing::Test::HasFailure()) {
-				FAIL() << "window at " << request.start[0] << "," << request.start[1] << ", shape "
-				       << shape[0] << "x" << shape[1];
-			}
-		}
-	}
-}
-
-TYPED_TEST(WindowConformance, a_window_that_leaves_scope_still_writes_what_it_was_given) {
-	// The sampler opens a window for a loop and lets it go. Closing is what commits the buffer, so
-	// leaving scope has to close it.
-	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
-	{
-		auto window = storage.open_window(IndexArray{1, 0}, /*n_cells=*/4, /*stride=*/1);
-		window.set_state(0, true);
-		window.set_state(2, true);
-	}
-	EXPECT_TRUE(storage.is_one(4));
-	EXPECT_FALSE(storage.is_one(5));
-	EXPECT_TRUE(storage.is_one(6));
-	EXPECT_FALSE(storage.is_one(7));
-}
-
-TYPED_TEST(WindowConformance, a_window_writes_a_held_cell_at_once_and_defers_the_rest) {
-	// The one place the two windows are allowed to differ, and the reason they may: the dense
-	// window indexes the state vector, so its write is already in the storage. The sparse window
-	// cannot insert a cell it does not hold without reallocating a row, so that write waits for
-	// close. Both windows read back the same state either way, which is the test above.
+TYPED_TEST(StorageConformance, a_run_along_a_row_writes_a_held_cell_at_once_and_defers_the_rest) {
+	// The one place the backends are allowed to differ, and the reason they may: a dense storage
+	// holds every cell of its container space, so its write is already in the storage. A sparse
+	// storage cannot insert a cell it does not hold without restructuring the container, so that
+	// write waits for the bulk insert.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
 	storage.insert_zero(4); // held by both, in state 0
 
-	auto window = storage.open_window(IndexArray{1, 0}, /*n_cells=*/4, /*stride=*/1);
-	window.set_state(0, true); // cell 4, which both storages hold
-	window.set_state(1, true); // cell 5, which only the dense storage holds
+	const std::vector<uint8_t> written{1, 1, 0, 0};
+	const auto deferred = write_run(storage, {IndexArray{1, 0}, 1, 4, 1}, written);
 
 	EXPECT_TRUE(storage.is_one(4)) << "a write to a held cell goes in place";
-	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
-	              std::is_same_v<TypeParam, TStorageZDense>) {
-		EXPECT_TRUE(storage.is_one(5)) << "the dense window holds no buffer";
+	if constexpr (holds_every_cell<TypeParam>) {
+		EXPECT_TRUE(deferred.empty()) << "a dense storage writes every cell in place";
+		EXPECT_TRUE(storage.is_one(5));
 	} else {
-		EXPECT_FALSE(storage.is_one(5)) << "the sparse window buffers an insert until it closes";
+		EXPECT_EQ(deferred, (std::vector<size_t>{5}))
+		    << "a sparse storage defers the cell it does not hold, and only that one";
+		EXPECT_FALSE(storage.is_one(5)) << "the write waits rather than restructuring the storage";
 	}
-	EXPECT_TRUE(window.is_one(0));
-	EXPECT_TRUE(window.is_one(1));
+	EXPECT_FALSE(storage.is_one(6)) << "an absent cell written to zero already reads as zero";
 
-	window.close();
+	for (const size_t linear : deferred) { storage.insert_one(linear); }
 	EXPECT_TRUE(storage.is_one(4));
 	EXPECT_TRUE(storage.is_one(5));
+	EXPECT_FALSE(storage.is_one(6));
 }
 
-TYPED_TEST(WindowConformance, a_column_window_writes_a_held_cell_at_once_and_defers_the_rest) {
-	// The same split, down a column. The sparse window walks a matrix row for a stride of one and a
-	// matrix column otherwise, so the two strides run different code to decide which cells the
-	// matrix holds. A column window that called a held cell absent would defer the write, and the
-	// commit writes a whole new cell where an in-place write keeps what the cell already carries.
+TYPED_TEST(StorageConformance, a_run_down_a_column_writes_a_held_cell_at_once_and_defers_the_rest) {
+	// The same split, down a column. A sorted-vector matrix keeps every cell twice, and asks its
+	// row whether it holds one, so the two strides reach that question by different arithmetic. A
+	// column run that named the wrong cell would defer a write the storage could have taken, and
+	// the commit writes a whole new cell where an in-place write keeps what the cell already
+	// carries. That is the clique-to-cell mapping the parity gate's non-square shapes catch.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
 	storage.insert_zero(4); // (row 1, column 0), held by both, in state 0
 
-	auto window = storage.open_window(IndexArray{0, 0}, /*n_cells=*/3, /*stride=*/4); // column 0
-	window.set_state(1, true); // cell 4, which both storages hold
-	window.set_state(2, true); // cell 8, which only the dense storage holds
+	const std::vector<uint8_t> written{0, 1, 1};
+	const auto deferred = write_run(storage, {IndexArray{0, 0}, 0, 3, 4}, written); // column 0
 
 	EXPECT_TRUE(storage.is_one(4)) << "a write to a held cell goes in place";
-	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
-	              std::is_same_v<TypeParam, TStorageZDense>) {
-		EXPECT_TRUE(storage.is_one(8)) << "the dense window holds no buffer";
+	if constexpr (holds_every_cell<TypeParam>) {
+		EXPECT_TRUE(deferred.empty()) << "a dense storage writes every cell in place";
+		EXPECT_TRUE(storage.is_one(8));
 	} else {
-		EXPECT_FALSE(storage.is_one(8)) << "the sparse window buffers an insert until it closes";
+		EXPECT_EQ(deferred, (std::vector<size_t>{8}))
+		    << "a sparse storage defers the cell it does not hold, and only that one";
+		EXPECT_FALSE(storage.is_one(8)) << "the write waits rather than restructuring the storage";
 	}
-	EXPECT_TRUE(window.is_one(1));
-	EXPECT_TRUE(window.is_one(2));
 
-	window.close();
+	for (const size_t linear : deferred) { storage.insert_one(linear); }
 	EXPECT_TRUE(storage.is_one(4));
 	EXPECT_TRUE(storage.is_one(8));
 }
 
-TYPED_TEST(WindowConformance, a_window_hands_out_the_inserts_it_could_not_write_in_place) {
-	// The other way a window ends. The clique walk runs in parallel, and an insert writes one row
-	// and one column of a sparse matrix, so no window in that loop may insert. It hands the cells
-	// out instead, and one bulk insert commits them after the loop. The dense window hands out
-	// nothing, so the same loop body serves both backends. See ADR-0006.
-	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
-	storage.insert_zero(4); // held by both, in state 0
-
-	auto window = storage.open_window(IndexArray{1, 0}, /*n_cells=*/4, /*stride=*/1);
-	window.set_state(0, true);  // cell 4, which both storages hold
-	window.set_state(1, true);  // cell 5, which only the dense storage holds
-	window.set_state(2, false); // cell 6, which neither storage has to be told about
-
-	const auto handed_out = window.take_buffered_inserts();
-	if constexpr (std::is_same_v<TypeParam, TStorageYDense> ||
-	              std::is_same_v<TypeParam, TStorageZDense>) {
-		EXPECT_TRUE(handed_out.empty()) << "the dense window writes every cell in place";
-	} else {
-		EXPECT_EQ(handed_out, (std::vector<size_t>{5}))
-		    << "the sparse window hands out the cell it does not hold, and only that one";
-		EXPECT_FALSE(storage.is_one(5)) << "the window handed the insert out rather than making it";
-	}
-
-	// The write in place landed either way, and a cell written to zero is never handed out.
-	EXPECT_TRUE(storage.is_one(4));
-	EXPECT_FALSE(storage.is_one(6));
-
-	// The window is drained. Closing it now writes nothing, so a buffered cell cannot reach the
-	// storage twice.
-	window.close();
-	EXPECT_TRUE(storage.is_one(4));
-	EXPECT_FALSE(storage.is_one(6));
-}
-
-TYPED_TEST(WindowConformance, a_window_runs_down_a_container_that_is_one_cell_wide) {
-	// A window along the first dimension steps by the width of a row, so in a container one cell
-	// wide it steps by one -- the stride a window along the last dimension has. The shape tells
-	// them apart, not the stride. A chain gives its container a single leaf, and so a single
-	// column.
+TYPED_TEST(StorageConformance, a_run_down_a_container_one_cell_wide_steps_by_one) {
+	// A run along the first dimension steps by the width of a row, so in a container one cell wide
+	// it steps by one -- the stride a run along the last dimension has. A chain gives its
+	// container a single leaf, and so a single column.
 	auto storage = make_storage<TypeParam>(IndexArray{4, 1});
 	storage.insert_one(1);
 	storage.insert_one(3);
 
-	auto window = storage.open_window(IndexArray{0, 0}, /*n_cells=*/4, /*stride=*/1);
-	ASSERT_EQ(window.size(), 4u);
-	EXPECT_FALSE(window.is_one(0));
-	EXPECT_TRUE(window.is_one(1));
-	EXPECT_FALSE(window.is_one(2));
-	EXPECT_TRUE(window.is_one(3));
-	for (size_t k = 0; k < 4; ++k) { EXPECT_EQ(window.linear_index(k), k); }
+	for (size_t k = 0; k < 4; ++k) {
+		EXPECT_EQ(storage.is_one(k), k == 1 || k == 3) << "cell " << k;
+	}
 
-	window.set_state(0, true);
-	window.set_state(3, false);
-	window.close();
+	const std::vector<uint8_t> written{1, 1, 0, 0};
+	for (const size_t linear : write_run(storage, {IndexArray{0, 0}, 0, 4, 1}, written)) {
+		storage.insert_one(linear);
+	}
 	EXPECT_TRUE(storage.is_one(0));
 	EXPECT_TRUE(storage.is_one(1));
 	EXPECT_FALSE(storage.is_one(2));
 	EXPECT_FALSE(storage.is_one(3));
 }
 
-TYPED_TEST(WindowConformance, a_window_over_no_cells_holds_nothing_and_closes) {
-	// A tree with one node gives a clique of one cell, and a window of none is one step further.
-	// Nothing to materialise and nothing to flush, on either backend.
+TYPED_TEST(StorageConformance, a_run_over_no_cells_writes_nothing_and_defers_nothing) {
+	// A tree with one node gives a clique of one cell, and a run of none is one step further.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
-	auto window  = storage.open_window(IndexArray{1, 2}, /*n_cells=*/0, /*stride=*/1);
-	EXPECT_EQ(window.size(), 0u);
-	EXPECT_NO_THROW(window.close());
+	EXPECT_TRUE(write_run(storage, {IndexArray{1, 2}, 1, 0, 1}, {}).empty());
+	for (size_t i = 0; i < storage.total_size_of_container_space(); ++i) {
+		EXPECT_FALSE(storage.is_one(i)) << "cell " << i;
+	}
 }
 
 TYPED_TEST(StorageConformance, an_untouched_cell_reads_as_zero) {
@@ -868,6 +820,45 @@ TYPED_TEST(HandleConformance, the_helper_writes_a_held_cell_at_once_and_defers_t
 	EXPECT_TRUE(storage.is_one(4));
 	EXPECT_TRUE(storage.is_one(5));
 	EXPECT_FALSE(storage.is_one(6));
+}
+
+TYPED_TEST(HandleConformance, a_handle_does_not_survive_a_bulk_insert_or_a_zero_removal) {
+	// The pointer-validity convention. A handle points into the storage, so it is good until the
+	// storage is restructured, and these two calls are what restructure it. A window's lifetime
+	// used to make this unsayable -- there was no pointer to keep -- so it is written down and
+	// checked here instead.
+	//
+	// What is shown is that the convention is load-bearing and not decorative: across each call a
+	// handle taken before it answers something that is no longer true, and a handle taken after it
+	// is right again. Using the stale one is what the convention forbids, and no test can assert
+	// that.
+	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
+	storage.insert_zero(4);
+
+	// A bulk insert gives a sparse storage a cell it did not hold.
+	const auto before_insert = storage.locate(5);
+	storage.insert_one(5);
+	const auto after_insert = storage.locate(5);
+	EXPECT_TRUE(after_insert.in_container) << "the cell was just inserted";
+	EXPECT_NE(after_insert.cell, nullptr);
+	EXPECT_TRUE(after_insert.is_one);
+	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+		EXPECT_FALSE(before_insert.in_container)
+		    << "a handle taken before the insert says the storage does not hold the cell";
+	}
+
+	// A zero removal takes one away again.
+	const auto before_removal = storage.locate(4);
+	ASSERT_TRUE(before_removal.in_container) << "every storage here holds a cell it was given";
+	storage.remove_zeros();
+	const auto after_removal = storage.locate(4);
+	EXPECT_FALSE(after_removal.is_one) << "the cell was a zero either way";
+	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+		EXPECT_FALSE(after_removal.in_container) << "the zero was reclaimed";
+		EXPECT_EQ(after_removal.cell, nullptr);
+	} else {
+		EXPECT_TRUE(after_removal.in_container) << "a dense storage holds every cell";
+	}
 }
 
 TYPED_TEST(StorageConformance,
@@ -1152,10 +1143,10 @@ TYPED_TEST(FieldConformance, a_field_that_has_counted_nothing_reports_no_posteri
 	EXPECT_DOUBLE_EQ(field.get_fraction_of_ones(0), 0.0);
 }
 
-TYPED_TEST(FieldConformance, a_write_through_a_window_leaves_the_counter_alone) {
-	// A window writes a state, and a state write keeps the cell's counter -- the same rule
+TYPED_TEST(FieldConformance, a_write_through_write_or_defer_leaves_the_counter_alone) {
+	// An update writes a state, and a state write keeps the cell's counter -- the same rule
 	// set_state follows, and the opposite of the one an insert follows. The counter is what the
-	// posterior is read off, so a window that reset it would throw away the chain so far.
+	// posterior is read off, so a write that reset it would throw away the chain so far.
 	std::mt19937_64 rng(20260828);
 	auto field           = make_storage<TypeParam>(IndexArray{4, 5});
 	const size_t n_cells = field.total_size_of_container_space();
@@ -1163,17 +1154,24 @@ TYPED_TEST(FieldConformance, a_write_through_a_window_leaves_the_counter_alone) 
 	run_chain(field, random_script(rng, n_cells, N_ITERATIONS), expected);
 
 	// The whole container, one row at a time and then one column at a time, each cell written to
-	// the state it already holds. Both ways round, because the sparse window walks a matrix row for
-	// a stride of one and a matrix column otherwise. A column window that called a held cell absent
-	// would defer the write, and the commit writes a whole new cell -- counter and all.
+	// the state it already holds. Both ways round, because a sorted-vector matrix asks its row
+	// whether it holds a cell and the two strides reach that question by different arithmetic. A
+	// column run that called a held cell absent would defer the write, and the commit writes a
+	// whole new cell -- counter and all.
+	std::vector<size_t> deferred;
 	for (size_t row = 0; row < 4; ++row) {
-		auto window = field.open_window(IndexArray{row, 0}, /*n_cells=*/5, /*stride=*/1);
-		for (size_t k = 0; k < window.size(); ++k) { window.set_state(k, window.is_one(k)); }
+		for (size_t k = 0; k < 5; ++k) {
+			const size_t linear = row * 5 + k;
+			write_or_defer(field, linear, field.is_one(linear), deferred);
+		}
 	}
 	for (size_t col = 0; col < 5; ++col) {
-		auto window = field.open_window(IndexArray{0, col}, /*n_cells=*/4, /*stride=*/5);
-		for (size_t k = 0; k < window.size(); ++k) { window.set_state(k, window.is_one(k)); }
+		for (size_t k = 0; k < 4; ++k) {
+			const size_t linear = k * 5 + col;
+			write_or_defer(field, linear, field.is_one(linear), deferred);
+		}
 	}
+	EXPECT_TRUE(deferred.empty()) << "no cell was written to a state it did not already hold";
 	for (size_t i = 0; i < n_cells; ++i) {
 		EXPECT_EQ(counter_of(field, i), expected.counts[i]) << "cell " << i;
 		EXPECT_EQ(field.is_one(i), expected.states[i] != 0) << "cell " << i;
@@ -1199,10 +1197,11 @@ TYPED_TEST(FieldConformance, reset_counts_clears_every_counter_and_keeps_every_s
 // The two backends together
 // -------------------------------------------------------------------------
 
-/// Cell for cell, and line for line: what one implementation answers, the other answers.
+/// Cell for cell: what one implementation answers, the other answers.
 ///
-/// The line half goes through a window, because a window is the only way in to a run of cells. The
-/// two windows run different code, so reading each line through both is what says they agree.
+/// Every cell, and not a sample of them, because a backend that lost a cell has to be caught
+/// wherever it lost it. A line of cells needs no pass of its own any more: a run is read one cell
+/// at a time, so a line is cells this loop has already compared.
 template<typename First, typename Second>
 void expect_same_cells(First &first, Second &second, const IndexArray &shape) {
 	ASSERT_EQ(first.total_size_of_container_space(), second.total_size_of_container_space());
@@ -1213,22 +1212,6 @@ void expect_same_cells(First &first, Second &second, const IndexArray &shape) {
 		    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
 		ASSERT_EQ(first.get_multi_dimensional_index(i), second.get_multi_dimensional_index(i))
 		    << "cell " << i << " of shape " << shape[0] << "x" << shape[1];
-	}
-
-	auto same_line = [&](const IndexArray &start, size_t n_cells_in_line, size_t stride) {
-		auto first_window  = first.open_window(start, n_cells_in_line, stride);
-		auto second_window = second.open_window(start, n_cells_in_line, stride);
-		ASSERT_EQ(linear_indices_of(first_window), linear_indices_of(second_window))
-		    << "the line at " << start[0] << "," << start[1] << " of shape " << shape[0] << "x"
-		    << shape[1];
-		ASSERT_EQ(states_of(first_window), states_of(second_window))
-		    << "the line at " << start[0] << "," << start[1] << " of shape " << shape[0] << "x"
-		    << shape[1];
-	};
-
-	for (size_t row = 0; row < shape[0]; ++row) { same_line(IndexArray{row, 0}, shape[1], 1); }
-	for (size_t col = 0; col < shape[1]; ++col) {
-		same_line(IndexArray{0, col}, shape[0], shape[1]);
 	}
 }
 
@@ -1266,78 +1249,10 @@ TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes)
 	}
 }
 
-TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes_through_a_window) {
-	// The two windows run different code -- one indexes a vector, the other walks a line and
-	// buffers what it cannot insert -- and ADR-0006 says the gate is the whole defence against
-	// them drifting apart. This is that gate at the storage seam.
-	std::mt19937_64 rng(20260828);
-	for (const auto &shape : generated_shapes()) {
-		const size_t n_cells = shape[0] * shape[1];
-		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
-
-		TStorageZMatrix sparse_Z(shape);
-		TStorageZDense dense_Z(shape);
-		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
-		TStorageYDense dense_Y(N_ITERATIONS, shape);
-		TExpectedCells ignored(n_cells);
-		replay(sparse_Z, writes, ignored);
-		replay(dense_Z, writes, ignored);
-		replay(sparse_Y, writes, ignored);
-		replay(dense_Y, writes, ignored);
-
-		for (const auto &request : a_few_windows_over(shape)) {
-			const auto written       = random_states(rng, request.n_cells);
-			const auto write_through = [&](auto &storage) {
-				auto window = storage.open_window(request.start, request.n_cells, request.stride);
-				for (size_t k = 0; k < request.n_cells; ++k) {
-					window.set_state(k, written[k] != 0);
-				}
-				window.close();
-			};
-			write_through(sparse_Z);
-			write_through(dense_Z);
-			write_through(sparse_Y);
-			write_through(dense_Y);
-		}
-
-		expect_same_cells(sparse_Z, dense_Z, shape);
-		expect_same_cells(sparse_Y, dense_Y, shape);
-		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
-	}
-}
-
-/// How a run of cells is written: through the window the storage opens, or one cell at a time.
-///
-/// The sampler does both. The simulation's forward draw and the clique view's sparse path open a
-/// window; the block update addresses one cell at a time. Either way the storage hands back the
-/// cells it could not take, and one bulk insert commits them afterwards.
-enum class TWritePath : uint8_t { through_a_window, one_cell_at_a_time };
-
-/// Writes one run of cells, and hands back the cells the storage could not take.
-template<typename Storage>
-std::vector<size_t> write_run(Storage &storage, const TWindowShape &request,
-                              const std::vector<uint8_t> &states, TWritePath path) {
-	if (path == TWritePath::through_a_window) {
-		auto window = storage.open_window(request.start, request.n_cells, request.stride);
-		for (size_t k = 0; k < request.n_cells; ++k) { window.set_state(k, states[k] != 0); }
-		return window.take_buffered_inserts();
-	}
-	const size_t start = storage.get_linear_index_in_container_space(request.start);
-	std::vector<size_t> deferred_inserts;
-	for (size_t k = 0; k < request.n_cells; ++k) {
-		write_or_defer(storage, start + k * request.stride, states[k] != 0, deferred_inserts);
-	}
-	return deferred_inserts;
-}
-
 TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_committed_in_bulk) {
 	// The shape an update takes, end to end: every run of cells writes, hands out what it could
 	// not insert, and one bulk insert commits the lot afterwards. A dense storage hands out
 	// nothing, so the same loop body drives both backends.
-	//
-	// Both ways in are driven, because both ship. A cell the sparse matrix holds in its row but
-	// not in its column is written in place by one and deferred by the other, and the two backends
-	// have to end in the same place either way.
 	//
 	// The runs of one pass do not overlap, exactly as one clique per column and one species leaf
 	// per row do not. Overlapping runs would be a different question: a deferred insert commits
@@ -1359,7 +1274,7 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 		replay(sparse_Y, writes, ignored);
 		replay(dense_Y, writes, ignored);
 
-		const auto run_one_pass = [&](const std::vector<TWindowShape> &requests, TWritePath path) {
+		const auto run_one_pass = [&](const std::vector<TRunShape> &requests) {
 			std::vector<std::vector<uint8_t>> written;
 			written.reserve(requests.size());
 			for (const auto &request : requests) {
@@ -1369,7 +1284,7 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 				std::vector<std::vector<size_t>> batches;
 				batches.reserve(requests.size());
 				for (size_t r = 0; r < requests.size(); ++r) {
-					batches.push_back(write_run(storage, requests[r], written[r], path));
+					batches.push_back(write_run(storage, requests[r], written[r]));
 				}
 				return batches;
 			};
@@ -1396,25 +1311,23 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 			expect_same_cells(sparse_Y, dense_Y, shape);
 		};
 
-		// One pass down the rows and one along the columns, four windows each at most, because a
+		// One pass down the rows and one along the columns, four runs each at most, because a
 		// pass over every line of the largest generated shape turns the suite into a benchmark.
-		std::vector<TWindowShape> rows;
+		std::vector<TRunShape> rows;
 		for (size_t row = 0; row < std::min<size_t>(shape[0], 4); ++row) {
-			rows.push_back({IndexArray{row, 0}, shape[1], 1});
+			rows.push_back({IndexArray{row, 0}, 1, shape[1], 1});
 		}
-		std::vector<TWindowShape> columns;
+		std::vector<TRunShape> columns;
 		for (size_t col = 0; col < std::min<size_t>(shape[1], 4); ++col) {
-			columns.push_back({IndexArray{0, col}, shape[0], shape[1]});
+			columns.push_back({IndexArray{0, col}, 0, shape[0], shape[1]});
 		}
-		for (const auto path : {TWritePath::through_a_window, TWritePath::one_cell_at_a_time}) {
-			run_one_pass(rows, path);
-			run_one_pass(columns, path);
-		}
+		run_one_pass(rows);
+		run_one_pass(columns);
 
 		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
 	}
 
-	// Without this the body above would pass just as happily on windows that handed out nothing,
+	// Without this the body above would pass just as happily on runs that handed out nothing,
 	// which is the one case in which the bulk commit proves nothing.
 	EXPECT_GT(n_cells_the_sparse_storages_handed_out, 0u)
 	    << "no sparse storage handed an insert out, so the bulk commit was never asked to do "

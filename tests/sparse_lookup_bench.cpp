@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "storages/cell_write.h"
 #include "storages/y_storage/TStorageYMatrix.h"
 #include "gtest/gtest.h"
 #include <chrono>
@@ -14,18 +15,20 @@
 // Helpers
 // -------------------------------------------------------------------------
 //
-// Opening a window is the whole of the sparse path's cost model. A point lookup in a sparse matrix
-// costs a search, so the sparse window walks one line on open and answers every later read from
-// what it found. Everything an update reads goes through that walk, and how it scales with density
-// is what decides whether the sparse backend is usable at scale.
+// Reading a run of cells is the whole of the sparse path's cost model. A point lookup in a
+// sorted-vector matrix costs a search of one line, and an update now pays that search once per
+// cell -- where a window used to walk the line once and answer every read from what it found. The
+// window is gone, so this is what the sparse backend costs today, and it is the number a hash-map
+// backing has to beat.
 //
-// Which line the window walks follows from the stride: a stride of one is a matrix row ("easy"),
-// and a stride of one row width is a matrix column ("hard"). The two are timed apart because they
-// are different walks over the same data.
+// Which line a lookup searches follows from the shape and not from the run: `get` searches
+// whichever of the cell's row and column holds fewer entries. So a run along the last dimension
+// ("easy") and one along the first ("hard") search the same kind of line, and the two are timed
+// apart to say whether that is true in practice as well as on paper.
 //
-// Correctness of the walk is a conformance question and is asserted over generated shapes in
+// Correctness of a run is a conformance question and is asserted over generated shapes in
 // tests/TStorageConformance_Tests.cpp. The one check here guards the benchmark itself: it says the
-// windows being timed, at these sizes and densities, hold what the field holds.
+// runs being timed, at these sizes and densities, read what the field holds.
 
 namespace {
 
@@ -49,6 +52,14 @@ TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t
 	std::vector<std::vector<size_t>> batch = {std::move(linear_indices)};
 	Y.insert_in_Y(batch);
 	return Y;
+}
+
+/// Reads a run of cells, exactly as an update reads one: a start, a count and a stride, and a
+/// point lookup per cell. Returns the number of ones, so nothing here is dead code.
+size_t read_run(const TStorageYMatrix &Y, size_t start, size_t n_cells, size_t stride) {
+	size_t n_ones = 0;
+	for (size_t k = 0; k < n_cells; ++k) { n_ones += Y.is_one(start + k * stride); }
+	return n_ones;
 }
 
 using Clock = std::chrono::high_resolution_clock;
@@ -76,10 +87,10 @@ void report(const std::string &label, const BenchResult &r) {
 } // namespace
 
 // -------------------------------------------------------------------------
-// Correctness: a window must hold what the point lookups answer
+// Correctness: a run must read what the point lookups answer
 // -------------------------------------------------------------------------
 
-TEST(OpenWindow_Matrix, matches_brute_force) {
+TEST(SparseLookup_Matrix, a_run_reads_the_cells_its_arithmetic_names) {
 	constexpr size_t dim0 = 200;
 	constexpr size_t dim1 = 200;
 
@@ -88,21 +99,19 @@ TEST(OpenWindow_Matrix, matches_brute_force) {
 
 		// easy path: a whole matrix row (stride 1) -> linear = row * dim1 + k
 		for (size_t row : {size_t{0}, size_t{37}, dim0 - 1}) {
-			auto window = Y.open_window(IndexArray{row, 0}, dim1, /*stride=*/1);
 			for (size_t k = 0; k < dim1; ++k) {
 				const size_t linear = row * dim1 + k;
-				EXPECT_EQ(window.linear_index(k), linear) << "easy row=" << row << " k=" << k;
-				EXPECT_EQ(window.is_one(k), Y.is_one(linear)) << "easy row=" << row << " k=" << k;
+				EXPECT_EQ(Y.get_multi_dimensional_index(linear), (IndexArray{row, k}))
+				    << "easy row=" << row << " k=" << k;
 			}
 		}
 
 		// hard path: a whole matrix column (stride dim1) -> linear = k * dim1 + col
 		for (size_t col : {size_t{0}, size_t{37}, dim1 - 1}) {
-			auto window = Y.open_window(IndexArray{0, col}, dim0, /*stride=*/dim1);
 			for (size_t k = 0; k < dim0; ++k) {
 				const size_t linear = k * dim1 + col;
-				EXPECT_EQ(window.linear_index(k), linear) << "hard col=" << col << " k=" << k;
-				EXPECT_EQ(window.is_one(k), Y.is_one(linear)) << "hard col=" << col << " k=" << k;
+				EXPECT_EQ(Y.get_multi_dimensional_index(linear), (IndexArray{k, col}))
+				    << "hard col=" << col << " k=" << k;
 			}
 		}
 	}
@@ -112,25 +121,20 @@ TEST(OpenWindow_Matrix, matches_brute_force) {
 // Benchmarks
 // -------------------------------------------------------------------------
 
-// Easy path (stride 1): open a window over one full matrix row.
-TEST(Benchmark_OpenWindow, easy_path) {
+// Easy path (stride 1): read one full matrix row, one cell at a time.
+TEST(Benchmark_SparseLookup, easy_path) {
 	constexpr size_t dim0  = 1000;
 	constexpr size_t dim1  = 1000;
 	constexpr size_t total = dim0 * dim1;
 
-	const IndexArray start = {0, 0}; // row 0
-
-	std::cout << "\n=== open_window — easy path (stride=1, along last dim) ===\n";
+	std::cout << "\n=== a run of point lookups — easy path (stride=1, along last dim) ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_cells=" << dim1 << "\n\n";
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
-		auto r      = timed([&] {
-			auto window = Y.open_window(start, dim1, /*stride=*/1);
-			sink += window.is_one(0); // prevent dead-code elimination
-		});
+		auto r      = timed([&] { sink += read_run(Y, /*start=*/0, dim1, /*stride=*/1); });
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
 		       r);
@@ -138,26 +142,22 @@ TEST(Benchmark_OpenWindow, easy_path) {
 	}
 }
 
-// Hard path (stride = dim1): open a window over one full matrix column.
-TEST(Benchmark_OpenWindow, hard_path) {
+// Hard path (stride = dim1): read one full matrix column, one cell at a time.
+TEST(Benchmark_SparseLookup, hard_path) {
 	constexpr size_t dim0   = 1000;
 	constexpr size_t dim1   = 1000;
 	constexpr size_t total  = dim0 * dim1;
 	constexpr size_t stride = dim1; // one row width
 
-	const IndexArray start = {0, 0}; // column 0
-
-	std::cout << "\n=== open_window — hard path (stride=" << stride << ", non-last dim) ===\n";
+	std::cout << "\n=== a run of point lookups — hard path (stride=" << stride
+	          << ", non-last dim) ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_cells=" << dim0 << "\n\n";
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y      = make_Y({dim0, dim1}, density);
 		size_t sink = 0;
-		auto r      = timed([&] {
-			auto window = Y.open_window(start, dim0, stride);
-			sink += window.is_one(0);
-		});
+		auto r      = timed([&] { sink += read_run(Y, /*start=*/0, dim0, stride); });
 		report("density=" + std::to_string(density) +
 		           "  stored=" + std::to_string(Y.number_of_ones()),
 		       r);
@@ -166,12 +166,10 @@ TEST(Benchmark_OpenWindow, hard_path) {
 }
 
 // Easy vs. hard side-by-side at several densities.
-TEST(Benchmark_OpenWindow, easy_vs_hard_comparison) {
+TEST(Benchmark_SparseLookup, easy_vs_hard_comparison) {
 	constexpr size_t dim0   = 1000;
 	constexpr size_t dim1   = 1000;
 	constexpr size_t stride = dim1;
-
-	const IndexArray start = {0, 0};
 
 	std::cout << "\n=== easy vs. hard comparison  (" << dim0 << "×" << dim1 << ") ===\n\n";
 	std::cout << "    " << std::left << std::setw(10) << "density" << std::setw(12) << "stored"
@@ -183,14 +181,8 @@ TEST(Benchmark_OpenWindow, easy_vs_hard_comparison) {
 		auto Y = make_Y({dim0, dim1}, density);
 
 		size_t sink = 0;
-		auto easy   = timed([&] {
-			auto window = Y.open_window(start, dim1, /*stride=*/1);
-			sink += window.is_one(0);
-		});
-		auto hard   = timed([&] {
-			auto window = Y.open_window(start, dim0, stride);
-			sink += window.is_one(0);
-		});
+		auto easy   = timed([&] { sink += read_run(Y, /*start=*/0, dim1, /*stride=*/1); });
+		auto hard   = timed([&] { sink += read_run(Y, /*start=*/0, dim0, stride); });
 		(void)sink;
 
 		const double ratio = hard.us_per_call / easy.us_per_call;

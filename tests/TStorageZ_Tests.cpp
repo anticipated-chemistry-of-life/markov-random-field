@@ -5,7 +5,6 @@
 #include "constants.h"
 #include "storages/z_storage/TStorageZ.h"
 #include "storages/z_storage/TStorageZMatrix.h"
-#include "window_contents.h"
 #include "gtest/gtest.h"
 #include <cstddef>
 #include <cstdint>
@@ -206,46 +205,50 @@ TEST(ZStorageMatrix_Tests, insert_zero_exceeds_size_throws) {
 	EXPECT_NO_THROW(Z.insert_zero(5));
 }
 
-// stride == 1: variable dimension is the last one -> a single matrix row walk.
-TEST(ZStorageMatrix_Tests, a_window_walks_one_row) {
+// A run of cells is a start, a count and a stride, and the caller does that arithmetic. A point
+// lookup in a sorted-vector matrix costs a search, and answering one per cell is what this backend
+// pays for a run; what it owes is the same answers a dense array gives.
+
+// stride == 1: the varying dimension is the last one, so the cells are consecutive.
+TEST(ZStorageMatrix_Tests, a_run_along_the_last_dimension_reads_consecutive_cells) {
 	TStorageZMatrix Z({1, 6}); // 1 row, 6 cols
 	Z.insert_one(1);
 	Z.insert_one(3);
 	Z.insert_zero(2); // stored but state zero
 
-	auto window = Z.open_window(IndexArray{0, 0}, /*n_cells=*/6, /*stride=*/1);
-	ASSERT_EQ(window.size(), 6u);
-	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{0, 1, 2, 3, 4, 5}));
 	// a stored zero and an absent cell both read as zero
-	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{0, 1, 0, 1, 0, 0}));
+	const std::vector<uint8_t> expected{0, 1, 0, 1, 0, 0};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		EXPECT_EQ(Z.get_multi_dimensional_index(k), (IndexArray{0, k})) << "cell " << k;
+		EXPECT_EQ(Z.is_one(k), expected[k] != 0) << "cell " << k;
+	}
 }
 
-// stride > 1: variable dimension is the first one -> a single matrix column walk.
-TEST(ZStorageMatrix_Tests, a_window_walks_one_column) {
-	TStorageZMatrix Z({3, 2}); // 3 rows, 2 cols -> nCols == 2 == stride
+// stride > 1: the varying dimension is the first one, so the cells are one row apart.
+TEST(ZStorageMatrix_Tests, a_run_along_the_first_dimension_steps_by_a_row) {
+	TStorageZMatrix Z({3, 2}); // 3 rows, 2 cols -> a row is 2 cells wide
 	Z.insert_one(2);           // (row 1, col 0) linear 2
 	Z.insert_one(4);           // (row 2, col 0) linear 4
-	Z.insert_one(3);           // (row 1, col 1) linear 3 -> not on the col-0 walk
+	Z.insert_one(3);           // (row 1, col 1) linear 3 -> a cell of the other column
 
-	auto window = Z.open_window(IndexArray{0, 0}, /*n_cells=*/3, /*stride=*/2);
-	ASSERT_EQ(window.size(), 3u);
-	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{0, 2, 4}));
-	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{0, 1, 1}));
+	const std::vector<uint8_t> expected{0, 1, 1};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		const size_t linear = k * 2;
+		EXPECT_EQ(Z.get_multi_dimensional_index(linear), (IndexArray{k, 0})) << "cell " << k;
+		EXPECT_EQ(Z.is_one(linear), expected[k] != 0) << "cell " << k;
+	}
 }
 
-// stride == 1 starting partway through the row: the linear indices and the row walk both honour
-// the start column.
-TEST(ZStorageMatrix_Tests, a_window_walks_one_row_from_partway_along_it) {
+TEST(ZStorageMatrix_Tests, a_run_that_starts_partway_along_a_row_reads_from_there) {
 	TStorageZMatrix Z({1, 6});
 	Z.insert_one(2);
 	Z.insert_one(4);
-	Z.insert_one(5); // past the end of the window -> must be ignored
+	Z.insert_one(5); // past the end of the run
 
-	// the window covers columns [2, 5)
-	auto window = Z.open_window(IndexArray{0, 2}, /*n_cells=*/3, /*stride=*/1);
-	ASSERT_EQ(window.size(), 3u);
-	EXPECT_EQ(linear_indices_of(window), (std::vector<size_t>{2, 3, 4}));
-	EXPECT_EQ(states_of(window), (std::vector<uint8_t>{1, 0, 1}));
+	const std::vector<uint8_t> expected{1, 0, 1};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		EXPECT_EQ(Z.is_one(2 + k), expected[k] != 0) << "cell " << k;
+	}
 }
 
 TEST(ZStorageMatrix_Tests, insert_in_Z_bulk_merges_and_sorts) {

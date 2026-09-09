@@ -36,8 +36,6 @@ private:
 
 	// info about size and dimensionality of clique
 	IndexArray _start_index_in_leaves_space;
-	size_t _n_nodes;
-	size_t _increment;
 
 	/// @brief Calculates the log probability of the root given the stationary distribution
 	static void _calculate_log_prob_root(double stationary_0,
@@ -60,7 +58,7 @@ private:
 	static size_t _get_parent_index(size_t index_in_tree, const TTree *tree);
 
 public:
-	TClique(const IndexArray &start_index, size_t n_nodes, size_t increment);
+	explicit TClique(const IndexArray &start_index);
 	~TClique() = default;
 
 	/// @brief Install this clique's process. Called once the parameters exist, and again whenever a
@@ -73,13 +71,9 @@ public:
 		return _transition_grid.value();
 	}
 
-	/// This clique's cells of the node state, on their own. The forward draw of a simulation
-	/// writes every node, leaves included, which is the one write a clique view refuses.
-	[[nodiscard]] TNodeStateStorage::TWindow open_node_state_window(TNodeStateStorage &Z) const;
-
 	/// This clique's own multidimensional index: a leaf in every dimension but its tree's own,
 	/// which carries a 0. Setting that dimension to a node index gives that node's cell, which is
-	/// what TCliqueView does and what nothing else does any more.
+	/// what TCliqueView does and what nothing else does.
 	[[nodiscard]] const IndexArray &clique_index() const { return _start_index_in_leaves_space; }
 
 	/// @brief Update the Z dimension for this clique.

@@ -8,37 +8,6 @@
 #include "storages/cell_handle.h"
 #include <concepts>
 #include <cstddef>
-#include <vector>
-
-/// The strided view a storage opens over itself: a start, a count and a stride.
-///
-/// The sampler reads and writes a run of cells through a window rather than through a cache it
-/// owns. Each storage brings the traversal that suits it, and the two are free to differ: the
-/// dense window indexes the state vector, and the sparse window materialises its line once. See
-/// ADR-0006.
-///
-/// A window shows its own write to a later read on the same window. The sparse window has to
-/// buffer a write to a cell it does not hold, because the insert would reallocate a row inside the
-/// parallel region. A read that returned the old state would send the two backends down different
-/// chains inside a single update.
-///
-/// A window ends once, in one of two ways. `close` commits what the window buffered, and the
-/// destructor runs it again for a window the caller lets go of. `take_buffered_inserts` hands the
-/// buffer to the caller as linear indices and writes nothing, which is the only exit a window
-/// inside a parallel region may take. The dense window hands out an empty list, so one loop body
-/// serves both backends. ADR-0006 gives the argument.
-///
-/// A cell is addressed by its position in the window; `linear_index` is what turns that back into
-/// the storage's own index.
-template<typename T>
-concept StorageWindow = requires(T &window, const T &const_window, size_t k, bool state) {
-	{ const_window.size() } -> std::same_as<size_t>;
-	{ const_window.is_one(k) } -> std::same_as<bool>;
-	{ const_window.linear_index(k) } -> std::same_as<size_t>;
-	{ window.set_state(k, state) } -> std::same_as<void>;
-	{ window.take_buffered_inserts() } -> std::same_as<std::vector<size_t>>;
-	{ window.close() } -> std::same_as<void>;
-};
 
 /// The surface every binary storage shares: a binary state per cell, the size of the space that
 /// state lives in, and the conversion between a linear index and a multi-dimensional one.
@@ -86,28 +55,20 @@ concept BinaryStorage = requires(T &storage, const T &const_storage, size_t line
 /// `is_one` is untouched and still returns a `bool`. The many read-only call sites ask a question
 /// with one answer, and they say so.
 ///
+/// A handle points into the storage, so it is only good until the storage is restructured. No
+/// bulk insert and no zero removal may run while one is live. That was a lifetime rule while a
+/// window held the cells; it is a convention now, and the conformance suite states it.
+///
 /// The two sorted-vector matrix storages do not satisfy this. A sparse matrix keeps every cell
 /// twice, once in its row and once in its column, so it has no single cell to point at. They
-/// answer `locate` once they own their cells.
+/// write through `write_state_if_held` instead, which storages/cell_write.h is the one caller of.
+/// They answer `locate` once they own their cells.
 template<typename T>
 concept LocatableStorage = BinaryStorage<T> && requires(T &storage, size_t linear_index,
                                                         const IndexArray &multidim_index) {
 	typename T::TCell;
 	{ storage.locate(linear_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
 	{ storage.locate(multidim_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
-};
-
-/// A storage the sampler reads and writes through a window: the field and the node states.
-///
-/// `open_window` is the traversal such a storage brings with it, described at `StorageWindow`
-/// above. It is the only way in to a run of cells. The observed data does not satisfy this and
-/// does not need to: a data source reads one cell at a time.
-template<typename T>
-concept WindowedStorage = BinaryStorage<T> && requires(T &storage, const IndexArray &multidim_index,
-                                                       size_t n_cells, size_t stride) {
-	typename T::TWindow;
-	requires StorageWindow<typename T::TWindow>;
-	{ storage.open_window(multidim_index, n_cells, stride) } -> std::same_as<typename T::TWindow>;
 };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

@@ -12,17 +12,8 @@
 #include <cstddef>
 #include <vector>
 
-TClique::TClique(const IndexArray &start_index_in_leaves_space, size_t n_nodes, size_t increment) {
+TClique::TClique(const IndexArray &start_index_in_leaves_space) {
 	_start_index_in_leaves_space = start_index_in_leaves_space;
-	_n_nodes                     = n_nodes;
-	_increment                   = increment;
-}
-
-// The window opens at the clique's first cell and steps by its increment, over every node of the
-// tree. The forward draw of a simulation writes leaves as well, which is the one write a clique
-// view refuses, so this is the last clique walk on a window.
-TNodeStateStorage::TWindow TClique::open_node_state_window(TNodeStateStorage &Z) const {
-	return Z.open_window(clique_index(), _n_nodes, _increment);
 }
 
 void TClique::update_Z(TNodeStateCliqueView &states, const TTree *tree,

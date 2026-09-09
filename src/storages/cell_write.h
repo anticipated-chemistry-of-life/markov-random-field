@@ -23,13 +23,19 @@
 /// `deferred_inserts`, and the caller commits the list once the region ends. An absent cell
 /// written to zero is left out, because a cell the storage does not hold already reads as zero.
 /// ADR-0006 gives the argument.
+///
+/// It answers whether the write landed in the storage, which is what a caller that reads the cell
+/// back before the commit has to know. Until then the storage still reads the old state, so a
+/// walk that reads what it has just written keeps that answer itself
+/// (tree/clique/TCliqueView.h). Every other caller ignores it.
 template<BinaryStorage Storage>
-void write_or_defer(Storage &storage, size_t linear_index, bool state,
+bool write_or_defer(Storage &storage, size_t linear_index, bool state,
                     std::vector<size_t> &deferred_inserts) {
 	if constexpr (LocatableStorage<Storage>) {
-		write_or_defer(storage.locate(linear_index), state, deferred_inserts);
+		return write_or_defer(storage.locate(linear_index), state, deferred_inserts);
 	} else {
 		const bool held = storage.write_state_if_held(linear_index, state);
 		if (!held && state) { deferred_inserts.push_back(linear_index); }
+		return held;
 	}
 }

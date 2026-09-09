@@ -36,12 +36,6 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	// to 1 before).
 	const size_t n_cliques = coretools::containerProduct(_dimension_cliques);
 
-	// calculate increment: product of the number of leaves of all subsequent dimensions
-	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) {
-		increment *= all_trees[i]->get_number_of_leaves();
-	}
-
 	// initialize cliques
 	for (size_t i = 0; i < n_cliques; ++i) {
 		// get start index of each clique in leaves space
@@ -49,7 +43,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 		// The transition grid is not installed here: it needs alpha and nu, which stattools has not
 		// drawn yet. TTree::guessInitialValues does it, and asking a clique for its grid before
 		// then throws instead of reading the zero-filled matrices this used to leave behind.
-		_cliques.emplace_back(start_index_in_leaves_space, _topology().n_nodes(), increment);
+		_cliques.emplace_back(start_index_in_leaves_space);
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;

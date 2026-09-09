@@ -55,12 +55,17 @@ inline void write_state(uint8_t &cell, bool state) { cell = state ? 1 : 0; }
 ///
 /// The helper takes a handle and not a storage. One body therefore serves every storage, and it is
 /// a template only over the cell the handle points at.
+///
+/// It answers whether the write landed in the storage. A caller that reads the cell back before
+/// the deferred list is committed needs that answer, because the storage still reads the old
+/// state; every other caller ignores it.
 template<typename Cell>
-void write_or_defer(const IsOneResult<Cell> &handle, bool state,
+bool write_or_defer(const IsOneResult<Cell> &handle, bool state,
                     std::vector<size_t> &deferred_inserts) {
 	if (handle.in_container) {
 		write_state(*handle.cell, state);
 	} else if (state) {
 		deferred_inserts.push_back(handle.linear_index);
 	}
+	return handle.in_container;
 }

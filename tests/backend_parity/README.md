@@ -11,20 +11,23 @@ ships.
 
 ## Which pairs it gates
 
-The field and the node state choose their storage independently, so there are four pairings. The
-gate builds two: sparse field against sparse node state, and dense against dense. Those two between
-them exercise both storages. `src/storages/storage_backend.h` records which pairs are gated and
-ADR-0006 gives the argument. The default build is dense against dense, so it is one of the two.
+Two things choose, and two follow.
+
+The **field** and the **node state** choose their storage independently, so there are four
+pairings. The gate builds two: sparse field against sparse node state, and dense against dense.
+Those two between them exercise both storages. `src/storages/storage_backend.h` records which pairs
+are gated and ADR-0006 gives the argument. The default build is dense against dense, so it is one
+of the two.
+
+The **simple error model data** follows the field. It takes the binary-storage alias, and that
+alias reads the field's own choice, so a gated pair compares a dense state array against a sparse
+binary array as well. The **LOTUS records** are pinned: they are a `TSparseBinaryArray` under every
+build, because a run reads them in once and never writes them again. So neither of them is a third
+define to pass, and the sparse binary array is in both gated builds rather than one.
 
 `run.sh` drives cmake itself rather than going through `just`, because nothing in the build system
 chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE` on the
 compiler command line, which is how an external define overrides an alias.
-
-The observed data follows those two rather than choosing. The LOTUS records are always a
-`TSparseBinaryArray`, whatever the build selects, so both binaries read them the same way. The
-simple error model data takes the binary-storage alias, which the field's own choice decides. Each
-gated pair therefore also compares one binary storage against the other, and there is no third
-define to pass.
 
 ## The fixture
 
@@ -39,9 +42,17 @@ Four files, small enough that both chains run in well under a second:
 (Internal nodes include the root, per `CONTEXT.md`.)
 
 The two trees are deliberately different shapes, so that no container the run asks for is square:
-the field is 8x6, the species node state 7x6 and the molecules node state 8x4. A square
-container is the one shape in which a row-walk and a column-walk can agree by accident, and telling
-those two apart is what the sparse window does on every open.
+the field is 8x6, the species node state 15x6 and the molecules node state 8x10. A square container
+is the one shape in which a wrong mapping from a clique to its cells can agree with the right one
+by accident.
+
+That is what the shapes catch now. There is no traversal left to get wrong -- a storage is
+addressed one cell at a time -- so the arithmetic moved up a layer: a clique's cells are a strided
+run, and `TCliqueView` works the stride out from the node state's own index conversion. Get the
+stride or the start wrong and the update walks another clique's column, which is the same bug class
+one layer up from the row-versus-column walk a window had to decide on every open. A square
+container hides it; these do not, and the two node states are non-square in opposite directions so
+that a mapping that is wrong in one dimension cannot pass by symmetry with the other.
 
 The parameters are not fitted to anything and no result of the run is interpreted -- only that the
 two backends produce the same bytes. What matters about the fixture is that it is varied enough for

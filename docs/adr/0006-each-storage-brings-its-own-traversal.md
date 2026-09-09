@@ -1,5 +1,14 @@
 # Each storage brings its own traversal, and the sampler keeps one kernel
 
+> **Status: the window is gone.** `open_window`, the window concept, `close` and
+> `take_buffered_inserts` were deleted once a storage could be addressed one cell at a time. What
+> still stands, and what the code cites this record for, is the rest: no write inside a parallel
+> region may insert, so an absent cell that turns into a one is deferred and committed in one bulk
+> insert after the region; each storage is selected by its own alias; and the arithmetic stays in
+> one shared kernel. The readback the window owed is now the caller's, and `TCliqueView` is where
+> it is kept. Read the window sections below as the argument that was made, not as the code that
+> runs. A record superseding this one properly is still to be written.
+
 ADR-0005 changed the model. This record changes the shape of the code that runs it, and it exists because that shape looks wrong from the outside: the storage seam promised one sampler over one concept, and what it delivers is **two traversals**. A reader who finds the dense path indexing a vector while the sparse path materialises a window will want to know whether that is a design or an accident.
 
 It is a design. The dense and the sparse storage want opposite things from a traversal. Dense wants to index its state vector: a read is an address computation, and forcing it through a cache adds a copy, an existence test and a deferred-write branch it never takes. Sparse wants to walk a row once and answer every question from the result: point lookups cost a search, so paying that search per cell is the difference between usable and not. One traversal cannot serve both. The current arrangement — a current-state class that fills from both storages and hands out a dense array — serves the sparse case and taxes the dense one, which is why the dense path carries machinery whose only purpose is to be ignored.

@@ -2,7 +2,6 @@
 #include "storages/storage_backend.h"
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
 // The storage concepts are checked entirely at compile time: TStorageYMatrix.h and
 // TStorageZMatrix.h assert that the sparse pair conforms, and storage_backend.h asserts it of the
@@ -16,28 +15,6 @@
 // clang-tidy's "could be static" is answering a question this file is not asking.
 // NOLINTBEGIN(readability-convert-member-functions-to-static)
 namespace {
-
-/// Everything StorageWindow asks for.
-struct Window {
-	[[nodiscard]] size_t size() const { return 0; }
-	[[nodiscard]] bool is_one(size_t) const { return false; }
-	[[nodiscard]] size_t linear_index(size_t) const { return 0; }
-	void set_state(size_t, bool) {}
-	std::vector<size_t> take_buffered_inserts() { return {}; }
-	void close() {}
-};
-static_assert(StorageWindow<Window>, "the full window surface must conform");
-
-/// The same window, with no way to close it. A window that never closes never commits the writes
-/// it buffered, so the sparse storage would lose every insert.
-struct UnclosableWindow {
-	[[nodiscard]] size_t size() const { return 0; }
-	[[nodiscard]] bool is_one(size_t) const { return false; }
-	[[nodiscard]] size_t linear_index(size_t) const { return 0; }
-	void set_state(size_t, bool) {}
-	std::vector<size_t> take_buffered_inserts() { return {}; }
-};
-static_assert(!StorageWindow<UnclosableWindow>, "a window that cannot close must not conform");
 
 /// Everything the shared concept asks for except `remove_zeros`.
 struct AlmostAStorage {
@@ -57,14 +34,6 @@ struct FullStorage : AlmostAStorage {
 };
 static_assert(BinaryStorage<FullStorage>, "the full shared surface must conform");
 static_assert(!FieldStorage<FullStorage>, "no counter means it is not a field");
-static_assert(!WindowedStorage<FullStorage>, "a storage with no window is not a windowed one");
-
-/// The same storage, with the window the update loops reach the field and the node state through.
-struct FullWindowedStorage : FullStorage {
-	using TWindow = Window;
-	TWindow open_window(const IndexArray &, size_t, size_t) { return {}; }
-};
-static_assert(WindowedStorage<FullWindowedStorage>, "the full windowed surface must conform");
 
 /// A storage that answers `locate` as well: the state, whether it holds the cell, the linear index
 /// and where the cell is.
@@ -93,18 +62,6 @@ struct WrongReturnType : FullStorage {
 };
 static_assert(!BinaryStorage<WrongReturnType>, "the return types are part of the interface");
 
-/// The window a storage hands out is part of what makes it a *windowed* storage: the update loops
-/// read and write through it, so a storage whose window falls short is one they cannot use. It is
-/// no part of being a storage, because a data source opens no window at all.
-struct StorageWithAWindowThatFallsShort : FullStorage {
-	using TWindow = UnclosableWindow;
-	TWindow open_window(const IndexArray &, size_t, size_t) { return {}; }
-};
-static_assert(BinaryStorage<StorageWithAWindowThatFallsShort>,
-              "a window is not what makes a storage a storage");
-static_assert(!WindowedStorage<StorageWithAWindowThatFallsShort>,
-              "the window is part of the windowed storage interface");
-
 } // namespace
 // NOLINTEND(readability-convert-member-functions-to-static)
 
@@ -125,9 +82,8 @@ static_assert(LocatableStorage<TStorageZDense>);
 static_assert(!LocatableStorage<TStorageYMatrix>);
 static_assert(!LocatableStorage<TStorageZMatrix>);
 
-// The observations are storages and no more. Neither opens a window, and neither carries a counter.
+// The observations are storages and no more. Neither carries a counter.
 static_assert(BinaryStorage<TBinaryStorage>);
 static_assert(!FieldStorage<TBinaryStorage>);
 static_assert(BinaryStorage<TSparseBinaryArray>);
-static_assert(!WindowedStorage<TSparseBinaryArray>);
 static_assert(!FieldStorage<TSparseBinaryArray>);

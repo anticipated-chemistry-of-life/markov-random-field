@@ -28,7 +28,7 @@ namespace node_state_draw {
 
 using node_state_density::BranchBins;
 
-/// The cells of one clique's column, as the draw reads and writes them. A window over the column
+/// The cells of one clique's column, as the draw reads and writes them. A view over the column
 /// satisfies this, and so does a vector a test writes by hand.
 ///
 /// `linear_index` is what names a cell to the stream of uniforms, so the state a node is given

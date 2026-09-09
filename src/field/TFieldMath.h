@@ -115,7 +115,7 @@ inline constexpr size_t n_block_states = 8;
 
 /// The three states of one leaf pair: the field and the two tree fields.
 ///
-/// One type serves both ends of a block update. The states read out of the three windows go in.
+/// One type serves both ends of a block update. The states read out of the three storages go in.
 /// The states drawn come back.
 struct TBlockStates {
 	bool y   = false; ///< the field

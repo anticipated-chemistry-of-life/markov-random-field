@@ -25,7 +25,7 @@
 
 namespace node_state_density {
 
-/// The states of one clique's nodes, addressed by node index. A window over the clique's column
+/// The states of one clique's nodes, addressed by node index. A view over the clique's column
 /// satisfies this, and so does a vector a test writes by hand.
 template<typename T>
 concept CliqueStates = requires(const T &states, size_t node) {

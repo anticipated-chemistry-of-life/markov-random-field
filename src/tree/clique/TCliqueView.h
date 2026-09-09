@@ -6,12 +6,13 @@
 
 #include "constants.h"
 #include "coretools/Main/TError.h"
-#include "storages/cell_handle.h"
+#include "storages/cell_write.h"
 #include "storages/storage_backend.h"
 #include "storages/storage_concepts.h"
 #include "tree/TPhylogeny.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -43,37 +44,48 @@ template<BinaryStorage Storage>
 	       Z.get_linear_index_in_container_space(clique_cell(clique_index, dimension, 0));
 }
 
-/// How a clique's cells are reached, which is the one thing the two node-state backends still do
-/// differently.
+/// The cells of one clique, as the run of cells a node state holds them in.
 ///
-/// A storage that answers `locate` gives up one cell at a time. The handle says whether the
-/// storage holds that cell. An in-place write and a deferred insert are then one branch apart
-/// (cell_handle.h).
+/// There is one way in. A read is a point lookup; a write is the one branch in
+/// storages/cell_write.h -- the node state takes it in place, or the cell waits in the deferred
+/// list and the caller commits that list once the parallel region ends. Which of the two a
+/// backend does is its own business, and neither the walk above nor this class asks.
 ///
-/// A storage that answers no handle keeps its window. The sorted-vector matrix is the one such
-/// storage left. It holds every cell twice, once in its row and once in its column, so it has no
-/// single cell to point at. ADR-0006 argues the window it keeps.
+/// A write the node state could not take is kept here as well, so that a later read on this run
+/// sees it. That is what a post-order walk needs: it reaches a parent after its children and
+/// reads the states they were just given. Without it the sparse and the dense backend would
+/// compute different chains inside one update, which is what the parity gate exists to prevent.
 ///
-/// Both spellings answer the same four questions. TCliqueView below never says which one it
-/// holds.
-template<typename Storage, bool = LocatableStorage<Storage>> class TCliqueCells;
-
-/// The handle path. A read is a point lookup and a write is one branch.
-template<typename Storage> class TCliqueCells<Storage, true> {
+/// A run writes each of its cells at most once, so a kept write is never written over. That is
+/// the same rule `write_or_defer` states for the list it appends to.
+template<typename Storage> class TCliqueCells {
 private:
 	Storage *_Z          = nullptr;
 	size_t _start_linear = 0;
 	size_t _n_cells      = 0;
 	size_t _stride       = 1;
 
-	/// The cells the storage does not hold and a write turned into ones. The caller commits them
-	/// once the parallel region ends. See ADR-0006.
+	/// The cells the node state does not hold and a write turned into ones. The caller commits
+	/// them once the parallel region ends. See ADR-0006.
 	std::vector<size_t> _deferred_inserts;
+
+	/// The same cells, by position in the run, so that a read finds them. Empty until the first
+	/// deferred write: a storage that holds every cell of its container space -- which every dense
+	/// one does -- defers nothing and allocates nothing here.
+	///
+	/// A write of zero needs no entry. It is deferred by nobody, because a cell the node state
+	/// does not hold already reads as zero.
+	std::vector<uint8_t> _kept_ones;
 
 public:
 	TCliqueCells(Storage &Z, const IndexArray &first_cell, size_t n_cells, size_t stride)
 	    : _Z(&Z), _start_linear(Z.get_linear_index_in_container_space(first_cell)),
-	      _n_cells(n_cells), _stride(stride) {}
+	      _n_cells(n_cells), _stride(stride) {
+		// The run is described here and read one cell at a time below, so a wrong start or stride
+		// would otherwise be caught by the storage, a layer down from where it was made.
+		DEBUG_ASSERT(n_cells == 0 ||
+		             _start_linear + (n_cells - 1) * stride < Z.total_size_of_container_space());
+	}
 
 	[[nodiscard]] size_t size() const { return _n_cells; }
 
@@ -82,43 +94,38 @@ public:
 		return _start_linear + k * _stride;
 	}
 
-	[[nodiscard]] bool is_one(size_t k) const { return _Z->is_one(linear_index(k)); }
+	[[nodiscard]] bool is_one(size_t k) const {
+		DEBUG_ASSERT(k < _n_cells);
+		if (!_kept_ones.empty() && _kept_ones[k] != 0) { return true; }
+		return _Z->is_one(linear_index(k));
+	}
 
 	void set_state(size_t k, bool state) {
-		const size_t deferred_before = _deferred_inserts.size();
-		write_or_defer(_Z->locate(linear_index(k)), state, _deferred_inserts);
-		// A deferred cell still reads as zero here, because this read goes to the storage. A
-		// post-order walk reads the state it has just given a child, so a storage that defers has
-		// to bring that read-back with it. Every storage that answers a handle today holds every
-		// cell of its container space, so nothing is deferred on this path. See ADR-0006.
-		DEBUG_ASSERT(_deferred_inserts.size() == deferred_before);
+		if (write_or_defer(*_Z, linear_index(k), state, _deferred_inserts)) { return; }
+		// The node state could not take this write, so the run keeps it. Undoing a kept write
+		// would have to undo the deferred entry beside it, which nothing here can do without a
+		// search -- so the once-per-cell rule above is asserted rather than defended. The window
+		// this replaces kept a state per cell and could afford to.
+		DEBUG_ASSERT(_kept_ones.empty() || _kept_ones[k] == 0);
+		if (!state) { return; }
+		if (_kept_ones.empty()) { _kept_ones.assign(_n_cells, 0); }
+		_kept_ones[k] = 1;
 	}
 
 	[[nodiscard]] std::vector<size_t> take_deferred_inserts() {
+		_kept_ones.clear();
 		return std::exchange(_deferred_inserts, {});
 	}
 };
 
-/// The window path, for a storage that has no cell to point at yet. The window walks the clique's
-/// line once on open and buffers the writes the container cannot take, which is the same two
-/// answers the handle gives one cell at a time.
-template<typename Storage> class TCliqueCells<Storage, false> {
-private:
-	typename Storage::TWindow _window;
-
-public:
-	TCliqueCells(Storage &Z, const IndexArray &first_cell, size_t n_cells, size_t stride)
-	    : _window(Z.open_window(first_cell, n_cells, stride)) {}
-
-	[[nodiscard]] size_t size() const { return _window.size(); }
-	[[nodiscard]] size_t linear_index(size_t k) const { return _window.linear_index(k); }
-	[[nodiscard]] bool is_one(size_t k) const { return _window.is_one(k); }
-	void set_state(size_t k, bool state) { _window.set_state(k, state); }
-
-	[[nodiscard]] std::vector<size_t> take_deferred_inserts() {
-		return _window.take_buffered_inserts();
-	}
-};
+/// Which nodes the walk that holds a view writes.
+///
+/// A tree's update writes internal nodes: a leaf's state is drawn with the field and the other
+/// tree's leaf, as one eight-state block, and not there (ADR-0005). A simulation's forward draw
+/// writes every node, because a simulated tree field is drawn with the rest of its node state.
+/// The view is the only place that can catch a write to the wrong block, so it is told which of
+/// the two walks holds it. The distinction goes when the update covers leaves too.
+enum class TCliqueWrites : uint8_t { internal_nodes, every_node };
 
 /// The cells of one clique of one tree's node state, addressed by node index.
 ///
@@ -134,10 +141,10 @@ public:
 /// written against. Those two headers reach a real node state through this. They reach a vector of
 /// states through a test's own type. Neither header knows the difference.
 ///
-/// The view keeps no copy of the states it assigns. It reads them back from the cells it wrote
-/// them through, which is what lets a post-order walk read the states it has just given. A cell
-/// the node state could not take is read back by the window that holds it.
-template<typename Storage> class TCliqueView {
+/// The view keeps no copy of the states the node state took. It reads those back from the cells
+/// it wrote them through, which is what lets a post-order walk read the states it has just given.
+/// A cell the node state could not take is the one exception, and TCliqueCells holds it.
+template<typename Storage, TCliqueWrites Writes = TCliqueWrites::internal_nodes> class TCliqueView {
 private:
 	const TPhylogeny *_topology = nullptr;
 	IndexArray _clique_index{};
@@ -179,11 +186,11 @@ public:
 
 	/// Gives `node` its new state.
 	void set_state(size_t node, bool state) {
-		// The walk assigns internal nodes. A leaf's state is drawn with the field and the other
-		// tree's leaf, as one eight-state block, and not here (ADR-0005). This is the only place
-		// left that can catch a write to the wrong block, and it inverts when the walk covers
-		// leaves.
-		DEBUG_ASSERT(!_topology->is_leaf(node));
+		// The only place left that can catch a write to the wrong block. Which block that is
+		// depends on the walk, which is what `Writes` says.
+		if constexpr (Writes == TCliqueWrites::internal_nodes) {
+			DEBUG_ASSERT(!_topology->is_leaf(node));
+		}
 		// A write of the state the cell already carries is dropped. A sparse node state would
 		// otherwise defer an insert for a cell it does not hold, and then throw that insert away.
 		if (_cells.is_one(node) != state) { _cells.set_state(node, state); }
@@ -197,5 +204,9 @@ public:
 	}
 };
 
-/// The view a tree opens over one clique of its own node state.
+/// The view a tree's update opens over one clique of its own node state.
 using TNodeStateCliqueView = TCliqueView<TNodeStateStorage>;
+
+/// The view a simulation's forward draw opens over the same cells. It differs in one thing: the
+/// draw writes leaves, because a simulated tree field is drawn with the rest of its node state.
+using TNodeStateSimulationView = TCliqueView<TNodeStateStorage, TCliqueWrites::every_node>;

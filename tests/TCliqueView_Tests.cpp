@@ -11,8 +11,8 @@
 // -- and no write leaves the clique it was made through.
 //
 // One body per storage, run against the dense and the sparse node state, because the two reach a
-// cell differently: one through a handle, one through the window it keeps until it owns its cells.
-// Nothing here builds a tree. A phylogeny and a node state are values.
+// cell differently: one through a handle, one through a write it makes itself. Nothing here builds
+// a tree. A phylogeny and a node state are values.
 //
 
 #include "constants.h"
@@ -110,8 +110,9 @@ template<typename Storage, typename Body> void for_every_clique(Body body) {
 	}
 }
 
-/// The stride TTree built its clique windows with: the product of the leaf counts of every
-/// dimension after the tree's own.
+/// The distance between two consecutive nodes of a clique: the product of the leaf counts of
+/// every dimension after the tree's own. Written out here rather than taken from the header under
+/// test, which is what makes it an assertion and not a restatement.
 size_t increment_of(const IndexArray &leaf_counts, size_t dimension) {
 	size_t increment = 1;
 	for (size_t d = dimension + 1; d < NUMBER_OF_TREES; ++d) { increment *= leaf_counts[d]; }
@@ -158,10 +159,11 @@ TYPED_TEST(CliqueView, a_node_addresses_the_cliques_cell_with_the_trees_dimensio
 	    });
 }
 
-TYPED_TEST(CliqueView, a_view_addresses_the_cells_the_window_over_the_same_clique_addressed) {
-	// The clique's cells are a strided run, and the window over that run is what a tree used to
-	// walk. This is what says the change of address is not a change of chain. It goes with the
-	// window itself.
+TYPED_TEST(CliqueView, a_view_addresses_a_strided_run_of_the_node_state) {
+	// A clique's cells are a run: the first cell, then one stride per node. The view works the
+	// stride out from the node state's own index conversion, so this says the run it lands on is
+	// the run the leaf counts imply -- whichever dimension the tree owns, and whatever the
+	// container's shape.
 	for (const auto &first : trees()) {
 		for (const auto &second : trees()) {
 			const IndexArray leaf_counts{first.n_leaves(), second.n_leaves()};
@@ -171,17 +173,14 @@ TYPED_TEST(CliqueView, a_view_addresses_the_cells_the_window_over_the_same_cliqu
 					TypeParam Z(node_state_dimensions(leaf_counts, dimension, owner));
 					const TCliqueView<TypeParam> view(Z, owner, clique, dimension);
 
-					auto window =
-					    Z.open_window(expected_cell(clique, dimension, 0), owner.n_nodes(),
-						              increment_of(leaf_counts, dimension));
-					ASSERT_EQ(view.size(), window.size());
+					const size_t start =
+					    Z.get_linear_index_in_container_space(expected_cell(clique, dimension, 0));
+					const size_t stride = increment_of(leaf_counts, dimension);
+					ASSERT_EQ(view.size(), owner.n_nodes());
 					for (size_t node = 0; node < owner.n_nodes(); ++node) {
-						EXPECT_EQ(view.linear_index(node), window.linear_index(node))
+						EXPECT_EQ(view.linear_index(node), start + node * stride)
 						    << "node " << node;
 					}
-					// Nothing was written, and the window must not reach its storage from here.
-					const std::vector<size_t> inserts = window.take_buffered_inserts();
-					EXPECT_TRUE(inserts.empty());
 				}
 			}
 		}
@@ -301,10 +300,10 @@ TYPED_TEST(CliqueView, a_view_writes_no_cell_outside_its_own_clique) {
 }
 
 #ifndef NDEBUG
-TYPED_TEST(CliqueView, a_view_refuses_a_write_to_a_leaf) {
-	// The walk assigns internal nodes. A leaf's state is drawn with the field and the other tree's
-	// leaf, as one block, and not here. The view is the only place left that can catch a write to
-	// the wrong block. The assertion inverts when the walk covers leaves.
+TYPED_TEST(CliqueView, a_view_the_update_holds_refuses_a_write_to_a_leaf) {
+	// The update assigns internal nodes. A leaf's state is drawn with the field and the other
+	// tree's leaf, as one block, and not there. The view is the only place left that can catch a
+	// write to the wrong block. The distinction goes when the update covers leaves.
 	for_every_clique<TypeParam>(
 	    [](auto &Z, const TPhylogeny &topology, const IndexArray &clique, size_t dimension) {
 		    TCliqueView<TypeParam> view(Z, topology, clique, dimension);
@@ -318,5 +317,33 @@ TYPED_TEST(CliqueView, a_view_refuses_a_write_to_a_leaf) {
 	    });
 }
 #endif
+
+TYPED_TEST(CliqueView, a_view_the_forward_draw_holds_writes_every_node) {
+	// The other walk: a simulation draws a whole node state, leaves included, because a simulated
+	// tree field is drawn with the rest of it. So the same view, told which walk holds it, takes
+	// the write the update's view refuses.
+	using SimulationView = TCliqueView<TypeParam, TCliqueWrites::every_node>;
+	for_every_clique<TypeParam>([](auto &Z, const TPhylogeny &topology, const IndexArray &clique,
+	                               size_t dimension) {
+		std::vector<uint8_t> expected(Z.total_size_of_container_space(), 0);
+
+		std::vector<size_t> deferred;
+		{
+			SimulationView view(Z, topology, clique, dimension);
+			for (size_t node = 0; node < topology.n_nodes(); ++node) {
+				const bool state = node % 3 != 0;
+				view.set_state(node, state);
+				EXPECT_EQ(view.is_one(node), state) << "node " << node;
+				const size_t linear =
+				    Z.get_linear_index_in_container_space(expected_cell(clique, dimension, node));
+				expected[linear] = static_cast<uint8_t>(state);
+			}
+			deferred = view.take_deferred_inserts();
+		}
+		Z.insert_in_Z({deferred});
+
+		EXPECT_EQ(whole_space_states<uint8_t>(Z), expected);
+	});
+}
 
 } // namespace

@@ -85,11 +85,3 @@ static_assert(BinaryStorage<TBinaryStorage> && !FieldStorage<TBinaryStorage>,
               "The selected binary storage must be a binary storage and not a field.");
 // The LOTUS records are the third, and TSparseBinaryArray.h asserts them where the type is
 // defined, because they are pinned to that type rather than selected here.
-
-// The node state still reaches a run of cells through a window in two places: the clique view's
-// sparse path, and the forward draw of a simulation. The field reaches none -- its update
-// addresses one cell at a time. Both keep the window, because the conformance suite compares the
-// two backends through it. The observed data opens none, so the binary storage above is asserted
-// no further than a storage.
-static_assert(WindowedStorage<TFieldStorage> && WindowedStorage<TNodeStateStorage>,
-              "The field and the node state must still open a window.");
