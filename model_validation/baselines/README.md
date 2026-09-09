@@ -29,7 +29,7 @@ manifests do not move.
 updates move. It is the tightest run: closest to closed form, and quickest.
 
 **Rung 2** pins the field and infers the internal states, and it is not optional.
-Under rung 1's `--Z.update false` the clique loop skips `TClique::update_Z`
+Under rung 1's `--Z.update false` the clique loop skips the node-state walk
 outright, and under `--set_<tree>_Z` the bottom-up initialisation returns before
 doing anything -- so a rung-1-only gate would pass a change to either of them
 without ever having run it.

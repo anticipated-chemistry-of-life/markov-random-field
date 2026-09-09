@@ -52,26 +52,26 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 	}
 };
 
+/// The likelihood ratio of one branch's proposed bin against its old one, under `process`.
+///
+/// Both lengths are scored under the clique's current process. This move proposes a branch length,
+/// not a parameter, so the caller passes one grid and it stands on either side of the ratio.
 double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-                                                        const TClique &clique,
+                                                        const TTransitionGrid &process,
                                                         const TNodeStateCliqueView &states) const {
 	// translate index in binned branch length vector (of size leaves + internal nodes without
 	// roots) to index in nodes
 	const size_t index_in_tree = _topology().branches()[index_in_binned_branch_length];
 
-	// Both lengths are scored under the clique's current process: this move proposes a branch
-	// length, not a parameter, so the transition grid is the same on either side of the ratio.
-	const auto &process = clique.transition_grid();
-
 	// calculate probability of parent to node for old branch length
-	double prob_old = clique.calculate_prob_to_parent(
-	    index_in_tree, this, _binned_branch_lengths->oldValue(index_in_binned_branch_length),
-	    states, process);
+	double prob_old = _prob_to_parent(
+	    index_in_tree, _binned_branch_lengths->oldValue(index_in_binned_branch_length), states,
+	    process);
 
 	// calculate probability of parent to node for new branch length
-	double prob_new = clique.calculate_prob_to_parent(
-	    index_in_tree, this, _binned_branch_lengths->value(index_in_binned_branch_length), states,
-	    process);
+	double prob_new =
+	    _prob_to_parent(index_in_tree, _binned_branch_lengths->value(index_in_binned_branch_length),
+		                states, process);
 
 	return prob_new / prob_old;
 }
@@ -79,15 +79,15 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 void TTree::_add_to_LL_branch_lengths(size_t c, const TNodeStateCliqueView &states,
                                       std::vector<coretools::TSumLogProbability> &log_sum,
                                       const stattools::TPairIndexSampler &pairs) const {
-	const auto &clique = _cliques[c];
+	const TTransitionGrid &process = transition_grid(c);
 
 	for (size_t p = 0; p < pairs.length(); ++p) { // loop over all possible pairs
 		// get index of branches to calculate LL: p1 and p2
 		// that index corresponds to the index in fake, concatenated vector of leaves and internal
 		// nodes without roots
 		auto [p1, p2]   = pairs.getIndexPair(p);
-		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, clique, states);
-		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, clique, states);
+		double ratio_p1 = _calculate_likelihood_ratio_branch_length(p1, process, states);
+		double ratio_p2 = _calculate_likelihood_ratio_branch_length(p2, process, states);
 
 		log_sum[p].add(ratio_p1);
 		log_sum[p].add(ratio_p2);

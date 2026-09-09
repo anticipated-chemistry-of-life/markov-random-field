@@ -15,7 +15,6 @@
 
 #pragma once
 
-#include "TClique.h"
 #include "TDataModel.h"
 #include "Types.h"
 #include "constants.h"
@@ -25,6 +24,7 @@
 #include "field/TFieldMath.h"
 #include "omp.h"
 #include "tree/TTree.h"
+#include "tree/branch/TTransitionGrid.h"
 #include <array>
 #include <cstddef>
 #include <memory>
@@ -132,9 +132,8 @@ public:
 
 	/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
 	[[nodiscard]] static coretools::Probability
-	prob_of_one(const TClique &clique, TypeBinnedBranchLengths branch, bool parent_state) {
-		return coretools::P(clique.transition_grid().probability(branch, parent_state,
-		                                                        /*to=*/true));
+	prob_of_one(const TTransitionGrid &process, TypeBinnedBranchLengths branch, bool parent_state) {
+		return coretools::P(process.probability(branch, parent_state, /*to=*/true));
 	}
 
 	[[nodiscard]] block_update::TLeafPairFactors factors(size_t species_leaf, size_t molecule_leaf,
@@ -146,11 +145,11 @@ public:
 		// A clique of one tree carries a leaf of every other tree, so the species tree's clique is
 		// named by the molecule leaf and the molecule tree's by the species leaf.
 		leaf_pair.prob_z_s_is_one =
-		    prob_of_one(_species_tree.get_clique(cell),
-		                _species_tree.get_binned_branch_length(species_leaf), species_parent);
+		    prob_of_one(_species_tree.transition_grid_of_cell(cell),
+			            _species_tree.get_binned_branch_length(species_leaf), species_parent);
 		leaf_pair.prob_z_m_is_one =
-		    prob_of_one(_molecule_tree.get_clique(IndexArray{species_leaf, 0}),
-		                _molecule_tree.get_binned_branch_length(molecule_leaf), molecule_parent);
+		    prob_of_one(_molecule_tree.transition_grid_of_cell(IndexArray{species_leaf, 0}),
+			            _molecule_tree.get_binned_branch_length(molecule_leaf), molecule_parent);
 
 		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
 		leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};

@@ -3,7 +3,6 @@
 //
 
 #include "TMarkovField.h"
-#include "TClique.h"
 #include "TDataModel.h"
 #include "Types.h"
 #include "cli.h"

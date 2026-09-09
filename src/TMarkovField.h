@@ -5,8 +5,6 @@
 #ifndef ACOL_TMARKOVFIELD_H
 #define ACOL_TMARKOVFIELD_H
 
-#include "TClique.h"
-
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"

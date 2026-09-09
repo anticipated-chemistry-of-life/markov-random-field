@@ -3,7 +3,6 @@
 //
 
 #include "TTree.h"
-#include "TClique.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
@@ -67,14 +66,14 @@ void TTree::initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &
 
 void TTree::initialize() {
 	// stattools initialization function
-	_alpha_c->initStorage(this, {_cliques.size()},
+	_alpha_c->initStorage(this, {n_cliques()},
 	                      {std::make_shared<coretools::TNamesStrings>(_clique_names)});
 
 	// now we initialize the mu_c_1
-	_log_nu_c->initStorage(this, {_cliques.size()},
+	_log_nu_c->initStorage(this, {n_cliques()},
 	                       {std::make_shared<coretools::TNamesStrings>(_clique_names)});
-	_nu_c.resize(_cliques.size());
-	for (size_t c = 0; c < _cliques.size(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
+	_nu_c.resize(n_cliques());
+	for (size_t c = 0; c < n_cliques(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
 
 	// number of branches = number of leaves + number of internal nodes without roots
 	std::vector<std::string> branch_names;
@@ -87,7 +86,7 @@ void TTree::initialize() {
 }
 
 void TTree::guessInitialValues() {
-	for (size_t c = 0; c < _cliques.size(); ++c) {
+	for (size_t c = 0; c < n_cliques(); ++c) {
 		// Draw log_nu[c] ~ Normal(LOG_NU_C, LOG_NU_C_INIT_SD^2) instead of setting every clique to
 		// the same constant. Identical initial values would make the MLE that seeds var_log_nu 0,
 		// yielding a degenerate prior that freezes log_nu, mean_log_nu and var_log_nu (their
@@ -97,7 +96,7 @@ void TTree::guessInitialValues() {
 		_log_nu_c->set(c, log_nu_init);
 		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 	}
 
 	_set_initial_branch_lengths(false);
@@ -116,9 +115,9 @@ double TTree::getLogDensityRatio(const UpdatedStorage &, size_t) const {
 void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
 	_set_initial_branch_lengths(true);
-	for (size_t c = 0; c < _cliques.size(); ++c) {
+	for (size_t c = 0; c < n_cliques(); ++c) {
 		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_cliques[c].set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 	}
 }
 
@@ -149,20 +148,18 @@ void TTree::simulate_Z() {
 	// One list per clique, committed in one batch below. Not per clique: a sparse node state
 	// re-sorts every row and every column of the whole matrix on commit, which is the right cost
 	// to pay once over every list at once and the wrong one to pay once per clique (ADR-0006).
-	std::vector<std::vector<size_t>> indices_to_insert(_cliques.size());
+	std::vector<std::vector<size_t>> indices_to_insert(n_cliques());
 
-	for (size_t c = 0; c < _cliques.size(); ++c) {
-		auto &clique = _cliques[c];
-		_simulation_prepare_cliques(c, clique);
+	for (size_t c = 0; c < n_cliques(); ++c) {
+		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
 
 		// This clique's cells of the node state, every node of them. Every node reads the state
 		// its parent was given, which the view shows even where the node state could not take
 		// the write.
 		//
 		// The leaves are drawn with the rest. Their block is this tree's tree field (ADR-0005).
-		TNodeStateSimulationView nodes(_Z, _topology(), clique.clique_index(), _dimension);
-		node_state_draw::draw_clique(_topology(), clique.transition_grid(), bin_of, uniforms,
-		                             nodes);
+		TNodeStateSimulationView nodes(_Z, _topology(), _clique_index(c), _dimension);
+		node_state_draw::draw_clique(_topology(), transition_grid(c), bin_of, uniforms, nodes);
 		indices_to_insert[c] = nodes.take_deferred_inserts();
 	}
 
