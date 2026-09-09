@@ -1,6 +1,6 @@
 #include "constants.h"
 #include "storages/y_storage/TStorageY.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "gtest/gtest.h"
 #include <cstdint>
 #include <vector>
@@ -175,12 +175,12 @@ TEST(YStorage_Tests, is_empty) {
 }
 
 //-----------------------------------
-// TStorageYMatrix -- the sparse field: a hash map of those cells, keyed by linear index.
+// TStorageYSparse -- the sparse field: a hash map of those cells, keyed by linear index.
 // Tests use a single-row layout {1, N} so the linear index equals the column.
 //-----------------------------------
 
 TEST(YStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.insert_zero(2);
@@ -195,7 +195,7 @@ TEST(YStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
 }
 
 TEST(YStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_zero(0);
 	Y.insert_zero(2);
 	Y.insert_zero(4);
@@ -206,7 +206,7 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
 }
 
 TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -217,7 +217,7 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
 }
 
 TEST(YStorageMatrix_Tests, set_state_to_zero_then_remove) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(2);
 	Y.insert_one(3);
@@ -230,7 +230,7 @@ TEST(YStorageMatrix_Tests, set_state_to_zero_then_remove) {
 }
 
 TEST(YStorageMatrix_Tests, reset_counts_sets_all_counters_to_zero) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -247,7 +247,7 @@ TEST(YStorageMatrix_Tests, reset_counts_sets_all_counters_to_zero) {
 }
 
 TEST(YStorageMatrix_Tests, reset_counts_does_not_affect_states) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.add_to_counter(0);
@@ -257,7 +257,7 @@ TEST(YStorageMatrix_Tests, reset_counts_does_not_affect_states) {
 }
 
 TEST(YStorageMatrix_Tests, set_state_flips_in_place) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(2);
 	Y.add_to_counter(0); // counter of linear-2 cell -> 1
 	Y.set_state(2, false);
@@ -269,7 +269,7 @@ TEST(YStorageMatrix_Tests, set_state_flips_in_place) {
 }
 
 TEST(YStorageMatrix_Tests, get_fraction_of_ones) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(3);
 	for (size_t it = 0; it < 4; ++it) { Y.add_to_counter(0); } // counter -> 4
 	// Four iterations were counted, so four out of four is the whole of them. Spelled as a literal
@@ -281,7 +281,7 @@ TEST(YStorageMatrix_Tests, get_fraction_of_ones) {
 }
 
 TEST(YStorageMatrix_Tests, add_data) {
-	TStorageYMatrix Y(1000, {2, 3});
+	TStorageYSparse Y(1000, {2, 3});
 	EXPECT_EQ(Y.total_size_of_container_space(), 6u);
 	EXPECT_ANY_THROW(Y.insert_one(7));
 

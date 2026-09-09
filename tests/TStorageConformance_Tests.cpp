@@ -27,15 +27,15 @@
 
 #include "constants.h"
 #include "phylogeny_generators.h"
-#include "storages/TDenseStateArray.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TDense.h"
+#include "storages/TSparse.h"
 #include "storages/cell_handle.h"
 #include "storages/cell_write.h"
 #include "storages/storage_concepts.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZDense.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"
 #include "tree/node_state_shape.h"
 #include "gtest/gtest.h"
@@ -352,7 +352,7 @@ std::vector<size_t> write_run(Storage &storage, const TRunShape &request,
 template<typename Storage>
 constexpr bool holds_every_cell =
     std::is_same_v<Storage, TStorageYDense> || std::is_same_v<Storage, TStorageZDense> ||
-    std::is_same_v<Storage, TDenseStateArray>;
+    std::is_same_v<Storage, TDenseBinary>;
 
 /// A state per cell of a run, drawn so that both states are asked for.
 std::vector<uint8_t> random_states(std::mt19937_64 &rng, size_t n_cells) {
@@ -369,15 +369,15 @@ std::vector<uint8_t> random_states(std::mt19937_64 &rng, size_t n_cells) {
 class StorageNames {
 public:
 	template<typename Storage> static std::string GetName(int /*index*/) {
-		if constexpr (std::is_same_v<Storage, TStorageZMatrix>) {
+		if constexpr (std::is_same_v<Storage, TStorageZSparse>) {
 			return "sparse_node_state";
 		} else if constexpr (std::is_same_v<Storage, TStorageZDense>) {
 			return "dense_node_state";
-		} else if constexpr (std::is_same_v<Storage, TStorageYMatrix>) {
+		} else if constexpr (std::is_same_v<Storage, TStorageYSparse>) {
 			return "sparse_field";
-		} else if constexpr (std::is_same_v<Storage, TSparseBinaryArray>) {
+		} else if constexpr (std::is_same_v<Storage, TSparseBinary>) {
 			return "sparse_binary_array";
-		} else if constexpr (std::is_same_v<Storage, TDenseStateArray>) {
+		} else if constexpr (std::is_same_v<Storage, TDenseBinary>) {
 			return "dense_state_array";
 		} else {
 			return "dense_field";
@@ -386,7 +386,7 @@ public:
 };
 
 /// One tree pairing, checked through one backend: the coordinates of a leaf pair address the same
-/// cell in the field and in either node state, with nothing converted in between.
+/// cell in the field and in either node state,SpaTStorageYSparsenothing convertSparsebetween.
 template<typename FieldT, typename NodeStateT>
 void check_the_leaf_block_needs_no_conversion(const TPhylogeny &first, const TPhylogeny &second,
                                               size_t &n_pairings_with_rows_the_field_lacks) {
@@ -430,8 +430,8 @@ void check_the_leaf_block_needs_no_conversion(const TPhylogeny &first, const TPh
 template<typename Storage> class StorageConformance : public ::testing::Test {};
 /// Every storage the sampler holds: the two node states, the two fields, and the two arrays the
 /// observed data is held in.
-using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatrix, TStorageYDense,
-                                  TSparseBinaryArray, TDenseStateArray>;
+using Storages = ::testing::Types<TStorageZSparse, TStorageZDense, TStorageYSparse, TStorageYDense,
+                                  TSparseBinary, TDenseBinary>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
 
 template<typename Storage> class HandleConformance : public ::testing::Test {};
@@ -464,7 +464,7 @@ TEST(NodeStateLeafBlock,
 	for (const auto &first : generated_phylogenies()) {
 		for (const auto &second : generated_phylogenies()) {
 			ASSERT_NO_FATAL_FAILURE(
-			    (check_the_leaf_block_needs_no_conversion<TStorageYMatrix, TStorageZMatrix>(
+			    (check_the_leaf_block_needs_no_conversion<TStorageYSparse, TStorageZSparse>(
 			        first, second, n_pairings_with_rows_the_field_lacks)));
 			ASSERT_NO_FATAL_FAILURE(
 			    (check_the_leaf_block_needs_no_conversion<TStorageYDense, TStorageZDense>(
@@ -990,7 +990,7 @@ TYPED_TEST(HandleConformance, the_ones_cursor_yields_what_a_handle_wrote) {
 class FieldNames {
 public:
 	template<typename Field> static std::string GetName(int /*index*/) {
-		if constexpr (std::is_same_v<Field, TStorageYMatrix>) {
+		if constexpr (std::is_same_v<Field, TStorageYSparse>) {
 			return "sparse";
 		} else {
 			return "dense";
@@ -999,7 +999,7 @@ public:
 };
 
 template<typename Field> class FieldConformance : public ::testing::Test {};
-using Fields = ::testing::Types<TStorageYMatrix, TStorageYDense>;
+using Fields = ::testing::Types<TStorageYSparse, TStorageYDense>;
 TYPED_TEST_SUITE(FieldConformance, Fields, FieldNames);
 
 TYPED_TEST(FieldConformance, the_counter_counts_the_iterations_a_cell_was_a_one) {
@@ -1209,7 +1209,7 @@ TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes)
 		const size_t n_cells = shape[0] * shape[1];
 		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
 
-		TStorageZMatrix sparse_Z(shape);
+		TStorageZSparse sparse_Z(shape);
 		TStorageZDense dense_Z(shape);
 		TExpectedCells sparse_expected(n_cells);
 		TExpectedCells dense_expected(n_cells);
@@ -1217,7 +1217,7 @@ TEST(StorageEquivalence, the_backends_agree_cell_for_cell_after_the_same_writes)
 		replay(dense_Z, writes, dense_expected);
 		expect_same_cells(sparse_Z, dense_Z, shape);
 
-		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
+		TStorageYSparse sparse_Y(N_ITERATIONS, shape);
 		TStorageYDense dense_Y(N_ITERATIONS, shape);
 		TExpectedCells sparse_field_expected(n_cells);
 		TExpectedCells dense_field_expected(n_cells);
@@ -1252,9 +1252,9 @@ TEST(StorageEquivalence, the_backends_agree_when_the_handed_out_inserts_are_comm
 		const size_t n_cells = shape[0] * shape[1];
 		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
 
-		TStorageZMatrix sparse_Z(shape);
+		TStorageZSparse sparse_Z(shape);
 		TStorageZDense dense_Z(shape);
-		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
+		TStorageYSparse sparse_Y(N_ITERATIONS, shape);
 		TStorageYDense dense_Y(N_ITERATIONS, shape);
 		TExpectedCells ignored(n_cells);
 		replay(sparse_Z, writes, ignored);
@@ -1328,7 +1328,7 @@ TEST(StorageEquivalence, the_backends_agree_on_the_counter_and_the_fraction_of_o
 		const size_t n_cells = shape[0] * shape[1];
 		const auto script    = random_script(rng, n_cells, N_ITERATIONS);
 
-		TStorageYMatrix sparse(N_ITERATIONS, shape);
+		TStorageYSparse sparse(N_ITERATIONS, shape);
 		TStorageYDense dense(N_ITERATIONS, shape);
 		// The comparison is exact only while neither field thins, which is what N_ITERATIONS is
 		// chosen for; the test below is the one that says what happens when they do.
@@ -1361,7 +1361,7 @@ TEST(StorageEquivalence, the_two_backends_thin_every_chain_by_the_same_factor) {
 	// Around, on and well past the capacity of the counter, because the factor is a ceiling: it
 	// steps at each multiple of 32767 and nowhere else.
 	for (const size_t n_iterations : {0u, 1u, 300u, 32766u, 32767u, 32768u, 65534u, 100003u}) {
-		const TStorageYMatrix sparse(n_iterations, IndexArray{1, 2});
+		const TStorageYSparse sparse(n_iterations, IndexArray{1, 2});
 		const TStorageYDense dense(n_iterations, IndexArray{1, 2});
 		EXPECT_EQ(sparse.get_thinning_factor(), dense.get_thinning_factor())
 		    << "n_iterations = " << n_iterations;
@@ -1370,7 +1370,7 @@ TEST(StorageEquivalence, the_two_backends_thin_every_chain_by_the_same_factor) {
 	// And a chain long enough to thin leaves both fields holding the same counter, not merely the
 	// same fraction. 65534 == 2 * 32767, so both count one iteration in two.
 	constexpr size_t n_iterations = 65534;
-	TStorageYMatrix sparse(n_iterations, IndexArray{1, 2});
+	TStorageYSparse sparse(n_iterations, IndexArray{1, 2});
 	TStorageYDense dense(n_iterations, IndexArray{1, 2});
 	ASSERT_EQ(sparse.get_thinning_factor(), 2u);
 	ASSERT_EQ(dense.get_thinning_factor(), 2u);
@@ -1415,7 +1415,7 @@ TEST(StorageEquivalence, the_backends_agree_on_the_bulk_insert_and_the_whole_spa
 			}
 		}
 
-		TStorageZMatrix sparse_Z(shape);
+		TStorageZSparse sparse_Z(shape);
 		TStorageZDense dense_Z(shape);
 		sparse_Z.insert_in_Z(batches);
 		dense_Z.insert_in_Z(batches);
@@ -1424,7 +1424,7 @@ TEST(StorageEquivalence, the_backends_agree_on_the_bulk_insert_and_the_whole_spa
 		ASSERT_EQ(sparse_Z.get_full_Z_binary_vector(), expected_Z);
 		ASSERT_EQ(dense_Z.get_full_Z_binary_vector(), expected_Z);
 
-		TStorageYMatrix sparse_Y(N_ITERATIONS, shape);
+		TStorageYSparse sparse_Y(N_ITERATIONS, shape);
 		TStorageYDense dense_Y(N_ITERATIONS, shape);
 		sparse_Y.insert_in_Y(batches);
 		dense_Y.insert_in_Y(batches);
@@ -1454,7 +1454,7 @@ TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_on
 		const size_t n_cells = shape[0] * shape[1];
 		const auto script    = random_script(rng, n_cells, N_ITERATIONS);
 
-		TStorageYMatrix sparse(N_ITERATIONS, shape);
+		TStorageYSparse sparse(N_ITERATIONS, shape);
 		TStorageYDense dense(N_ITERATIONS, shape);
 		TExpectedCells sparse_expected(n_cells);
 		TExpectedCells dense_expected(n_cells);
@@ -1507,7 +1507,7 @@ TEST(StorageEquivalence, the_cursor_the_likelihoods_walk_yields_the_same_cells_u
 		const size_t n_cells = shape[0] * shape[1];
 		const auto writes    = random_writes(rng, n_cells, n_writes_for(n_cells));
 
-		TStorageYMatrix sparse(N_ITERATIONS, shape);
+		TStorageYSparse sparse(N_ITERATIONS, shape);
 		TStorageYDense dense(N_ITERATIONS, shape);
 		TExpectedCells sparse_expected(n_cells);
 		TExpectedCells dense_expected(n_cells);
@@ -1549,7 +1549,7 @@ TEST(StorageEquivalence, the_cursor_the_likelihoods_walk_yields_the_same_cells_u
 // hold fixed was in fact read in -- means "is any cell a one", which is what dense answers, and
 // the compaction the sampler runs anyway brings the two back into step.
 TEST(StorageEquivalence, empty_is_the_one_answer_the_backends_may_differ_on) {
-	TStorageZMatrix sparse(IndexArray{2, 3});
+	TStorageZSparse sparse(IndexArray{2, 3});
 	TStorageZDense dense(IndexArray{2, 3});
 	EXPECT_EQ(sparse.empty(), dense.empty());
 

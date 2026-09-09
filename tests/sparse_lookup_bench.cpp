@@ -1,6 +1,6 @@
 #include "constants.h"
 #include "storages/cell_write.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "gtest/gtest.h"
 #include <chrono>
 #include <cstddef>
@@ -31,11 +31,11 @@
 
 namespace {
 
-// Build a TStorageYMatrix with Bernoulli(density) ones at each position.
+// Build a TStorageYSparse with Bernoulli(density) ones at each position.
 // insert_in_Y takes batches of *linear indices*, which is what the map is keyed
 // by; TStorageY carries a state and a counter and no index of its own.
-TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
-	TStorageYMatrix Y;
+TStorageYSparse make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
+	TStorageYSparse Y;
 	Y.initialize(/*n_iterations=*/1000, dims);
 	const size_t total = Y.total_size_of_container_space();
 
@@ -55,7 +55,7 @@ TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t
 
 /// Reads a run of cells, exactly as an update reads one: a start, a count and a stride, and a
 /// point lookup per cell. Returns the number of ones, so nothing here is dead code.
-size_t read_run(const TStorageYMatrix &Y, size_t start, size_t n_cells, size_t stride) {
+size_t read_run(const TStorageYSparse &Y, size_t start, size_t n_cells, size_t stride) {
 	size_t n_ones = 0;
 	for (size_t k = 0; k < n_cells; ++k) { n_ones += Y.is_one(start + k * stride); }
 	return n_ones;

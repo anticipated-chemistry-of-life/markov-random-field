@@ -73,7 +73,7 @@ one line. The build system takes no part.
 
 | storage | field             | node state        |
 | ------- | ----------------- | ----------------- |
-| sparse  | `TStorageYMatrix` | `TStorageZMatrix` |
+| sparse  | `TStorageYSparse` | `TStorageZSparse` |
 | dense   | `TStorageYDense`  | `TStorageZDense`  |
 
 A sparse storage holds its cells in a hash map keyed by the linear index, so its memory tracks the

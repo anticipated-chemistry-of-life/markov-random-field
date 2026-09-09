@@ -5,7 +5,7 @@
 #pragma once
 
 #include "TStorageZ.h"
-#include "storages/TDenseStateArray.h"
+#include "storages/TDense.h"
 #include "storages/bulk_paths.h"
 
 #include <cstddef>
@@ -25,12 +25,12 @@
 /// is the one difference from the sparse implementation that is visible in output:
 /// `write_Z_to_file` asked for only the stored cells writes the whole container space under this
 /// backend. Production only ever asks it for the whole space anyway.
-class TStorageZDense : public TDenseStateArray {
+class TStorageZDense : public TDenseBinary {
 public:
 	TStorageZDense() = default;
-	explicit TStorageZDense(const IndexArray &dimensions) : TDenseStateArray(dimensions) {}
+	explicit TStorageZDense(const IndexArray &dimensions) : TDenseBinary(dimensions) {}
 
-	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZMatrix::insert_in_Z.
+	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZSparse::insert_in_Z.
 	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
 		insert_ones_in_batches(*this, linear_indices_to_insert);
 	}

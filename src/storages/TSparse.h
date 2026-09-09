@@ -61,7 +61,7 @@ public:
 /// cell of one or two. The dense form pays the cell alone, for every position of the space. So
 /// this form wins on memory well below one one in twenty cells, and not merely below one in two.
 /// ADR-0006 argues the choice on fill for that reason.
-template<typename Cell> class TSparseCellArray {
+template<typename Cell> class TSparseStorage {
 private:
 	IndexArray _dimensions{};
 	size_t _total_size = 0;
@@ -132,8 +132,8 @@ protected:
 	}
 
 public:
-	TSparseCellArray() = default;
-	explicit TSparseCellArray(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
+	TSparseStorage() = default;
+	explicit TSparseStorage(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
 
 	/// Sizes the container space and drops every stored cell, so every cell reads as state 0.
 	///
@@ -280,9 +280,9 @@ public:
 /// The sparse array of bare states: one byte per stored cell, and nothing else. The LOTUS records
 /// take it whatever the build selects for the field, and it is the sparse half of the
 /// binary-storage alias.
-using TSparseBinaryArray = TSparseCellArray<uint8_t>;
+using TSparseBinary = TSparseStorage<uint8_t>;
 
-static_assert(BinaryStorage<TSparseBinaryArray>,
+static_assert(BinaryStorage<TSparseBinary>,
               "The sparse binary array must satisfy the binary storage interface.");
-static_assert(!FieldStorage<TSparseBinaryArray>,
+static_assert(!FieldStorage<TSparseBinary>,
               "A binary array carries no posterior counter, so it is not a field.");

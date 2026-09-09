@@ -4,14 +4,14 @@
 
 #pragma once
 
+#include "storages/TSparse.h"
 #include "storages/storage_concepts.h"
 
-#include "storages/TDenseStateArray.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TDense.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZDense.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/z_storage/TStorageZSparse.h"
 
 #include <type_traits>
 
@@ -47,13 +47,13 @@ using TNodeStateStorage = TStorageZDense;
 /// It makes no choice of its own. The field's flag decides both, because the two are the same
 /// shape and are read cell for cell against each other. A run that wants the sparse field wants
 /// this sparse too. A third define would also be a third pairing for the parity gate to cover.
-using TBinaryStorage = std::conditional_t<std::is_same_v<TFieldStorage, TStorageYDense>,
-                                          TDenseStateArray, TSparseBinaryArray>;
+using TBinaryStorage =
+    std::conditional_t<std::is_same_v<TFieldStorage, TStorageYDense>, TDenseBinary, TSparseBinary>;
 
 // The alias above reads the field's choice as a type, so it has to know every type that choice can
 // be. A define naming a third field storage would fall to the sparse side without saying so.
 static_assert(std::is_same_v<TFieldStorage, TStorageYDense> ||
-                  std::is_same_v<TFieldStorage, TStorageYMatrix>,
+                  std::is_same_v<TFieldStorage, TStorageYSparse>,
               "The binary storage follows the field, so the field has to be one of the two "
               "storages it knows. Add the new one to TBinaryStorage before selecting it here.");
 

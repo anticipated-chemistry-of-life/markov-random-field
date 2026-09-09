@@ -1,6 +1,6 @@
 #include "constants.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZDense.h"
 #include "gtest/gtest.h"
 #include <cstddef>
@@ -176,7 +176,7 @@ TEST(YStorageDense_Tests, thinning_factor_uses_the_packed_15_bit_counter) {
 	// over many chain lengths in tests/TStorageConformance_Tests.cpp; this says which factor it is.
 	constexpr size_t n_iterations = 65534;
 	const TStorageYDense dense(n_iterations, {1, 4});
-	const TStorageYMatrix sparse(n_iterations, IndexArray{1, 4});
+	const TStorageYSparse sparse(n_iterations, IndexArray{1, 4});
 
 	EXPECT_EQ(dense.get_thinning_factor(), 2u);
 	EXPECT_EQ(sparse.get_thinning_factor(), 2u);

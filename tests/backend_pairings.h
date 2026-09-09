@@ -18,9 +18,9 @@
 #include "phylogeny_generators.h"
 #include "storages/storage_concepts.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZDense.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"
 #include "tree/node_state_shape.h"
 #include "gtest/gtest.h"
@@ -102,7 +102,7 @@ template<typename Field, typename NodeState> struct TBackends {
 
 /// Every pairing of the two field storages with the two node-state storages.
 using AllBackends = ::testing::Types<
-    TBackends<TStorageYDense, TStorageZDense>, TBackends<TStorageYDense, TStorageZMatrix>,
-    TBackends<TStorageYMatrix, TStorageZDense>, TBackends<TStorageYMatrix, TStorageZMatrix>>;
+    TBackends<TStorageYDense, TStorageZDense>, TBackends<TStorageYDense, TStorageZSparse>,
+    TBackends<TStorageYSparse, TStorageZDense>, TBackends<TStorageYSparse, TStorageZSparse>>;
 
 } // namespace backends

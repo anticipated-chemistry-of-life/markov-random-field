@@ -76,8 +76,8 @@ esac
 # One gated pair per index: its label, the field's storage and the node state's. `sparse` names the
 # pair whose storages are both sparse, which is what the label meant before the two could differ.
 BACKENDS=(sparse dense)
-FIELD_STORAGES=(TStorageYMatrix TStorageYDense)
-NODE_STATE_STORAGES=(TStorageZMatrix TStorageZDense)
+FIELD_STORAGES=(TStorageYSparse TStorageYDense)
+NODE_STATE_STORAGES=(TStorageZSparse TStorageZDense)
 BINARIES=()
 
 # Copied into the working directory rather than referred to, so that both runs spell every argument

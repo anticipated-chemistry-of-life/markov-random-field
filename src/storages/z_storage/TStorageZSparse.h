@@ -6,7 +6,7 @@
 
 #include "TStorageZ.h"
 #include "constants.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TSparse.h"
 #include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
 
@@ -33,10 +33,10 @@
 /// space where the dense implementation reports all of it. That is the one difference between the
 /// two that is visible in output: `write_Z_to_file` asked for only the stored cells writes fewer
 /// rows under this backend. Production only ever asks it for the whole space anyway.
-class TStorageZMatrix : public TSparseBinaryArray {
+class TStorageZSparse : public TSparseBinary {
 public:
-	TStorageZMatrix() = default;
-	explicit TStorageZMatrix(const IndexArray &dimensions) : TSparseBinaryArray(dimensions) {}
+	TStorageZSparse() = default;
+	explicit TStorageZSparse(const IndexArray &dimensions) : TSparseBinary(dimensions) {}
 
 	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZDense::insert_in_Z.
 	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
@@ -59,7 +59,7 @@ public:
 	}
 };
 
-static_assert(BinaryStorage<TStorageZMatrix>,
+static_assert(BinaryStorage<TStorageZSparse>,
               "The sparse node state must satisfy the binary storage interface.");
-static_assert(!FieldStorage<TStorageZMatrix>,
+static_assert(!FieldStorage<TStorageZSparse>,
               "The node state carries no posterior counter, so it is not a field.");

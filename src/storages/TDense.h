@@ -32,7 +32,7 @@
 ///     `insert_zero`, sparse is not empty and this is. The caller asking (TMarkovField, checking
 ///     that a field it was told to hold fixed was in fact read in) means the former, and it is
 ///     the only reading dense has to give -- every cell is stored from the moment it is sized.
-template<typename Cell> class TDenseCellArray {
+template<typename Cell> class TDenseStorage {
 private:
 	IndexArray _dimensions{};
 	std::vector<Cell> _states;
@@ -54,8 +54,8 @@ protected:
 	[[nodiscard]] const std::vector<Cell> &cells() const { return _states; }
 
 public:
-	TDenseCellArray() = default;
-	explicit TDenseCellArray(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
+	TDenseStorage() = default;
+	explicit TDenseStorage(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
 
 	/// Sizes the array to the container space and puts every cell in state 0.
 	void initialize_dimensions(const IndexArray &dimensions) {
@@ -156,8 +156,8 @@ public:
 	/// backend, and a sum split by that reaches a Metropolis ratio. tests/backend_parity/README.md
 	/// records what that cost to find out.
 	class OnesCursor {
-		const TDenseCellArray *_array = nullptr;
-		size_t _index                 = 0;
+		const TDenseStorage *_array = nullptr;
+		size_t _index               = 0;
 
 		void _advance_to_next_one() {
 			const size_t total = _array->total_size_of_container_space();
@@ -166,9 +166,7 @@ public:
 
 	public:
 		OnesCursor() = default;
-		explicit OnesCursor(const TDenseCellArray &array) : _array(&array) {
-			_advance_to_next_one();
-		}
+		explicit OnesCursor(const TDenseStorage &array) : _array(&array) { _advance_to_next_one(); }
 
 		[[nodiscard]] bool valid() const {
 			return _array != nullptr && _index < _array->total_size_of_container_space();
@@ -186,9 +184,9 @@ public:
 /// The dense array of bare states: one byte per cell of the container space, and nothing else.
 /// This is the whole of a node state -- `Z` carries a state and nothing more -- and the storage
 /// the simple error model data takes on the dense side.
-using TDenseStateArray = TDenseCellArray<uint8_t>;
+using TDenseBinary = TDenseStorage<uint8_t>;
 
-static_assert(BinaryStorage<TDenseStateArray>,
+static_assert(BinaryStorage<TDenseBinary>,
               "The dense state array must satisfy the binary storage interface.");
-static_assert(!FieldStorage<TDenseStateArray>,
+static_assert(!FieldStorage<TDenseBinary>,
               "A state array carries no posterior counter, so it is not a field.");

@@ -18,9 +18,9 @@
 #include "constants.h"
 #include "coretools/algorithms.h"
 #include "phylogeny_generators.h"
-#include "storages/TDenseStateArray.h"
+#include "storages/TDense.h"
 #include "storages/z_storage/TStorageZDense.h"
-#include "storages/z_storage/TStorageZMatrix.h"
+#include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"
 #include "tree/clique/TCliqueView.h"
 #include "tree/node_state_density.h"
@@ -44,9 +44,9 @@ namespace {
 // A view is what the node-state draw writes through and what the node-state density reads. Both
 // headers name a concept and not this type, so this is the whole of what they need from it.
 static_assert(node_state_draw::CliqueColumn<TCliqueView<TStorageZDense>>);
-static_assert(node_state_draw::CliqueColumn<TCliqueView<TStorageZMatrix>>);
+static_assert(node_state_draw::CliqueColumn<TCliqueView<TStorageZSparse>>);
 static_assert(node_state_density::CliqueStates<TCliqueView<TStorageZDense>>);
-static_assert(node_state_density::CliqueStates<TCliqueView<TStorageZMatrix>>);
+static_assert(node_state_density::CliqueStates<TCliqueView<TStorageZSparse>>);
 
 // -------------------------------------------------------------------------
 // The shapes the properties are asserted over
@@ -135,7 +135,7 @@ public:
 };
 
 template<typename Storage> class CliqueView : public ::testing::Test {};
-using NodeStates = ::testing::Types<TStorageZDense, TStorageZMatrix>;
+using NodeStates = ::testing::Types<TStorageZDense, TStorageZSparse>;
 TYPED_TEST_SUITE(CliqueView, NodeStates, NodeStateNames);
 
 // -------------------------------------------------------------------------

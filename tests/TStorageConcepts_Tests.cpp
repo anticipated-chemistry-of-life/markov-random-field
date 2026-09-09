@@ -1,5 +1,8 @@
 
+#include "storages/TDense.h"
 #include "storages/storage_backend.h"
+#include "storages/y_storage/TStorageYSparse.h"
+#include "storages/z_storage/TStorageZSparse.h"
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -84,15 +87,15 @@ static_assert(FieldStorage<TFieldStorage>);
 // Every storage points an updater at one of its cells, so `BinaryStorage` above already says it of
 // all six. What is left to check is that the two cells they point at are the two that exist: a
 // bare state, and the state packed with the posterior counter beside it.
-static_assert(std::is_same_v<TDenseStateArray::TCell, uint8_t>);
-static_assert(std::is_same_v<TSparseBinaryArray::TCell, uint8_t>);
+static_assert(std::is_same_v<TDenseBinary::TCell, uint8_t>);
+static_assert(std::is_same_v<TSparseBinary::TCell, uint8_t>);
 static_assert(std::is_same_v<TStorageZDense::TCell, uint8_t>);
-static_assert(std::is_same_v<TStorageZMatrix::TCell, uint8_t>);
+static_assert(std::is_same_v<TStorageZSparse::TCell, uint8_t>);
 static_assert(std::is_same_v<TStorageYDense::TCell, TStorageY>);
-static_assert(std::is_same_v<TStorageYMatrix::TCell, TStorageY>);
+static_assert(std::is_same_v<TStorageYSparse::TCell, TStorageY>);
 
 // The observations are storages and no more. Neither carries a counter.
 static_assert(BinaryStorage<TBinaryStorage>);
 static_assert(!FieldStorage<TBinaryStorage>);
-static_assert(BinaryStorage<TSparseBinaryArray>);
-static_assert(!FieldStorage<TSparseBinaryArray>);
+static_assert(BinaryStorage<TSparseBinary>);
+static_assert(!FieldStorage<TSparseBinary>);

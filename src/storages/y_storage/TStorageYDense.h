@@ -7,7 +7,7 @@
 #include "TStorageY.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
-#include "storages/TDenseStateArray.h"
+#include "storages/TDense.h"
 #include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
@@ -24,7 +24,7 @@
 /// of n iterations is sampled one iteration in ceil(n / 32767) whichever backend runs it. That is
 /// what makes a posterior field written by one comparable with a posterior field written by the
 /// other: the resolution is the cell's, and no longer the backend's.
-class TStorageYDense : public TDenseCellArray<TStorageY> {
+class TStorageYDense : public TDenseStorage<TStorageY> {
 private:
 	size_t _thinning_factor = 1;
 	/// The number of iterations actually counted, and so the largest a cell's counter can be.
@@ -106,7 +106,7 @@ public:
 	// -- sampler needs them, but they describe what the model does with a field rather than what
 	// -- makes a field a field, and both implementations still spell them with a `Y` in the name.
 
-	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageYMatrix::insert_in_Y.
+	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageYSparse::insert_in_Y.
 	///
 	/// Every index goes through `insert_one`, counter and all: the sparse form writes a whole new
 	/// entry per index, which starts that cell's counter over, and the two have to leave a cell

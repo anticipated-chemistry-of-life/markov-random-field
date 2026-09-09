@@ -17,14 +17,16 @@
 // two of them (`just parity`), so this is where the other two are exercised at all.
 //
 
-#include "constants.h"
 #include "backend_pairings.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Types/probability.h"
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
 #include "field/link_backend.h"
 #include "random/TCellUniforms.h"
+#include "storages/y_storage/TStorageYSparse.h"
+#include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"
 #include "gtest/gtest.h"
 
@@ -47,8 +49,8 @@ using backends::make_storage;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;
-using backends::TTreePair;
 using backends::tree_pairs;
+using backends::TTreePair;
 
 /// Every cell of a container space, as states, so two runs can be compared without either backend
 /// having to say which cells it holds.
@@ -84,8 +86,8 @@ class TForcingModel {
 public:
 	/// What the loop did at one leaf pair.
 	struct TVisit {
-		size_t n_asked   = 0; ///< how often `factors` was asked about this leaf pair
-		size_t n_recorded = 0; ///< how often `record` was told about it
+		size_t n_asked       = 0; ///< how often `factors` was asked about this leaf pair
+		size_t n_recorded    = 0; ///< how often `record` was told about it
 		bool species_parent  = false;
 		bool molecule_parent = false;
 		field_math::TBlockStates drawn;
@@ -94,10 +96,9 @@ public:
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
 	    : _n_molecule_leaves(n_molecule_leaves), _visits(n_species_leaves * n_molecule_leaves) {}
 
-	[[nodiscard]] block_update::TLeafPairFactors factors(size_t species_leaf, size_t molecule_leaf,
-	                                                     bool species_parent,
-	                                                     bool molecule_parent) {
-		TVisit &recorded         = visit(species_leaf, molecule_leaf);
+	[[nodiscard]] block_update::TLeafPairFactors
+	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+		TVisit &recorded = visit(species_leaf, molecule_leaf);
 		++recorded.n_asked;
 		recorded.species_parent  = species_parent;
 		recorded.molecule_parent = molecule_parent;
@@ -162,7 +163,8 @@ field_math::TLinkCounters recount(const Field &Y, const NodeState &Z_species,
 	field_math::TLinkCounters counters;
 	for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 		for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
-			const bool z_s = Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m}));
+			const bool z_s =
+			    Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m}));
 			const bool z_m =
 			    Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space({s, m}));
 			counters.add(TLinkPolicy::bucket(z_s, z_m),
@@ -353,7 +355,7 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 			                  merged(tallies)};
 		};
 
-		const auto [one_Y, one_species, one_molecule, one_counters]    = run_once(1);
+		const auto [one_Y, one_species, one_molecule, one_counters]     = run_once(1);
 		const auto [many_Y, many_species, many_molecule, many_counters] = run_once(4);
 
 		EXPECT_EQ(one_Y, many_Y);
@@ -435,7 +437,7 @@ TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 		const auto [dense_Y, dense_species, dense_molecule, dense_counters] =
 		    run_once.template operator()<TStorageYDense, TStorageZDense>();
 		const auto [sparse_Y, sparse_species, sparse_molecule, sparse_counters] =
-		    run_once.template operator()<TStorageYMatrix, TStorageZMatrix>();
+		    run_once.template operator()<TStorageYSparse, TStorageZSparse>();
 
 		EXPECT_EQ(dense_Y, sparse_Y);
 		EXPECT_EQ(dense_species, sparse_species);

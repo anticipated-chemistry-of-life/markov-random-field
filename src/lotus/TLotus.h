@@ -21,7 +21,7 @@
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TSparse.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
@@ -42,7 +42,7 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	// data
-	TSparseBinaryArray _L;
+	TSparseBinary _L;
 
 	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
@@ -126,7 +126,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TSparseBinaryArray &get_L() const { return _L; }
+	[[nodiscard]] const TSparseBinary &get_L() const { return _L; }
 	[[nodiscard]] std::vector<std::string> tree_names() const;
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;

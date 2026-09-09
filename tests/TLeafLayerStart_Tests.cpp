@@ -6,11 +6,11 @@
 // from backend_pairings.h.
 //
 
-#include "constants.h"
 #include "backend_pairings.h"
+#include "constants.h"
 #include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TSparse.h"
 #include "gtest/gtest.h"
 
 #include <cstddef>
@@ -29,7 +29,7 @@ using backends::tree_pairs;
 /// The records the start reads: every third cell, so that the smallest container space the tree
 /// pairs ask for still holds both a record and a cell without one. The records hold only what is
 /// put in them, so a cell left out is one the start has to insert rather than write in place.
-void seed_records(TSparseBinaryArray &records) {
+void seed_records(TSparseBinary &records) {
 	for (size_t i = 0; i < records.total_size_of_container_space(); ++i) {
 		if (i % 3U == 0U) { records.insert_one(i); }
 	}
@@ -49,7 +49,7 @@ template<typename F> void expect_dev_error(F &&f) {
 }
 
 /// Whether the records hold this leaf pair, read the way the field's own index reads it.
-bool records_hold(const TSparseBinaryArray &records, size_t s, size_t m) {
+bool records_hold(const TSparseBinary &records, size_t s, size_t m) {
 	return records.is_one(records.get_linear_index_in_container_space(IndexArray{s, m}));
 }
 
@@ -72,7 +72,7 @@ TYPED_TEST(LeafLayerStart, starts_all_three_at_the_records) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		auto records    = TSparseBinaryArray(field_shape(pair));
+		auto records    = TSparseBinary(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
 		auto Z_species  = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
@@ -83,8 +83,8 @@ TYPED_TEST(LeafLayerStart, starts_all_three_at_the_records) {
 		seed_ones(Z_molecule, 3);
 
 		leaf_layer_start::start_the_field_at(records, Y);
-		const auto counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
-		    Y, Z_species, Z_molecule);
+		const auto counters =
+		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 		EXPECT_EQ(counters.total(), Y.total_size_of_container_space());
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
@@ -112,7 +112,7 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		const auto records = TSparseBinaryArray(field_shape(pair));
+		const auto records = TSparseBinary(field_shape(pair));
 		auto Y             = make_storage<Field>(field_shape(pair));
 		auto Z_species     = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule    = make_storage<NodeState>(molecule_shape(pair));
@@ -120,8 +120,8 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 		seed_ones(Z_molecule, 3);
 
 		leaf_layer_start::start_the_field_at(records, Y);
-		const auto counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
-		    Y, Z_species, Z_molecule);
+		const auto counters =
+		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -150,15 +150,15 @@ TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
-		auto records    = TSparseBinaryArray(field_shape(pair));
+		auto records    = TSparseBinary(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
 		auto Z_species  = make_storage<NodeState>(species_shape(pair));
 		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
 		seed_records(records);
 
 		leaf_layer_start::start_the_field_at(records, Y);
-		const auto counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
-		    Y, Z_species, Z_molecule);
+		const auto counters =
+		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 
 		size_t n_reported = 0;
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
@@ -184,7 +184,7 @@ TYPED_TEST(LeafLayerStart, refuses_records_of_another_shape) {
 
 	const auto &pair = tree_pairs().front();
 	const auto records =
-	    TSparseBinaryArray(IndexArray{pair.species.n_leaves() + 1, pair.molecule.n_leaves()});
+	    TSparseBinary(IndexArray{pair.species.n_leaves() + 1, pair.molecule.n_leaves()});
 	auto Y = make_storage<Field>(field_shape(pair));
 
 	expect_dev_error([&] { leaf_layer_start::start_the_field_at(records, Y); });
@@ -196,7 +196,7 @@ TYPED_TEST(LeafLayerStart, refuses_a_field_that_already_holds_states) {
 	using Field = typename TestFixture::Field;
 
 	const auto &pair = tree_pairs().front();
-	auto records     = TSparseBinaryArray(field_shape(pair));
+	auto records     = TSparseBinary(field_shape(pair));
 	auto Y           = make_storage<Field>(field_shape(pair));
 	seed_records(records);
 	seed_ones(Y, 7);

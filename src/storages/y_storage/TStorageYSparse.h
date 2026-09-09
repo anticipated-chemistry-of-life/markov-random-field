@@ -7,7 +7,7 @@
 #include "TStorageY.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
-#include "storages/TSparseBinaryArray.h"
+#include "storages/TSparse.h"
 #include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
@@ -26,7 +26,7 @@
 ///
 /// The cell is the dense field's cell, so both fields hold a 15-bit counter and thin a chain
 /// identically. Nothing about a posterior field's resolution follows from which backend wrote it.
-class TStorageYMatrix : public TSparseCellArray<TStorageY> {
+class TStorageYSparse : public TSparseStorage<TStorageY> {
 private:
 	size_t _thinning_factor = 1;
 	/// The number of iterations actually counted, and so the largest a cell's counter can be.
@@ -39,8 +39,8 @@ public:
 	/// reach past it.
 	static constexpr uint16_t MAX_COUNTER = TStorageY::MAX_COUNTER;
 
-	TStorageYMatrix() = default;
-	TStorageYMatrix(size_t n_iterations, const IndexArray &dimensions) {
+	TStorageYSparse() = default;
+	TStorageYSparse(size_t n_iterations, const IndexArray &dimensions) {
 		initialize(n_iterations, dimensions);
 	}
 
@@ -131,5 +131,5 @@ public:
 	}
 };
 
-static_assert(FieldStorage<TStorageYMatrix>,
+static_assert(FieldStorage<TStorageYSparse>,
               "The sparse field must satisfy the field storage interface.");
