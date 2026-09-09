@@ -409,6 +409,98 @@ TYPED_TEST(FieldUpdate, counters_tally_the_configuration_it_left) {
 	}
 }
 
+/// The retally a held field gets counts the configuration it was handed, and moves no cell.
+///
+/// It is the same tally the drawing pass leaves, so it is asserted against the same naive recount
+/// -- and against the pass itself, which is what makes the two agree for a run that turns `--fix_Y`
+/// on halfway through its thinking.
+TYPED_TEST(FieldUpdate, tally_counts_a_configuration_without_drawing) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_storage<NodeState>(species_shape(pair));
+		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+
+		const std::vector<uint8_t> field_before    = states_of(Y);
+		const std::vector<uint8_t> species_before  = states_of(Z_species);
+		const std::vector<uint8_t> molecule_before = states_of(Z_molecule);
+
+		const field_math::TLinkCounters kept =
+		    field_update::tally<TLinkPolicy>(Y, Z_species, Z_molecule);
+		const field_math::TLinkCounters expected = recount(Y, Z_species, Z_molecule, pair);
+
+		EXPECT_EQ(kept.total(), pair.species.n_leaves() * pair.molecule.n_leaves());
+		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+			for (const bool y : {false, true}) {
+				SCOPED_TRACE("bucket " + std::to_string(bucket) + ", field state " +
+				             std::to_string(static_cast<int>(y)));
+				EXPECT_EQ(kept.count(bucket, y), expected.count(bucket, y));
+			}
+		}
+
+		// Nothing moved. A held field is held, and the two tree fields are their trees' to draw.
+		EXPECT_EQ(states_of(Y), field_before);
+		EXPECT_EQ(states_of(Z_species), species_before);
+		EXPECT_EQ(states_of(Z_molecule), molecule_before);
+
+		// The retally splits the cells over the threads, so the six numbers must not move with the
+		// thread count. Merging shares is exact integer addition, which is what makes that true.
+		for (const size_t n_threads : {size_t{1}, size_t{4}}) {
+			const TThreadCount threads(n_threads);
+			const field_math::TLinkCounters got =
+			    field_update::tally<TLinkPolicy>(Y, Z_species, Z_molecule);
+			for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+				for (const bool y : {false, true}) {
+					EXPECT_EQ(got.count(bucket, y), expected.count(bucket, y))
+					    << n_threads << " threads, bucket " << bucket << ", field state " << y;
+				}
+			}
+		}
+	}
+}
+
+/// The tally the drawing pass keeps and the tally the retally builds are the same six numbers over
+/// one configuration. So a chain that holds its field is scored against what a chain that draws it
+/// would have been scored against.
+TYPED_TEST(FieldUpdate, tally_agrees_with_the_tally_the_pass_keeps) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_storage<NodeState>(species_shape(pair));
+		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+
+		TFreeModel model;
+		std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		const TCellUniforms uniforms(4242, TCellStream::field, 17);
+		field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+		                               field_math::TErrorProbability(OMEGA), model, uniforms,
+		                               tallies);
+
+		const field_math::TLinkCounters kept = merged(tallies);
+		const field_math::TLinkCounters retallied =
+		    field_update::tally<TLinkPolicy>(Y, Z_species, Z_molecule);
+		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+			for (const bool y : {false, true}) {
+				SCOPED_TRACE("bucket " + std::to_string(bucket) + ", field state " +
+				             std::to_string(static_cast<int>(y)));
+				EXPECT_EQ(kept.count(bucket, y), retallied.count(bucket, y));
+			}
+		}
+	}
+}
+
 /// A tally short of one per thread is rejected before the region opens.
 ///
 /// A thread writes the tally at its own index, so a short vector would be a write past the end from

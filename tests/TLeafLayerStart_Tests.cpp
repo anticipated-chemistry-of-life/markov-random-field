@@ -142,7 +142,7 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 
 /// The six counters the start leaves behind are degenerate: a record puts a leaf pair in bucket 2
 /// with the field at one, and no record puts it in bucket 0 with the field at zero. Bucket 1 holds
-/// nothing, so the AND diagnostic can say nothing about them. The first block update replaces the
+/// nothing, so the AND diagnostic can say nothing about them. The first field update replaces the
 /// whole tally.
 TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 	using Field     = typename TestFixture::Field;

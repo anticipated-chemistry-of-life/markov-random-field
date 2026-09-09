@@ -32,6 +32,20 @@
 #include <utility>
 #include <vector>
 
+/// A source of one leaf link per clique.
+///
+/// A tree's leaves are the one part of its node state that something outside the tree reads. The
+/// caller binds whatever that is and hands the tree this; the tree passes each clique's link
+/// straight to the walk and looks behind it nowhere. So a tree still names neither the field, nor
+/// the other tree, nor the error probability (ADR-0005).
+///
+/// The tree hands over both the clique's index and its own dimension, so the link addresses a
+/// clique with the dimension the tree walks it with rather than with a second copy of that number.
+template<typename T>
+concept LeafLinkSource = requires(const T &links, const IndexArray &clique_index, size_t dimension) {
+	{ links.for_clique(clique_index, dimension) } -> node_state_walk::LeafLink;
+};
+
 /// Note: All indices are within the tree itself
 class TTree : public stattools::prior::TStochasticBase<stattools::TParameterBase, TypeMarkovField,
                                                        NumDimMarkovField> {
@@ -142,9 +156,12 @@ private:
 	}
 
 	/// The bottom-up start of one clique. It shares its child terms with the node-state walk.
-	void _initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const;
+	///
+	/// It writes internal nodes alone, so it takes the view that says so. The leaves it reads were
+	/// put at the field before it ran (TMarkovField::_start_the_chain).
+	void _initialize_clique_from_children(size_t c, TNodeStateStartView &states) const;
 	void _initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
-	                                    TNodeStateCliqueView &states) const;
+	                                    TNodeStateStartView &states) const;
 
 	/// The bin every branch of this tree sat in before the current round of proposals. Branch
 	/// lengths are proposed before the loop over cliques starts, so `value` inside that loop is
@@ -227,6 +244,11 @@ private:
 	/// The cells of clique `c`, addressed by node index. One place holds the three things a view
 	/// is built from, so the loops below cannot drift apart.
 	[[nodiscard]] TNodeStateCliqueView _clique_view(size_t c) {
+		return {_Z, _topology(), _clique_index(c), _dimension};
+	}
+
+	/// The same cells, for the one walk that writes internal nodes alone.
+	[[nodiscard]] TNodeStateStartView _clique_start_view(size_t c) {
 		return {_Z, _topology(), _clique_index(c), _dimension};
 	}
 
@@ -335,12 +357,17 @@ public:
 
 	/// The field is not named here at all. Each tree owns a leaf-level view of it: its tree field,
 	/// the leaf block of this tree's node state. So the walk below, and the alpha and nu moves
-	/// after it, read one tree and nothing else. See ADR-0005. The leaves themselves are drawn
-	/// with the field, as one eight-state block, before this runs.
+	/// after it, read one tree and nothing else. See ADR-0005.
+	///
+	/// The walk covers every node, leaves included. A leaf's own conditional reaches outside the
+	/// tree, and it reaches it through `leaf_links` -- which this forwards one clique at a time and
+	/// never looks into.
 	///
 	/// Every read and write of a cell goes through the clique's view, which is the one place a
 	/// node index becomes a cell of the node state.
-	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
+	template<bool FixZ, LeafLinkSource LeafLinks>
+	void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration,
+	                                                    const LeafLinks &leaf_links) {
 		std::vector<std::vector<size_t>> indices_to_insert(n_cliques());
 
 		// The stream this tree's node state draws from this iteration, built before the parallel
@@ -359,7 +386,8 @@ public:
 		_propose_new_branch_lengths(pairs);
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms)
+    schedule(dynamic)                                                                              \
+    shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms, leaf_links)
 		for (size_t i = 0; i < n_cliques(); ++i) {
 			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
 			// The cells this clique reads and writes. The view lives across the moves below,
@@ -368,7 +396,9 @@ public:
 			// update Z
 			if constexpr (!FixZ) {
 				node_state_walk::update_clique(_topology(), transition_grid(i), _previous_bins(),
-				                               node_state_uniforms, states);
+				                               node_state_uniforms,
+				                               leaf_links.for_clique(_clique_index(i), _dimension),
+				                               states);
 			}
 
 			// update nu and alpha
@@ -459,7 +489,7 @@ public:
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none) shared(indices_to_insert)
 		for (size_t i = 0; i < n_cliques(); ++i) {
-			auto states = _clique_view(i);
+			auto states = _clique_start_view(i);
 			_initialize_clique_from_children(i, states);
 			indices_to_insert[i] = states.take_deferred_inserts();
 		}

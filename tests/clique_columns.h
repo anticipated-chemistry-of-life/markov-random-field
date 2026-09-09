@@ -12,6 +12,7 @@
 #include "tree/TPhylogeny.h"
 #include "written_uniforms.h"
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -53,6 +54,30 @@ public:
 		for (size_t node = 0; node < _states.size(); ++node) {
 			_states[node] = ((mask >> node) & 1U) != 0U;
 		}
+	}
+};
+
+/// A link that says nothing: both states of every leaf are equally supported, so a leaf is drawn
+/// from its parent alone. It is what a clique with nothing under its leaves looks like, and it is
+/// what lets a suite compare the walk against the node-state density, which has no link term.
+struct TNoLink {
+	[[nodiscard]] static std::array<double, 2> prob_of_leaf_states(size_t /*leaf*/) {
+		return {1.0, 1.0};
+	}
+};
+
+/// A link written out one leaf at a time, so that a test names what stands below each of them.
+class TWrittenLink {
+private:
+	std::vector<std::array<double, 2>> _probability;
+
+public:
+	explicit TWrittenLink(size_t n_leaves) : _probability(n_leaves, {1.0, 1.0}) {}
+
+	void set(size_t leaf, std::array<double, 2> probability) { _probability[leaf] = probability; }
+
+	[[nodiscard]] std::array<double, 2> prob_of_leaf_states(size_t leaf) const {
+		return _probability[leaf];
 	}
 };
 

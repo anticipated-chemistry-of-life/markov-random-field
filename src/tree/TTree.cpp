@@ -158,7 +158,7 @@ void TTree::simulate_Z() {
 		// the write.
 		//
 		// The leaves are drawn with the rest. Their block is this tree's tree field (ADR-0005).
-		TNodeStateSimulationView nodes(_Z, _topology(), _clique_index(c), _dimension);
+		TNodeStateCliqueView nodes(_Z, _topology(), _clique_index(c), _dimension);
 		node_state_draw::draw_clique(_topology(), transition_grid(c), bin_of, uniforms, nodes);
 		indices_to_insert[c] = nodes.take_deferred_inserts();
 	}

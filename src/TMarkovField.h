@@ -12,6 +12,8 @@
 #include "coretools/Main/TError.h"
 #include "field/TFieldMath.h"
 #include "field/joint_density.h"
+#include "field/link_backend.h"
+#include "field/tree_field_link.h"
 #include "field/tree_field_posterior.h"
 #include "mass_spec/msms_data.h"
 #include "random/TCellUniforms.h"
@@ -50,16 +52,16 @@ private:
 	bool _fix_Y = false;
 	bool _fix_Z = false;
 
-	// Mass spectrometry data, still dormant. Nothing builds it. The block update does not read it
-	// either: the eight-state block takes the LOTUS and the simple-error term, and adapting a third
-	// source is that source's own work.
+	// Mass spectrometry data, still dormant. Nothing builds it. The field update does not read it
+	// either: it takes the LOTUS and the simple-error term, and adapting a third source is that
+	// source's own work.
 	std::optional<TMSMSData> _ms_data;
 
 	// The error probability standing between the two tree fields and the field. stattools owns the
 	// value and moves it; this is where the field reads it.
 	TypeParamErrorProbability *_omega = nullptr;
 
-	// The link's sufficient statistic over the whole field, n(bucket, field state). The block
+	// The link's sufficient statistic over the whole field, n(bucket, field state). The field
 	// update tallies it as it goes and commits it here, which is what makes the error
 	// probability's likelihood O(1) in the number of cells (ADR-0005).
 	field_math::TLinkCounters _link_counters;
@@ -89,12 +91,16 @@ private:
 	coretools::TOutputFile _joint_density_file;
 	coretools::TOutputFile _link_counters_file;
 
-	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
-	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
+	/// One field update: every cell of the field's container space, split over the threads.
+	/// Defined in TMarkovField.cpp, where the model it hands the pass is complete.
+	///
+	/// It is the last state update of an iteration, so the six counters it leaves describe the
+	/// configuration the error probability then proposes against. A held field draws nothing and is
+	/// retallied instead, because the two tree fields moved underneath it.
 	///
 	/// An inferred chain is the only caller. A simulated one draws its whole configuration forward
 	/// and runs no update at all (`simulate`).
-	void _update_block(TDataModel &data_model, size_t iteration);
+	void _update_the_field(TDataModel &data_model, size_t iteration);
 
 	/// Opens the field's trace file on the first iteration of a chain.
 	void _open_Y_trace_file();
@@ -124,9 +130,8 @@ private:
 	/// no states, which is a user error rather than a chain to run.
 	void _throw_if_the_fixed_field_is_empty() const;
 
-	/// Puts both tree fields at the field, and tallies the six counters over them. The chain's
-	/// start needs it, and so does the fixed field, which has no block update to write all three
-	/// and leave the tally behind as it goes.
+	/// Puts both tree fields at the field, and tallies the six counters over them. This is the
+	/// second half of the chain start, and its only caller.
 	void _hold_tree_fields_at_the_field();
 
 	void _simulate_Y();
@@ -165,8 +170,22 @@ private:
 			}
 		}
 
-		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<FixZ>(iteration);
+		// The link each tree's leaves draw through. It carries the field, the *other* tree's node
+		// state and the error probability -- none of which a tree may name (ADR-0005) -- and it is
+		// built here, outside the parallel region the tree opens over its cliques.
+		//
+		// The trees are drawn one after another, so the second reads the leaf states the first was
+		// just given.
+		const field_math::TErrorProbability omega = _error_probability();
+		for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
+			// The other tree is the one this is not. The constructor has already said there are
+			// exactly NUMBER_OF_TREES of them, and the link is written for two.
+			const TNodeStateStorage &other_tree_field =
+			    _trees[NUMBER_OF_TREES - 1 - tree_idx]->get_Z();
+			const tree_field_link::TLeafLinks<TLinkPolicy, TFieldStorage, TNodeStateStorage> links(
+			    _Y, other_tree_field, omega);
+			_trees[tree_idx]->update_Z_and_nus_and_alphas_and_branch_lengths<FixZ>(iteration,
+			                                                                      links);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
@@ -239,7 +258,7 @@ public:
 	/// Puts the error probability's support at the open interval (0, 0.5).
 	///
 	/// The bound is a statement about the model, not a range on an argument (ADR-0005): at 0 the
-	/// link is the deterministic AND and the block update takes log(0), and at 0.5 and above the
+	/// link is the deterministic AND and a draw takes log(0), and at 0.5 and above the
 	/// tree fields are anti-correlated with the field. The type carries it, so the Metropolis
 	/// proposal mirrors at both ends and never leaves the interval.
 	///

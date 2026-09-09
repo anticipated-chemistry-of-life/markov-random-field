@@ -1,9 +1,9 @@
 //
 // Where a chain's leaf layer starts.
 //
-// The block update draws the field and both tree fields together, so the three of them start
-// together too. The start is two steps. The field takes the LOTUS records, and both tree fields
-// take the field. CONTEXT.md names the concept under *Chain start*, and ADR-0005 argues it.
+// The field and both tree fields start together, before any of the three has an update to move
+// it. The start is two steps. The field takes the LOTUS records, and both tree fields take the
+// field. CONTEXT.md names the concept under *Chain start*, and ADR-0005 argues it.
 //
 // Both steps read and write through the storage concepts and hold no tree. One suite therefore
 // asserts them over every backend pairing, and not over the one pairing a chain is built with.

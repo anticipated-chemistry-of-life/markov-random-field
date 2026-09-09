@@ -11,8 +11,8 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "field/TBlockModel.h"
-#include "field/TBlockUpdate.h"
+#include "field/TFieldModel.h"
+#include "field/field_update.h"
 #include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
 #include "field/simulate_field.h"
@@ -42,11 +42,19 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	// read: fix Y or Z?
 	_fix_Y = ProgramOptions::FIX_Y;
 	if (_fix_Y) {
-		// The block draws the field and both tree fields together, so holding one holds all three.
-		logfile().list("Will fix Y, and with it both tree fields, during the MCMC.");
+		// The field has an update of its own, so holding it holds the field and nothing else. Both
+		// tree fields still move: each is the leaf block of its tree's node state, and each tree
+		// draws its own (ADR-0005). The six counters are therefore retallied every iteration.
+		logfile().list("Will fix Y during the MCMC. Both tree fields still move, and the link "
+		               "counters are retallied every iteration.");
 	}
 	_fix_Z = ProgramOptions::FIX_Z;
-	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
+	if (_fix_Z) {
+		// Every node of both node states, leaves included. A tree field is the leaf block of a
+		// node state, so fixing a node state fixes its tree field with it.
+		logfile().list("Will fix Z during the MCMC, every node of it, leaves included. Pass "
+		               "--Y.update false as well to hold the whole leaf layer.");
+	}
 
 	// initialize Y: one dimension per tree, sized by that tree's leaf count. The loop is bounded by
 	// the array and not by the tree count, because the array is NUMBER_OF_TREES long and nothing
@@ -66,9 +74,17 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	logfile().list("The posterior field counts one iteration in ", _Y.get_thinning_factor(),
 	               ", which is what a 15-bit counter holds over ", n_iterations, " iterations.");
 
-	// The block update is written for one species tree and one molecule tree, and a cell index
-	// holds two coordinates. A third tree would run past the end of both. The loop above is
-	// bounded by the array so that it reaches this line, which says so.
+	// Said before the chain runs, because a run compared against an older revision will differ and
+	// the difference is expected. Each tree now draws its own leaf states, so a leaf takes its
+	// uniform from that tree's node-state stream where it used to take one from the field's
+	// (ADR-0007). Two revisions therefore do not line up seed for seed, however long the chain.
+	logfile().list("The leaf states of each tree are drawn with that tree, from its node-state "
+	               "stream. A run before this revision drew them from the field's stream, so the "
+	               "two cannot be compared seed for seed.");
+
+	// The field update and the link are written for one species tree and one molecule tree, and a
+	// cell index holds two coordinates. A third tree would run past the end of both. The loop above
+	// is bounded by the array so that it reaches this line, which says so.
 	if (_trees.size() != NUMBER_OF_TREES) {
 		throw coretools::TUserError("The model is written for ", NUMBER_OF_TREES,
 		                            " trees, but the run has ", _trees.size(), ".");
@@ -134,7 +150,7 @@ double TMarkovField::link_log_likelihood_ratio() const {
 }
 
 //-----------------------------------
-// The block update
+// The field update
 //-----------------------------------
 
 void TMarkovField::_open_Y_trace_file() {
@@ -195,11 +211,9 @@ void TMarkovField::_report_link_diagnostic() const {
 	logfile().endIndent();
 }
 
-/// A held field holds both tree fields with it, because the block draws all three together.
-///
 /// The tree fields take the field's own states. Under the AND link that is the configuration the
 /// field is most likely to have come from, and it is what the internal nodes are built from
-/// (TTree::initialize_Z_from_children). Before the block, that walk read the field itself.
+/// (TTree::initialize_Z_from_children).
 void TMarkovField::_hold_tree_fields_at_the_field() {
 	_link_counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
 	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z());
@@ -221,16 +235,15 @@ void TMarkovField::_throw_if_the_fixed_field_is_empty() const {
 /// the user error it is.
 ///
 /// The six counters this leaves are degenerate. Bucket 1 holds nothing, so the AND diagnostic says
-/// nothing about them. That is accepted. The first block update recounts every leaf pair and
-/// replaces the tally. A fixed field runs no block update, so its degenerate tally stands for the
-/// whole chain -- which is the truth of a field both tree fields match exactly.
+/// nothing about them. That is accepted, and it lasts one iteration: the first field update
+/// recounts every leaf pair and replaces the tally, and a held field is retallied in its place.
 void TMarkovField::_start_the_chain([[maybe_unused]] const TDataModel &data_model) {
 	using namespace coretools::instances;
 
 	// Before the log line below reports a start, and before every clique is walked for nothing.
 	_throw_if_the_fixed_field_is_empty();
 
-	// A fixed field is a field from a file, so the flag alone decides.
+	// A field the run gave stands as it is, so the flag alone decides.
 	if (!_field_came_from_a_file) {
 #ifdef USE_LOTUS
 		leaf_layer_start::start_the_field_at(data_model.get_lotus().get_L(), _Y);
@@ -243,43 +256,45 @@ void TMarkovField::_start_the_chain([[maybe_unused]] const TDataModel &data_mode
 	for (auto &tree : _trees) { tree->initialize_Z_from_children(); }
 }
 
-void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
+void TMarkovField::_update_the_field(TDataModel &data_model, size_t iteration) {
 	if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
 		_open_Y_trace_file();
 	}
 
 	if (_fix_Y) {
 		_throw_if_the_fixed_field_is_empty();
-		// The block draws the two tree fields with the field, so holding one holds all three. The
-		// leaf layer never moves after this, and one tally stands for the whole chain; the chain's
-		// start is where it was built (_start_the_chain).
-		//
-		// The error probability still moves against that tally, so the trace still carries it.
+		// The field does not move. Both tree fields did, a moment ago, each drawn by its own tree
+		// -- so the bucket a leaf pair falls in has moved even where its field state has not, and
+		// the tally the chain start built no longer describes the configuration. The error
+		// probability is scored against six counters, so those six are recounted here.
+		_link_counters = field_update::tally<TLinkPolicy>(_Y, _trees.front()->get_Z(),
+		                                                  _trees.back()->get_Z());
 		_trace_link_counters(iteration);
 		return;
 	}
 
-	// The stream the leaf pairs draw from this iteration, built before the parallel region
+	// The stream the cells draw from this iteration, built before the parallel region
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
 	TDataUpdateAccumulator accumulator(ProgramOptions::NUMBER_OF_THREADS);
-	TBlockModel model(_trees, data_model, accumulator);
-	std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+	TFieldModel model(data_model, accumulator);
+	std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
 
-	const field_math::TErrorProbability omega = _error_probability();
-	block_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
-	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), omega,
-	                               model, field_uniforms, tallies);
+	field_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
+	                               _error_probability(), model, field_uniforms, tallies);
 
-	// The update covered every leaf pair, so the tally it built is the configuration itself.
+	// The pass covered every cell, so the tally it built is the configuration itself.
 	_link_counters = field_math::TLinkCounters();
-	for (const auto &tally : tallies) { _link_counters.merge(tally.counters); }
+	for (const auto &tally : tallies) { _link_counters.merge(tally); }
 
 	_trace_link_counters(iteration);
 
 	// at the very end: sum the per-thread accumulators and store them in the data sources
 	accumulator.commit(data_model);
+	// The held field returned above, and only that return keeps this line from writing to a trace
+	// file `_open_Y_trace_file` was never asked to open. The flag is named here as well, so a
+	// held field that one day stops returning early does not write to a closed file.
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {
 		_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 	}
@@ -293,14 +308,16 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 		_chain_started = true;
 	}
 
-	// The block update is the whole of the leaf layer's turn: it draws the field and both tree
-	// fields together. Then each tree walks its own internal nodes, and then the parameters move.
-	_update_block(data_model, iteration);
+	// One iteration, in order: the species tree's node state, the molecule tree's, then the field
+	// (CONTEXT.md, *Update*). Each tree draws its whole node state, its tree field included, so the
+	// field update reads two tree fields that have already moved this iteration -- and the six
+	// counters it leaves describe the configuration the parameters then propose against.
 	if (_fix_Z) {
 		_update_all_Z<true>(iteration);
 	} else {
 		_update_all_Z<false>(iteration);
 	}
+	_update_the_field(data_model, iteration);
 	if (_ms_data.has_value()) _ms_data->update_all_MS_assignments();
 	_Y.add_to_counter(iteration);
 	_count_the_tree_fields(iteration);
@@ -405,7 +422,7 @@ joint_density::TJointDensity TMarkovField::_calculate_joint_density(const TDataM
 	// (ADR-0005).
 	density.link = _link_log_likelihood();
 
-	// A simulated chain draws from the prior. Every data term is neutral in the block update, and
+	// A simulated chain draws from the prior. Every data term is neutral in the field update, and
 	// no source has scored the field, so there is nothing here to add.
 	if (!_simulate) { density.data = data_model.data_log_likelihood(); }
 

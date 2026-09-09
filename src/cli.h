@@ -134,7 +134,7 @@ public:
 		ERROR_PROBABILITY = params.get<double>("error_probability", ERROR_PROBABILITY);
 		if (ERROR_PROBABILITY <= 0.0 || ERROR_PROBABILITY >= 0.5) {
 			// The open interval is a statement about the model, not a range on an argument: at 0
-			// the link is the deterministic AND and the block update takes log(0), and at or above
+			// the link is the deterministic AND and a draw takes log(0), and at or above
 			// 0.5 the tree fields are anti-correlated with the field (ADR-0005).
 			throw coretools::TUserError("--error_probability must be strictly between 0 and 0.5, "
 			                            "but got ",

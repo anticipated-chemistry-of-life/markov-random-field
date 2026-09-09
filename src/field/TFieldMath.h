@@ -1,6 +1,6 @@
 //
-// The link between the two tree fields and the field, and the two draws the sampler takes from
-// it: one field cell on its own, and the eight-state block over a whole leaf pair.
+// The link between the two tree fields and the field, and what the sampler reads from it: the
+// probability of one field cell, and the likelihood of a whole configuration from six counters.
 //
 // Each tree carries its own leaf-level view of the field -- its tree field -- and the field is a
 // noisy reconciliation of the two: corrupt each tree field cell independently with probability
@@ -18,13 +18,13 @@
 // The table depends on the two tree field states only through their sum, so the link's whole
 // contribution to the likelihood collapses to six integers -- n(bucket, field state) -- and the
 // error-probability Metropolis move becomes O(1) in the number of cells rather than a sum over
-// every cell. That
-// is the same trick the simple error model's disagreement count plays for its own rate.
+// every cell. That is the same trick the simple error model's disagreement count plays for its own
+// rate.
 //
-// Everything here is free-standing. It takes two transition probabilities, an error probability
-// and two data-likelihood pairs, and it touches no storage, no tree, no parameter and no random
-// generator -- which is what makes the closed forms below testable against brute-force definitions
-// for a few lines of arithmetic, instead of through a constructed field.
+// Everything here is free-standing. It takes two tree field states, an error probability and two
+// data-likelihood pairs, and it touches no storage, no tree, no parameter and no random generator.
+// That is what makes the closed forms below testable against brute-force definitions for a few
+// lines of arithmetic, instead of through a constructed field.
 //
 // It is also deliberately NOT guarded by the data-source build flags, so it compiles and is unit
 // tested in every build configuration, following lotus/TLotusMath.h and
@@ -52,8 +52,8 @@ namespace field_math {
 /// tree fields in state 1 pools the two mixed cells, which is only valid while both trees are
 /// corrupted at the same rate.
 ///
-/// Constrained to the open interval (0, 0.5). At 0 the link is the deterministic AND and the block
-/// update hits log 0; at or above 0.5 the tree fields are anti-correlated with the field, which is
+/// Constrained to the open interval (0, 0.5). At 0 the link is the deterministic AND and a draw
+/// hits log 0; at or above 0.5 the tree fields are anti-correlated with the field, which is
 /// meaningless as an error model and is a genuine second mode for a sampler to find (ADR-0005).
 ///
 /// The check below is written out rather than delegated to one of coretools' interval types, for
@@ -74,8 +74,8 @@ public:
 			throw std::invalid_argument(
 			    "The error probability must lie strictly inside (0, 0.5), but it is " +
 			    std::to_string(omega) +
-			    ". At 0 the link is deterministic and the block update takes log(0); at 0.5 and "
-			    "above the tree fields are anti-correlated with the field.");
+			    ". At 0 the link is deterministic and a draw takes log(0); at 0.5 and above the "
+			    "tree fields are anti-correlated with the field.");
 		}
 	}
 
@@ -102,49 +102,16 @@ inline void check_bucket(size_t bucket, size_t n_buckets) {
 	}
 }
 
-/// Index of one of the eight states a leaf pair can be in, over (field, species tree field,
-/// molecule tree field). The field takes the high bit so that the four states sharing a field
-/// value are contiguous.
-[[nodiscard]] constexpr size_t state_index(bool y, bool z_s, bool z_m) noexcept {
-	return (static_cast<size_t>(y) << 2U) | (static_cast<size_t>(z_s) << 1U) |
-	       static_cast<size_t>(z_m);
-}
-
-/// The number of states one leaf pair can be in, over the field and the two tree fields.
-inline constexpr size_t n_block_states = 8;
-
-/// The three states of one leaf pair: the field and the two tree fields.
-///
-/// One type serves both ends of a block update. The states read out of the three storages go in.
-/// The states drawn come back.
-struct TBlockStates {
-	bool y   = false; ///< the field
-	bool z_s = false; ///< the species tree field
-	bool z_m = false; ///< the molecule tree field
-};
-
-/// The inverse of `state_index`.
-[[nodiscard]] constexpr TBlockStates states_of_index(size_t index) {
-	if (index >= n_block_states) {
-		throw std::invalid_argument("There is no block state " + std::to_string(index) +
-		                            "; there are " + std::to_string(n_block_states) + ".");
-	}
-	return {.y   = ((index >> 2U) & 1U) != 0U,
-	        .z_s = ((index >> 1U) & 1U) != 0U,
-	        .z_m = (index & 1U) != 0U};
-}
-
-/// One cell of the six counters: a bucket and a field state.
-struct TCounterCell {
-	size_t bucket = 0;
-	bool y        = false;
-};
-
 /// The sufficient statistic of the link: `n(bucket, field state)`.
 ///
 /// Six integers carry the whole link likelihood, so the error-probability move never walks the
-/// cells. The block update knows its own old and new (bucket, field state), which is why this is
-/// maintained by `add` and `remove` rather than recomputed.
+/// cells.
+///
+/// Every update builds a whole tally with `add`, because every update visits every cell.
+/// `remove` moves one cell between two counter cells instead, and nothing in the sampler calls it
+/// today: the block update was its caller, and ADR-0005's successor retired that. It stays because
+/// it is what a partial update would need, and because it is the guard that says a count may not
+/// go below zero.
 ///
 /// The bucket count is the AND's; a link that bucketed differently would change this type with it.
 class TLinkCounters {
@@ -178,7 +145,7 @@ public:
 
 	/// Adds another tally's counts to this one.
 	///
-	/// The block update keeps one tally per thread, because a thread sees only a share of the
+	/// The field update keeps one tally per thread, because a thread sees only a share of the
 	/// cells and `remove` would take a partial count below zero. This is how the shares come back
 	/// together after the parallel region.
 	void merge(const TLinkCounters &other) noexcept {
@@ -360,10 +327,9 @@ public:
 
 /// P(Y = 1) at one field cell, given the two tree field cells and the data that observes it.
 ///
-/// The field update draws one cell at a time, so the eight-state table below collapses to two
-/// weights: what the link says about the field state, times what each data source makes of it. The
-/// tree fields are not drawn here. Each is drawn by its own tree, so the two enter as states rather
-/// than as factors.
+/// The field update draws one cell at a time, from two weights: what the link says about the field
+/// state, times what each data source makes of it. The tree fields are not drawn here. Each is
+/// drawn by its own tree, so the two enter as states rather than as factors.
 ///
 /// Pure, as its neighbours are. It touches no storage, no tree and no random generator. The caller
 /// draws with the probability this returns.
@@ -391,137 +357,6 @@ prob_field_cell_is_one(bool z_s, bool z_m, const TErrorProbability &omega,
 		    "underflowed.");
 	}
 	return coretools::P(weight_1 / total);
-}
-
-/// The eight-state block at one leaf pair: the field and the two tree fields, updated together.
-///
-/// Their combined Markov blanket is these six scalars and the error probability. Sampling the
-/// three as one block rather than as three single-site steps is what escapes the metastable state
-/// the AND creates -- with a small omega, a field cell at one pins both tree fields, and given both
-/// at one the field stays at one with probability near one. That triple mixes arbitrarily slowly
-/// under single-site Gibbs, and it would present as a convergence problem rather than as a bug.
-///
-/// Returns the normalised probability of each of the eight states, addressed by `state_index`.
-/// Drawing from them is the caller's business; nothing here touches a random generator.
-///
-/// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition
-/// grid.
-/// @param prob_z_m_is_one  P(Z_m = 1 | the molecule parent's state).
-/// @param omega            The error probability standing between the tree fields and the field.
-/// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
-/// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
-template<LinkPolicy Policy>
-[[nodiscard]] std::array<double, n_block_states>
-block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
-                    const TErrorProbability &omega,
-                    const std::array<coretools::Probability, 2> &lotus,
-                    const std::array<coretools::Probability, 2> &simple_error) {
-	// These are probabilities by type, so the range check happens where the caller builds the
-	// value, the way TSimpleErrorModelMath.h already does it. Note the bargain: coretools checks
-	// its intervals only under CHECK_INTERVALS, which CMakeLists.txt defines for the unit tests and
-	// not for acol. So this is a development-time guard, and a transition probability outside [0,1]
-	// reaching a release build would still produce a negative weight. Every coretools type in this
-	// codebase makes the same trade.
-	const double p_s = prob_z_s_is_one.get();
-	const double p_m = prob_z_m_is_one.get();
-
-	std::array<double, n_block_states> probability{};
-	double total = 0.0;
-
-	for (const bool z_s : {false, true}) {
-		for (const bool z_m : {false, true}) {
-			const double tree_factor = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
-			const double link        = Policy::prob_y_is_one(z_s, z_m, omega);
-			for (const bool y : {false, true}) {
-				const auto data     = static_cast<size_t>(y);
-				const double weight = tree_factor * (y ? link : 1.0 - link) * lotus[data].get() *
-				                      simple_error[data].get();
-				probability[state_index(y, z_s, z_m)] = weight;
-				total += weight;
-			}
-		}
-	}
-
-	if (!(total > 0.0)) {
-		throw std::invalid_argument(
-		    "The eight-state block has no probability mass: the eight weights sum to " +
-		    std::to_string(total) +
-		    ". Either a data likelihood is zero for both field states, or the weights "
-		    "underflowed.");
-	}
-	for (double &p : probability) { p /= total; }
-	return probability;
-}
-
-/// What one block draw did at one leaf pair. The counter move comes back whole: each end carries a
-/// bucket and a field state.
-struct TBlockDraw {
-	TBlockStates drawn; ///< the states the draw assigned
-	TCounterCell from;  ///< the counter cell the leaf pair left
-	TCounterCell to;    ///< the counter cell it counts in now
-};
-
-/// Draw the eight-state block at one leaf pair, and report the counter cell the leaf pair moved
-/// between.
-///
-/// The draw is inverse transform sampling over `block_probabilities`, in `state_index` order. The
-/// same uniform therefore gives the same state whatever order a traversal reaches the cell in.
-///
-/// The counter move comes back with the states, so that no traversal computes the delta itself.
-/// ADR-0006 says why that arithmetic must not be written twice.
-///
-/// Pure, as its neighbours are. It touches no storage, no tree, no parameter and no random
-/// generator. The caller hands it the cell's uniform.
-///
-/// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition
-///                         grid.
-/// @param prob_z_m_is_one  P(Z_m = 1 | the molecule parent's state).
-/// @param omega            The error probability standing between the tree fields and the field.
-/// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
-/// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
-/// @param current          The states the leaf pair is in now. Only the cell it leaves depends on
-///                         them.
-/// @param uniform          The cell's uniform, on [0, 1).
-template<LinkPolicy Policy>
-[[nodiscard]] TBlockDraw
-draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
-           const TErrorProbability &omega, const std::array<coretools::Probability, 2> &lotus,
-           const std::array<coretools::Probability, 2> &simple_error, const TBlockStates &current,
-           double uniform) {
-	// Written as two negations, so that a NaN uniform is rejected rather than drawn on.
-	if (!(uniform >= 0.0) || !(uniform < 1.0)) {
-		throw std::invalid_argument("The uniform must lie in [0, 1), but it is " +
-		                            std::to_string(uniform) + ".");
-	}
-
-	const auto probability =
-	    block_probabilities<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, lotus, simple_error);
-
-	size_t index      = n_block_states;
-	double cumulative = 0.0;
-	for (size_t i = 0; i < n_block_states; ++i) {
-		cumulative += probability[i];
-		if (uniform < cumulative) {
-			index = i;
-			break;
-		}
-	}
-	if (index == n_block_states) {
-		// The running sum stopped below the uniform. Only rounding can do that, because the
-		// weights are normalised. So the last state that has mass takes the draw. A state with no
-		// mass stays out of reach: a datum that rules one out must keep ruling it out.
-		for (size_t i = n_block_states; i-- > 0;) {
-			if (probability[i] > 0.0) {
-				index = i;
-				break;
-			}
-		}
-	}
-
-	const TBlockStates drawn = states_of_index(index);
-	return {.drawn = drawn,
-	        .from  = {.bucket = Policy::bucket(current.z_s, current.z_m), .y = current.y},
-	        .to    = {.bucket = Policy::bucket(drawn.z_s, drawn.z_m), .y = drawn.y}};
 }
 
 } // namespace field_math
