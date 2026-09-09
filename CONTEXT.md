@@ -93,7 +93,7 @@ The configuration a chain holds before its first update. Both tree fields start 
 _Avoid_: initial values, seed, guess, warm-up
 
 **Field update**:
-The field's own pass over its cells. It visits every leaf pair and draws that cell from the two tree field cells at that pair, and from the data that observes the field. It retallies the six link counters as it goes. It is the last state update of an iteration, so the counters describe the configuration the error probability then proposes against. The tree fields are not its to draw: each is drawn by its own tree, as the leaf block of that tree's node state.
+The field's own pass over its cells. It visits every leaf pair and draws that cell from the two tree field cells at that pair, and from the data that observes the field. It retallies the six link counters as it goes. It is the last state update of an iteration, so the counters describe the configuration the error probability then proposes against. The tree fields are not its to draw: each is drawn by its own tree, as the leaf block of that tree's node state. `field_update::run`, `src/field/`.
 _Avoid_: Y update, Y sweep, leaf pair update
 
 **Block update**:

@@ -552,6 +552,90 @@ TEST(FieldMath_Tests, the_log_probabilities_agree_with_the_logs_of_the_probabili
 }
 
 //-----------------------------------
+// One field cell
+//-----------------------------------
+
+TEST(FieldMath_Tests, a_field_cell_is_the_link_tilted_by_the_data) {
+	// The definition: the link's probability of each field state, times what each source makes of
+	// it, normalised. The link comes from the corruption enumeration, so this shares no closed form
+	// with `prob_field_cell_is_one`.
+	const std::array<double, 2> lotus        = {0.7, 0.2};
+	const std::array<double, 2> simple_error = {0.15, 0.85};
+	for (const double w : {0.01, 0.1, 0.3, 0.45}) {
+		for (const bool z_s : {false, true}) {
+			for (const bool z_m : {false, true}) {
+				const double link     = brute_force_prob_y_is_one(z_s, z_m, w);
+				const double weight_0 = (1.0 - link) * lotus[0] * simple_error[0];
+				const double weight_1 = link * lotus[1] * simple_error[1];
+
+				const auto got = prob_field_cell_is_one<TLinkPolicy>(
+				    z_s, z_m, TErrorProbability(w), as_probabilities(lotus),
+				    as_probabilities(simple_error));
+				EXPECT_NEAR(got.get(), weight_1 / (weight_0 + weight_1), 1e-14)
+				    << "omega = " << w << ", z_s = " << z_s << ", z_m = " << z_m;
+			}
+		}
+	}
+}
+
+TEST(FieldMath_Tests, a_field_cell_with_no_data_follows_the_link) {
+	// Both sources neutral, so the cell is the link and nothing else. This is the build that
+	// compiled no data source in.
+	const std::array<double, 2> neutral = {1.0, 1.0};
+	for (const double w : {0.02, 0.2, 0.49}) {
+		for (const bool z_s : {false, true}) {
+			for (const bool z_m : {false, true}) {
+				const auto got = prob_field_cell_is_one<TLinkPolicy>(z_s, z_m, TErrorProbability(w),
+				                                                     as_probabilities(neutral),
+				                                                     as_probabilities(neutral));
+				EXPECT_NEAR(got.get(), TLinkPolicy::prob_y_is_one(z_s, z_m, TErrorProbability(w)),
+				            1e-15)
+				    << "omega = " << w << ", z_s = " << z_s << ", z_m = " << z_m;
+			}
+		}
+	}
+}
+
+TEST(FieldMath_Tests, a_field_cell_is_the_block_conditioned_on_the_two_tree_fields) {
+	// The two draws must agree about the field. The block moves all three variables at once, so
+	// its field marginal *given* the two tree field states is what a single-cell draw is. The two
+	// tree factors cancel from that conditional, which is why they are not asked for here.
+	const std::array<double, 2> lotus        = {0.6, 0.3};
+	const std::array<double, 2> simple_error = {0.25, 0.75};
+	for (const double w : {0.05, 0.25, 0.4}) {
+		for (const double p_s : {0.2, 0.5, 0.9}) {
+			for (const double p_m : {0.15, 0.5, 0.85}) {
+				const auto block = block_probabilities<TLinkPolicy>(
+				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
+				    as_probabilities(lotus), as_probabilities(simple_error));
+				for (const bool z_s : {false, true}) {
+					for (const bool z_m : {false, true}) {
+						const double at_zero = block[state_index(false, z_s, z_m)];
+						const double at_one  = block[state_index(true, z_s, z_m)];
+						const auto got       = prob_field_cell_is_one<TLinkPolicy>(
+						    z_s, z_m, TErrorProbability(w), as_probabilities(lotus),
+						    as_probabilities(simple_error));
+						EXPECT_NEAR(got.get(), at_one / (at_zero + at_one), 1e-14)
+						    << "omega = " << w << ", p_s = " << p_s << ", p_m = " << p_m
+						    << ", z_s = " << z_s << ", z_m = " << z_m;
+					}
+				}
+			}
+		}
+	}
+}
+
+TEST(FieldMath_Tests, a_field_cell_rejects_a_configuration_with_no_mass) {
+	// zero is a perfectly good probability, so the type lets this through and the cell itself has
+	// to notice that nothing is left to normalise
+	const std::array<double, 2> nothing = {0.0, 0.0};
+	EXPECT_THROW(static_cast<void>(prob_field_cell_is_one<TLinkPolicy>(
+	                 true, true, TErrorProbability(0.1), as_probabilities(nothing),
+	                 as_probabilities(nothing))),
+	             std::invalid_argument);
+}
+
+//-----------------------------------
 // The eight-state block
 //-----------------------------------
 

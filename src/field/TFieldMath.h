@@ -1,6 +1,6 @@
 //
-// The link between the two tree fields and the field, and the eight-state block the sampler draws
-// from.
+// The link between the two tree fields and the field, and the two draws the sampler takes from
+// it: one field cell on its own, and the eight-state block over a whole leaf pair.
 //
 // Each tree carries its own leaf-level view of the field -- its tree field -- and the field is a
 // noisy reconciliation of the two: corrupt each tree field cell independently with probability
@@ -357,6 +357,41 @@ public:
 		return diagnostic;
 	}
 };
+
+/// P(Y = 1) at one field cell, given the two tree field cells and the data that observes it.
+///
+/// The field update draws one cell at a time, so the eight-state table below collapses to two
+/// weights: what the link says about the field state, times what each data source makes of it. The
+/// tree fields are not drawn here. Each is drawn by its own tree, so the two enter as states rather
+/// than as factors.
+///
+/// Pure, as its neighbours are. It touches no storage, no tree and no random generator. The caller
+/// draws with the probability this returns.
+///
+/// @param z_s           The species tree field cell at this leaf pair.
+/// @param z_m           The molecule tree field cell at this leaf pair.
+/// @param omega         The error probability standing between the tree fields and the field.
+/// @param lotus         {P(L | Y = 0), P(L | Y = 1)} for this cell.
+/// @param simple_error  {P(D | Y = 0), P(D | Y = 1)} for this cell.
+template<LinkPolicy Policy>
+[[nodiscard]] coretools::Probability
+prob_field_cell_is_one(bool z_s, bool z_m, const TErrorProbability &omega,
+                       const std::array<coretools::Probability, 2> &lotus,
+                       const std::array<coretools::Probability, 2> &simple_error) {
+	const double link     = Policy::prob_y_is_one(z_s, z_m, omega);
+	const double weight_0 = (1.0 - link) * lotus[0].get() * simple_error[0].get();
+	const double weight_1 = link * lotus[1].get() * simple_error[1].get();
+
+	const double total = weight_0 + weight_1;
+	if (!(total > 0.0)) {
+		throw std::invalid_argument(
+		    "The field cell has no probability mass: the two weights sum to " +
+		    std::to_string(total) +
+		    ". Either a data likelihood is zero for both field states, or the weights "
+		    "underflowed.");
+	}
+	return coretools::P(weight_1 / total);
+}
 
 /// The eight-state block at one leaf pair: the field and the two tree fields, updated together.
 ///
