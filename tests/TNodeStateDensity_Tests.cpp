@@ -9,6 +9,7 @@
 // A phylogeny and a transition grid are values, so nothing here builds a tree or a chain.
 //
 
+#include "clique_columns.h"
 #include "phylogeny_generators.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
@@ -22,40 +23,17 @@
 
 namespace {
 
+using clique::TColumn;
+using clique::TOneBin;
 using node_state_density::log_density_of_clique;
 using phylo::edge;
 
 constexpr size_t N_BINS = 5;
 
-/// The states of a clique, as a test writes them: one bit per node, indexed by node index.
-class TStates {
-private:
-	std::vector<bool> _states;
-
-public:
-	explicit TStates(size_t n_nodes) : _states(n_nodes, false) {}
-
-	/// The configuration `mask` names: bit `node` of it is that node's state.
-	void set_from_mask(size_t mask) {
-		for (size_t node = 0; node < _states.size(); ++node) {
-			_states[node] = ((mask >> node) & 1U) != 0U;
-		}
-	}
-	void set(size_t node, bool state) { _states[node] = state; }
-
-	[[nodiscard]] bool is_one(size_t node) const { return _states[node]; }
-};
-
-/// Every branch in the same bin, which is what a test that is not about branch lengths wants.
-struct TOneBin {
-	size_t bin = 0;
-	size_t operator()(size_t /*node*/) const { return bin; }
-};
-
 /// The total probability the clique's density assigns to every configuration of `topology`.
 double total_probability(const TPhylogeny &topology, const TTransitionGrid &process,
                          const TOneBin &bins) {
-	TStates states(topology.n_nodes());
+	TColumn states(topology.n_nodes());
 	double total = 0.0;
 	for (size_t mask = 0; mask < (size_t{1} << topology.n_nodes()); ++mask) {
 		states.set_from_mask(mask);
@@ -121,9 +99,9 @@ TEST(NodeStateDensity, is_the_stationary_term_of_the_root_and_the_branch_term_of
 	const TTransitionGrid process(0.25, 1.1, grid);
 	const TPhylogeny topology = build_phylogeny({edge("leaf", "root")});
 
-	TStates states(topology.n_nodes());
-	states.set(topology.index_of("root"), true);
-	states.set(topology.index_of("leaf"), false);
+	TColumn states(topology.n_nodes());
+	states.set_state(topology.index_of("root"), true);
+	states.set_state(topology.index_of("leaf"), false);
 
 	const double expected =
 	    std::log(process.stationary(true)) + std::log(process.probability(2, true, false));
@@ -136,9 +114,9 @@ TEST(NodeStateDensity, moves_with_the_bin_a_branch_sits_in) {
 	const TTransitionGrid process(0.25, 1.1, grid);
 	const TPhylogeny topology = build_phylogeny({edge("leaf", "root")});
 
-	TStates states(topology.n_nodes());
-	states.set(topology.index_of("root"), true);
-	states.set(topology.index_of("leaf"), false);
+	TColumn states(topology.n_nodes());
+	states.set_state(topology.index_of("root"), true);
+	states.set_state(topology.index_of("leaf"), false);
 
 	EXPECT_NE(log_density_of_clique(topology, process, states, TOneBin{0}),
 	          log_density_of_clique(topology, process, states, TOneBin{N_BINS - 1}));

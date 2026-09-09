@@ -23,6 +23,7 @@
 #include "tree/branch/TTransitionGrid.h"
 #include "tree/clique/TCliqueView.h"
 #include "tree/node_state_density.h"
+#include "tree/node_state_walk.h"
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -140,17 +141,18 @@ private:
 		return process.probability(binned_branch_length, parent_state, child_state);
 	}
 
-	/// The node-state walk over one clique, and the bottom-up start it shares its arithmetic with.
-	void _update_Z_of_clique(size_t c, TNodeStateCliqueView &states,
-	                         const TCellUniforms &uniforms) const;
+	/// The bottom-up start of one clique. It shares its child terms with the node-state walk.
 	void _initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const;
 	void _initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
 	                                    TNodeStateCliqueView &states) const;
-	static void _log_prob_root(double stationary_0,
-	                           std::array<coretools::TSumLogProbability, 2> &sum_log);
-	void _log_prob_node_to_children(size_t index_in_tree, const TTransitionGrid &process,
-	                                const TNodeStateCliqueView &states,
-	                                std::array<coretools::TSumLogProbability, 2> &sum_log) const;
+
+	/// The bin every branch of this tree sat in before the current round of proposals. Branch
+	/// lengths are proposed before the loop over cliques starts, so `value` inside that loop is
+	/// already the candidate. The node-state walk and the bottom-up start are handed this, so
+	/// neither reads a parameter.
+	[[nodiscard]] auto _previous_bins() const {
+		return [this](size_t node) { return get_previous_binned_branch_length(node); };
+	}
 
 	void _simulateUnderPrior(Storage *) override;
 
@@ -364,7 +366,10 @@ public:
 			// because those moves read the states the walk assigns.
 			auto states         = _clique_view(i);
 			// update Z
-			if constexpr (!FixZ) { _update_Z_of_clique(i, states, node_state_uniforms); }
+			if constexpr (!FixZ) {
+				node_state_walk::update_clique(_topology(), transition_grid(i), _previous_bins(),
+				                               node_state_uniforms, states);
+			}
 
 			// update nu and alpha
 			_update_nu_or_alpha<true>(states, i, _alpha_c);

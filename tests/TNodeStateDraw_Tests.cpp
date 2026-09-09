@@ -12,6 +12,7 @@
 // A phylogeny and a transition grid are values, so nothing here builds a tree or a chain.
 //
 
+#include "clique_columns.h"
 #include "phylogeny_generators.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
@@ -28,50 +29,14 @@
 
 namespace {
 
+using clique::TColumn;
+using clique::TOneBin;
+using clique::uniforms_for;
 using node_state_density::log_density_of_clique;
 using node_state_draw::draw_clique;
 using phylo::edge;
 
 constexpr size_t N_BINS = 5;
-
-/// One clique's column, as a test writes it. The linear index of a node is deliberately not the
-/// node index: a clique's cells are a strided run of the node state, and the uniform a node draws
-/// is named by that stride and not by the node.
-class TColumn {
-private:
-	std::vector<bool> _states;
-	size_t _offset;
-	size_t _stride;
-
-public:
-	TColumn(size_t n_nodes, size_t offset, size_t stride)
-	    : _states(n_nodes, false), _offset(offset), _stride(stride) {}
-
-	[[nodiscard]] bool is_one(size_t node) const { return static_cast<bool>(_states[node]); }
-	[[nodiscard]] size_t linear_index(size_t node) const { return _offset + node * _stride; }
-	void set_state(size_t node, bool state) { _states[node] = state; }
-
-	/// The configuration as one integer, bit `node` per node. What the density is enumerated by.
-	[[nodiscard]] size_t mask() const {
-		size_t mask = 0;
-		for (size_t node = 0; node < _states.size(); ++node) {
-			if (_states[node]) { mask |= size_t{1} << node; }
-		}
-		return mask;
-	}
-};
-
-/// Every branch in the same bin, which is what a test that is not about branch lengths wants.
-struct TOneBin {
-	size_t bin = 0;
-	size_t operator()(size_t /*node*/) const { return bin; }
-};
-
-/// A column wide enough for the uniforms a stride of `stride` asks for.
-uniforms::TWrittenUniforms uniforms_for(const TPhylogeny &topology, size_t offset, size_t stride,
-                                        double value) {
-	return uniforms::TWrittenUniforms(offset + topology.n_nodes() * stride, value);
-}
 
 // -------------------------------------------------------------------------
 // Every node, leaves included
@@ -183,10 +148,8 @@ TEST(NodeStateDraw, draws_the_configurations_the_clique_density_scores) {
 
 	double total_scored = 0.0;
 	for (size_t mask = 0; mask < n_configurations; ++mask) {
-		TColumn column(topology.n_nodes(), 0, 1);
-		for (size_t node = 0; node < topology.n_nodes(); ++node) {
-			column.set_state(node, ((mask >> node) & 1U) != 0U);
-		}
+		TColumn column(topology.n_nodes());
+		column.set_from_mask(mask);
 		const double scored = std::exp(log_density_of_clique(topology, process, column, bins));
 		total_scored += scored;
 		const double drawn = static_cast<double>(counted[mask]) / static_cast<double>(N_DRAWS);
