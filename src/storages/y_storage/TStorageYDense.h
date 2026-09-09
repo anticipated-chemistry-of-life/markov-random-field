@@ -4,32 +4,28 @@
 
 #pragma once
 
+#include "TStorageY.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "storages/TDenseStateArray.h"
-#include "storages/cell_handle.h"
+#include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <utility>
 #include <vector>
 
-/// The field, dense: a TDenseStateArray for the state, and a counter of the same length beside it.
-/// The two arrays are indexed by the same linear index, so a cell's state and its count are one
-/// index computation apart without either having to make room for the other.
+/// The field, dense: the dense cell array over the packed field cell, and the posterior counter
+/// that cell carries beside its state.
 ///
-/// That is what buys the counter its sixteenth bit. The sparse field packs a cell into a single
-/// 16-bit word of a sparse matrix, where the state bit takes one of them and the counter is left
-/// with 15; here nothing shares the word, so a count runs to 65535 rather than 32767. Twice the
-/// range is half the thinning: a chain of n iterations is sampled one iteration in
-/// ceil(n / 65535), where the sparse field needs one in ceil(n / 32767).
-class TStorageYDense {
+/// The cell is the sparse field's cell. Both fields therefore hold a 15-bit counter, and a chain
+/// of n iterations is sampled one iteration in ceil(n / 32767) whichever backend runs it. That is
+/// what makes a posterior field written by one comparable with a posterior field written by the
+/// other: the resolution is the cell's, and no longer the backend's.
+class TStorageYDense : public TDenseCellArray<TStorageY> {
 private:
-	TDenseStateArray _states;
-	std::vector<uint16_t> _counts;
 	size_t _thinning_factor = 1;
 	/// The number of iterations actually counted, and so the largest a cell's counter can be.
 	/// Counted rather than derived from the chain length -- see FieldStorage in
@@ -39,7 +35,7 @@ private:
 public:
 	/// The largest value a counter can hold. A chain thinned by `get_thinning_factor()` cannot
 	/// reach past it.
-	static constexpr uint16_t MAX_COUNTER = std::numeric_limits<uint16_t>::max();
+	static constexpr uint16_t MAX_COUNTER = TStorageY::MAX_COUNTER;
 
 	TStorageYDense() = default;
 	TStorageYDense(size_t n_iterations, const IndexArray &dimensions) {
@@ -58,74 +54,18 @@ public:
 		// even for a chain with no iterations to thin.
 		_thinning_factor =
 		    std::max<size_t>(1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
-		                                                      static_cast<double>(MAX_COUNTER))));
+			                                                  static_cast<double>(MAX_COUNTER))));
 		_total_counts = 0;
-		_states.initialize_dimensions(dimensions);
-		_counts.assign(_states.total_size_of_container_space(), 0);
+		initialize_dimensions(dimensions);
 	}
 
-	// -- State. The array answers all of it, except that inserting a cell also starts its counter
-	// -- over: in the sparse field an insert writes a whole new entry, counter included, and the
-	// -- two implementations have to agree on what a cell holds afterwards.
+	// -- State. The array answers all of it. An insert writes the cell anew, counter included,
+	// -- which is what the sparse field's insert does too.
 
-	[[nodiscard]] bool is_one(size_t linear_index) const { return _states.is_one(linear_index); }
-	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
-		return _states.is_one(_states.get_linear_index_in_container_space(multidim_index));
-	}
-	void set_state(size_t linear_index, bool state) { _states.set_state(linear_index, state); }
-
-	/// The state array's cell: one byte, and the counter is not in it. A write through a handle
-	/// therefore leaves the counter alone, which is the rule `set_state` follows too.
-	using TCell = TDenseStateArray::TCell;
-
-	/// Where a cell is, for a caller that is about to write it. The array holds every cell, so the
-	/// handle is always in the container.
-	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
-		return _states.locate(linear_index);
-	}
-
-	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
-		return _states.locate(multidim_index);
-	}
-
-	void insert_one(size_t linear_index) {
-		_states.insert_one(linear_index);
-		_counts[linear_index] = 0;
-	}
-
-	void insert_zero(size_t linear_index) {
-		_states.insert_zero(linear_index);
-		_counts[linear_index] = 0;
-	}
-
-	/// The cells stay -- see TDenseStateArray::remove_zeros -- but their counters do not. Sparse
-	/// erases a zero cell outright, counter and all, so a later get_fraction_of_ones reads 0 for
-	/// it; zeroing the counter here is what makes the two answer the same.
-	void remove_zeros() {
-		for (size_t i = 0; i < _counts.size(); ++i) {
-			if (!_states.is_one(i)) { _counts[i] = 0; }
-		}
-	}
-
-	[[nodiscard]] size_t total_size_of_container_space() const {
-		return _states.total_size_of_container_space();
-	}
-	[[nodiscard]] const IndexArray &dimensions() const { return _states.dimensions(); }
-	[[nodiscard]] bool empty() const { return _states.empty(); }
-
-	[[nodiscard]] size_t number_of_ones() const { return _states.number_of_ones(); }
-
-	[[nodiscard]] size_t
-	get_linear_index_in_container_space(const IndexArray &multidim_index) const {
-		return _states.get_linear_index_in_container_space(multidim_index);
-	}
-	/// The same conversion under the name the sparse field gives it, because that is the name
-	/// production reaches for it by (msms_data.cpp).
+	/// The same conversion as `get_linear_index_in_container_space`, under the name the sparse
+	/// field gives it, because that is the name production reaches for it by (msms_data.cpp).
 	[[nodiscard]] size_t get_linear_index_in_Y_space(const IndexArray &multidim_index) const {
 		return get_linear_index_in_container_space(multidim_index);
-	}
-	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index) const {
-		return _states.get_multi_dimensional_index(linear_index);
 	}
 
 	// -- The posterior counter.
@@ -133,36 +73,30 @@ public:
 	/// Counts every cell that is currently a one, on one iteration in `get_thinning_factor()`.
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor != 0) { return; }
-		for (size_t i = 0; i < _counts.size(); ++i) {
-			if (!_states.is_one(i)) { continue; }
-			if (_counts[i] == MAX_COUNTER) {
-				throw coretools::TDevError("counter exceeds 16-bit maximum (", MAX_COUNTER, ")");
-			}
-			++_counts[i];
-		}
+		for (auto &cell : cells()) { cell.update_counter(); }
 		// after the loop, so a counter that overflows does not leave the denominator counting an
 		// iteration the cells never got
 		++_total_counts;
 	}
 
 	void reset_counts() {
-		std::fill(_counts.begin(), _counts.end(), 0);
+		for (auto &cell : cells()) { cell.reset_counter(); }
 		_total_counts = 0;
 	}
 
 	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
-		DEBUG_ASSERT(linear_index < _counts.size());
+		DEBUG_ASSERT(linear_index < total_size_of_container_space());
 		// Nothing counted yet: no posterior to report, and nothing to divide by.
 		if (_total_counts == 0) { return 0.0; }
-		return static_cast<double>(_counts[linear_index]) / static_cast<double>(_total_counts);
+		return static_cast<double>(cells()[linear_index].get_counter()) /
+		       static_cast<double>(_total_counts);
 	}
 
-	/// How often the cell was counted a one -- the numerator of the fraction above. This is where
-	/// the sparse field's `operator[](i).get_counter()` lands once the counter no longer shares a
-	/// word with the state, and it is what a test can assert on exactly.
+	/// How often the cell was counted a one -- the numerator of the fraction above, and what a
+	/// test can assert on exactly.
 	[[nodiscard]] uint16_t get_counter(size_t linear_index) const {
-		DEBUG_ASSERT(linear_index < _counts.size());
-		return _counts[linear_index];
+		DEBUG_ASSERT(linear_index < total_size_of_container_space());
+		return cells()[linear_index].get_counter();
 	}
 
 	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
@@ -187,44 +121,23 @@ public:
 		return whole_space_states<uint8_t>(*this);
 	}
 
-	/// One cell as the stored-entry walks below report it: a state and the counter beside it. Not
-	/// `TCell`, which is the state alone -- the byte a handle points at, and the only half of a
-	/// cell a write through a handle touches.
-	///
-	/// The sparse field hands back its packed entry type, whose counter is 15 bits; this one is
-	/// not that type precisely because the dense counter is 16, and returning a `TStorageY` would
-	/// mean either dropping the top bit or throwing on a count the dense field is entitled to
-	/// hold.
-	class TStoredCell {
-		bool _state       = false;
-		uint16_t _counter = 0;
-
-	public:
-		TStoredCell() = default;
-		TStoredCell(bool state, uint16_t counter) : _state(state), _counter(counter) {}
-
-		[[nodiscard]] bool is_one() const { return _state; }
-		[[nodiscard]] uint16_t get_counter() const { return _counter; }
-	};
-
-	/// Every stored cell as (linear index, value), in ascending linear-index order -- which here
-	/// is every cell of the container space, since the dense field stores all of them.
-	[[nodiscard]] std::vector<std::pair<size_t, TStoredCell>> get_stored_entries() const {
+	/// Every stored cell as (linear index, cell), in ascending linear-index order -- which here is
+	/// every cell of the container space, since the dense field stores all of them.
+	[[nodiscard]] std::vector<std::pair<size_t, TStorageY>> get_stored_entries() const {
 		const size_t total = total_size_of_container_space();
-		std::vector<std::pair<size_t, TStoredCell>> entries;
+		std::vector<std::pair<size_t, TStorageY>> entries;
 		entries.reserve(total);
-		for (size_t i = 0; i < total; ++i) {
-			entries.emplace_back(i, TStoredCell(_states.is_one(i), _counts[i]));
-		}
+		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, cells()[i]); }
 		return entries;
 	}
 
-	/// The cells that are *one*, in ascending linear-index order -- the state array's own walk.
-	/// The counter takes no part in it, so there is nothing here the array does not already do.
-	[[nodiscard]] TDenseStateArray::OnesCursor ones_cursor() const { return _states.ones_cursor(); }
+	/// One stored cell, by linear index. The sparse field spells the same lookup, so a test that
+	/// reads a counter reads either field through it.
+	[[nodiscard]] TStorageY operator[](size_t linear_index) const {
+		DEBUG_ASSERT(linear_index < total_size_of_container_space());
+		return cells()[linear_index];
+	}
 };
 
 static_assert(FieldStorage<TStorageYDense>,
               "The dense field must satisfy the field storage interface.");
-static_assert(LocatableStorage<TStorageYDense>,
-              "The dense field must point an updater at one of its cells.");

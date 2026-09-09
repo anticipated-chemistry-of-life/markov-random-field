@@ -31,12 +31,20 @@ template<typename Cell> struct IsOneResult {
 	Cell *cell          = nullptr;
 };
 
-/// Writes the state of the cell a handle points at.
+/// Whether a cell holds state 1.
 ///
-/// Every storage that answers `locate` today holds one byte per cell. A storage whose cell is a
-/// class -- the packed field cell, once the sparse storages own their cells -- joins by adding an
-/// overload here rather than by changing the helper below.
+/// A cell is one of two things. A bare byte carries a state and nothing else, and is its own
+/// answer. A cell that carries more than a state -- the packed field cell, whose posterior counter
+/// shares its word with the state bit -- answers for itself. Every storage is built over one of
+/// the two, so these two overloads are what let one array body serve a state and a counted cell.
+inline bool cell_is_one(uint8_t cell) { return cell != 0; }
+template<typename Cell> [[nodiscard]] bool cell_is_one(const Cell &cell) { return cell.is_one(); }
+
+/// Writes the state of the cell a handle points at, and leaves everything else the cell carries
+/// as it was. A counted cell keeps its counter, which is the rule every state write follows: only
+/// an insert starts a counter over.
 inline void write_state(uint8_t &cell, bool state) { cell = state ? 1 : 0; }
+template<typename Cell> void write_state(Cell &cell, bool state) { cell.set_state(state); }
 
 /// Writes a cell the storage holds, or records the cell for a later insert.
 ///

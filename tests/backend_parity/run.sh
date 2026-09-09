@@ -70,17 +70,6 @@ case "$WORKDIR" in
        exit 1 ;;
 esac
 
-# Above 32767 iterations the two fields thin their posterior counters differently -- the sparse
-# counter is 15 bits and the dense one 16 -- and the thinning factor is also what decides which
-# iterations get a trace line. The two would then write traces of different lengths, which is a
-# property of the counter widths and not a regression. Keep the gate below that.
-readonly MAX_IDENTICAL_THINNING_ITERATIONS=32767
-if ((ITERATIONS > MAX_IDENTICAL_THINNING_ITERATIONS)); then
-    echo "error: ACOL_PARITY_ITERATIONS=$ITERATIONS exceeds $MAX_IDENTICAL_THINNING_ITERATIONS," >&2
-    echo "       above which the two backends thin their traces differently by design." >&2
-    exit 1
-fi
-
 # Indexed rather than associative arrays, and indices rather than names throughout: macOS ships
 # bash 3.2, which has no `declare -A`.
 #

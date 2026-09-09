@@ -11,7 +11,7 @@
 #include <vector>
 
 //-----------------------------------
-// TStorageZ (single state byte; since Z migrated to a TSparseMatrix the cell no
+// TStorageZ (single state byte; the cell a node state hands out when asked for its stored ones; no
 // longer stores its own linear index, only the state bit)
 //-----------------------------------
 
@@ -74,7 +74,7 @@ TEST(ZStorage_Tests, equality) {
 TEST(ZStorage_Tests, size_is_one_byte) { EXPECT_EQ(sizeof(TStorageZ), 1u); }
 
 //-----------------------------------
-// TStorageZMatrix (sparse 2-D matrix; indices are linear indices in Z space)
+// TStorageZMatrix -- the sparse node state: a hash map of state bytes, keyed by linear index.
 // A single-row layout {1, N} makes the linear index equal the column.
 //-----------------------------------
 
@@ -98,10 +98,10 @@ TEST(ZStorageMatrix_Tests, insert_one_and_lookup) {
 TEST(ZStorageMatrix_Tests, insert_one_by_multidim_index) {
 	TStorageZMatrix Z({2, 3});
 	const IndexArray idx{1, 2}; // row 1, col 2 -> linear 5
-	EXPECT_EQ(Z.get_linear_index_in_Z_space(idx), 5u);
+	EXPECT_EQ(Z.get_linear_index_in_container_space(idx), 5u);
 	Z.insert_one(idx);
 	EXPECT_TRUE(Z.is_one(5));
-	EXPECT_TRUE(Z.is_one(Z.get_linear_index_in_Z_space(idx)));
+	EXPECT_TRUE(Z.is_one(Z.get_linear_index_in_container_space(idx)));
 }
 
 TEST(ZStorageMatrix_Tests, set_state_flips_in_place) {
@@ -206,8 +206,8 @@ TEST(ZStorageMatrix_Tests, insert_zero_exceeds_size_throws) {
 }
 
 // A run of cells is a start, a count and a stride, and the caller does that arithmetic. A point
-// lookup in a sorted-vector matrix costs a search, and answering one per cell is what this backend
-// pays for a run; what it owes is the same answers a dense array gives.
+// lookup in the map costs a hash of the linear index, and answering one per cell is what this
+// backend pays for a run; what it owes is the same answers a dense array gives.
 
 // stride == 1: the varying dimension is the last one, so the cells are consecutive.
 TEST(ZStorageMatrix_Tests, a_run_along_the_last_dimension_reads_consecutive_cells) {

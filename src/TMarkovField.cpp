@@ -12,8 +12,8 @@
 #include "coretools/Main/TParameters.h"
 #include "coretools/Main/progressTools.h"
 #include "coretools/algorithms.h"
-#include "field/TBlockUpdate.h"
 #include "field/TBlockModel.h"
+#include "field/TBlockUpdate.h"
 #include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
 #include "field/simulate_field.h"
@@ -57,6 +57,15 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 		num_leaves_per_dim[i] = _trees[i]->get_number_of_leaves();
 	}
 	_Y.initialize(n_iterations, num_leaves_per_dim);
+
+	// What the posterior field is worth, said before the chain runs. A field cell holds its
+	// posterior counter in 15 bits, so a chain longer than 32767 iterations is thinned to fit, and
+	// the factor is the resolution of the posterior field, of both tree field posteriors, and of
+	// every trace the run writes. Both backends hold the same cell and thin the same chain
+	// identically. A dense run written before that was true counted one iteration in
+	// ceil(n / 65535), so its posterior field is at twice the resolution of this one.
+	logfile().list("The posterior field counts one iteration in ", _Y.get_thinning_factor(),
+	               ", which is what a 15-bit counter holds over ", n_iterations, " iterations.");
 
 	// The block update is written for one species tree and one molecule tree, and a cell index
 	// holds two coordinates. A third tree would run past the end of both. The loop above is
@@ -132,9 +141,7 @@ double TMarkovField::link_log_likelihood_ratio() const {
 void TMarkovField::_open_Y_trace_file() {
 	std::vector<size_t> Y_trace_header;
 	Y_trace_header.reserve(_Y.total_size_of_container_space());
-	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
-		Y_trace_header.push_back(i);
-	}
+	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
 	_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
 }
 
@@ -384,8 +391,7 @@ const TFieldStorage &TMarkovField::get_Y_matrix() const { return _Y; }
 // The joint density, and the tree fields' posteriors
 //-----------------------------------
 
-joint_density::TJointDensity
-TMarkovField::_calculate_joint_density(const TDataModel &data_model) {
+joint_density::TJointDensity TMarkovField::_calculate_joint_density(const TDataModel &data_model) {
 	// One column per tree, and the constructor has already said there are NUMBER_OF_TREES of them.
 	joint_density::TJointDensity density;
 
@@ -420,8 +426,7 @@ void TMarkovField::_trace_joint_density(size_t iteration, const TDataModel &data
 		_joint_density_file.open(_prefix + suffix, joint_density::trace_header(tree_names), "\t");
 	}
 
-	_joint_density_file.writeln(
-	    joint_density::trace_row(_calculate_joint_density(data_model)));
+	_joint_density_file.writeln(joint_density::trace_row(_calculate_joint_density(data_model)));
 }
 
 void TMarkovField::_count_the_tree_fields(size_t iteration) {

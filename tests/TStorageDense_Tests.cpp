@@ -148,7 +148,8 @@ TEST(ZStorageDense_Tests, a_run_that_starts_partway_along_a_row_reads_from_there
 }
 
 //-----------------------------------
-// TStorageYDense -- the dense field: the state array above, with a 16-bit counter beside it.
+// TStorageYDense -- the dense field: the dense cell array over the packed field cell, which
+// carries the posterior counter in the same word as the state.
 //-----------------------------------
 
 TEST(YStorageDense_Tests, state_round_trips_and_out_of_range_inserts_throw) {
@@ -169,29 +170,27 @@ TEST(YStorageDense_Tests, state_round_trips_and_out_of_range_inserts_throw) {
 	EXPECT_ANY_THROW(Y.insert_zero(6));
 }
 
-TEST(YStorageDense_Tests, thinning_factor_uses_the_full_16_bit_counter) {
-	// 65534 == 2 * 32767, the capacity of the sparse field's 15-bit counter. The dense counter has
-	// the sixteenth bit too, so the same chain needs no thinning at all where sparse needs half.
+TEST(YStorageDense_Tests, thinning_factor_uses_the_packed_15_bit_counter) {
+	// 65534 == 2 * 32767, the capacity of the field cell's 15-bit counter. Both fields hold that
+	// cell, so both need one iteration in two here. The equivalence of the two factors is asserted
+	// over many chain lengths in tests/TStorageConformance_Tests.cpp; this says which factor it is.
 	constexpr size_t n_iterations = 65534;
 	const TStorageYDense dense(n_iterations, {1, 4});
 	const TStorageYMatrix sparse(n_iterations, IndexArray{1, 4});
 
-	EXPECT_EQ(dense.get_thinning_factor(), 1u);
+	EXPECT_EQ(dense.get_thinning_factor(), 2u);
 	EXPECT_EQ(sparse.get_thinning_factor(), 2u);
 
 	// The counts are what a chain produced, not what its length predicts, so before one runs there
-	// is nothing to report. Running it is what the two thinning factors then differ over.
+	// is nothing to report.
 	EXPECT_EQ(dense.get_total_counts(), 0u);
 	EXPECT_EQ(sparse.get_total_counts(), 0u);
 
 	TStorageYDense dense_run(n_iterations, {1, 4});
-	TStorageYMatrix sparse_run(n_iterations, IndexArray{1, 4});
 	for (size_t iteration = 0; iteration < n_iterations; ++iteration) {
 		dense_run.add_to_counter(iteration);
-		sparse_run.add_to_counter(iteration);
 	}
-	EXPECT_EQ(dense_run.get_total_counts(), 65534u);  // every iteration
-	EXPECT_EQ(sparse_run.get_total_counts(), 32767u); // one in two
+	EXPECT_EQ(dense_run.get_total_counts(), 32767u); // one in two
 }
 
 TEST(YStorageDense_Tests, counter_accumulates_for_ones_only) {
@@ -213,8 +212,8 @@ TEST(YStorageDense_Tests, counter_accumulates_for_ones_only) {
 }
 
 TEST(YStorageDense_Tests, counter_accumulates_once_per_thinning_factor) {
-	// 196605 == 3 * 65535, so one iteration in three is counted.
-	TStorageYDense Y(196605, {1, 2});
+	// 98301 == 3 * 32767, so one iteration in three is counted.
+	TStorageYDense Y(98301, {1, 2});
 	ASSERT_EQ(Y.get_thinning_factor(), 3u);
 	Y.insert_one(0);
 
@@ -225,7 +224,7 @@ TEST(YStorageDense_Tests, counter_accumulates_once_per_thinning_factor) {
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 1.0);
 }
 
-TEST(YStorageDense_Tests, counter_past_the_16_bit_maximum_throws) {
+TEST(YStorageDense_Tests, counter_past_the_15_bit_maximum_throws) {
 	TStorageYDense Y(TStorageYDense::MAX_COUNTER, {1, 1});
 	ASSERT_EQ(Y.get_thinning_factor(), 1u);
 	Y.insert_one(0);

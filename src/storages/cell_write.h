@@ -14,15 +14,12 @@
 /// This is the whole write of an update that runs inside a parallel region. The caller names a
 /// storage and a linear index, and says nothing about which backend it holds.
 ///
-/// A storage that answers `locate` hands out a handle, and the write is the one branch in
-/// cell_handle.h. A sorted-vector matrix has no cell to point at, because it keeps every cell
-/// twice, so it makes the write itself and says whether it held the cell. Both answer the same two
-/// questions: the write landed, or the cell has to wait.
-///
-/// A cell the storage holds is written in place. An absent cell that turns into a one waits in
-/// `deferred_inserts`, and the caller commits the list once the region ends. An absent cell
-/// written to zero is left out, because a cell the storage does not hold already reads as zero.
-/// ADR-0006 gives the argument.
+/// Every storage hands out a handle, and the write is the one branch in cell_handle.h. A cell the
+/// storage holds is written in place, a one-to-zero transition included. An absent cell that turns
+/// into a one waits in `deferred_inserts`, and the caller commits the list once the region ends --
+/// an insert restructures the container, which is what a thread may not do while the others read
+/// it. An absent cell written to zero is left out, because a cell the storage does not hold
+/// already reads as zero. ADR-0006 gives the argument.
 ///
 /// It answers whether the write landed in the storage, which is what a caller that reads the cell
 /// back before the commit has to know. Until then the storage still reads the old state, so a
@@ -31,11 +28,5 @@
 template<BinaryStorage Storage>
 bool write_or_defer(Storage &storage, size_t linear_index, bool state,
                     std::vector<size_t> &deferred_inserts) {
-	if constexpr (LocatableStorage<Storage>) {
-		return write_or_defer(storage.locate(linear_index), state, deferred_inserts);
-	} else {
-		const bool held = storage.write_state_if_held(linear_index, state);
-		if (!held && state) { deferred_inserts.push_back(linear_index); }
-		return held;
-	}
+	return write_or_defer(storage.locate(linear_index), state, deferred_inserts);
 }

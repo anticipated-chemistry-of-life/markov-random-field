@@ -9,11 +9,19 @@
 #include <cstdint>
 #include <cstdlib>
 
-/** TStorage Y is the class to store a single value Y of the Random Markov Field
- * We store in a single 64 bits integer (8 bytes) the following information:
- * - the first 16 bits are the counter of the number of times the element was a one in the MCMC
- * - the 17th (position 16 ) is the current state of the element (0 or 1)
- * - the rest is the linear index in the Y space.
+/** One cell of the field: the state, and how often the chain counted that cell a one, packed into
+ * a single 16-bit word.
+ *
+ * - bit 15 is the state (0 or 1),
+ * - bits 0..14 are the posterior counter, so it holds 32767 counted iterations.
+ *
+ * The cell knows nothing of where it is. Both fields key their cells by linear index, so the
+ * position is the container's business and not the cell's.
+ *
+ * Both backends hold this cell, which is what makes their posterior fields comparable: a chain of
+ * n iterations is thinned to one iteration in ceil(n / 32767) whichever one runs it. The counter
+ * was 16 bits wide on the dense side while the two fields held different cells, and a posterior
+ * field written then is at twice the resolution of one written now.
  */
 class TStorageY {
 private:
@@ -48,8 +56,8 @@ public:
 
 	bool operator==(const TStorageY &other) const { return _value == other._value; }
 	bool operator!=(const TStorageY &other) const { return _value != other._value; }
-	/// "Empty" == the sentinel the sparse matrix uses for an absent cell:
-	/// state == false AND counter == 0 (i.e. _value == 0). Equivalent to *this == TStorageY{}.
+	/// "Empty" == what a cell no storage holds reads as: state == false AND counter == 0 (i.e.
+	/// _value == 0). Equivalent to *this == TStorageY{}.
 	[[nodiscard]] bool is_empty() const { return _value == 0; }
 };
 static_assert(sizeof(TStorageY) == 2);

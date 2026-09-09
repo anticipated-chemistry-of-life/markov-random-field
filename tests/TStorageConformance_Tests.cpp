@@ -13,13 +13,10 @@
 // "linear index round-trips" whatever the layout; a container one cell wide, which is what a tree
 // with a single leaf asks for, does not.
 //
-// Three lists, because not every storage answers everything. `Storages` holds every one of them
-// and carries the shared surface -- including the run of cells an update writes, which every
-// storage answers through `write_or_defer` (storages/cell_write.h). `StoragesWithACursor` holds
-// the four the merge joins walk. `LocatableStorages` holds the four that point an updater at one
-// of their cells; the two sorted-vector matrix storages make that write themselves instead, and
-// the run tests cover both spellings without naming either. Adding a storage means adding a type
-// to the lists it answers to.
+// One list, because every storage answers the same surface: the run of cells an update writes, the
+// handle it writes each cell through, and the cursor a merge join walks. Adding a storage means
+// adding a type to it. The suites below split that surface by what they ask about, not by which
+// storage answers.
 //
 // What is deliberately *not* asserted equal between the backends is which cells a storage holds.
 // Dense holds the whole container space, sparse holds what it was given. It reaches an update
@@ -115,8 +112,9 @@ std::vector<IndexArray> generated_shapes() {
 }
 
 /// How long a chain a field under test is sized for. Short enough that both implementations thin
-/// by one -- the sparse counter has 15 bits and the dense one 16, so they thin differently for a
-/// chain that is long enough to need it -- which is what lets the counters be compared exactly.
+/// by one, which is what lets the counters be compared exactly. Both hold their counter in the
+/// same 15 bits, so a longer chain would thin them equally rather than differently -- which is a
+/// property of its own, and asserted at the end of this file.
 constexpr size_t N_ITERATIONS = 300;
 
 /// Both storages take their dimensions at construction; a field takes the chain length too,
@@ -130,15 +128,11 @@ template<typename Storage> Storage make_storage(const IndexArray &dimensions) {
 	}
 }
 
-/// How often a cell was counted a one. The two fields spell this differently -- the sparse one
-/// hands out the packed entry the counter shares a word with, the dense one holds the counter in
-/// an array of its own -- and neither spelling is in the concept, so the equivalence between them
-/// runs through this pair of overloads rather than through a member.
-uint16_t counter_of(const TStorageYMatrix &field, size_t linear_index) {
+/// How often a cell was counted a one. Both fields hand out the packed cell the counter shares a
+/// word with, and the spelling is not in the concept, so the tests read it through here rather
+/// than through a member.
+template<typename Field> uint16_t counter_of(const Field &field, size_t linear_index) {
 	return field[linear_index].get_counter();
-}
-uint16_t counter_of(const TStorageYDense &field, size_t linear_index) {
-	return field.get_counter(linear_index);
 }
 
 // -------------------------------------------------------------------------
@@ -441,20 +435,16 @@ using Storages = ::testing::Types<TStorageZMatrix, TStorageZDense, TStorageYMatr
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
 
 template<typename Storage> class HandleConformance : public ::testing::Test {};
-/// The storages that point an updater at one of their cells. The two sorted-vector matrix storages
-/// are not among them. That matrix keeps every cell twice, once in its row and once in its column,
-/// so it has no single cell to point at. They join the list when they own their cells; until then
-/// the run tests above reach them through `write_or_defer`, which covers both spellings.
-using LocatableStorages =
-    ::testing::Types<TStorageZDense, TStorageYDense, TSparseBinaryArray, TDenseStateArray>;
-TYPED_TEST_SUITE(HandleConformance, LocatableStorages, StorageNames);
+/// Every storage points an updater at one of its cells, so this is the list above under another
+/// name. It is a suite of its own because what it asks about is the handle rather than the state
+/// the handle writes.
+TYPED_TEST_SUITE(HandleConformance, Storages, StorageNames);
 
 template<typename Storage> class OnesCursorConformance : public ::testing::Test {};
-/// The storages that offer a ones cursor: the field, and the observed data it is joined against.
-/// A node state offers none, because nothing joins one.
-using StoragesWithACursor =
-    ::testing::Types<TStorageYMatrix, TStorageYDense, TSparseBinaryArray, TDenseStateArray>;
-TYPED_TEST_SUITE(OnesCursorConformance, StoragesWithACursor, StorageNames);
+/// The cursor comes with the array a storage is built on, so every storage offers one. Only the
+/// field and the observed data are merge-joined through it; a node state answers the same contract
+/// because it is the same code, and asking it costs nothing.
+TYPED_TEST_SUITE(OnesCursorConformance, Storages, StorageNames);
 
 // -------------------------------------------------------------------------
 // The leaf block of a node state is the field, index for index
@@ -631,11 +621,11 @@ TYPED_TEST(StorageConformance, a_run_along_a_row_writes_a_held_cell_at_once_and_
 }
 
 TYPED_TEST(StorageConformance, a_run_down_a_column_writes_a_held_cell_at_once_and_defers_the_rest) {
-	// The same split, down a column. A sorted-vector matrix keeps every cell twice, and asks its
-	// row whether it holds one, so the two strides reach that question by different arithmetic. A
-	// column run that named the wrong cell would defer a write the storage could have taken, and
-	// the commit writes a whole new cell where an in-place write keeps what the cell already
-	// carries. That is the clique-to-cell mapping the parity gate's non-square shapes catch.
+	// The same split, down a column. Every storage is keyed by the linear index, so a stride is
+	// arithmetic the caller does and the storage never sees; a column run that named the wrong
+	// cell would defer a write the storage could have taken, and the commit writes a whole new
+	// cell where an in-place write keeps what the cell already carries. That is the
+	// clique-to-cell mapping the parity gate's non-square shapes catch.
 	auto storage = make_storage<TypeParam>(IndexArray{3, 4});
 	storage.insert_zero(4); // (row 1, column 0), held by both, in state 0
 
@@ -783,7 +773,7 @@ TYPED_TEST(HandleConformance, a_dense_storage_holds_every_cell_and_a_sparse_one_
 	EXPECT_NE(held.cell, nullptr);
 	EXPECT_TRUE(held.is_one);
 
-	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+	if constexpr (!holds_every_cell<TypeParam>) {
 		EXPECT_FALSE(other.in_container) << "the sparse array was never given this cell";
 		EXPECT_EQ(other.cell, nullptr);
 	} else {
@@ -806,7 +796,7 @@ TYPED_TEST(HandleConformance, the_helper_writes_a_held_cell_at_once_and_defers_t
 	write_or_defer(storage.locate(6), false, deferred_inserts); // absent, and written to zero
 
 	EXPECT_TRUE(storage.is_one(4)) << "a write to a held cell goes in place";
-	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+	if constexpr (!holds_every_cell<TypeParam>) {
 		EXPECT_EQ(deferred_inserts, (std::vector<size_t>{5}))
 		    << "the sparse array defers the cell it does not hold, and only that one";
 		EXPECT_FALSE(storage.is_one(5)) << "the helper deferred the insert rather than making it";
@@ -842,7 +832,7 @@ TYPED_TEST(HandleConformance, a_handle_does_not_survive_a_bulk_insert_or_a_zero_
 	EXPECT_TRUE(after_insert.in_container) << "the cell was just inserted";
 	EXPECT_NE(after_insert.cell, nullptr);
 	EXPECT_TRUE(after_insert.is_one);
-	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+	if constexpr (!holds_every_cell<TypeParam>) {
 		EXPECT_FALSE(before_insert.in_container)
 		    << "a handle taken before the insert says the storage does not hold the cell";
 	}
@@ -853,7 +843,7 @@ TYPED_TEST(HandleConformance, a_handle_does_not_survive_a_bulk_insert_or_a_zero_
 	storage.remove_zeros();
 	const auto after_removal = storage.locate(4);
 	EXPECT_FALSE(after_removal.is_one) << "the cell was a zero either way";
-	if constexpr (std::is_same_v<TypeParam, TSparseBinaryArray>) {
+	if constexpr (!holds_every_cell<TypeParam>) {
 		EXPECT_FALSE(after_removal.in_container) << "the zero was reclaimed";
 		EXPECT_EQ(after_removal.cell, nullptr);
 	} else {
@@ -1039,10 +1029,9 @@ TYPED_TEST(FieldConformance, the_counter_counts_the_iterations_a_cell_was_a_one)
 // The posterior fraction is a probability
 // -------------------------------------------------------------------------
 
-/// Chain lengths the thinning factor does not divide. Below 32768 the sparse counter needs no
-/// thinning at all and the dense one needs none below 65536, so a shorter chain cannot show this:
-/// numerator and denominator agree by accident there. 32769 therefore exercises only the sparse
-/// field; 65537 and 100003 make both of them thin, which is what the criterion asks for.
+/// Chain lengths the thinning factor does not divide. Below 32768 neither counter needs thinning
+/// at all, so a shorter chain cannot show this: numerator and denominator agree by accident there.
+/// Each of these makes both fields thin, which is what the criterion asks for.
 const std::vector<size_t> &chain_lengths_that_thin() {
 	static const std::vector<size_t> lengths = {32769, 65537, 100003};
 	return lengths;
@@ -1154,10 +1143,9 @@ TYPED_TEST(FieldConformance, a_write_through_write_or_defer_leaves_the_counter_a
 	run_chain(field, random_script(rng, n_cells, N_ITERATIONS), expected);
 
 	// The whole container, one row at a time and then one column at a time, each cell written to
-	// the state it already holds. Both ways round, because a sorted-vector matrix asks its row
-	// whether it holds a cell and the two strides reach that question by different arithmetic. A
-	// column run that called a held cell absent would defer the write, and the commit writes a
-	// whole new cell -- counter and all.
+	// the state it already holds. Both ways round, because the stride is the caller's arithmetic
+	// and either way round can name the wrong cell. A column run that called a held cell absent
+	// would defer the write, and the commit writes a whole new cell -- counter and all.
 	std::vector<size_t> deferred;
 	for (size_t row = 0; row < 4; ++row) {
 		for (size_t k = 0; k < 5; ++k) {
@@ -1361,19 +1349,31 @@ TEST(StorageEquivalence, the_backends_agree_on_the_counter_and_the_fraction_of_o
 	}
 }
 
-// The counters themselves cannot agree over a long chain: the sparse counter shares its word with
-// the state bit and holds 15 bits, the dense one has all 16, so the same chain is thinned twice as
-// hard on one side as on the other. What the two still have to agree on is the fraction, which is
-// the counter over the number of iterations that were counted -- and that is what the chain is
-// read for.
-TEST(StorageEquivalence, the_fraction_of_ones_survives_a_chain_the_two_thin_differently) {
-	// 65534 == 2 * 32767: the sparse counter needs one iteration in two, the dense one every
-	// iteration, and both divide the chain exactly.
+// The two fields hold the same cell, so they thin the same chain by the same factor and their
+// counters agree cell for cell however long it runs. That is what makes a posterior field written
+// by one comparable with a posterior field written by the other, and it is what decides which
+// iterations get a trace line, so it also keeps two traces the same length.
+//
+// The counters used to differ by a factor of two: the sparse counter shared its 16-bit word with
+// the state bit and the dense one did not. A dense posterior field written then is at twice the
+// resolution of one written now.
+TEST(StorageEquivalence, the_two_backends_thin_every_chain_by_the_same_factor) {
+	// Around, on and well past the capacity of the counter, because the factor is a ceiling: it
+	// steps at each multiple of 32767 and nowhere else.
+	for (const size_t n_iterations : {0u, 1u, 300u, 32766u, 32767u, 32768u, 65534u, 100003u}) {
+		const TStorageYMatrix sparse(n_iterations, IndexArray{1, 2});
+		const TStorageYDense dense(n_iterations, IndexArray{1, 2});
+		EXPECT_EQ(sparse.get_thinning_factor(), dense.get_thinning_factor())
+		    << "n_iterations = " << n_iterations;
+	}
+
+	// And a chain long enough to thin leaves both fields holding the same counter, not merely the
+	// same fraction. 65534 == 2 * 32767, so both count one iteration in two.
 	constexpr size_t n_iterations = 65534;
 	TStorageYMatrix sparse(n_iterations, IndexArray{1, 2});
 	TStorageYDense dense(n_iterations, IndexArray{1, 2});
 	ASSERT_EQ(sparse.get_thinning_factor(), 2u);
-	ASSERT_EQ(dense.get_thinning_factor(), 1u);
+	ASSERT_EQ(dense.get_thinning_factor(), 2u);
 
 	sparse.insert_one(0);
 	dense.insert_one(0);
@@ -1382,14 +1382,14 @@ TEST(StorageEquivalence, the_fraction_of_ones_survives_a_chain_the_two_thin_diff
 		dense.add_to_counter(iteration);
 	}
 
-	// A cell that was a one for the whole chain has posterior probability one, whichever counter
-	// was used to say so; a cell that never was has zero.
+	EXPECT_EQ(counter_of(sparse, 0), counter_of(dense, 0));
+	EXPECT_EQ(sparse.get_total_counts(), dense.get_total_counts());
+	// A cell that was a one for the whole chain has posterior probability one; a cell that never
+	// was has zero.
 	EXPECT_DOUBLE_EQ(sparse.get_fraction_of_ones(0), 1.0);
 	EXPECT_DOUBLE_EQ(dense.get_fraction_of_ones(0), 1.0);
 	EXPECT_DOUBLE_EQ(sparse.get_fraction_of_ones(1), 0.0);
 	EXPECT_DOUBLE_EQ(dense.get_fraction_of_ones(1), 0.0);
-	// The counters are what differ, and by exactly the ratio of the two thinning factors.
-	EXPECT_EQ(counter_of(dense, 0), 2 * counter_of(sparse, 0));
 }
 
 // The bulk paths, which the storage concept deliberately leaves out (storage_concepts.h) and
@@ -1461,9 +1461,8 @@ TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_on
 		run_chain(sparse, script, sparse_expected);
 		run_chain(dense, script, dense_expected);
 
-		// The two entry types are different -- the sparse field hands out its packed entry, the
-		// dense one a state and a full 16-bit count -- but both answer the two questions the
-		// filter asks, which is the whole of what the writer needs from them.
+		// Both fields hand out the same packed cell, and it answers the two questions the filter
+		// asks, which is the whole of what the writer needs from it.
 		const auto reported = [](const auto &field) {
 			std::vector<std::pair<size_t, bool>> lines;
 			for (const auto &[linear_index, cell] : field.get_stored_entries()) {

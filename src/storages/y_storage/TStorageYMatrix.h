@@ -1,5 +1,5 @@
 //
-// Created by VISANI Marco on 17.10.2024.
+// The sparse field.
 //
 
 #pragma once
@@ -7,330 +7,128 @@
 #include "TStorageY.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
-#include "coretools/Math/TSparseMatrix.h"
-#include "coretools/algorithms.h"
+#include "storages/TSparseBinaryArray.h"
+#include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
 
-class TStorageYMatrix {
+/// The field, sparse: the sparse cell array over the packed field cell, and the posterior counter
+/// that cell carries beside its state.
+///
+/// Memory tracks the number of ones rather than the size of the leaf space, which is what this
+/// backend exists for (ADR-0006). A cell the map does not hold reads as state 0 and carries no
+/// count, so a run over a field that is mostly zeros pays for the ones alone.
+///
+/// The cell is the dense field's cell, so both fields hold a 15-bit counter and thin a chain
+/// identically. Nothing about a posterior field's resolution follows from which backend wrote it.
+class TStorageYMatrix : public TSparseCellArray<TStorageY> {
 private:
 	size_t _thinning_factor = 1;
 	/// The number of iterations actually counted, and so the largest a cell's counter can be.
 	/// Counted rather than derived from the chain length -- see FieldStorage in
 	/// storages/storage_concepts.h for why that arithmetic cannot be done up front.
 	size_t _total_counts    = 0;
-	coretools::TSparseMatrix<TStorageY> _mat;
-
-	/// _dimensions_Y_space is the number of leaf nodes in each dimension
-	IndexArray _dimensions_Y_space;
-
-	/// Allocation-free (row, col) of a linear index, for the hot internal paths. The public
-	/// get_multi_dimensional_index returns a std::vector and is meant for external callers.
-	[[nodiscard]] IndexArray _row_col(size_t linear_index_in_Y_space) const {
-		return coretools::getSubscriptsAsArray(linear_index_in_Y_space, _dimensions_Y_space);
-	}
-
-	/// Whether the row of this cell holds it.
-	///
-	/// A sparse matrix keeps every cell twice, once in its row and once in its column, and the two
-	/// can part company: `cleanUp` drops a cell whose value is the default one, and it leaves a
-	/// line of one entry alone. The row is the copy a run of cells along the last dimension walks,
-	/// so the row is what "held" means here.
-	///
-	/// The write below then puts the cell back in both. It appends one entry to a column, which is
-	/// the one restructuring a write in place can still make.
-	[[nodiscard]] bool _row_holds(size_t row, size_t col) const {
-		for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-			if (it->index == col) { return true; }
-		}
-		return false;
-	}
-
-	void _insert(size_t linear_index_in_Y_space, bool state) {
-		if (linear_index_in_Y_space >= this->total_size_of_container_space()) {
-			throw coretools::TDevError(
-			    "You are trying to insert a value at an linear index bigger than the total "
-			    "size of the container. ",
-			    "The index is: ", linear_index_in_Y_space,
-			    " and the total size of the container is : ",
-			    this->total_size_of_container_space());
-		}
-		const auto multidim_index = _row_col(linear_index_in_Y_space);
-		_mat.set(multidim_index[0], multidim_index[1], TStorageY(state));
-	};
 
 public:
-	TStorageYMatrix()  = default;
-	~TStorageYMatrix() = default;
-	TStorageYMatrix(const size_t n_iterations, const IndexArray &dimensions_Y_space) {
-		initialize(n_iterations, dimensions_Y_space);
-	};
+	/// The largest value a counter can hold. A chain thinned by `get_thinning_factor()` cannot
+	/// reach past it.
+	static constexpr uint16_t MAX_COUNTER = TStorageY::MAX_COUNTER;
 
-	void initialize(const size_t n_iterations, const IndexArray &dimensions_Y_space) {
+	TStorageYMatrix() = default;
+	TStorageYMatrix(size_t n_iterations, const IndexArray &dimensions) {
+		initialize(n_iterations, dimensions);
+	}
+
+	void initialize(size_t n_iterations, const std::vector<size_t> &dimensions) {
+		if (dimensions.size() != NUMBER_OF_TREES) {
+			throw coretools::TDevError("dimensions must have size NUMBER_OF_TREES");
+		}
+		initialize(n_iterations, IndexArray{dimensions[0], dimensions[1]});
+	}
+
+	void initialize(size_t n_iterations, const IndexArray &dimensions) {
 		// add_to_counter takes the iteration modulo the thinning factor, so it stays at least one
 		// even for a chain with no iterations to thin.
-		_thinning_factor = std::max<size_t>(
-		    1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
-		                                     static_cast<double>(TStorageY::MAX_COUNTER))));
-		_total_counts       = 0;
-		_dimensions_Y_space = dimensions_Y_space;
-		_mat.resize(dimensions_Y_space[0], dimensions_Y_space[1]);
+		_thinning_factor =
+		    std::max<size_t>(1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
+			                                                  static_cast<double>(MAX_COUNTER))));
+		_total_counts = 0;
+		initialize_dimensions(dimensions);
 	}
 
-	void initialize(const size_t n_iterations, const std::vector<size_t> &dimensions_Y_space) {
-		if (dimensions_Y_space.size() != NUMBER_OF_TREES) {
-			throw coretools::TDevError("dimensions_Y_space must have size NUMBER_OF_TREES");
-		}
-		IndexArray dims = {dimensions_Y_space[0], dimensions_Y_space[1]};
-		initialize(n_iterations, dims);
+	// -- State. The array answers all of it. An insert writes a whole new entry, counter included,
+	// -- which is what the dense field's insert does too.
+
+	/// The same conversion as `get_linear_index_in_container_space`, under the name production
+	/// reaches for it by (msms_data.cpp).
+	[[nodiscard]] size_t get_linear_index_in_Y_space(const IndexArray &multidim_index) const {
+		return get_linear_index_in_container_space(multidim_index);
 	}
 
-	/// We want to check if element at position index_in_TStorageYMatrix is one.
-	/// This index *must* be previously obtained by a binary search.
-	/// @param index_in_TStorageYMatrix the position of the element in the Y vector.
-	/// @return true if the element is one, false otherwise.
-	[[nodiscard]] inline bool is_one(const size_t index_in_TStorageYMatrix) const {
-		const auto multidim_index = _row_col(index_in_TStorageYMatrix);
-		return _mat.get(multidim_index[0], multidim_index[1]).is_one();
-	};
+	// -- The posterior counter.
 
-	[[nodiscard]] inline bool is_one(const IndexArray &index_in_Y_space) const {
-		return _mat.get(index_in_Y_space[0], index_in_Y_space[1]).is_one();
-	};
-
-	/** set_to_one will set the element at the index_in_TStorageYMatrix to 1.
-	 * @param index_in_TStorageYMatrix the position of the element in the Y vector
-	 */
-	void set_to_one(size_t index_in_TStorageYMatrix) {
-		const auto multidim_index = _row_col(index_in_TStorageYMatrix);
-		auto s                    = _mat.get(multidim_index[0], multidim_index[1]);
-		s.set_state(true);
-		_mat.set(multidim_index[0], multidim_index[1], s);
-	}
-	void set_to_zero(size_t index_in_TStorageYMatrix) {
-		const auto multidim_index = _row_col(index_in_TStorageYMatrix);
-		auto s                    = _mat.get(multidim_index[0], multidim_index[1]);
-		s.set_state(false);
-		_mat.set(multidim_index[0], multidim_index[1], s);
-	}
-
-	/// Set the state of the cell at `linear_index_in_Y_space` to `state`, preserving its counter.
-	/// If the cell does not exist yet, TSparseMatrix::set inserts it (counter starts at 0), so this
-	/// unifies the old set_to_one / set_to_zero / insert-later branches into a single call.
-	void set_state(size_t linear_index_in_Y_space, bool state) {
-		const auto multidim_index = _row_col(linear_index_in_Y_space);
-		auto s                    = _mat.get(multidim_index[0], multidim_index[1]);
-		s.set_state(state);
-		_mat.set(multidim_index[0], multidim_index[1], s);
-	}
-
-	/// Writes the state of a cell this matrix already holds, and says whether it held it. The
-	/// counter beside the state is left as it was, which is the rule `set_state` follows too.
-	///
-	/// A cell the matrix does not hold is left alone. Inserting one restructures a row and a
-	/// column, which is what a caller inside a parallel region has to defer. This is the matrix's
-	/// half of `write_or_defer` (storages/cell_write.h), and it stands in for the handle a
-	/// sorted-vector matrix cannot give: it keeps every cell twice, so it has no single cell to
-	/// point at.
-	[[nodiscard]] bool write_state_if_held(size_t linear_index_in_Y_space, bool state) {
-		const auto multidim_index = _row_col(linear_index_in_Y_space);
-		if (!_row_holds(multidim_index[0], multidim_index[1])) { return false; }
-		set_state(linear_index_in_Y_space, state);
-		return true;
-	}
-
-	void insert_one(size_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, true); }
-
-	/// Does the same as set_to_one but sets the element to zero
-	void insert_zero(size_t linear_index_in_Y_space) { _insert(linear_index_in_Y_space, false); }
-
+	/// Counts every cell that is currently a one, on one iteration in `get_thinning_factor()`.
 	void add_to_counter(size_t iteration) {
-		if (iteration % _thinning_factor == 0) {
-			_mat.updateValues([](TStorageY &elem) { elem.update_counter(); });
-			++_total_counts;
-		}
-	}
-
-	[[nodiscard]] double get_fraction_of_ones(size_t linear_index_in_Y_space) const {
-		const auto multidim_index = _row_col(linear_index_in_Y_space);
-		// A missing cell returns a default-constructed TStorageY (counter == 0),
-		// so the result is 0.0 for absent entries without an explicit empty check.
-		const auto storage        = _mat.get(multidim_index[0], multidim_index[1]);
-		// Nothing counted yet: no posterior to report, and nothing to divide by.
-		if (_total_counts == 0) { return 0.0; }
-		return static_cast<double>(storage.get_counter()) / static_cast<double>(_total_counts);
-	}
-
-	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
-
-	TStorageY operator[](size_t index_in_TStorageYMatrix) const {
-		const auto multidim_index = _row_col(index_in_TStorageYMatrix);
-		return _mat.get(multidim_index[0], multidim_index[1]);
-	}
-
-	TStorageY operator[](const IndexArray &index_in_TStorageYMatrix) const {
-		return _mat.get(index_in_TStorageYMatrix[0], index_in_TStorageYMatrix[1]);
+		if (iteration % _thinning_factor != 0) { return; }
+		for (auto &[linear_index, cell] : cells()) { cell.update_counter(); }
+		// after the loop, so a counter that overflows does not leave the denominator counting an
+		// iteration the cells never got
+		++_total_counts;
 	}
 
 	void reset_counts() {
-		_mat.updateValues([](TStorageY &val) { val.reset_counter(); });
+		for (auto &[linear_index, cell] : cells()) { cell.reset_counter(); }
 		_total_counts = 0;
 	}
 
-	/// Remove all the elements that have the state to zero.
-	/// @return void
-	void remove_zeros() {
-		_mat.erase_if([](const TStorageY &elem) { return !elem.is_one(); });
+	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
+		// Nothing counted yet: no posterior to report, and nothing to divide by.
+		if (_total_counts == 0) { return 0.0; }
+		return static_cast<double>((*this)[linear_index].get_counter()) /
+		       static_cast<double>(_total_counts);
 	}
 
-	/// Given a multi-dimensional index, we want to get its linear index.
-	/// @param multi_dim_index the multi-dimensional index
-	/// @return the linear index
-	[[nodiscard]] size_t
-	get_linear_index_in_Y_space(const IndexArray &multidim_index_in_Y_space) const {
-		return coretools::getLinearIndex(multidim_index_in_Y_space, _dimensions_Y_space);
-	}
-	[[nodiscard]] size_t
-	get_linear_index_in_container_space(const IndexArray &multidim_index_in_Y_space) const {
-		return get_linear_index_in_Y_space(multidim_index_in_Y_space);
-	}
-
-	/// Given a linear index, we want to get the multi-dimensional index (in Y / leaves space).
-	/// Returns a std::vector for callers that need it (get_clique, the reporting model, ...); the
-	/// hot internal paths use the allocation-free _row_col instead.
-	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Y_space) const {
-		return _row_col(linear_index_in_Y_space);
-	}
-
-	/// Returns the product of the dimensions in the container. This is the
-	/// maximum number of ones that can be stored in the vector given
-	/// the dimensions of the container. For example, if the container
-	/// has dimension sizes [2, 3, 4], the maximum number of ones that can be
-	/// stored in the vector is 24.
-	[[nodiscard]]
-	size_t total_size_of_container_space() const {
-		return coretools::containerProduct(_dimensions_Y_space);
-	}
-
-	std::vector<uint8_t> get_full_Y_binary_vector() const {
-		std::vector<uint8_t> Y_as_vector;
-		size_t total_size = total_size_of_container_space();
-		Y_as_vector.reserve(total_size);
-		for (size_t i = 0; i < _mat.nRows(); ++i) {
-			const auto row = _mat.getRow(i);
-			for (const auto &val : row) { Y_as_vector.push_back(val.is_one()); }
-		}
-		return Y_as_vector;
-	}
-
-	void insert_in_Y(const std::vector<std::vector<size_t>> &linear_indices_in_Y_space_to_insert) {
-		// Step 1: Merge all vectors into a single sorted vector
-		std::vector<size_t> merged_vec;
-		for (const auto &vec : linear_indices_in_Y_space_to_insert) {
-			merged_vec.insert(merged_vec.end(), vec.begin(), vec.end());
-		}
-
-		for (const auto &it : merged_vec) {
-			const auto multi_dim_index = _row_col(it);
-			_mat.setRaw(multi_dim_index[0], multi_dim_index[1], TStorageY(true));
-		}
-		_mat.cleanUp();
-	}
-
-	/// Number of leaf nodes per dimension. Two matrices are cell-by-cell comparable (their linear
-	/// indices denote the same cell) only if their dimensions are equal.
-	[[nodiscard]] const IndexArray &dimensions() const { return _dimensions_Y_space; }
-
-	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
-	[[nodiscard]] double sparsity() const {
-		return static_cast<double>(_mat.nNonZero()) /
-		       static_cast<double>(total_size_of_container_space());
-	}
-	[[nodiscard]] size_t number_of_dimensions() const { return _dimensions_Y_space.size(); }
+	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
 	[[nodiscard]] size_t get_thinning_factor() const { return _thinning_factor; }
-	[[nodiscard]] size_t number_of_ones() const {
-		size_t count = 0;
-		for (size_t row = 0; row < _mat.nRows(); ++row) {
-			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-				if (it->val.is_one()) { ++count; }
-			}
-		}
-		return count;
+
+	/// One cell, by linear index. A cell the map does not hold comes back default-constructed --
+	/// state 0 and no count -- which is what its absence says.
+	[[nodiscard]] TStorageY operator[](size_t linear_index) const {
+		const auto stored = cells().find(linear_index);
+		return stored == cells().end() ? TStorageY() : stored->second;
 	}
 
-	/// Returns every stored cell as (linear index in Y space, value), in ascending linear-index
-	/// order. Iterating rows then columns is naturally row-major, which matches the linear-index
-	/// layout (linear = row * nCols + col). Used to write only the non-default entries of Y.
+	[[nodiscard]] TStorageY operator[](const IndexArray &multidim_index) const {
+		return (*this)[get_linear_index_in_container_space(multidim_index)];
+	}
+
+	// -- The bulk paths. Deliberately outside the storage concept (see storage_concepts.h): the
+	// -- sampler needs them, but they describe what the model does with a field rather than what
+	// -- makes a field a field, and both implementations still spell them with a `Y` in the name.
+
+	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageYDense::insert_in_Y.
+	void insert_in_Y(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		insert_ones_in_batches(*this, linear_indices_to_insert);
+	}
+
+	/// The state of every cell of the container space, in ascending linear-index order.
+	[[nodiscard]] std::vector<uint8_t> get_full_Y_binary_vector() const {
+		return whole_space_states<uint8_t>(*this);
+	}
+
+	/// Every stored cell as (linear index, cell), in ascending linear-index order. Which cells
+	/// those are is a property of this backend: the map holds the cells it was given, ones and
+	/// zeros alike, where the dense field holds the whole container space. Only the posterior
+	/// field is written from this, and it drops a cell that is neither a one nor ever counted
+	/// (TMarkovField::_write_only_values_in_Y_vector), which is what makes the two files agree.
 	[[nodiscard]] std::vector<std::pair<size_t, TStorageY>> get_stored_entries() const {
-		std::vector<std::pair<size_t, TStorageY>> entries;
-		entries.reserve(_mat.nNonZero());
-		const size_t n_cols = _dimensions_Y_space[1];
-		for (size_t row = 0; row < _mat.nRows(); ++row) {
-			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-				entries.emplace_back(row * n_cols + it->index, it->val);
-			}
-		}
-		return entries;
+		return stored_cells_in_order();
 	}
-
-	/// Allocation-free forward walk over the cells that are *one*, in ascending linear-index order
-	/// (row-major: linear = row * nCols + col). Within a row the sparse entries are already
-	/// column-sorted and rows are visited in order, so the linear index increases monotonically.
-	/// Lets callers merge-join two fields without materializing a vector for either.
-	///
-	/// The ones, and not the stored cells, because which cells are stored is a property of this
-	/// implementation rather than of the field: this matrix holds the cells it was given, ones and
-	/// zeros alike, where the dense field holds the whole container space. A merge-join that
-	/// visited the stored cells would therefore split its sum between the accumulator and the
-	/// caller's closed-form term differently under the two backends and reach an answer that
-	/// differs in the last bits -- which is enough, through a Metropolis ratio, to send two chains
-	/// from the same seed down different paths. A stored zero contributes exactly what the
-	/// closed-form term contributes for it, so leaving it out changes nothing but the rounding.
-	class OnesCursor {
-		const coretools::TSparseMatrix<TStorageY> *_mat = nullptr;
-		size_t _n_cols                                  = 0;
-		size_t _row                                     = 0;
-		decltype(std::declval<const coretools::TSparseMatrix<TStorageY>>().begin_row(0)) _it{};
-
-		/// Leaves the cursor on the next cell that is a one, skipping both exhausted rows and the
-		/// stored cells that hold a zero.
-		void _advance_to_next_one() {
-			while (_row < _mat->nRows()) {
-				if (_it == _mat->end_row(_row)) {
-					++_row;
-					if (_row < _mat->nRows()) { _it = _mat->begin_row(_row); }
-					continue;
-				}
-				if (_it->val.is_one()) { return; }
-				++_it;
-			}
-		}
-
-	public:
-		OnesCursor() = default;
-		OnesCursor(const coretools::TSparseMatrix<TStorageY> &mat, size_t n_cols)
-		    : _mat(&mat), _n_cols(n_cols) {
-			if (_mat->nRows() > 0) {
-				_it = _mat->begin_row(0);
-				_advance_to_next_one();
-			}
-		}
-
-		[[nodiscard]] bool valid() const { return _mat != nullptr && _row < _mat->nRows(); }
-		[[nodiscard]] size_t linear_index() const { return _row * _n_cols + _it->index; }
-		void advance() {
-			++_it;
-			_advance_to_next_one();
-		}
-	};
-
-	[[nodiscard]] OnesCursor ones_cursor() const { return {_mat, _dimensions_Y_space[1]}; }
 };
 
 static_assert(FieldStorage<TStorageYMatrix>,

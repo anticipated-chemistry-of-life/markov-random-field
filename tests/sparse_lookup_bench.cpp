@@ -15,16 +15,15 @@
 // Helpers
 // -------------------------------------------------------------------------
 //
-// Reading a run of cells is the whole of the sparse path's cost model. A point lookup in a
-// sorted-vector matrix costs a search of one line, and an update now pays that search once per
-// cell -- where a window used to walk the line once and answer every read from what it found. The
-// window is gone, so this is what the sparse backend costs today, and it is the number a hash-map
-// backing has to beat.
+// Reading a run of cells is the whole of the sparse path's cost model. A point lookup costs one
+// hash of the linear index, and an update pays that once per cell -- where a sorted-vector matrix
+// used to pay a search of one line, and a window before it walked the line once and answered every
+// read from what it found.
 //
-// Which line a lookup searches follows from the shape and not from the run: `get` searches
-// whichever of the cell's row and column holds fewer entries. So a run along the last dimension
-// ("easy") and one along the first ("hard") search the same kind of line, and the two are timed
-// apart to say whether that is true in practice as well as on paper.
+// The cost no longer follows from which line a cell is in: a map keyed by the linear index knows
+// nothing of rows and columns. What is left is the memory the run touches, so a run along the last
+// dimension (consecutive linear indices) and one along the first (a row width apart) are timed
+// apart to say what that costs, and how the answer moves with the density.
 //
 // Correctness of a run is a conformance question and is asserted over generated shapes in
 // tests/TStorageConformance_Tests.cpp. The one check here guards the benchmark itself: it says the
@@ -33,8 +32,8 @@
 namespace {
 
 // Build a TStorageYMatrix with Bernoulli(density) ones at each position.
-// insert_in_Y takes batches of *linear indices* (the index is implicit in the
-// matrix position; TStorageY does not store it).
+// insert_in_Y takes batches of *linear indices*, which is what the map is keyed
+// by; TStorageY carries a state and a counter and no index of its own.
 TStorageYMatrix make_Y(const std::vector<size_t> &dims, double density, uint64_t seed = 42) {
 	TStorageYMatrix Y;
 	Y.initialize(/*n_iterations=*/1000, dims);
@@ -97,21 +96,21 @@ TEST(SparseLookup_Matrix, a_run_reads_the_cells_its_arithmetic_names) {
 	for (double density : {0.001, 0.05, 0.5}) {
 		auto Y = make_Y({dim0, dim1}, density);
 
-		// easy path: a whole matrix row (stride 1) -> linear = row * dim1 + k
+		// along the last dimension: a whole row (stride 1) -> linear = row * dim1 + k
 		for (size_t row : {size_t{0}, size_t{37}, dim0 - 1}) {
 			for (size_t k = 0; k < dim1; ++k) {
 				const size_t linear = row * dim1 + k;
 				EXPECT_EQ(Y.get_multi_dimensional_index(linear), (IndexArray{row, k}))
-				    << "easy row=" << row << " k=" << k;
+				    << "row=" << row << " k=" << k;
 			}
 		}
 
-		// hard path: a whole matrix column (stride dim1) -> linear = k * dim1 + col
+		// along the first dimension: a whole column (stride dim1) -> linear = k * dim1 + col
 		for (size_t col : {size_t{0}, size_t{37}, dim1 - 1}) {
 			for (size_t k = 0; k < dim0; ++k) {
 				const size_t linear = k * dim1 + col;
 				EXPECT_EQ(Y.get_multi_dimensional_index(linear), (IndexArray{k, col}))
-				    << "hard col=" << col << " k=" << k;
+				    << "col=" << col << " k=" << k;
 			}
 		}
 	}
@@ -121,13 +120,13 @@ TEST(SparseLookup_Matrix, a_run_reads_the_cells_its_arithmetic_names) {
 // Benchmarks
 // -------------------------------------------------------------------------
 
-// Easy path (stride 1): read one full matrix row, one cell at a time.
-TEST(Benchmark_SparseLookup, easy_path) {
+// Stride 1: read one full row, one cell at a time.
+TEST(Benchmark_SparseLookup, a_run_along_the_last_dimension) {
 	constexpr size_t dim0  = 1000;
 	constexpr size_t dim1  = 1000;
 	constexpr size_t total = dim0 * dim1;
 
-	std::cout << "\n=== a run of point lookups — easy path (stride=1, along last dim) ===\n";
+	std::cout << "\n=== a run of point lookups — stride=1, along the last dimension ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_cells=" << dim1 << "\n\n";
 
@@ -142,15 +141,15 @@ TEST(Benchmark_SparseLookup, easy_path) {
 	}
 }
 
-// Hard path (stride = dim1): read one full matrix column, one cell at a time.
-TEST(Benchmark_SparseLookup, hard_path) {
+// Stride = dim1: read one full column, one cell at a time.
+TEST(Benchmark_SparseLookup, a_run_along_the_first_dimension) {
 	constexpr size_t dim0   = 1000;
 	constexpr size_t dim1   = 1000;
 	constexpr size_t total  = dim0 * dim1;
 	constexpr size_t stride = dim1; // one row width
 
-	std::cout << "\n=== a run of point lookups — hard path (stride=" << stride
-	          << ", non-last dim) ===\n";
+	std::cout << "\n=== a run of point lookups — along the first dimension, stride=" << stride
+	          << " ===\n";
 	std::cout << "    container: " << dim0 << " × " << dim1 << " = " << total << " total"
 	          << "  n_cells=" << dim0 << "\n\n";
 
@@ -165,29 +164,29 @@ TEST(Benchmark_SparseLookup, hard_path) {
 	}
 }
 
-// Easy vs. hard side-by-side at several densities.
-TEST(Benchmark_SparseLookup, easy_vs_hard_comparison) {
+// The two strides side by side at several densities.
+TEST(Benchmark_SparseLookup, the_two_strides_compared) {
 	constexpr size_t dim0   = 1000;
 	constexpr size_t dim1   = 1000;
 	constexpr size_t stride = dim1;
 
-	std::cout << "\n=== easy vs. hard comparison  (" << dim0 << "×" << dim1 << ") ===\n\n";
+	std::cout << "\n=== the two strides compared  (" << dim0 << "×" << dim1 << ") ===\n\n";
 	std::cout << "    " << std::left << std::setw(10) << "density" << std::setw(12) << "stored"
-	          << std::setw(18) << "easy (µs/call)" << std::setw(18) << "hard (µs/call)"
-	          << "ratio (hard/easy)\n";
+	          << std::setw(18) << "stride 1 (µs)" << std::setw(18) << "stride dim1 (µs)"
+	          << "ratio\n";
 	std::cout << "    " << std::string(70, '-') << "\n";
 
 	for (double density : {0.001, 0.01, 0.05, 0.10, 0.30, 0.50}) {
 		auto Y = make_Y({dim0, dim1}, density);
 
 		size_t sink = 0;
-		auto easy   = timed([&] { sink += read_run(Y, /*start=*/0, dim1, /*stride=*/1); });
-		auto hard   = timed([&] { sink += read_run(Y, /*start=*/0, dim0, stride); });
+		auto by_row = timed([&] { sink += read_run(Y, /*start=*/0, dim1, /*stride=*/1); });
+		auto by_col = timed([&] { sink += read_run(Y, /*start=*/0, dim0, stride); });
 		(void)sink;
 
-		const double ratio = hard.us_per_call / easy.us_per_call;
+		const double ratio = by_col.us_per_call / by_row.us_per_call;
 		std::cout << "    " << std::left << std::fixed << std::setprecision(2) << std::setw(10)
 		          << density << std::setw(12) << Y.number_of_ones() << std::setw(18)
-		          << easy.us_per_call << std::setw(18) << hard.us_per_call << ratio << "×\n";
+		          << by_row.us_per_call << std::setw(18) << by_col.us_per_call << ratio << "×\n";
 	}
 }

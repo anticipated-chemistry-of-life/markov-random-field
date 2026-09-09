@@ -6,7 +6,7 @@
 #include <vector>
 
 //-----------------------------------
-// TStorageY (single 2-byte state + 15-bit counter; no longer stores a linear index)
+// TStorageY -- the cell both fields hold: a state bit and a 15-bit counter in one 2-byte word.
 //-----------------------------------
 
 TEST(YStorage_Tests, flip_state) {
@@ -175,7 +175,7 @@ TEST(YStorage_Tests, is_empty) {
 }
 
 //-----------------------------------
-// TStorageYMatrix (sparse 2-D matrix; indices are linear indices in Y space)
+// TStorageYMatrix -- the sparse field: a hash map of those cells, keyed by linear index.
 // Tests use a single-row layout {1, N} so the linear index equals the column.
 //-----------------------------------
 
@@ -216,12 +216,12 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
 	EXPECT_EQ(Y.number_of_ones(), 3);
 }
 
-TEST(YStorageMatrix_Tests, set_to_zero_then_remove) {
+TEST(YStorageMatrix_Tests, set_state_to_zero_then_remove) {
 	TStorageYMatrix Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(2);
 	Y.insert_one(3);
-	Y.set_to_zero(2); // linear index 2
+	Y.set_state(2, false); // linear index 2
 	Y.remove_zeros();
 	const auto entries = Y.get_stored_entries();
 	ASSERT_EQ(entries.size(), 2);
@@ -288,7 +288,7 @@ TEST(YStorageMatrix_Tests, add_data) {
 	Y.insert_one(5);
 	EXPECT_EQ(Y.get_full_Y_binary_vector(), (std::vector<uint8_t>{0, 0, 0, 0, 0, 1}));
 
-	Y.set_to_zero(5); // linear index 5 -> (row 1, col 2)
+	Y.set_state(5, false); // linear index 5 -> (row 1, col 2)
 	EXPECT_EQ(Y.get_full_Y_binary_vector(), (std::vector<uint8_t>{0, 0, 0, 0, 0, 0}));
 
 	EXPECT_EQ(Y.get_multi_dimensional_index(5), (IndexArray{1, 2}));

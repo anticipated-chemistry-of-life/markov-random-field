@@ -6,6 +6,7 @@
 
 #include "TStorageZ.h"
 #include "storages/TDenseStateArray.h"
+#include "storages/bulk_paths.h"
 
 #include <cstddef>
 #include <utility>
@@ -52,7 +53,5 @@ public:
 
 static_assert(BinaryStorage<TStorageZDense>,
               "The dense node state must satisfy the binary storage interface.");
-static_assert(LocatableStorage<TStorageZDense>,
-              "The dense node state must point an updater at one of its cells.");
 static_assert(!FieldStorage<TStorageZDense>,
               "The node state carries no posterior counter, so it is not a field.");

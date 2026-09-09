@@ -22,6 +22,16 @@
 /// may be absent; `set_state` is the in-place write for one that is already known to be
 /// addressable.
 ///
+/// `locate` answers the four questions a write asks at once -- the state, whether the storage
+/// holds the cell, its linear index and where it is -- so that an in-place write and a deferred
+/// insert are one branch apart. `write_or_defer` in cell_handle.h is that branch. `is_one` is
+/// untouched beside it and still returns a `bool`: the many read-only call sites ask a question
+/// with one answer, and they say so.
+///
+/// A handle points into the storage, so it is only good until the storage is restructured. No
+/// bulk insert and no zero removal may run while one is live. That was a lifetime rule while a
+/// window held the cells; it is a convention now, and the conformance suite states it.
+///
 /// Three things stay deliberately outside the concept. The bulk-insert and whole-space dump paths
 /// still spell `Y` and `Z` in their names. The ones cursor is offered by the field and the
 /// observed data alone. The reporting accessors belong to the field. An implementation still has
@@ -44,28 +54,8 @@ concept BinaryStorage = requires(T &storage, const T &const_storage, size_t line
 	// Index conversion.
 	{ const_storage.get_linear_index_in_container_space(multidim_index) } -> std::same_as<size_t>;
 	{ const_storage.get_multi_dimensional_index(linear_index) } -> std::same_as<IndexArray>;
-};
 
-/// A storage that can point an updater at one of its cells.
-///
-/// `locate` answers the four questions a write asks at once -- the state, whether the storage
-/// holds the cell, its linear index and where it is -- so that an in-place write and a deferred
-/// insert are one branch apart. `write_or_defer` in cell_handle.h is that branch.
-///
-/// `is_one` is untouched and still returns a `bool`. The many read-only call sites ask a question
-/// with one answer, and they say so.
-///
-/// A handle points into the storage, so it is only good until the storage is restructured. No
-/// bulk insert and no zero removal may run while one is live. That was a lifetime rule while a
-/// window held the cells; it is a convention now, and the conformance suite states it.
-///
-/// The two sorted-vector matrix storages do not satisfy this. A sparse matrix keeps every cell
-/// twice, once in its row and once in its column, so it has no single cell to point at. They
-/// write through `write_state_if_held` instead, which storages/cell_write.h is the one caller of.
-/// They answer `locate` once they own their cells.
-template<typename T>
-concept LocatableStorage = BinaryStorage<T> && requires(T &storage, size_t linear_index,
-                                                        const IndexArray &multidim_index) {
+	// The cell a write is pointed at.
 	typename T::TCell;
 	{ storage.locate(linear_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
 	{ storage.locate(multidim_index) } -> std::same_as<IsOneResult<typename T::TCell>>;

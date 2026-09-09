@@ -81,11 +81,11 @@ a backend could get wrong.
 
 ## Where it stops
 
-Above 32767 iterations the two fields thin their posterior counters differently -- the sparse
-counter shares its 16-bit word with the state bit, the dense one does not -- and the thinning factor
-is also what decides which iterations get a trace line. The two would then write traces of different
-lengths, by design rather than by regression. `run.sh` refuses a chain that long rather than let the
-gate fail for a reason it is not testing.
+Chain length is not a limit. Both fields hold the same packed cell, so they thin a chain of any
+length by the same factor -- and the thinning factor is also what decides which iterations get a
+trace line, so two traces are the same length whatever the chain. The gate used to refuse a chain
+above 32767 iterations, because the sparse counter shared its 16-bit word with the state bit and
+the dense one did not.
 
 One thread for the two backend chains. What that leaves out is the multi-batch commit of the
 update's deferred inserts, which one thread never produces; `StorageEquivalence` in
@@ -123,7 +123,7 @@ from there they were simply different chains.
 The fix was to give the cursor a contract that does not mention the backend: it yields the cells
 that are **one**. Every caller wanted exactly that anyway, a stored zero contributes precisely what
 the closed-form term contributes for it, and the two backends now walk the same cells in the same
-order. See `TStorageYMatrix::OnesCursor`.
+order. See `TSparseCellArray::OnesCursor`.
 
 The lesson generalises: anything that lets "what this backend happens to store" reach an
 arithmetic result will diverge, and printed precision will hide it right up until it doesn't.

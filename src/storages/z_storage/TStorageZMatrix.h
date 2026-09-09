@@ -1,180 +1,65 @@
 //
-// Created by VISANI Marco on 18.10.2024.
+// The sparse node state.
 //
 
-#ifndef TStorageZMatrix_H
-#define TStorageZMatrix_H
+#pragma once
 
 #include "TStorageZ.h"
 #include "constants.h"
-#include "coretools/Main/TError.h"
-#include "coretools/Math/TSparseMatrix.h"
-#include "coretools/algorithms.h"
+#include "storages/TSparseBinaryArray.h"
+#include "storages/bulk_paths.h"
 #include "storages/storage_concepts.h"
+
 #include <cstddef>
 #include <utility>
 #include <vector>
 
-/// There is one TStorageZMatrix per dimension `d`. The dimensions in Z space are the number of
-/// leaves in each dimension except for `d`, which spans every node of its tree -- leaves included
+/// The sparse node state: the sparse array of bare states, plus the three bulk paths `Z` is asked
+/// for by name. The array is inherited rather than wrapped because `Z` carries one binary state
+/// per cell and nothing else -- there is no member to add, only the whole-space dump, the bulk
+/// insert and the stored-entry walk, none of which the storage concept covers (see
+/// storage_concepts.h) and all of which the dense implementation spells with a `Z` in the name too.
+///
+/// `locate` comes with the array too, so the node state points an updater at one of its cells
+/// without a member of its own.
+///
+/// There is one node state per dimension `d`. The dimensions in Z space are the number of leaves
+/// in each dimension except for `d`, which spans every node of its tree -- leaves included
 /// (ADR-0005). For example, with leaf counts [2, 3] and 19 nodes in dimension `d == 0`, the
 /// dimensions in Z space are [19, 3], where the first two rows are the leaves the field also
 /// holds. `node_state_dimensions` in tree/node_state_shape.h is where that rule lives.
 ///
-/// Backed by a coretools::TSparseMatrix<TStorageZ>, mirroring TStorageYMatrix: rows and
-/// columns are kept sorted, so a clique's nodes can be range-walked in O(nnz in that
-/// line) and the (row, col) position encodes the linear index in Z space.
-class TStorageZMatrix {
-private:
-	IndexArray _dimensions_in_Z_space{};
-	coretools::TSparseMatrix<TStorageZ> _mat;
-
-	/// Allocation-free (row, col) of a linear index, for the hot internal paths.
-	[[nodiscard]] IndexArray _row_col(size_t linear_index_in_Z_space) const {
-		return coretools::getSubscriptsAsArray(linear_index_in_Z_space, _dimensions_in_Z_space);
-	}
-
-	/// Whether the row of this cell holds it.
-	///
-	/// A sparse matrix keeps every cell twice, once in its row and once in its column, and the two
-	/// can part company: `cleanUp` drops a cell whose value is the default one, and it leaves a
-	/// line of one entry alone. The row is the copy a run of cells along the last dimension walks,
-	/// so the row is what "held" means here.
-	///
-	/// The write below then puts the cell back in both. It appends one entry to a column, which is
-	/// the one restructuring a write in place can still make.
-	[[nodiscard]] bool _row_holds(size_t row, size_t col) const {
-		for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-			if (it->index == col) { return true; }
-		}
-		return false;
-	}
-
-	void _insert(size_t linear_index_in_Z_space, bool state) {
-		if (linear_index_in_Z_space >= this->total_size_of_container_space()) {
-			throw coretools::TDevError(
-			    "You are trying to insert a value at an linear index bigger than the total "
-			    "size of the container. ",
-			    "The index is: ", linear_index_in_Z_space,
-			    " and the total size of the container is : ",
-			    this->total_size_of_container_space());
-		}
-		const auto md = _row_col(linear_index_in_Z_space);
-		_mat.set(md[0], md[1], TStorageZ(state));
-	}
-
+/// Only the cells a caller put in are stored, so "the stored entries" is a subset of the container
+/// space where the dense implementation reports all of it. That is the one difference between the
+/// two that is visible in output: `write_Z_to_file` asked for only the stored cells writes fewer
+/// rows under this backend. Production only ever asks it for the whole space anyway.
+class TStorageZMatrix : public TSparseBinaryArray {
 public:
-	TStorageZMatrix()  = default;
-	~TStorageZMatrix() = default;
-	explicit TStorageZMatrix(const IndexArray &dimensions_in_Z_space) {
-		initialize_dimensions(dimensions_in_Z_space);
+	TStorageZMatrix() = default;
+	explicit TStorageZMatrix(const IndexArray &dimensions) : TSparseBinaryArray(dimensions) {}
+
+	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZDense::insert_in_Z.
+	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {
+		insert_ones_in_batches(*this, linear_indices_to_insert);
 	}
 
-	void initialize_dimensions(const IndexArray &dimensions_in_Z_space) {
-		_dimensions_in_Z_space = dimensions_in_Z_space;
-		_mat.resize(dimensions_in_Z_space[0], dimensions_in_Z_space[1]);
-	}
-
-	/// Point lookup by linear index in Z space. A missing cell reads as false.
-	[[nodiscard]] inline bool is_one(size_t linear_index_in_Z_space) const {
-		const auto md = _row_col(linear_index_in_Z_space);
-		return _mat.get(md[0], md[1]).is_one();
-	}
-
-	/// Set the state of the cell at `linear_index_in_Z_space` in place. If the cell does not exist
-	/// yet, TSparseMatrix::set inserts it.
-	void set_state(size_t linear_index_in_Z_space, bool state) {
-		const auto md = _row_col(linear_index_in_Z_space);
-		auto s        = _mat.get(md[0], md[1]);
-		s.set_state(state);
-		_mat.set(md[0], md[1], s);
-	}
-
-	/// Writes the state of a cell this matrix already holds, and says whether it held it.
-	///
-	/// A cell the matrix does not hold is left alone. Inserting one restructures a row and a
-	/// column, which is what a caller inside a parallel region has to defer. This is the matrix's
-	/// half of `write_or_defer` (storages/cell_write.h), and it stands in for the handle a
-	/// sorted-vector matrix cannot give: it keeps every cell twice, so it has no single cell to
-	/// point at.
-	[[nodiscard]] bool write_state_if_held(size_t linear_index_in_Z_space, bool state) {
-		const auto md = _row_col(linear_index_in_Z_space);
-		if (!_row_holds(md[0], md[1])) { return false; }
-		set_state(linear_index_in_Z_space, state);
-		return true;
-	}
-
-	void insert_one(size_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, true); }
-	void insert_one(const IndexArray &multi_dim_index_in_Z_space) {
-		insert_one(get_linear_index_in_Z_space(multi_dim_index_in_Z_space));
-	}
-	void insert_zero(size_t linear_index_in_Z_space) { _insert(linear_index_in_Z_space, false); }
-
-	/// Remove all the elements whose state is zero.
-	void remove_zeros() {
-		_mat.erase_if([](const TStorageZ &elem) { return !elem.is_one(); });
-	}
-
-	[[nodiscard]] size_t
-	get_linear_index_in_Z_space(const IndexArray &multidim_index_in_Z_space) const {
-		return coretools::getLinearIndex(multidim_index_in_Z_space, _dimensions_in_Z_space);
-	}
-	[[nodiscard]] size_t
-	get_linear_index_in_container_space(const IndexArray &multidim_index_in_Z_space) const {
-		return get_linear_index_in_Z_space(multidim_index_in_Z_space);
-	}
-
-	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t linear_index_in_Z_space) const {
-		return _row_col(linear_index_in_Z_space);
-	}
-
-	[[nodiscard]] size_t total_size_of_container_space() const {
-		return coretools::containerProduct(_dimensions_in_Z_space);
-	}
-
-	/// Bulk-insert deferred 0 -> 1 transitions (linear indices in Z space), then re-sort once.
-	/// Mirror of TStorageYMatrix::insert_in_Y.
-	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_in_Z_space_to_insert) {
-		std::vector<size_t> merged_vec;
-		for (const auto &vec : linear_indices_in_Z_space_to_insert) {
-			merged_vec.insert(merged_vec.end(), vec.begin(), vec.end());
-		}
-		for (const auto &it : merged_vec) {
-			const auto md = _row_col(it);
-			_mat.setRaw(md[0], md[1], TStorageZ(true));
-		}
-		_mat.cleanUp();
-	}
-
+	/// The state of every cell of the container space, in ascending linear-index order.
 	[[nodiscard]] std::vector<size_t> get_full_Z_binary_vector() const {
-		std::vector<size_t> Z_as_vector;
-		Z_as_vector.reserve(total_size_of_container_space());
-		for (size_t i = 0; i < _mat.nRows(); ++i) {
-			const auto row = _mat.getRow(i);
-			for (const auto &val : row) { Z_as_vector.push_back(val.is_one()); }
-		}
-		return Z_as_vector;
+		return whole_space_states<size_t>(*this);
 	}
 
-	/// Returns every stored cell as (linear index in Z space, value), in ascending linear-index
-	/// order (rows then columns is row-major, matching linear = row * nCols + col).
+	/// Every stored cell as (linear index in Z space, value), in ascending linear-index order.
 	[[nodiscard]] std::vector<std::pair<size_t, TStorageZ>> get_stored_entries() const {
 		std::vector<std::pair<size_t, TStorageZ>> entries;
-		entries.reserve(_mat.nNonZero());
-		const size_t n_cols = _dimensions_in_Z_space[1];
-		for (size_t row = 0; row < _mat.nRows(); ++row) {
-			for (auto it = _mat.begin_row(row); it != _mat.end_row(row); ++it) {
-				entries.emplace_back(row * n_cols + it->index, it->val);
-			}
+		entries.reserve(size());
+		for (const auto &[linear_index, state] : stored_cells_in_order()) {
+			entries.emplace_back(linear_index, TStorageZ(state != 0));
 		}
 		return entries;
 	}
-
-	[[nodiscard]] bool empty() const { return _mat.nNonZero() == 0; }
-	[[nodiscard]] size_t size() const { return _mat.nNonZero(); }
 };
 
 static_assert(BinaryStorage<TStorageZMatrix>,
               "The sparse node state must satisfy the binary storage interface.");
-
-#endif // TStorageZMatrix_H
+static_assert(!FieldStorage<TStorageZMatrix>,
+              "The node state carries no posterior counter, so it is not a field.");

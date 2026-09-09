@@ -43,7 +43,8 @@ private:
 
 public:
 	/// The largest value a counter can hold. A chain thinned by the field's thinning factor cannot
-	/// reach past it, because that factor is what the field sizes its own 16-bit counter with.
+	/// reach past it: the field sizes that factor from its own 15-bit counter, so a counter of 16
+	/// bits has room to spare here.
 	static constexpr uint16_t MAX_COUNTER = std::numeric_limits<uint16_t>::max();
 
 	/// @param n_cells         the leaf-pair space, which is the field's container space

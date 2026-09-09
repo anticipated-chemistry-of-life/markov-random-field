@@ -76,9 +76,30 @@ one line. The build system takes no part.
 | sparse  | `TStorageYMatrix` | `TStorageZMatrix` |
 | dense   | `TStorageYDense`  | `TStorageZDense`  |
 
+A sparse storage holds its cells in a hash map keyed by the linear index, so its memory tracks the
+number of ones rather than the size of the container space. A dense one holds an array over the
+whole space. Both hold the same cell, and a cell the storage has no entry for reads as state 0.
+
+A stored cell costs a map node and a bucket slot, which is some tens of bytes where the cell itself
+is one or two. Sparse therefore wins on memory well below **one one in twenty cells**, and not
+merely below one in two. Choose it on the fill of the container and not on its size.
+
 The interface an alias has to satisfy is the pair of concepts in
 `src/storages/storage_concepts.h`, checked with `static_assert` rather than through virtual calls,
 so nothing on a storage access path pays for the choice.
+
+#### The posterior field is thinned
+
+A field cell packs its posterior counter into the same 16-bit word as its state, which leaves the
+counter 15 bits. A chain of `n` iterations is therefore counted one iteration in
+`ceil(n / 32767)`, and that factor also decides which iterations get a trace line. Each run reports
+it to its log file.
+
+Both backends hold that cell, so both thin a chain identically. **A dense run before that was true
+counted one iteration in `ceil(n / 65535)`**, because the dense counter had a 16th bit of its own.
+A dense chain longer than 32767 iterations therefore writes a posterior field at half the previous
+resolution, and traces of half the previous length. The numbers a run produces are otherwise
+unchanged.
 
 Both defaults are **dense** for now, which is one of the two pairings CI gates.
 `docs/adr/0006-each-storage-brings-its-own-traversal.md` argues for a sparse field against a dense
