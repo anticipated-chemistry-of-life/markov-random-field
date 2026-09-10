@@ -62,6 +62,10 @@ _Avoid_: sufficient statistics, the six counts, contingency table
 A set of nodes that vary along exactly one tree's dimension while every other dimension is fixed at a leaf. Cliques belong to a tree: a species-tree clique is identified by a *molecule* leaf, and vice versa.
 _Avoid_: slice, column, replicate
 
+**Clique space**:
+The indexed set of one tree's cliques. A clique number and the cell subscript it stands for are the same thing under one convention, which is row-major: the extent is every other tree's leaf count, and a 1 in the owning tree's dimension. That 1 is what puts a 0 in the owning dimension of every clique's subscript, and what makes the extents multiply to the clique count. A tree has one, built from the leaf counts and the dimension it owns, and it holds no storage, no topology and no parameter. `TCliqueSpace`, `src/tree/clique/`. See ADR-0011.
+_Avoid_: clique index space, clique dimensions, clique grid (that is the transition grid)
+
 **Alpha**:
 The stationary probability that a node in a given clique is in state 1. One value per clique.
 _Avoid_: prevalence, base rate, pi
