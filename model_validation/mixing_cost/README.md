@@ -25,6 +25,17 @@ Both link the same `coretools` and `stattools` checkout — the one at the root 
 pinned with `FETCHCONTENT_SOURCE_DIR_*`. A reference binary built against a different dependency
 revision would put the difference somewhere the measurement cannot see.
 
+**Since ADR-0010 the default pair is source-identical.** The block update was reinstated by reverting
+the commit that deleted it, so the working tree now matches `a3d1ae6` in `src/` and `tests/`, and
+`current` is always the working tree. A default run therefore compares two identical binaries and
+measures nothing.
+
+Two comparisons are worth naming. To measure the block against the single-variable walk **from
+today's tree**, set `ACOL_MIXING_REFERENCE=f13fef9`: the reference is then the revision that drew
+the leaf layer one variable at a time, and the ratios read the other way round from `findings.md`.
+To **reproduce the recorded table**, run from a tree at `f13fef9` with the default reference, which
+is the pair that produced it.
+
 ## Why the data is fixed and the seed is not
 
 **The two binaries cannot be compared seed for seed.** A leaf's cell uniform used to come from the

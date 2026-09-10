@@ -360,7 +360,7 @@ public:
 
 /// P(Y = 1) at one field cell, given the two tree field cells and the data that observes it.
 ///
-/// The field update draws one cell at a time, so the eight-state table below collapses to two
+/// The field is drawn one cell at a time, so the eight-state table below collapses to two
 /// weights: what the link says about the field state, times what each data source makes of it. The
 /// tree fields are not drawn here. Each is drawn by its own tree, so the two enter as states rather
 /// than as factors.

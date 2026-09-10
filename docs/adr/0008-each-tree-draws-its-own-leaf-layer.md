@@ -1,5 +1,7 @@
 # Each tree draws its own leaf layer, and the field draws its own
 
+_The **decision** below is superseded by [ADR-0010](0010-the-block-draws-the-leaf-layer.md), which reinstates the block update. **The measurement is not superseded.** It is the evidence ADR-0010 stands on, and the `reference` column of the table in the consequences is the binary that runs today: reverting this record's commit leaves `src/` and `tests/` byte-identical to `a3d1ae6`. So read the decision and the considered options as the argument that was made, and the measurement as the price the decision was reversed on._
+
 ADR-0005 gave each tree a leaf-level field of its own, and it argued for one **eight-state block update** over the triple `(Y, Z_s, Z_m)` at a leaf pair. This record retires the block. The leaf layer is drawn **one variable at a time**: each tree draws every node of its node state, its leaf block included, and the field has an update of its own.
 
 ADR-0005 said the failure "would present as slow mixing rather than as a bug", which is a claim about a number nobody had. Issue #69 measured it. This record carries that measurement as its consequences, so the trade is priced here rather than argued here.

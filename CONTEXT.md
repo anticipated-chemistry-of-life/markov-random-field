@@ -55,7 +55,7 @@ The number of tree fields in state 1 at one leaf pair, so 0, 1 or 2. The link ta
 _Avoid_: class, category, sum of the tree fields
 
 **Link counters**:
-The link's sufficient statistic: six integers, `n(bucket, field state)`, counting the leaf pairs of the whole field. The link's whole likelihood is a function of them and the error probability, so the error probability's move costs the same whatever the size of the field. The field update retallies them over every leaf pair as it goes. Traced to `<prefix>_link_counters_trace.txt`, which is what the AND diagnostic reads. See ADR-0005.
+The link's sufficient statistic: six integers, `n(bucket, field state)`, counting the leaf pairs of the whole field. The link's whole likelihood is a function of them and the error probability, so the error probability's move costs the same whatever the size of the field. The block update tallies them over every leaf pair as it goes. Traced to `<prefix>_link_counters_trace.txt`, which is what the AND diagnostic reads. See ADR-0005.
 _Avoid_: sufficient statistics, the six counts, contingency table
 
 **Clique**:
@@ -85,7 +85,7 @@ _Avoid_: partition function, Z (that is the node state), evidence
 ## The chain
 
 **Update**:
-One full pass over a set of variables. A tree's node-state update visits every node of every clique of that tree, leaves included; the field update visits every leaf pair. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: the species tree's node state, the molecule tree's node state, the field, then the parameters.
+One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every node above the leaf block of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: the block, the species tree's node state, the molecule tree's node state, then the parameters.
 _Avoid_: sweep, pass, scan
 
 **Chain start**:
@@ -93,11 +93,11 @@ The configuration a chain holds before its first update. Both tree fields start 
 _Avoid_: initial values, seed, guess, warm-up
 
 **Field update**:
-The field's own pass over its cells. It visits every leaf pair and draws that cell from the two tree field cells at that pair, and from the data that observes the field. It retallies the six link counters as it goes. It is the last state update of an iteration, so the counters describe the configuration the error probability then proposes against. The tree fields are not its to draw: each is drawn by its own tree, as the leaf block of that tree's node state. `field_update::run`, `src/field/`.
+The field's own pass over its cells, drawing each cell from the two tree field cells at that leaf pair and from the data that observes the field. The term survives only to name what ADR-0008 built and ADR-0010 retired. The block update draws the field again, together with both tree fields, so the field has no pass of its own. ADR-0008 gave the field one because a tree field is the leaf block of a node state, and the block was a second owner for a variable that already had one. ADR-0010 records what one pass of single-variable draws cost the field, and reinstates the block. See ADR-0010.
 _Avoid_: Y update, Y sweep, leaf pair update
 
 **Block update**:
-The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The term survives only to name what ADR-0005 built and ADR-0008 retired. Each tree now draws its own leaf states, and the field has an update of its own, so the three variables move one at a time. ADR-0005 built the block to escape the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 records what dropping it costs. See ADR-0008.
+The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. One thread takes a species leaf and walks the molecule leaves of its row, and the pass tallies the six link counters as it goes. The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `src/field/`. See ADR-0005 and ADR-0010.
 _Avoid_: joint draw, eight-state sweep
 
 **Joint density**:

@@ -105,12 +105,12 @@ public:
 
 		BRANCH_LENGTHS_BINS = params.get<size_t>("n_bins", BRANCH_LENGTHS_BINS);
 
-		// --K sized the sheet the field update cached. The update reads a row at a time now, so
+		// --K sized a sheet an older update cached. The block update reads a row at a time, so
 		// there is no sheet to size. The old default was larger than any real dimension, so every
 		// run that passed K already meant "the whole dimension". A run that still passes it stops
 		// here, rather than running to the end and reporting an unused argument.
 		if (params.exists("K")) {
-			throw coretools::TUserError("--K is gone. The field update reads a whole row of the "
+			throw coretools::TUserError("--K is gone. The block update reads a whole row of the "
 			                            "field at a time, so there is no sheet to size. Remove the "
 			                            "argument: the update already covers every leaf.");
 		}

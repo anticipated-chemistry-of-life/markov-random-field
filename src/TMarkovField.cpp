@@ -46,7 +46,12 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 		logfile().list("Will fix Y, and with it both tree fields, during the MCMC.");
 	}
 	_fix_Z = ProgramOptions::FIX_Z;
-	if (_fix_Z) { logfile().list("Will fix Z during the MCMC."); }
+	if (_fix_Z) {
+		// Every node above the leaves. The leaf layer is the block's, and the block still draws
+		// it, so both tree fields move under this flag (ADR-0010).
+		logfile().list("Will fix Z during the MCMC, every node above the leaves. Both tree "
+		               "fields still move: the block update draws them with the field.");
+	}
 
 	// initialize Y: one dimension per tree, sized by that tree's leaf count. The loop is bounded by
 	// the array and not by the tree count, because the array is NUMBER_OF_TREES long and nothing

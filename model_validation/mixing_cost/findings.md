@@ -1,5 +1,7 @@
 # The mixing cost of dropping the block update, measured
 
+_The verdict is [ADR-0010](../../docs/adr/0010-the-block-draws-the-leaf-layer.md): the block update was reinstated on the numbers below, so the sampler draws the field and both tree fields together again. Read this write-up as the price of one pass of single-variable draws, not as a description of the code that runs._
+
 ADR-0005 built the leaf layer's eight-state block update on an argument. At a small error
 probability a field cell at one pins both tree fields; given both tree fields at one the field
 stays at one with probability near one; that triple is metastable under single-variable draws, and
