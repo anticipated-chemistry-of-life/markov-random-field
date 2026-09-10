@@ -1,12 +1,12 @@
 #include "constants.h"
 #include "storages/y_storage/TStorageY.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "gtest/gtest.h"
 #include <cstdint>
 #include <vector>
 
 //-----------------------------------
-// TStorageY (single 2-byte state + 15-bit counter; no longer stores a linear index)
+// TStorageY -- the cell both fields hold: a state bit and a 15-bit counter in one 2-byte word.
 //-----------------------------------
 
 TEST(YStorage_Tests, flip_state) {
@@ -175,12 +175,12 @@ TEST(YStorage_Tests, is_empty) {
 }
 
 //-----------------------------------
-// TStorageYMatrix (sparse 2-D matrix; indices are linear indices in Y space)
+// TStorageYSparse -- the sparse field: a hash map of those cells, keyed by linear index.
 // Tests use a single-row layout {1, N} so the linear index equals the column.
 //-----------------------------------
 
 TEST(YStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.insert_zero(2);
@@ -195,7 +195,7 @@ TEST(YStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
 }
 
 TEST(YStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_zero(0);
 	Y.insert_zero(2);
 	Y.insert_zero(4);
@@ -206,7 +206,7 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
 }
 
 TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -216,12 +216,12 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
 	EXPECT_EQ(Y.number_of_ones(), 3);
 }
 
-TEST(YStorageMatrix_Tests, set_to_zero_then_remove) {
-	TStorageYMatrix Y(1000, {1, 5});
+TEST(YStorageMatrix_Tests, set_state_to_zero_then_remove) {
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(2);
 	Y.insert_one(3);
-	Y.set_to_zero(2); // linear index 2
+	Y.set_state(2, false); // linear index 2
 	Y.remove_zeros();
 	const auto entries = Y.get_stored_entries();
 	ASSERT_EQ(entries.size(), 2);
@@ -230,7 +230,7 @@ TEST(YStorageMatrix_Tests, set_to_zero_then_remove) {
 }
 
 TEST(YStorageMatrix_Tests, reset_counts_sets_all_counters_to_zero) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
@@ -247,7 +247,7 @@ TEST(YStorageMatrix_Tests, reset_counts_sets_all_counters_to_zero) {
 }
 
 TEST(YStorageMatrix_Tests, reset_counts_does_not_affect_states) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.add_to_counter(0);
@@ -257,7 +257,7 @@ TEST(YStorageMatrix_Tests, reset_counts_does_not_affect_states) {
 }
 
 TEST(YStorageMatrix_Tests, set_state_flips_in_place) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(2);
 	Y.add_to_counter(0); // counter of linear-2 cell -> 1
 	Y.set_state(2, false);
@@ -269,24 +269,26 @@ TEST(YStorageMatrix_Tests, set_state_flips_in_place) {
 }
 
 TEST(YStorageMatrix_Tests, get_fraction_of_ones) {
-	TStorageYMatrix Y(1000, {1, 5});
+	TStorageYSparse Y(1000, {1, 5});
 	Y.insert_one(3);
 	for (size_t it = 0; it < 4; ++it) { Y.add_to_counter(0); } // counter -> 4
-	// total_counts == n_iterations / thinning_factor == 1000
-	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 4.0 / static_cast<double>(Y.get_total_counts()));
+	// Four iterations were counted, so four out of four is the whole of them. Spelled as a literal
+	// rather than over get_total_counts(), which would divide the count by itself.
+	EXPECT_EQ(Y.get_total_counts(), 4u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 1.0);
 	// a cell that was never stored has fraction 0
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 0.0);
 }
 
 TEST(YStorageMatrix_Tests, add_data) {
-	TStorageYMatrix Y(1000, {2, 3});
+	TStorageYSparse Y(1000, {2, 3});
 	EXPECT_EQ(Y.total_size_of_container_space(), 6u);
 	EXPECT_ANY_THROW(Y.insert_one(7));
 
 	Y.insert_one(5);
 	EXPECT_EQ(Y.get_full_Y_binary_vector(), (std::vector<uint8_t>{0, 0, 0, 0, 0, 1}));
 
-	Y.set_to_zero(5); // linear index 5 -> (row 1, col 2)
+	Y.set_state(5, false); // linear index 5 -> (row 1, col 2)
 	EXPECT_EQ(Y.get_full_Y_binary_vector(), (std::vector<uint8_t>{0, 0, 0, 0, 0, 0}));
 
 	EXPECT_EQ(Y.get_multi_dimensional_index(5), (IndexArray{1, 2}));

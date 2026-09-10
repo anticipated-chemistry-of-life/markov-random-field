@@ -10,8 +10,9 @@ whose matrix exponential has the closed form implemented in `transition_matrix`.
 
 The C++ never evaluates that exponential at `t` directly: it builds bin 0 as
 `expm(Lambda * Delta / 2)` and then walks up the grid by repeated multiplication,
-`P_k = P_{k-1} @ expm(Lambda * Delta)` (`src/TClique.h:103`). This module
-evaluates the closed form at `t = Delta * (k + 0.5)` instead. That divergence is
+`P_k = P_{k-1} @ expm(Lambda * Delta)` (`TTransitionGrid`'s constructor,
+src/tree/branch/TTransitionGrid.h). This module evaluates the closed form at
+`t = Delta * (k + 0.5)` instead. That divergence is
 deliberate: replicating the recursion would reproduce any error accumulating in
 it rather than exposing it.
 """
@@ -24,8 +25,9 @@ import numpy as np
 N_BINS = 10
 
 # Above this rate the C++ short-circuits to the stationary distribution
-# (TMatrices::set_lambda, src/TClique.h:161). This module never replicates that
-# approximation; callers assert which side of it they are on.
+# (TTransitionGrid::STATIONARY_NU_THRESHOLD, src/tree/branch/TTransitionGrid.h).
+# This module never replicates that approximation; callers assert which side of
+# it they are on.
 STATIONARY_NU_THRESHOLD = 25.0
 
 

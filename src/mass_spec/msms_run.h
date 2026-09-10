@@ -99,10 +99,10 @@ private:
 
 	/// Maps a molecule index to the feature that currently holds it, or `NO_HOLDER` if the molecule
 	/// is free. Only alive during `update_all_assignments`, where it turns both "is this molecule
-	/// free?" and "which feature holds it?" into O(1) lookups; outside the sweep it is dropped
+	/// free?" and "which feature holds it?" into O(1) lookups; outside the update it is dropped
 	/// because keeping one vector of n_molecules entries per MSMS run would be far too much memory.
 	/// Every access goes through the five `_*_holder*` methods below, so the representation can be
-	/// changed (e.g. to a hash map sized on the number of features) without touching the sweep.
+	/// changed (e.g. to a hash map sized on the number of features) without touching the update.
 	std::vector<uint32_t> _holder_of_molecule;
 
 	size_t _number_of_molecules = 0;
@@ -113,7 +113,7 @@ private:
 	/// Builds the holder map from the current assignments. Features at the unknown molecule are
 	/// skipped: the unknown molecule is shared by arbitrarily many features and its sentinel index
 	/// is out of range of the map. Throws if a real molecule is held twice, which turns a
-	/// bookkeeping bug in one sweep into a loud failure at the start of the next one.
+	/// bookkeeping bug in one update into a loud failure at the start of the next one.
 	void _fill_holders() {
 		_reset_holders();
 		for (size_t f = 0; f < _current_assignments.size(); ++f) {
@@ -204,7 +204,7 @@ public:
 	/// guarantee the order and be able to do binary search.
 	void add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods);
 
-	/// One Metropolis-Hastings sweep over every feature of this run, see `msms_run.cpp` for the
+	/// One Metropolis-Hastings update over every feature of this run, see `msms_run.cpp` for the
 	/// move types and their Hastings ratios. `beta` is the probability of proposing to move an
 	/// already assigned feature back to the unknown molecule.
 	void update_all_assignments(const TAssignmentScorer &scorer, double beta);

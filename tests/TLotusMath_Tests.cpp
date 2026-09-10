@@ -2,8 +2,8 @@
 //
 // The first four mirror the research-effort checks in model_validation/tests/test_independent.py,
 // which until now could only be asked of the Python reference. The rest cover ground the reference
-// cannot reach at all: it simulates with a single scalar gamma, while the C++ infers one per kept
-// dimension.
+// cannot reach at all: it simulates with a single scalar gamma, while the C++ infers one per
+// tree.
 
 #include "lotus/TLotusMath.h"
 #include "gtest/gtest.h"
@@ -84,7 +84,7 @@ TEST(LotusMath, effort_saturates_as_gamma_grows) {
 }
 
 // --------------------------------------------------------------------------
-// One gamma per kept dimension
+// One gamma per tree
 // --------------------------------------------------------------------------
 
 TEST(LotusMath, each_dimension_uses_its_own_gamma) {
@@ -137,7 +137,7 @@ TEST(LotusMath, an_absent_pair_is_reported_at_the_flat_error_rate) {
 }
 
 TEST(LotusMath, the_absent_case_does_not_depend_on_position) {
-	// This is what lets the likelihood sweep answer absent cells without converting a linear index,
+	// This is what lets the likelihood update answer absent cells without converting a linear index,
 	// and what makes the bulk term for never-stored cells a single constant.
 	const auto model = two_dimensions(1.1, 1.1, 0.03);
 	for (size_t first = 0; first < 3; ++first) {

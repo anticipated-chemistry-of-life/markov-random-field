@@ -4,7 +4,7 @@
 // TDataModel owns the Markov random field (the latent Y and the per-tree Z) and every source of
 // information that is compiled in. Each source is an independent likelihood term over the same Y:
 //
-//   USE_LOTUS              TLotus            reported occurrences, collapsible, research effort
+//   USE_LOTUS              TLotus            reported occurrences, research effort
 //   USE_SIMPLE_ERROR_MODEL TSimpleErrorModel a flat-error-rate noisy copy of Y
 //   USE_MS_DATA            TMSMSData         mass spectrometry (still dormant)
 //
@@ -61,6 +61,10 @@ private:
 	// the latent field: Y and, per tree, Z
 	TMarkovField _markov_field;
 
+	// the error probability standing between the two tree fields and the field; owned by TModel,
+	// moved by stattools
+	TMarkovField::TypeParamErrorProbability *_omega = nullptr;
+
 	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
 	const MarkovFieldParams &_markov_field_stattools_param;
 
@@ -104,9 +108,13 @@ private:
 	[[nodiscard]] TNotifierStats _collect_notifier_stats() const;
 
 public:
+	/// `omega` is the field's own parameter, not a data source's, so it is passed apart from
+	/// `sources`: every data source stands above the field, and the error probability stands
+	/// inside it.
 	TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSources &sources,
-	           size_t n_iterations, const MarkovFieldParams &markov_field_stattools_param,
-	           std::string prefix, bool simulate);
+	           TMarkovField::TypeParamErrorProbability *omega, size_t n_iterations,
+	           const MarkovFieldParams &markov_field_stattools_param, std::string prefix,
+	           bool simulate);
 	~TDataModel() override = default;
 
 	[[nodiscard]] std::string name() const override;
@@ -121,10 +129,15 @@ public:
 	/// the same Y, so they simply add.
 	[[nodiscard]] double getSumLogPriorDensity(const Storage &) const override;
 
-	/// Per-sheet preparation for the Y sweep: each source caches the slice of its data that the
-	/// sweep is about to walk over.
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_clique_along_last_dim,
-	                                   size_t K);
+	/// `log p(L, D | Y)`: the same sum, under the name the joint density trace asks for it by. It
+	/// is the data factor of the ADR-0005 factorisation, and stattools' own accessor takes a
+	/// storage the field has nothing to hand it.
+	///
+	/// The LOTUS records and the simple error model, and nothing else. The mass spectrometry
+	/// source is dormant -- nothing builds it, and it hangs off the field rather than this class --
+	/// so it has no term to add. A build that wakes it adds it here, or the joint density stops
+	/// being the whole of the model.
+	[[nodiscard]] double data_log_likelihood() const;
 
 	void update_markov_field();
 
@@ -142,6 +155,12 @@ public:
 	[[nodiscard]] double calculateLLRatio(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/);
 	void updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/, bool Accepted);
 #endif
+
+	// The error probability is not a data source's parameter, so it is never behind an #ifdef: the
+	// link stands between the tree fields and the field in every build.
+	[[nodiscard]] double calculateLLRatio(TMarkovField::TypeParamErrorProbability *,
+	                                      size_t /*Index*/);
+	void updateTempVals(TMarkovField::TypeParamErrorProbability *, size_t /*Index*/, bool Accepted);
 
 	// --- accessors ---
 

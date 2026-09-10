@@ -5,17 +5,17 @@
 #ifndef ACOL_TMARKOVFIELD_H
 #define ACOL_TMARKOVFIELD_H
 
-#include "TClique.h"
-#include "TCurrentState.h"
-
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
-#include "coretools/algorithms.h"
+#include "field/TFieldMath.h"
+#include "field/joint_density.h"
+#include "field/tree_field_posterior.h"
 #include "mass_spec/msms_data.h"
-#include "omp.h"
+#include "random/TCellUniforms.h"
+#include "storages/storage_backend.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -23,325 +23,136 @@
 #include <string>
 #include <vector>
 
-//-----------------------------------
-// Y sweep bookkeeping
-//-----------------------------------
-
 class TDataModel; // forward declaration
-
-/// Per-cell outcome of one Y update. Each data source keeps its own likelihood bookkeeping (they
-/// are independent terms), so the results are handed back separately instead of merged.
-struct TYUpdateResult {
-	int diff_counter_1_in_last_dim = 0;
-#ifdef USE_LOTUS
-	/// P(L_cell | x = new_state). Neutral value 1.0 (log 0), used when collapsing makes the LOTUS
-	/// term identical for both Y states and calculate_LL_update_Y leaves it untouched.
-	double prob_lotus_new_state = 1.0;
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	/// Whether the observed D cell contradicts the state Y was just set to.
-	bool simple_model_disagrees = false;
-#endif
-};
-
-/// Per-thread accumulators for one full Y sweep, committed to the data sources at the end.
-///
-/// The accumulators are bundled into a single object on purpose: `#ifdef` cannot appear inside a
-/// `#pragma omp` line, and the sweep's `default(none) shared(...)` clause has to name every
-/// variable it touches. One object keeps that clause identical in every build configuration.
-class TDataSweepAccumulator {
-private:
-#ifdef USE_LOTUS
-	std::vector<coretools::TSumLogProbability> _lotus_LL;
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	std::vector<size_t> _n_disagree;
-#endif
-
-public:
-	/// Sizing happens in the body rather than in a member-initializer list, so that adding or
-	/// removing a source does not require rebalancing the commas of a #ifdef'd init list.
-	explicit TDataSweepAccumulator(size_t n_threads) {
-#ifdef USE_LOTUS
-		_lotus_LL.resize(n_threads);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		_n_disagree.assign(n_threads, 0);
-#endif
-	}
-
-	/// Hot path: called once per updated Y cell, from inside the parallel region. Only ever touches
-	/// the slot of the calling thread.
-	void add(size_t thread, const TYUpdateResult &result) {
-#ifdef USE_LOTUS
-		_lotus_LL[thread].add(result.prob_lotus_new_state);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		_n_disagree[thread] += static_cast<size_t>(result.simple_model_disagrees);
-#endif
-	}
-
-	/// Sums the per-thread slots and installs the results in the data sources. Called once, after
-	/// the parallel region.
-	void commit(TDataModel &data_model);
-};
 
 //-----------------------------------
 // TMarkovField
 //-----------------------------------
 
 class TMarkovField {
+public:
+	/// The error probability, as stattools moves it. It hangs off TDataModel, which owns this
+	/// class and forwards the MCMC callbacks, the way the simple error model's rate does.
+	using TypeParamErrorProbability = stattools::TParameter<SpecErrorProbability, TDataModel>;
+
 private:
 	// trees and Y
 	std::vector<std::unique_ptr<TTree>> &_trees;
 	TFieldStorage _Y;
 	std::string _prefix;
 
-	// stuff for updating Y
-	size_t _K;
-	size_t _num_outer_loops;
-	IndexArray _num_leaves_per_dim_except_last{};
-	std::vector<TSheet> _sheets;
-	TCurrentState _clique_last_dim;
+	/// Whether this run simulates. It decides what every file this class writes is called, and
+	/// nothing else: a simulated configuration and an inferred chain go to different names so that
+	/// one directory can hold both.
+	bool _simulate = false;
 
 	// fix values?
 	bool _fix_Y = false;
 	bool _fix_Z = false;
 
-	// mass spectrometry data and the dimension indices of molecules/species within _trees
+	// Mass spectrometry data, still dormant. Nothing builds it. The block update does not read it
+	// either: the eight-state block takes the LOTUS and the simple-error term, and adapting a third
+	// source is that source's own work.
 	std::optional<TMSMSData> _ms_data;
 
-	// complete joint density of the markov random field
-	std::vector<double> _complete_log_density;
+	// The error probability standing between the two tree fields and the field. stattools owns the
+	// value and moves it; this is where the field reads it.
+	TypeParamErrorProbability *_omega = nullptr;
 
-	/// Was Z initialized from children ?
-	bool _z_initialized_from_children = false;
+	// The link's sufficient statistic over the whole field, n(bucket, field state). The block
+	// update tallies it as it goes and commits it here, which is what makes the error
+	// probability's likelihood O(1) in the number of cells (ADR-0005).
+	field_math::TLinkCounters _link_counters;
+
+	// Every counter tally the trace file has written, added together. The AND diagnostic is
+	// reported from these, so it pools the cells of the whole chain instead of reading one
+	// iteration. Burn-in clears them.
+	field_math::TLinkCounters _traced_link_counters;
+
+	/// Whether the chain has been started. The start runs on the first update and not in the
+	/// constructor. Initialising the internal nodes reads each clique's transition grid, and the
+	/// parameters build those.
+	bool _chain_started = false;
+
+	/// Whether --set_Y gave the field its states. The chain leaves such a field as it is, and does
+	/// not start it at the LOTUS records.
+	bool _field_came_from_a_file = false;
+
+	// The posterior of each tree field, one per tree, over the leaf-pair space the tree fields
+	// share with the field. The field's own posterior lives inside its storage; a node state
+	// carries no counter, so these stand beside them (field/tree_field_posterior.h).
+	std::vector<TTreeFieldPosterior> _tree_field_posteriors;
 
 	// output files
 	coretools::TOutputFile _Y_trace_file;
 	std::vector<coretools::TOutputFile> _Z_trace_files;
 	coretools::TOutputFile _joint_density_file;
+	coretools::TOutputFile _link_counters_file;
 
-	// functions for updating Y
-	void _update_sheets(bool first, IndexArray &start_index_in_leaves_space,
-	                    IndexArray &previous_ix, size_t K_cur_sheet);
-	void _fill_clique_along_last_dim(IndexArray start_index_in_leaves_space);
-	void _calculate_log_prob_field(const IndexArray &index_in_leaves_space,
-	                               std::array<coretools::TSumLogProbability, 2> &sum_log) const;
-	[[nodiscard]] bool _need_to_update_sheet(size_t sheet_ix,
-	                                         const IndexArray &start_index_in_leaves_space,
-	                                         const IndexArray &previous_ix) const;
-	int _set_new_Y(bool new_state, const IndexArray &index_in_leaves_space,
-	               std::vector<size_t> &linear_indices_in_Y_space_to_insert);
-	void _update_counter_1_cliques(bool new_state, bool old_state,
-	                               const IndexArray &index_in_leaves_space);
+	/// One block update: the field and both tree fields at every leaf pair, one species leaf per
+	/// thread. Defined in TMarkovField.cpp, where the model it hands the traversal is complete.
+	///
+	/// An inferred chain is the only caller. A simulated one draws its whole configuration forward
+	/// and runs no update at all (`simulate`).
+	void _update_block(TDataModel &data_model, size_t iteration);
+
+	/// Opens the field's trace file on the first iteration of a chain.
+	void _open_Y_trace_file();
+
+	/// The error probability the chain holds now.
+	[[nodiscard]] field_math::TErrorProbability _error_probability() const;
+
+	/// The link's log-likelihood, from the six counters and the current error probability.
+	[[nodiscard]] double _link_log_likelihood() const;
+
+	/// Writes the six counters of one tally, and adds them to the total the diagnostic reads.
+	/// Opens the file on first use.
+	///
+	/// The trace is not behind a flag. Six integers an iteration is what the error probability's
+	/// whole likelihood rests on, and the AND diagnostic reads nothing else.
+	void _trace_link_counters(size_t iteration);
+
+	/// Reports the two parameter-free constraints to the log file. A violation means the link is
+	/// wrong, which is a finding rather than a defect, so this throws nothing and fails nothing.
+	void _report_link_diagnostic() const;
+
+	/// The chain start: the field at the LOTUS records, both tree fields at the field, and every
+	/// internal node at what its children make most likely.
+	void _start_the_chain(const TDataModel &data_model);
+
+	/// A fixed field has to come from somewhere. Throws when the run fixed the field and gave it
+	/// no states, which is a user error rather than a chain to run.
+	void _throw_if_the_fixed_field_is_empty() const;
+
+	/// Puts both tree fields at the field, and tallies the six counters over them. The chain's
+	/// start needs it, and so does the fixed field, which has no block update to write all three
+	/// and leave the tally behind as it goes.
+	void _hold_tree_fields_at_the_field();
 
 	void _simulate_Y();
-	// These forward into the data sources. They are declared here and defined in TMarkovField.cpp
-	// (which includes TDataModel.h) because TDataModel is only forward-declared in this header:
-	// _update_Y is a template, but `data_model` is not a dependent type, so any member access on it
-	// would be checked right here against an incomplete type.
-#ifdef USE_LOTUS
-	void _calc_lotus_LL(const IndexArray &index_in_leaves_space, size_t index_for_tmp_state,
-	                    size_t leaf_index_last_dim, std::array<double, 2> &prob,
-	                    const TDataModel &data_model);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	static void _calc_simple_error_model_LL(size_t index_for_tmp_state, std::array<double, 2> &prob,
-	                                        const TDataModel &data_model);
-	[[nodiscard]] static bool _simple_error_model_disagrees(size_t index_for_tmp_state,
-	                                                        bool new_state,
-	                                                        const TDataModel &data_model);
-#endif
-	/// Per-sheet preparation: every compiled-in source caches the slice of its data that the sweep
-	/// is about to walk over.
-	static void _prepare_data_LL(const IndexArray &start_index_in_leaves_space, size_t K_cur_sheet,
-	                             TDataModel &data_model);
-	double _calculate_complete_joint_density();
-	void _reset_log_joint_density() {
-		_complete_log_density.clear();
-		_complete_log_density.resize(ProgramOptions::NUMBER_OF_THREADS);
-	}
 
-	template<bool IsSimulation, bool initYFromData>
-	TYUpdateResult _update_Y(const IndexArray &index_in_leaves_space, size_t leaf_index_last_dim,
-	                         size_t index_for_tmp_state,
-	                         std::vector<size_t> &linear_indices_in_Y_space_to_insert,
-	                         const TDataModel &data_model) {
-		auto index_copy   = index_in_leaves_space;
-		index_copy.back() = leaf_index_last_dim;
+	/// The joint density of the configuration the iteration leaves behind: both trees' node
+	/// states, the link, and the data (ADR-0005). The data term is what TDataModel sums, which is
+	/// the LOTUS records and the simple error model.
+	///
+	/// A simulated chain draws from the prior and scores no data, so its data term is zero.
+	[[nodiscard]] joint_density::TJointDensity
+	_calculate_joint_density(const TDataModel &data_model);
 
-		// prepare log probabilities for the two possible states
-		std::array<coretools::TSumLogProbability, 2> sum_log;
+	/// Writes one row of the joint density trace, opening the file on first use. Does nothing
+	/// unless the run asked for the trace: the density is a pass over both node states, which is
+	/// the cost `--write_joint_log_prob_density` exists to let a run skip.
+	void _trace_joint_density(size_t iteration, const TDataModel &data_model);
 
-		// calculate probabilities in Markov random field
-		if constexpr (!initYFromData) { _calculate_log_prob_field(index_copy, sum_log); }
-		std::array<coretools::TSumLogProbability, 2> sum_log_field = sum_log;
+	/// Counts every tree field cell that is a one now, on the iterations the field counts.
+	void _count_the_tree_fields(size_t iteration);
 
-		// Declared outside the IsSimulation branch so the simulation instantiation does not warn
-		// about an unused variable. 1.0 is the neutral value: calculate_LL_update_Y leaves prob
-		// untouched when collapsing makes the LOTUS term identical for both states, and adding
-		// log(1) = 0 is exactly the no-op that case needs.
-#ifdef USE_LOTUS
-		std::array<double, 2> prob_lotus{1.0, 1.0};
-#endif
-		if constexpr (!IsSimulation) {
-			// calculate log likelihood (lotus)
-#ifdef USE_LOTUS
-			_calc_lotus_LL(index_copy, index_for_tmp_state, leaf_index_last_dim, prob_lotus,
-			               data_model);
-			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_lotus[i]); }
-#endif
-			// calculate log likelihood (simple error model)
-#ifdef USE_SIMPLE_ERROR_MODEL
-			std::array<double, 2> prob_simple{};
-			_calc_simple_error_model_LL(index_for_tmp_state, prob_simple, data_model);
-			for (size_t i = 0; i < 2; ++i) { sum_log[i].add(prob_simple[i]); }
-#endif
-			// calculate log likelihood mass spec data
-			if (_ms_data.has_value()) { _ms_data->add_log_likelihood(index_copy, sum_log); }
-		}
-
-		// sample state
-		const bool new_state = sample(sum_log);
-
-		// update Y accordingly
-		TYUpdateResult result;
-		result.diff_counter_1_in_last_dim =
-		    _set_new_Y(new_state, index_copy, linear_indices_in_Y_space_to_insert);
-#ifdef USE_LOTUS
-		result.prob_lotus_new_state = prob_lotus[new_state];
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		if constexpr (!IsSimulation) {
-			result.simple_model_disagrees =
-			    _simple_error_model_disagrees(index_for_tmp_state, new_state, data_model);
-		}
-#endif
-
-		_complete_log_density[omp_get_thread_num()] +=
-		    sum_log_field[static_cast<size_t>(new_state)].getSum();
-
-		return result;
-	}
-
-	template<bool IsSimulation, bool initYFromData>
-	void _update_all_Y(TDataModel &data_model, size_t iteration) {
-		_reset_log_joint_density();
-
-		if (iteration == 0 && ProgramOptions::WRITE_Y_TRACE && !_Y_trace_file.isOpen() && !_fix_Y) {
-			std::vector<size_t> Y_trace_header;
-			Y_trace_header.reserve(_Y.total_size_of_container_space());
-			for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
-				Y_trace_header.push_back(i);
-			}
-			if constexpr (IsSimulation) {
-				_Y_trace_file.open(_prefix + "_simulated_Y_trace.txt", Y_trace_header, "\t");
-			} else {
-				_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
-			}
-		}
-
-		if (_fix_Y) {
-			// keep the two ifs separate because if Y is not empty, then we just return
-			if (_Y.empty()) {
-				throw coretools::TUserError(
-				    "Y is currently empty and fixed. Was Y read from a file ? "
-				    "(--set_Y)");
-			}
-			return;
-		}
-
-		// loop over sheets in last dimension
-		TDataSweepAccumulator acc(ProgramOptions::NUMBER_OF_THREADS);
-		std::vector<std::vector<size_t>> linear_indices_in_Y_space_to_insert(
-		    ProgramOptions::NUMBER_OF_THREADS);
-
-		// Persistent thread team for the whole sweep: the team is created ONCE here instead of once
-		// per inner iteration (the old `omp parallel for` sat inside the k x i loop, paying a
-		// fork/join every inner iteration). The k/i loops are now executed redundantly by all
-		// threads (SPMD) and the work is shared via `omp for`/`omp single`, turning the per-inner
-		// fork/joins into cheap barriers on a warm team.
-		// previous_ix and diff_counter_1_in_last_dim are shared across the team: previous_ix is
-		// read by all threads in _need_to_update_sheet and written in the post `single`; the
-		// reduction combines into diff_counter_1_in_last_dim (reset to 0 in the prep `single` each
-		// iteration).
-		IndexArray previous_ix;
-		int diff_counter_1_in_last_dim = 0;
-#pragma omp parallel num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)                  \
-    shared(acc, linear_indices_in_Y_space_to_insert, previous_ix, diff_counter_1_in_last_dim,      \
-               data_model)
-		{
-			for (size_t k = 0; k < _num_outer_loops; ++k) {
-				const size_t start_ix_in_leaves_last_dim = k * _K; // 0, _K, 2*_K, ...
-
-				// loop over all dimensions except last (linearized)
-				const size_t num_inner_loops =
-				    coretools::containerProduct(_num_leaves_per_dim_except_last);
-				for (size_t i = 0; i < num_inner_loops; ++i) {
-					// get multi-dimensional index from linear coordinate and set the start of the
-					// last dimension
-					auto start_index_in_leaves_space =
-					    coretools::getSubscriptsAsArray(i, _num_leaves_per_dim_except_last);
-					start_index_in_leaves_space.back() = start_ix_in_leaves_last_dim;
-					// calculate size of current sheet (make sure not to overshoot)
-					const size_t K_cur_sheet = std::min(_K, _trees.back()->get_number_of_leaves() -
-					                                            start_ix_in_leaves_last_dim);
-					// update sheet(s), if necessary. Called by ALL threads: TSheet::fill uses
-					// worksharing (omp for) and thus distributes over this team.
-					_update_sheets(i == 0, start_index_in_leaves_space, previous_ix, K_cur_sheet);
-
-					// serial prep that writes shared state, done by one thread (implicit barrier)
-#pragma omp single
-					{
-						// fill clique along last dimension
-						_fill_clique_along_last_dim(start_index_in_leaves_space);
-						_prepare_data_LL(start_index_in_leaves_space, K_cur_sheet, data_model);
-						diff_counter_1_in_last_dim = 0; // reset before the reduction below
-					}
-
-					// now loop along all leaves of the last dimension for updating (only K leaves
-					// for which we have everything)
-					const size_t end_ix_in_leaves_last_dim =
-					    start_ix_in_leaves_last_dim + K_cur_sheet;
-#pragma omp for schedule(static) reduction(+ : diff_counter_1_in_last_dim)
-					for (size_t j = start_ix_in_leaves_last_dim; j < end_ix_in_leaves_last_dim;
-					     ++j) {
-						const auto result = _update_Y<IsSimulation, initYFromData>(
-						    start_index_in_leaves_space, j, j - start_ix_in_leaves_last_dim,
-						    linear_indices_in_Y_space_to_insert[omp_get_thread_num()], data_model);
-						diff_counter_1_in_last_dim += result.diff_counter_1_in_last_dim;
-						if constexpr (!IsSimulation) {
-							acc.add(static_cast<size_t>(omp_get_thread_num()), result);
-						}
-					}
-
-					// insert new 1-valued indices into Y
-					// Note: indices of where Y is one in _sheets is not accurate anymore, but we
-					// don't use them, so it's ok
-#pragma omp single
-					{
-						_trees.back()
-						    ->get_clique(start_index_in_leaves_space)
-						    .update_counter_leaves_state_1(diff_counter_1_in_last_dim);
-						previous_ix = start_index_in_leaves_space;
-					}
-				}
-			}
-		}
-
-		_Y.insert_in_Y(linear_indices_in_Y_space_to_insert);
-		// at the very end: sum the per-thread accumulators and store them in the data sources
-		if constexpr (!IsSimulation) { acc.commit(data_model); }
-		if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) &&
-		    !_fix_Y) {
-			_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
-		}
-	}
+	/// Writes the posterior of every tree field, one file per tree, beside the field's own.
+	void _write_tree_field_posteriors() const;
 
 	void _read_Y_from_file(const std::string &filename);
 
-	template<bool IsSimulation, bool FixZ> void _update_all_Z(size_t iteration) {
+	template<bool FixZ> void _update_all_Z(size_t iteration) {
 		if (iteration == 0 && ProgramOptions::WRITE_Z_TRACE && _Z_trace_files.empty() && !_fix_Z) {
 			for (const auto &tree : _trees) {
 				std::vector<size_t> Z_trace_header;
@@ -355,7 +166,7 @@ private:
 		}
 
 		for (auto &_tree : _trees) {
-			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<IsSimulation, FixZ>(_Y);
+			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<FixZ>(iteration);
 		}
 		if (_fix_Z) { return; }
 		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
@@ -422,8 +233,26 @@ private:
 
 public:
 	TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTree>> &Trees,
-	             std::string _prefix);
+	             TypeParamErrorProbability *omega, std::string _prefix, bool simulate);
 	~TMarkovField() = default;
+
+	/// Puts the error probability's support at the open interval (0, 0.5).
+	///
+	/// The bound is a statement about the model, not a range on an argument (ADR-0005): at 0 the
+	/// link is the deterministic AND and the block update takes log(0), and at 0.5 and above the
+	/// tree fields are anti-correlated with the field. The type carries it, so the Metropolis
+	/// proposal mirrors at both ends and never leaves the interval.
+	///
+	/// Must run before stattools sizes the parameter, because the value it creates then is checked
+	/// against these bounds.
+	static void set_error_probability_support();
+
+	/// The log-likelihood ratio of the proposed error probability against the one it replaces.
+	///
+	/// O(1) in the number of cells: the counters do not move with the error probability, so this
+	/// reads six integers and no cell. stattools has already proposed when this is called, so the
+	/// parameter holds the proposal and remembers the old value.
+	[[nodiscard]] double link_log_likelihood_ratio() const;
 
 	// updates
 	void update(TDataModel &data_model, size_t iteration);
@@ -434,12 +263,11 @@ public:
 	// get Y
 	[[nodiscard]] const TFieldStorage &get_Y_matrix() const;
 
+
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();
 	void MCMCHasFinished();
 	void oneBurninHasFinished();
-
-	static size_t get_num_iterations_simulation() { return ProgramOptions::NUM_ITERATIONS; }
 };
 
 #endif // ACOL_TMARKOVFIELD_H

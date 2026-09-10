@@ -10,12 +10,11 @@ observed.
 **LOTUS.** A record is reported for a present pair with probability equal to the
 research effort spent on it, and for an absent pair with probability
 `error_rate` (`lotus_math::TReportingModel::probability`,
-src/lotus/TLotusMath.h). Research effort is a product across the kept dimensions
-of `1 - exp(-gamma_i * log(papers_i[leaf] + 1))`. Both trees are kept by default,
-so both need paper counts.
+src/lotus/TLotusMath.h). Research effort is a product across the trees of
+`1 - exp(-gamma_i * log(papers_i[leaf] + 1))`, so both trees need paper counts.
 
-Note the C++ carries one gamma *per kept dimension*; this module takes a single
-scalar and uses it for both, which is the special case the scenarios simulate.
+Note the C++ carries one gamma *per tree*; this module takes a single scalar and
+uses it for both, which is the special case the scenarios simulate.
 """
 
 from __future__ import annotations

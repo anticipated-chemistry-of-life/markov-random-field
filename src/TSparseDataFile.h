@@ -3,9 +3,8 @@
 //
 // Both sources use the same on-disk format: a header naming one tree per column, then one row per
 // cell whose state is 1, giving that cell's leaf node id in each tree. Cells not listed are 0.
-// LOTUS may name a subset of the trees (the remaining dimensions are then collapsed); the simple
-// error model always names all of them. The header validation and the node-name -> leaf-index
-// resolution are identical either way and live here.
+// Both name every tree, in tree order, so both files have exactly one column per tree. The header
+// validation and the node-name -> leaf-index resolution are shared and live here.
 //
 // Not guarded by any USE_* macro: these helpers are needed by whichever data sources are compiled
 // in, and by none of them exclusively.
@@ -13,6 +12,7 @@
 
 #pragma once
 
+#include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Main/TError.h"
 #include "tree/TTree.h"
@@ -26,6 +26,21 @@
 
 namespace sparse_data_file {
 
+/// The container space a sparse data source lives in: one dimension per tree, sized by that
+/// tree's leaf count. Both sources are indexed on every tree, so the shape follows from the trees
+/// alone -- and it is the field's shape, cell for cell.
+[[nodiscard]] inline IndexArray leaf_shape(const std::vector<std::unique_ptr<TTree>> &trees) {
+	if (trees.size() != NUMBER_OF_TREES) {
+		throw coretools::TDevError(
+		    "A sparse data source is indexed on every tree, so it holds one dimension per tree. "
+		    "There are ",
+		    trees.size(), " trees and ", NUMBER_OF_TREES, " dimensions.");
+	}
+	IndexArray shape{};
+	for (size_t i = 0; i < NUMBER_OF_TREES; ++i) { shape[i] = trees[i]->get_number_of_leaves(); }
+	return shape;
+}
+
 /// Tree names in tree order -- the header of a sparse data file that names every tree.
 [[nodiscard]] inline std::vector<std::string>
 header_from_trees(const std::vector<std::unique_ptr<TTree>> &trees) {
@@ -35,12 +50,22 @@ header_from_trees(const std::vector<std::unique_ptr<TTree>> &trees) {
 	return header;
 }
 
-/// Every header entry must name a tree, and the headers must appear in the same relative order as
-/// the trees. A file may name fewer trees than exist (LOTUS), but it may not reorder them, because
-/// column i is matched positionally against the i-th kept dimension. Throws TUserError otherwise.
+/// A file names every tree, exactly once, in tree order: column i is matched positionally against
+/// the i-th tree. Throws TUserError otherwise.
+///
+/// Both sources are indexed on every tree, so the count is pinned here rather than by each caller.
+/// That is also what turns the order check below into an exact one: with the counts equal, a header
+/// that is a subsequence of the tree names is the tree names.
 inline void validate_header_against_trees(const coretools::TInputFile &file,
                                           const std::vector<std::unique_ptr<TTree>> &trees,
                                           std::string_view filename) {
+	if (file.header().size() != trees.size()) {
+		throw coretools::TUserError("File '", filename, "' has ", file.header().size(),
+		                            " columns but there are ", trees.size(),
+		                            " trees. This data source is indexed on every tree, so the "
+		                            "file must have exactly one column per tree.");
+	}
+
 	const auto tree_names = header_from_trees(trees);
 
 	for (const auto &header_name : file.header()) {

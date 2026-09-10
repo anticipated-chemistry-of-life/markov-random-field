@@ -1,11 +1,26 @@
+//
+// The clique side of a tree: which grid a clique carries, where its cells are, and the bottom-up
+// start that gives its nodes their first states.
+//
+
 #include "../TTree.h"
 #include "constants.h"
+#include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
-#include <utility>
+#include "tree/node_state_walk.h"
 
-std::vector<TClique> &TTree::get_cliques() { return _cliques; }
+#include <array>
+#include <cstddef>
 
-const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const {
+IndexArray TTree::_clique_index(size_t c) const {
+	// The 0 this tree's own dimension carries comes from the 1 _dimension_cliques holds there.
+	// Setting that dimension to a node index gives that node's cell, which TCliqueView does and
+	// nothing else does.
+	return coretools::getSubscriptsAsArray(c, _dimension_cliques);
+}
+
+const TTransitionGrid &
+TTree::transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
 	size_t ix_clique = 0;
 	size_t stride    = 1;
 
@@ -15,12 +30,7 @@ const TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) const 
 		stride *= _dimension_cliques[i];
 	}
 
-	return _cliques[ix_clique];
-}
-
-TClique &TTree::get_clique(const IndexArray &index_in_leaves_space) {
-	// One copy of the stride arithmetic: the const overload above is the implementation.
-	return const_cast<TClique &>(std::as_const(*this).get_clique(index_in_leaves_space));
+	return transition_grid(ix_clique);
 }
 
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
@@ -34,37 +44,54 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	// we then caclulate how many cliques we will have in total for that tree. Which is the product
 	// of the number of leaves in each tree except the one we are working on (that is why we set it
 	// to 1 before).
-	const size_t n_cliques = coretools::containerProduct(_dimension_cliques);
+	const size_t clique_count = coretools::containerProduct(_dimension_cliques);
 
-	// calculate increment: product of the number of leaves of all subsequent dimensions
-	size_t increment = 1;
-	for (size_t i = _dimension + 1; i < all_trees.size(); ++i) {
-		increment *= all_trees[i]->get_number_of_leaves();
-	}
+	// One grid slot per clique, in clique order, and all of them empty. A grid needs alpha and nu,
+	// which stattools has not drawn yet. TTree::guessInitialValues installs them.
+	_transition_grids.resize(clique_count);
 
-	// initialize cliques
-	for (size_t i = 0; i < n_cliques; ++i) {
-		// get start index of each clique in leaves space
-		auto start_index_in_leaves_space = coretools::getSubscriptsAsArray(i, _dimension_cliques);
-		// The transition grid is not installed here: it needs alpha and nu, which stattools has not
-		// drawn yet. TTree::guessInitialValues does it, and asking a clique for its grid before
-		// then throws instead of reading the zero-filled matrices this used to leave behind.
-		_cliques.emplace_back(start_index_in_leaves_space, _dimension, _topology().n_nodes(),
-		                      increment);
+	for (size_t i = 0; i < clique_count; ++i) {
+		const IndexArray clique_index = _clique_index(i);
 
 		// build clique name from leaf names in all other dimensions
 		std::string name;
 		for (size_t d = 0; d < all_trees.size(); ++d) {
 			if (d == _dimension) continue;
-			size_t node_idx =
-			    all_trees[d]->get_node_index_from_leaf_index(start_index_in_leaves_space[d]);
-			if (!name.empty()) name += "_";
+			size_t node_idx = all_trees[d]->get_node_index_from_leaf_index(clique_index[d]);
+			if (!name.empty()) name += '_';
 			name += all_trees[d]->get_node_id(node_idx);
 		}
 		_clique_names.push_back(name);
 	}
 }
 
-void TTree::_simulation_prepare_cliques(size_t c, TClique &clique) const {
-	clique.set_transition_grid(TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
-};
+void TTree::_initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const {
+	// Bottom-up start of Z, as one forward walk. The internal nodes are stored as the non-root
+	// block in post-order followed by the roots (ADR-0004), so every node's children are already
+	// done by the time it comes up -- leaves before all of them, and each parent after its own
+	// children.
+	const TTransitionGrid &process = transition_grid(c);
+	for (const size_t node_index : get_internal_nodes()) {
+		_initialize_node_from_children(node_index, process, states);
+	}
+}
+
+/// Starts one internal node at the state its children make most likely. This is initialisation and
+/// not a sampler move: it runs once, before the chain's first update, and it takes the mode rather
+/// than a draw.
+void TTree::_initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
+                                           TNodeStateCliqueView &states) const {
+	std::array<coretools::TSumLogProbability, 2> sum_log;
+
+	// The same child terms the node-state walk adds, and from the same place. The start reads them
+	// alone: it has no parent term, because it takes the state the children make most likely.
+	node_state_walk::add_log_prob_of_children(_topology(), process, _previous_bins(), states,
+	                                          node_index, sum_log);
+
+	const double log_prob_0 = sum_log[0].getSum();
+	const double log_prob_1 = sum_log[1].getSum();
+
+	// The mode, not a draw: this is where the chain starts, and the first update moves it.
+	const bool most_likely_state = log_prob_1 > log_prob_0;
+	states.set_state(node_index, most_likely_state);
+}

@@ -6,28 +6,34 @@ This directory shows a couple of tests to validate the MRF model. See [here](htt
 
 ## Independent-field validation
 
-`simulate_independent.py` samples the field from a Python reference implementation
-that shares no code with the C++ binary, so a disagreement between them is a bug
-in one of the two. The reference draws one pass down the species tree — root from
-the stationary distribution, then every node given its parent — with no molecules
-tree involved at all. The molecules dimension is then pinned neutral so the C++
-model reduces to exactly that process; see
-[ADR-0001](../docs/adr/0001-neutralise-molecules-dimension-for-validation.md).
+`simulate_independent.py` draws a whole scenario from a Python reference
+implementation that shares no code with the C++ binary, so a disagreement between
+them is a bug in one of the two. **Both trees are active.** Each draws its own
+node state in one pass down its nodes — root from the stationary distribution,
+then every node given its parent, leaves included — and the field is a noisy AND
+of the two leaf blocks. Nothing is neutralised: under
+[ADR-0005](../docs/adr/0005-each-tree-owns-its-leaf-level-field.md) the reference
+is exact with both trees running, which is precisely what
+[ADR-0001](../docs/adr/0001-neutralise-molecules-dimension-for-validation.md)
+could not do.
 
 ```bash
 uv run python simulate_independent.py --seed 42     # writes a scenario directory
 cd independent_y_s255_m255_seed42
 
-bash check_neutrality_invariant.sh                  # run this first
-
-bash rung1_pin_field_and_states.sh                  # then each rung in order
+bash rung1_pin_field_and_states.sh                  # each rung in order
 uv run python validate_independent.py . rung1_pin_field_and_states
 ```
 
+The neutralised rung ADR-0005 keeps as a cheap regression check is **not** here.
+It needs a neutralised *scenario*, because a neutralised inference against a
+scenario both trees drew is a misspecified fit rather than a regression check.
+Issue #44 builds it, along with the rest of the ladder.
+
 Run the rungs in order and stop at the first failure. Each pins strictly less
 than the one before, so a failure localises the fault: rung 1 pins the field and
-both trees' internal states and is close to closed form; rung 2 adds the Z Gibbs
-sweep; rung 3 infers everything from observations, against the simple error model
+both trees' node states and is close to closed form; rung 2 adds the Z Gibbs
+update; rung 3 infers everything from observations, against the simple error model
 alone, then LOTUS alone, then both.
 
 Rung 1 is also the empirical ceiling. Its scores are what the looser rungs should
@@ -54,27 +60,38 @@ shared by every tree. It carries no `gamma` or `epsilon`, so those get no panel;
 
 Separately, `replicates.sh` runs the C++ simulator under the same parameters and
 `compare_fields.py` compares both against the analytic prediction. That tests the
-simulator; the rungs test inference.
+simulators; the rungs test inference. Five statistics: the field's density against
+the product of the two adjusted rates, each tree field's per-clique density
+against that clique's `alpha`, the rate at which the field reads 1 in each link
+bucket against `P_k`, the sibling calibration of the species tree field, and the
+six counters the C++ traced against a tally of the same cells.
 
-### What the rungs cannot see
+`--gate N` turns the report into a check: each deviation is scored against the
+scatter of the replicates themselves, and the command exits non-zero above `N`
+standard errors. The scatter comes from the replicates and not from a binomial
+formula, because the cells of one replicate are correlated along the trees.
 
-Pinning the molecules dimension neutral is what makes an independent reference
-possible, and it also makes an entire class of faults invisible. `log_nu`
-drifting downward on a doubly balanced tree is one of them.
+### The enumerable case
 
-`diagnose_normaliser.py` covers that case by shrinking the field until every
-configuration can be enumerated, so the quantity the rungs cannot reach — the
-normalising constant of the two-tree product — can be computed exactly rather
-than estimated:
+Under [ADR-0005](../docs/adr/0005-each-tree-owns-its-leaf-level-field.md) the
+joint sums to one by construction. A chain cannot check that. The sum runs over
+every `(Z_s, Z_m, Y)`. So `src/independent/enumeration.py` shrinks both trees
+until every configuration can be listed, and the suite asserts the total:
 
 ```bash
-uv run python diagnose_normaliser.py
+uv run pytest tests/test_independent.py
 ```
 
-It reports where the C++'s objective peaks against where the correctly
-normalised one does, for a molecules dimension swept from neutral to strongly
-non-neutral, and then reproduces the drift as an MCMC and removes it. See
-[ADR-0002](../docs/adr/0002-the-two-tree-product-is-unnormalised.md).
+Both trees stay active, and a test pins that they are. The same enumeration used
+to measure how far
+[ADR-0002](../docs/adr/0002-the-two-tree-product-is-unnormalised.md)'s constant
+moved with the parameters, and it ran by hand. It runs in the suite now.
+
+Read the total for what it is. It reads the two node-state densities, and it
+reads whether a variable is scored twice, which is ADR-0002's defect. It is blind
+to the shape of the link, to the error probability and to the orientation of a
+leaf block. The field rate and the reference draw pin those. The module header
+says so at more length.
 
 ### Remarks
 
@@ -86,15 +103,42 @@ non-neutral, and then reproduces the drift as an MCMC and removes it. See
   only matched up by parameter name when the filename contains `trace`,
   `simulated`, `meanVar`, `statePosteriors` or `posteriorMode`. Otherwise it must
   be a bare one-column file of exactly the right length. Renaming
-  `simulated_pinned_molecules.txt` breaks every run script.
+  `simulated_parameters.txt` breaks `replicates.sh`.
 - **Research effort is driven by log paper counts, not raw ones.** The counts
   are read raw (`read_paper_counts` in `src/lotus/paper_counts.cpp`) and the
   `log(count + 1)` is applied by `lotus_math::TReportingModel`. Simulating LOTUS
   data from raw counts is indistinguishable from an inference bug.
-- **`--numThreads all` is not reproducible.** Two identical invocations under the
-  same `--fixedSeed` give posterior means differing by ~0.2 posterior standard
-  deviations. Any test that compares runs exactly must pass `--numThreads 1`;
-  `check_neutrality_invariant.sh` does.
+- **`--numThreads all` is not reproducible for `infer`.** Two identical
+  invocations under the same `--fixedSeed` give posterior means differing by ~0.2
+  posterior standard deviations. The cell draws are hashed from their position
+  (ADR-0007); what is left is the alpha and nu moves, which still draw from the
+  thread-local generator inside the clique loop. Any test that compares `infer`
+  runs exactly must pass `--numThreads 1`. A `simulate` run is reproducible at any
+  thread count -- it is a forward draw and takes nothing from the thread-local
+  generator -- and `just parity` gates it.
 - **"internal nodes" means two different things.** The startup log line counts
-  internal nodes _excluding_ roots, while `get_number_of_internal_nodes()` — the
-  one that sizes the Z dimension — _includes_ them.
+  internal nodes _excluding_ roots, while `TPhylogeny::n_internal_nodes()`
+  _includes_ them. Neither sizes the node state any more: since ADR-0005 that
+  dimension spans every node of its tree, leaves included.
+
+## The mixing cost of dropping the block update
+
+ADR-0005 argued for the leaf layer's eight-state block update on the grounds
+that the field and both tree fields are metastable under single-variable draws at
+a small error probability, and that the failure would present as slow mixing
+rather than as a bug. Issue #68 deleted that block update. `mixing_cost/`
+measures what that costs, since slow mixing is not something a test suite trips
+over.
+
+```bash
+bash mixing_cost/run.sh
+```
+
+Two binaries — the revision before the block update was deleted, and the working
+tree — infer from one data set the reference binary simulated. The data set is
+fixed and the seed is not: the pattern of random-number consumption changed, so
+the two cannot be compared seed for seed.
+`compare_mixing.py` reads the joint density trace's autocorrelation time and both
+tree field posteriors, the second as a point on the ADR-0005 ridge.
+[`mixing_cost/README.md`](./mixing_cost/README.md) says how, and
+[`mixing_cost/findings.md`](./mixing_cost/findings.md) is the recorded result.

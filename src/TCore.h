@@ -48,6 +48,11 @@ private:
 	// Markov field parameters (only needed for stattools)
 	MarkovFieldParams _markov_field_stattools_param;
 
+	// The error probability standing between the two tree fields and the field. Not behind an
+	// #ifdef: the link stands there in every build, whichever data sources were compiled in.
+	PriorOnErrorProbability _prior_on_error_probability{};
+	TMarkovField::TypeParamErrorProbability _error_probability;
+
 #ifdef USE_LOTUS
 	// gamma
 	PriorOnGamma _prior_on_gamma{};

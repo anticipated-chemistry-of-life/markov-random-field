@@ -16,16 +16,11 @@
 
 TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees,
                                      TypeParamEpsilon *epsilon)
-    : _trees(trees), _epsilon(epsilon), _tmp_state_along_last_dim(trees.back()->phylogeny(), 1) {}
+    : _trees(trees), _epsilon(epsilon) {}
 
 void TSimpleErrorModel::initialize_storage() {
-	// D lives in the same space as Y: one dimension per tree, sized by that tree's leaf count.
-	std::vector<size_t> num_leaves_per_dim;
-	num_leaves_per_dim.reserve(_trees.size());
-	for (const auto &tree : _trees) { num_leaves_per_dim.push_back(tree->get_number_of_leaves()); }
-
-	// n_iterations = 1: D is data, its per-cell counters are never used.
-	_D.initialize(1, num_leaves_per_dim);
+	// D lives in the same space as Y, which is the shape both sparse data sources take.
+	_D.initialize_dimensions(sparse_data_file::leaf_shape(_trees));
 	_total_cells = _D.total_size_of_container_space();
 }
 
@@ -34,15 +29,7 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 	                                            filename, "' ...");
 	coretools::TInputFile file(filename, coretools::FileType::Header);
 
-	// Unlike LOTUS, D is never collapsed: it must name every tree, in tree order. The order is
-	// checked by validate_header_against_trees, so pinning the count is enough to make column i
-	// correspond to tree i.
-	if (file.header().size() != _trees.size()) {
-		throw coretools::TUserError("File '", filename, "' has ", file.header().size(),
-		                            " columns but there are ", _trees.size(),
-		                            " trees. The simple error model data is never collapsed, so it "
-		                            "must have exactly one column per tree.");
-	}
+	// D names every tree, in tree order, so column i is tree i.
 	sparse_data_file::validate_header_against_trees(file, _trees, filename);
 
 	IndexArray index_in_D_space{};
@@ -61,13 +48,6 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 
 void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
-}
-
-void TSimpleErrorModel::fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space,
-                                                      size_t K) {
-	// D has the same dimensions as Y, so the index needs no translation (in contrast to LOTUS,
-	// where the collapser maps Y space to L space first).
-	_tmp_state_along_last_dim.fill_Y_along_last_dim(start_index_in_leaves_space, K, _D);
 }
 
 void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
@@ -95,9 +75,10 @@ void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
 	coretools::TOutputFile file(file_name, sparse_data_file::header_from_trees(_trees), "\t");
 
 	std::vector<std::string> line(_trees.size());
-	for (const auto &[linear_index, storage] : _D.get_stored_entries()) {
-		if (!storage.is_one()) { continue; }
-		const auto index_in_D_space = _D.get_multi_dimensional_index(linear_index);
+	// The cells that are one, in ascending linear-index order. The file lists the ones and nothing
+	// else, so the walk needs no test of what it is handed.
+	for (auto cell = _D.ones_cursor(); cell.valid(); cell.advance()) {
+		const auto index_in_D_space = _D.get_multi_dimensional_index(cell.linear_index());
 		for (size_t i = 0; i < _trees.size(); ++i) {
 			const size_t node_index =
 			    _trees[i]->get_node_index_from_leaf_index(index_in_D_space[i]);

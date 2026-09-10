@@ -6,14 +6,16 @@
 #define TSTORAGEZ_H
 
 #include <cstdint>
-/** A single Z cell. Since Z migrated to a TSparseMatrix (like Y), the (row, col)
- * position encodes the linear index, so the element no longer needs to store its own
- * index. Z also has no MCMC counter (only Y tracks a posterior fraction of ones), so
- * the cell collapses to a single state bit stored in one byte.
+/** A single Z cell: one state bit in one byte.
+ *
+ * A node state carries no MCMC counter -- only the field tracks a posterior fraction of ones -- so
+ * a cell of one collapses to its state. Both node states hold their states as bare bytes and hand
+ * this out when a caller asks for their stored cells, which is where a written node-state file
+ * gets the state of a row from.
  */
 class TStorageZ {
 private:
-	/// 0 = false (this is also the "absent" sentinel TSparseMatrix uses), 1 = true.
+	/// 0 = false (this is also what a cell no storage holds reads as), 1 = true.
 	uint8_t _state = 0;
 
 public:
@@ -25,8 +27,8 @@ public:
 	void set_state(bool state) { _state = state ? 1 : 0; }
 	void switch_state() { _state ^= 1; }
 
-	/// "Empty" == the sentinel the sparse matrix uses for an absent cell (state false).
-	/// Equivalent to *this == TStorageZ{}.
+	/// "Empty" == what a cell no storage holds reads as (state false). Equivalent to
+	/// *this == TStorageZ{}.
 	[[nodiscard]] bool is_empty() const { return _state == 0; }
 
 	bool operator==(const TStorageZ &other) const { return _state == other._state; }

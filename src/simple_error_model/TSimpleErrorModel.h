@@ -3,7 +3,7 @@
 //
 // D is a binary matrix with exactly the same dimensions as the latent field Y: each cell of D is a
 // direct observation of the corresponding cell of Y, correct with probability 1 - epsilon and
-// inverted with probability epsilon. Unlike LOTUS, D is never collapsed and carries no notion of
+// inverted with probability epsilon. Unlike LOTUS, D carries no notion of
 // research effort -- it is deliberately the simplest possible data source, so that switching every
 // other source off isolates whether a convergence problem lives in a data likelihood or in the
 // Markov field itself.
@@ -18,7 +18,6 @@
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 
-#include "TCurrentState.h"
 #include "Types.h"
 #include "constants.h"
 #include "stattools/ParametersObservations/TParameter.h"
@@ -39,20 +38,16 @@ private:
 	const std::vector<std::unique_ptr<TTree>> &_trees;
 
 	/// the observed data, same dimensions as Y
-	TFieldStorage _D;
+	TBinaryStorage _D;
 
 	/// error rate; owned by TModel, updated by stattools
 	TypeParamEpsilon *_epsilon = nullptr;
 
 	/// Number of cells where D and Y currently disagree, and the total number of cells. The
 	/// likelihood depends on the data only through these two numbers (see TSimpleErrorModelMath.h),
-	/// so keeping the count up to date after each Y sweep makes every epsilon move O(1).
+	/// so keeping the count up to date after each field update makes every epsilon move O(1).
 	size_t _n_disagree  = 0;
 	size_t _total_cells = 0;
-
-	/// Cache of the D cells of the current sheet, filled once per sheet by the Y sweep. Mirrors
-	/// TLotus's cache: it turns the per-cell lookup inside the OpenMP loop into an array read.
-	TCurrentState _tmp_state_along_last_dim;
 
 	[[nodiscard]] double _eps() const { return (double)_epsilon->value(); }
 
@@ -67,26 +62,24 @@ public:
 	void load_from_file(const std::string &filename);
 
 	/// Synchronises the disagreement count with the current Y. Must be called once before the first
-	/// likelihood evaluation, and after anything that changes Y outside of a sweep.
+	/// likelihood evaluation, and after anything that changes Y outside of an update.
 	void guess_initial_values(const TFieldStorage &Y);
 
-	// --- hooks used by the Y sweep (see TMarkovField::_update_Y) ---
+	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	void fill_tmp_state_along_last_dim(const IndexArray &start_index_in_leaves_space, size_t K);
-
-	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1) for the cell at position
-	/// `index_for_tmp_state` within the current sheet.
-	void probabilities_for_Y_update(size_t index_for_tmp_state, std::array<double, 2> &prob) const {
-		simple_error_model::probabilities_for_both_Y_states(
-		    _tmp_state_along_last_dim.get_Y(index_for_tmp_state), _eps(), prob);
+	/// The state D holds for one cell of the field. D has the field's dimensions, so the field's
+	/// index is already D's. The update asks this one cell at a time. Nothing writes D.
+	[[nodiscard]] bool observed_state_of(const IndexArray &index_in_leaves_space) const {
+		return _D.is_one(_D.get_linear_index_in_container_space(index_in_leaves_space));
 	}
 
-	/// Whether the observed cell contradicts the state Y was just set to.
-	[[nodiscard]] bool disagrees_with(size_t index_for_tmp_state, bool new_state) const {
-		return _tmp_state_along_last_dim.get_Y(index_for_tmp_state) != new_state;
+	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1). `observed_state` is the state D
+	/// holds for the cell, which the caller reads through the accessor above.
+	void probabilities_for_Y_update(bool observed_state, std::array<double, 2> &prob) const {
+		simple_error_model::probabilities_for_both_Y_states(observed_state, _eps(), prob);
 	}
 
-	/// Installs the disagreement count accumulated over a full Y sweep.
+	/// Installs the disagreement count accumulated over a full field update.
 	void set_n_disagree(size_t n_disagree) { _n_disagree = n_disagree; }
 
 	// --- likelihood ---
@@ -114,7 +107,7 @@ public:
 
 	// --- accessors ---
 
-	[[nodiscard]] const TFieldStorage &get_D() const { return _D; }
+	[[nodiscard]] const TBinaryStorage &get_D() const { return _D; }
 	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
 };
 

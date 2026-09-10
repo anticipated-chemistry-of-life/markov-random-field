@@ -1,5 +1,7 @@
 # The two-tree product is unnormalised, which biases every parameter toward small nu
 
+_Superseded by [ADR-0005](0005-each-tree-owns-its-leaf-level-field.md), which takes the **second** of the three options listed at the end of this record: the product is replaced by a directed factorisation in which each tree owns its own leaf-level field and the field is a noisy reconciliation of the two. `C` is then identically 1 for every parameter value, so the bias described below is structurally absent rather than corrected. This record is kept because it is the evidence that the work was necessary, and because the diagnosis — two normalised factors that are functions of the same variable — is what tells a future reader which changes would bring the defect back._
+
 The field's joint density is the product of the two trees' likelihoods — `TMarkovField::_calculate_complete_joint_density` sums the two trees' log-densities and nothing else, and `TTree::_update_nu_or_alpha` forms its acceptance ratio from one tree's likelihood alone. Each factor is a properly normalised tree likelihood over its own variables. Their product is not normalised, because both are functions of the same field:
 
 ```
@@ -19,6 +21,8 @@ Under a neutral molecules dimension (ADR-0001) `p_m(Y)` is the same for every fi
 ## Evidence
 
 `model_validation/diagnose_normaliser.py` enumerates every field for two balanced trees, so `C` is computed exactly rather than estimated. With the molecules dimension neutral, the C++'s objective and the correctly normalised one peak at the same place. As molecules leaves neutrality the two separate, and the gap grows with both the strength of the molecules dimension and the size of the field: at `log_nu_molecules = -3` the peak sits 0.58 below the truth for a 2x2 field and 1.38 below for a 4x4 one. A Metropolis chain started at the truth reproduces the drift and stops drifting when `-log C` is added to the ratio, with nothing else changed.
+
+That script is gone. ADR-0005 repurposed the enumeration to assert that the new joint sums to one, and it now runs in the validation suite. `git log -- model_validation/diagnose_normaliser.py` holds the version that produced these numbers.
 
 ## Consequences
 

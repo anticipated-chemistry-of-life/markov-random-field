@@ -4,17 +4,24 @@
 #   ./run_rung.sh rung1     field and both trees' internal states pinned
 #   ./run_rung.sh rung2     field pinned, internal states inferred
 #
-# Two rungs, because rung 1 alone does not reach the Z sweep: with --Z.update
+# Two rungs, because rung 1 alone does not reach the Z update: with --Z.update
 # false the clique loop skips update_Z entirely, and with --set_<tree>_Z the
 # bottom-up initialisation returns before it does anything. Every change to
 # either of those would pass a rung-1-only gate without being run once.
 #
 # Single-threaded is not a preference, it is what makes the run reproducible.
-# coretools' TRandomGenerator is `static thread_local`, so every thread owns its
-# own stream; the sweep over cliques is `schedule(dynamic)`, so which clique is
-# drawn by which thread varies between runs. With --numThreads all the same seed
-# therefore yields a different chain each time -- verified empirically, the whole
-# species trace diverges. With --numThreads 1 the run is byte-stable.
+# Every cell draw is hashed from the cell's position now (ADR-0007), but the
+# alpha and nu moves still draw from coretools' `static thread_local`
+# TRandomGenerator inside a `schedule(dynamic)` loop over cliques. So which
+# clique is drawn by which thread varies between runs, and with --numThreads all
+# the same seed yields a different chain each time -- verified empirically, the
+# whole species trace diverges. With --numThreads 1 the run is byte-stable.
+# This is an infer run, so it is the half that is still affected; a simulate run
+# is now byte-stable at any thread count, and `just parity` gates that.
+#
+# Nothing is neutralised. Both trees are active, so the rung infers both of them
+# (ADR-0005). The manifests in this directory predate that change and have to be
+# re-recorded before they mean anything again.
 set -euo pipefail
 RUNG="${1:?usage: run_rung.sh rung1|rung2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,9 +69,5 @@ rm -rf "${RUNG}_gate" && mkdir -p "${RUNG}_gate"
     --numThreads 1 \
     --writeBurnin \
     --write_joint_log_prob_density \
-    --molecules_branch_lengths simulated_pinned_molecules.txt --molecules_branch_lengths.update false \
-    --molecules_mean_log_nu simulated_pinned_molecules.txt --molecules_mean_log_nu.update false \
-    --molecules_var_log_nu simulated_pinned_molecules.txt --molecules_var_log_nu.update false \
-    --molecules_log_nu simulated_pinned_molecules.txt --molecules_log_nu.update false \
-    --molecules_alpha simulated_pinned_molecules.txt --molecules_alpha.update false \
+    --error_probability 0.05 \
     "${pinned[@]}"

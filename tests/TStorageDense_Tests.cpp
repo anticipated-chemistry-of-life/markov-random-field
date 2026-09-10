@@ -1,6 +1,6 @@
 #include "constants.h"
 #include "storages/y_storage/TStorageYDense.h"
-#include "storages/y_storage/TStorageYMatrix.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZDense.h"
 #include "gtest/gtest.h"
 #include <cstddef>
@@ -8,7 +8,7 @@
 #include <vector>
 
 //-----------------------------------
-// TStorageZDense -- the dense internal state, which is the shared state array plus the bulk paths
+// TStorageZDense -- the dense node state, which is the shared state array plus the bulk paths
 // `Z` is asked for by name. What is asserted of the array here therefore holds of the dense field's
 // state too; the field's own suite below only has to check what the counter adds.
 //
@@ -103,60 +103,53 @@ TEST(ZStorageDense_Tests, insert_zero_outside_the_container_space_throws) {
 	EXPECT_NO_THROW(Z.insert_zero(5));
 }
 
-// increment == 1: the variable dimension is the last one -- for the sparse implementation a row
-// walk, for this one a straight run of linear indices.
-TEST(ZStorageDense_Tests, fill_current_state_along_the_last_dimension) {
+// A run of cells is a start, a count and a stride, and the caller does that arithmetic. What the
+// storage owes is that `start + k * stride` names the cell the multidimensional index names --
+// which is where a clique of a node state and a row of a field update both come from.
+
+// stride == 1: the varying dimension is the last one, so the cells are consecutive.
+TEST(ZStorageDense_Tests, a_run_along_the_last_dimension_reads_consecutive_cells) {
 	TStorageZDense Z({1, 6});
 	Z.insert_one(1);
 	Z.insert_one(3);
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Z.fill_current_state(IndexArray{0, 0}, /*K=*/6, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 1, 2, 3, 4, 5}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 1, 0, 0}));
-	// dense stores the whole container space, so every cell of the clique exists
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1, 1, 1, 1}));
+	const std::vector<uint8_t> expected{0, 1, 0, 1, 0, 0};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		EXPECT_EQ(Z.get_multi_dimensional_index(k), (IndexArray{0, k})) << "cell " << k;
+		EXPECT_EQ(Z.is_one(k), expected[k] != 0) << "cell " << k;
+	}
 }
 
-// increment > 1: the variable dimension is the first one -- a column of the matrix.
-TEST(ZStorageDense_Tests, fill_current_state_along_the_first_dimension) {
-	TStorageZDense Z({3, 2}); // 3 rows, 2 cols -> nCols == 2 == increment
+// stride > 1: the varying dimension is the first one, so the cells are one row apart.
+TEST(ZStorageDense_Tests, a_run_along_the_first_dimension_steps_by_a_row) {
+	TStorageZDense Z({3, 2}); // 3 rows, 2 cols -> a row is 2 cells wide
 	Z.insert_one(2);          // (row 1, col 0)
 	Z.insert_one(4);          // (row 2, col 0)
-	Z.insert_one(3);          // (row 1, col 1) -> not on the col-0 walk
+	Z.insert_one(3);          // (row 1, col 1) -> a cell of the other column
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Z.fill_current_state(IndexArray{0, 0}, /*K=*/3, /*increment=*/2, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 2, 4}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 1}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1}));
+	const std::vector<uint8_t> expected{0, 1, 1};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		const size_t linear = k * 2;
+		EXPECT_EQ(Z.get_multi_dimensional_index(linear), (IndexArray{k, 0})) << "cell " << k;
+		EXPECT_EQ(Z.is_one(linear), expected[k] != 0) << "cell " << k;
+	}
 }
 
-TEST(ZStorageDense_Tests, fill_current_state_honours_the_start_index) {
+TEST(ZStorageDense_Tests, a_run_that_starts_partway_along_a_row_reads_from_there) {
 	TStorageZDense Z({1, 6});
 	Z.insert_one(2);
 	Z.insert_one(4);
-	Z.insert_one(5); // past the end of the window -> must not be reported
+	Z.insert_one(5); // past the end of the run
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	// window covers columns [2, 5)
-	Z.fill_current_state(IndexArray{0, 2}, /*K=*/3, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{2, 3, 4}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{1, 0, 1}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1}));
+	const std::vector<uint8_t> expected{1, 0, 1};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		EXPECT_EQ(Z.is_one(2 + k), expected[k] != 0) << "cell " << k;
+	}
 }
 
 //-----------------------------------
-// TStorageYDense -- the dense field: the state array above, with a 16-bit counter beside it.
+// TStorageYDense -- the dense field: the dense cell array over the packed field cell, which
+// carries the posterior counter in the same word as the state.
 //-----------------------------------
 
 TEST(YStorageDense_Tests, state_round_trips_and_out_of_range_inserts_throw) {
@@ -177,17 +170,27 @@ TEST(YStorageDense_Tests, state_round_trips_and_out_of_range_inserts_throw) {
 	EXPECT_ANY_THROW(Y.insert_zero(6));
 }
 
-TEST(YStorageDense_Tests, thinning_factor_uses_the_full_16_bit_counter) {
-	// 65534 == 2 * 32767, the capacity of the sparse field's 15-bit counter. The dense counter has
-	// the sixteenth bit too, so the same chain needs no thinning at all where sparse needs half.
+TEST(YStorageDense_Tests, thinning_factor_uses_the_packed_15_bit_counter) {
+	// 65534 == 2 * 32767, the capacity of the field cell's 15-bit counter. Both fields hold that
+	// cell, so both need one iteration in two here. The equivalence of the two factors is asserted
+	// over many chain lengths in tests/TStorageConformance_Tests.cpp; this says which factor it is.
 	constexpr size_t n_iterations = 65534;
 	const TStorageYDense dense(n_iterations, {1, 4});
-	const TStorageYMatrix sparse(n_iterations, IndexArray{1, 4});
+	const TStorageYSparse sparse(n_iterations, IndexArray{1, 4});
 
-	EXPECT_EQ(dense.get_thinning_factor(), 1u);
-	EXPECT_EQ(dense.get_total_counts(), 65534u);
+	EXPECT_EQ(dense.get_thinning_factor(), 2u);
 	EXPECT_EQ(sparse.get_thinning_factor(), 2u);
-	EXPECT_EQ(sparse.get_total_counts(), 32767u);
+
+	// The counts are what a chain produced, not what its length predicts, so before one runs there
+	// is nothing to report.
+	EXPECT_EQ(dense.get_total_counts(), 0u);
+	EXPECT_EQ(sparse.get_total_counts(), 0u);
+
+	TStorageYDense dense_run(n_iterations, {1, 4});
+	for (size_t iteration = 0; iteration < n_iterations; ++iteration) {
+		dense_run.add_to_counter(iteration);
+	}
+	EXPECT_EQ(dense_run.get_total_counts(), 32767u); // one in two
 }
 
 TEST(YStorageDense_Tests, counter_accumulates_for_ones_only) {
@@ -209,17 +212,19 @@ TEST(YStorageDense_Tests, counter_accumulates_for_ones_only) {
 }
 
 TEST(YStorageDense_Tests, counter_accumulates_once_per_thinning_factor) {
-	// 196605 == 3 * 65535, so one iteration in three is counted.
-	TStorageYDense Y(196605, {1, 2});
+	// 98301 == 3 * 32767, so one iteration in three is counted.
+	TStorageYDense Y(98301, {1, 2});
 	ASSERT_EQ(Y.get_thinning_factor(), 3u);
-	ASSERT_EQ(Y.get_total_counts(), 65535u);
 	Y.insert_one(0);
 
 	for (size_t iteration = 0; iteration < 9; ++iteration) { Y.add_to_counter(iteration); }
 	EXPECT_EQ(Y.get_counter(0), 3); // iterations 0, 3 and 6
+	// the denominator counted the same three, which is what keeps the fraction a probability
+	EXPECT_EQ(Y.get_total_counts(), 3u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 1.0);
 }
 
-TEST(YStorageDense_Tests, counter_past_the_16_bit_maximum_throws) {
+TEST(YStorageDense_Tests, counter_past_the_15_bit_maximum_throws) {
 	TStorageYDense Y(TStorageYDense::MAX_COUNTER, {1, 1});
 	ASSERT_EQ(Y.get_thinning_factor(), 1u);
 	Y.insert_one(0);
@@ -283,21 +288,21 @@ TEST(YStorageDense_Tests, get_fraction_of_ones) {
 	Y.insert_one(3);
 	for (size_t iteration = 0; iteration < 4; ++iteration) { Y.add_to_counter(iteration); }
 
-	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 4.0 / static_cast<double>(Y.get_total_counts()));
+	// as in TStorageY_Tests: four of the four counted iterations, spelled without dividing the
+	// count by itself
+	EXPECT_EQ(Y.get_total_counts(), 4u);
+	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(3), 1.0);
 	// a cell that was never a one has fraction 0
 	EXPECT_DOUBLE_EQ(Y.get_fraction_of_ones(0), 0.0);
 }
 
-TEST(YStorageDense_Tests, fill_current_state_reports_every_cell_as_existing) {
+TEST(YStorageDense_Tests, a_run_of_cells_reads_the_states_the_field_holds) {
 	TStorageYDense Y(1000, {1, 4});
 	Y.insert_one(1);
 
-	std::vector<uint8_t> state;
-	std::vector<uint8_t> exists;
-	std::vector<size_t> linear;
-	Y.fill_current_state(IndexArray{0, 0}, /*K=*/4, /*increment=*/1, state, exists, linear);
-
-	EXPECT_EQ(linear, (std::vector<size_t>{0, 1, 2, 3}));
-	EXPECT_EQ(state, (std::vector<uint8_t>{0, 1, 0, 0}));
-	EXPECT_EQ(exists, (std::vector<uint8_t>{1, 1, 1, 1}));
+	const std::vector<uint8_t> expected{0, 1, 0, 0};
+	for (size_t k = 0; k < expected.size(); ++k) {
+		EXPECT_EQ(Y.get_multi_dimensional_index(k), (IndexArray{0, k})) << "cell " << k;
+		EXPECT_EQ(Y.is_one(k), expected[k] != 0) << "cell " << k;
+	}
 }

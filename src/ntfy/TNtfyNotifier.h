@@ -26,7 +26,7 @@ private:
 	void _send(const std::string &title, const std::string &message, int priority = 3,
 	           const std::string &tag = "") const;
 
-	/// Body shared by the three parameter notifications: one line per kept dimension of gamma,
+	/// Body shared by the three parameter notifications: one line per tree of gamma,
 	/// then one line per scalar. Empty vectors simply produce no lines, which is what a build
 	/// without LOTUS (no gamma, no epsilon) reports.
 	[[nodiscard]] static std::string

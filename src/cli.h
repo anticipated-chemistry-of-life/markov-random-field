@@ -10,9 +10,6 @@ class ProgramOptions {
 public:
 	static inline size_t NUMBER_OF_THREADS = 1;
 
-	static inline bool SIMULATION_NO_Z_INITIALIZATION = false;
-	static inline bool SIMULATION_NO_Y_INITIALIZATION = false;
-
 	static inline bool WRITE_Y       = false;
 	static inline bool WRITE_Y_TRACE = false;
 
@@ -21,13 +18,17 @@ public:
 
 	static inline bool WRITE_JOINT_LOG_PROB_DENSITY = false;
 
+	/// Whether to write the posterior of each tree field. It costs one counter per leaf pair per
+	/// tree, held for the whole chain, and a pass over the leaf-pair space on every counted
+	/// iteration. A run that chose the sparse field chose not to pay that for the field itself, so
+	/// it is asked for rather than assumed (ADR-0006).
+	static inline bool WRITE_TREE_FIELD_POSTERIORS = false;
+
 	static inline bool WRITE_BRANCH_LENGTHS = false;
 
 	static inline double EPSILON = 0.001;
 
 	static inline size_t BRANCH_LENGTHS_BINS = 10;
-
-	static inline size_t SHEET_SIZE_K = static_cast<size_t>(1e7);
 
 	static inline bool FIX_Y = false;
 
@@ -41,6 +42,15 @@ public:
 	/// reports the opposite of the latent state Y. Used as the simulated truth during simulation
 	/// and as the starting value of the inferred epsilon_simple_model parameter during inference.
 	static inline double EPSILON_SIMPLE_MODEL = 0.1;
+
+	/// The error probability omega: the rate at which one tree field cell is corrupted before the
+	/// two are reconciled into the field (ADR-0005). Used as the simulated truth when simulating
+	/// and as the starting value of the inferred omega parameter when inferring.
+	static inline double ERROR_PROBABILITY = 0.005;
+
+	/// The rate of the exponential prior on the error probability, truncated to (0, 0.5). A rate of
+	/// 20 puts the prior mean at 0.05. A larger rate concentrates the prior harder on small values.
+	static inline double ERROR_PROBABILITY_PRIOR_RATE = 200.0;
 
 	static inline double GAMMA = 1.1;
 
@@ -79,10 +89,6 @@ public:
 
 		NUMBER_OF_THREADS = coretools::getNumThreads();
 
-		SIMULATION_NO_Z_INITIALIZATION = params.exists("simulation_no_Z_initilisation");
-
-		SIMULATION_NO_Y_INITIALIZATION = params.exists("simulation_no_Y_initilisation");
-
 		WRITE_Y       = params.exists("write_Y");
 		WRITE_Y_TRACE = params.exists("write_Y_trace");
 
@@ -91,13 +97,23 @@ public:
 
 		WRITE_JOINT_LOG_PROB_DENSITY = params.exists("write_joint_log_prob_density");
 
+		WRITE_TREE_FIELD_POSTERIORS = params.exists("write_tree_field_posteriors");
+
 		WRITE_BRANCH_LENGTHS = params.exists("write_branch_lengths");
 
 		EPSILON = params.get<double>("epsilon", EPSILON);
 
 		BRANCH_LENGTHS_BINS = params.get<size_t>("n_bins", BRANCH_LENGTHS_BINS);
 
-		SHEET_SIZE_K = params.get("K", SHEET_SIZE_K);
+		// --K sized a sheet an older update cached. The block update reads a row at a time, so
+		// there is no sheet to size. The old default was larger than any real dimension, so every
+		// run that passed K already meant "the whole dimension". A run that still passes it stops
+		// here, rather than running to the end and reporting an unused argument.
+		if (params.exists("K")) {
+			throw coretools::TUserError("--K is gone. The block update reads a whole row of the "
+			                            "field at a time, so there is no sheet to size. Remove the "
+			                            "argument: the update already covers every leaf.");
+		}
 
 		FIX_Y = !params.get("Y.update", true);
 		FIX_Z = !params.get("Z.update", true);
@@ -113,6 +129,24 @@ public:
 			throw coretools::TUserError("--epsilon_simple_model must be strictly between 0 and 1, "
 			                            "but got ",
 			                            EPSILON_SIMPLE_MODEL, ".");
+		}
+
+		ERROR_PROBABILITY = params.get<double>("error_probability", ERROR_PROBABILITY);
+		if (ERROR_PROBABILITY <= 0.0 || ERROR_PROBABILITY >= 0.5) {
+			// The open interval is a statement about the model, not a range on an argument: at 0
+			// the link is the deterministic AND and the block update takes log(0), and at or above
+			// 0.5 the tree fields are anti-correlated with the field (ADR-0005).
+			throw coretools::TUserError("--error_probability must be strictly between 0 and 0.5, "
+			                            "but got ",
+			                            ERROR_PROBABILITY, ".");
+		}
+
+		ERROR_PROBABILITY_PRIOR_RATE =
+		    params.get<double>("error_probability_prior_rate", ERROR_PROBABILITY_PRIOR_RATE);
+		if (ERROR_PROBABILITY_PRIOR_RATE <= 0.0) {
+			throw coretools::TUserError("--error_probability_prior_rate must be strictly positive, "
+			                            "but got ",
+			                            ERROR_PROBABILITY_PRIOR_RATE, ".");
 		}
 
 		GAMMA = params.get<double>("gamma", GAMMA);
@@ -151,12 +185,22 @@ public:
 		std::cout << "--write_Z                      Write Z output\n";
 		std::cout << "--write_Z_trace                Write Z trace\n";
 		std::cout << "--write_branch_lengths         Output branch lengths\n";
+		std::cout << "--write_joint_log_prob_density  Trace the joint density, one row per "
+		             "thinned iteration. It costs a pass over both node states, so it is off "
+		             "unless asked for\n";
+		std::cout << "--write_tree_field_posteriors  Write the posterior of each tree field, one "
+		             "file per tree. It costs a counter per leaf pair per tree, so it is off "
+		             "unless asked for\n";
 		std::cout << "--lotus                        LOTUS data file (only with the 'lotus' build "
 		             "option)\n";
 		std::cout << "--simple_data                  Simple error model data file (only with the "
 		             "'simple_data' build option)\n";
 		std::cout << "--epsilon_simple_model         Error rate of the simple error model, in "
 		             "(0,1). Simulated truth when simulating, starting value when inferring\n";
+		std::cout << "--error_probability            Error probability omega, in (0,0.5). "
+		             "Simulated truth when simulating, starting value when inferring\n";
+		std::cout << "--error_probability_prior_rate Rate of the exponential prior on omega "
+		             "(> 0). A rate of 20 puts the prior mean at 0.05\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 	}

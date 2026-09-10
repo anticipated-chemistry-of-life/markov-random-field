@@ -1,5 +1,11 @@
 # Acceptance baseline for the pinned runs
 
+> **The committed manifests are stale.** They were recorded under the shared
+> field, which ADR-0005 retired. Every output moved with the model, and the rung
+> ladder is rebuilt by issue #44. Re-record with `./verify.sh --record` once that
+> ladder settles; until then `verify.sh` reports a difference it is right to
+> report.
+
 Some changes to the model are supposed to leave its output alone, bit for bit.
 This directory holds the baseline that claim is measured against: a SHA-256 per
 output file, for each of two pinned runs.
@@ -23,7 +29,7 @@ manifests do not move.
 updates move. It is the tightest run: closest to closed form, and quickest.
 
 **Rung 2** pins the field and infers the internal states, and it is not optional.
-Under rung 1's `--Z.update false` the clique loop skips `TClique::update_Z`
+Under rung 1's `--Z.update false` the clique loop skips the node-state walk
 outright, and under `--set_<tree>_Z` the bottom-up initialisation returns before
 doing anything -- so a rung-1-only gate would pass a change to either of them
 without ever having run it.
@@ -62,19 +68,23 @@ cd model_validation && uv run python simulate_independent.py --seed 42
 
 ## Why the run is single-threaded
 
-`--numThreads 1` is not a preference. coretools' `TRandomGenerator` is
-`static thread_local`, so each thread owns its own stream, and the sweep over
-cliques is `schedule(dynamic)` -- so which clique is drawn by which thread varies
-between runs. Under `--numThreads all` the same `--fixedSeed 42` therefore
-produces a different chain every time; verified empirically, the entire species
-trace diverges from line 3 onwards, while the pinned molecules side stays put.
+`--numThreads 1` is not a preference. Every cell draw is hashed from the cell's
+position now (ADR-0007), but the alpha and nu moves still draw from coretools'
+`static thread_local` `TRandomGenerator`, inside a `schedule(dynamic)` loop over
+cliques -- so which clique is drawn by which thread varies between runs. Under
+`--numThreads all` the same `--fixedSeed 42` therefore produces a different chain
+every time; verified empirically, the entire species trace diverges from line 3
+onwards, while the pinned molecules side stays put.
 
 Single-threaded, two runs agree on every output file. `acol.log` is excluded from
 the manifest regardless: it carries a per-run ntfy topic UUID and wall-clock
 timings, neither of which say anything about the model.
 
-A consequence worth knowing outside this directory: **a multi-threaded acol run
-is not reproducible from its seed.** That is a property of the harness, not of
+A consequence worth knowing outside this directory: **a multi-threaded acol
+`infer` run is not reproducible from its seed.** A `simulate` run is, at any
+thread count, because it is a forward draw and takes nothing from the
+thread-local generator; `just parity` gates that. Both are properties of the
+harness, not of
 any one refactor.
 
 ## Scope of the gate

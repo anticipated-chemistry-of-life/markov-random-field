@@ -8,11 +8,11 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import PowerNorm
 from dictances import cosine as cosine_dist
 from dictances import mae as dict_mae
 from dictances import mse as dict_mse
 from dictances import pearson as dict_pearson
+from matplotlib.colors import PowerNorm
 from scipy.stats import gaussian_kde
 from sklearn.metrics import confusion_matrix, matthews_corrcoef
 
@@ -27,7 +27,14 @@ DIM_COLORS = {"species": "#2196F3", "molecules": "#FF9800", "other": "#9E9E9E"}
 
 # scalar parameters: few enough per run that the posterior itself is worth
 # showing, so these are drawn as a trace KDE instead of a true-vs-inferred scatter
-KDE_PTYPES = {"gamma", "epsilon", "epsilon_simple_model", "mean_log_nu", "var_log_nu"}
+KDE_PTYPES = {
+    "gamma",
+    "epsilon",
+    "epsilon_simple_model",
+    "omega",
+    "mean_log_nu",
+    "var_log_nu",
+}
 
 # the parameter types that get a panel, in the order the panels are laid out;
 # anything classifying outside this list is never drawn
@@ -35,6 +42,7 @@ PLOT_ORDER = (
     "gamma",
     "epsilon",
     "epsilon_simple_model",
+    "omega",
     "alpha",
     "log_nu",
     "mean_log_nu",
@@ -61,6 +69,8 @@ def _param_type(name: str) -> str:
         return "epsilon_simple_model"
     if name == "epsilon":
         return "epsilon"
+    if name == "omega":
+        return "omega"
     if re.search(r"_alpha_", name):
         return "alpha"
     if re.search(r"_log_nu_", name) and not re.search(r"mean_log_nu|var_log_nu", name):

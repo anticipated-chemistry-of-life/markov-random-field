@@ -62,36 +62,60 @@ just build l               # debug, LOTUS only
 just run release lsm --out results/acol --numThreads all
 ```
 
-Each combination gets its own build directory (`build/<mode>-<letters>-<backend>`, e.g.
-`build/release-ls-sparse`), so switching back and forth does not trigger a rebuild.
+Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
+so switching back and forth does not trigger a rebuild.
 
-### Choosing the storage backend
+### Choosing the storage
 
-Which implementation backs the field and the internal state is likewise a compile-time decision,
-made by `-DACOL_STORAGE_BACKEND=<name>`. It selects the `using` aliases in
-`src/storages/storage_backend.h`; the interface those aliases have to satisfy is the pair of
-concepts in `src/storages/storage_concepts.h`, checked with `static_assert` rather than through
-virtual calls, so nothing on a storage access path pays for the choice.
+Which storage backs the field, and which backs the node state, are two aliases in
+`src/storages/storage_backend.h`. The two are chosen independently, and changing one is an edit to
+one line. The build system takes no part.
 
-| value    | field             | internal state    |
-| -------- | ----------------- | ----------------- |
-| `sparse` | `TStorageYMatrix` | `TStorageZMatrix` |
-| `dense`  | `TStorageYDense`  | `TStorageZDense`  |
+| storage | field             | node state        |
+| ------- | ----------------- | ----------------- |
+| sparse  | `TStorageYSparse` | `TStorageZSparse` |
+| dense   | `TStorageYDense`  | `TStorageZDense`  |
 
-`sparse` is the default and is the path to larger runs; `dense` stores the whole container space
-and is the obviously-correct implementation to check the other against. Anything else fails at
-configure time. Unlike the data sources this is not a `just` letter but an environment variable,
-because it is a different kind of choice: the letters change what the program computes, this does
-not.
+A sparse storage holds its cells in a hash map keyed by the linear index, so its memory tracks the
+number of ones rather than the size of the container space. A dense one holds an array over the
+whole space. Both hold the same cell, and a cell the storage has no entry for reads as state 0.
+
+A stored cell costs a map node and a bucket slot, which is some tens of bytes where the cell itself
+is one or two. Sparse therefore wins on memory well below **one one in twenty cells**, and not
+merely below one in two. Choose it on the fill of the container and not on its size.
+
+The interface an alias has to satisfy is the pair of concepts in
+`src/storages/storage_concepts.h`, checked with `static_assert` rather than through virtual calls,
+so nothing on a storage access path pays for the choice.
+
+#### The posterior field is thinned
+
+A field cell packs its posterior counter into the same 16-bit word as its state, which leaves the
+counter 15 bits. A chain of `n` iterations is therefore counted one iteration in
+`ceil(n / 32767)`, and that factor also decides which iterations get a trace line. Each run reports
+it to its log file.
+
+Both backends hold that cell, so both thin a chain identically. **A dense run before that was true
+counted one iteration in `ceil(n / 65535)`**, because the dense counter had a 16th bit of its own.
+A dense chain longer than 32767 iterations therefore writes a posterior field at half the previous
+resolution, and traces of half the previous length. The numbers a run produces are otherwise
+unchanged.
+
+Both defaults are **dense** for now, which is one of the two pairings CI gates.
+`docs/adr/0006-each-storage-brings-its-own-traversal.md` argues for a sparse field against a dense
+node state, on fill rather than size; that pairing is one line away when the runs need it. The
+header records which pairings CI gates.
+
+An external define overrides either alias:
 
 ```bash
-ACOL_BACKEND=dense just build release ls    # build/release-ls-dense/acol
-cmake --preset debug -DACOL_STORAGE_BACKEND=dense
+cmake --preset debug -DCMAKE_CXX_FLAGS="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=TStorageYDense"
 ```
 
-That the two agree is checked, not assumed. `just parity` builds both binaries, runs the same
-simulation and the same chain under each from a fixed seed, and compares every file they write byte
-for byte; it runs in CI on every push. See `tests/backend_parity/`.
+That is how `just parity` builds two binaries from one source tree. It gates two of the four
+pairings, sparse against sparse and dense against dense. It runs the same simulation and the same
+chain under each from a fixed seed, then compares every file they write byte for byte. It runs in
+CI on every push. See `tests/backend_parity/`.
 
 Other recipes: `just configure` (configure only), `just bin` / `just dir` (print the binary or build
 directory path), `just shell` (a shell inside the environment), `just clean`, `just distclean`.
@@ -109,4 +133,4 @@ cmake --build build/debug
 ```
 
 The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; `just` sets `ACOL_FLAG_SUFFIX` to
-the data-source letters and the storage backend, and it is empty when you invoke cmake yourself.
+the data-source letters, and it is empty when you invoke cmake yourself.
