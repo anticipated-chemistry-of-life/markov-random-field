@@ -30,3 +30,9 @@ bool write_or_defer(Storage &storage, size_t linear_index, bool state,
                     std::vector<size_t> &deferred_inserts) {
 	return write_or_defer(storage.locate(linear_index), state, deferred_inserts);
 }
+
+template<BinaryStorage Storage>
+bool write_or_defer(Storage &storage, const IndexArray &multidim_index, bool state,
+                    std::vector<size_t> &deferred_inserts) {
+	return write_or_defer(storage.locate(multidim_index), state, deferred_inserts);
+}

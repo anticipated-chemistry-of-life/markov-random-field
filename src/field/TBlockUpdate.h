@@ -64,15 +64,15 @@ struct TLeafPairFactors {
 /// The model answers one leaf pair at a time. Threads ask it at once, so `factors` reads and
 /// writes nothing a second thread also touches.
 template<typename T>
-concept BlockModel = requires(T &model, size_t species_leaf, size_t molecule_leaf,
-                              bool species_parent, bool molecule_parent,
-                              const TLeafPairFactors &factors,
-                              const field_math::TBlockStates &drawn) {
-	{
-		model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent)
-	} -> std::same_as<TLeafPairFactors>;
-	{ model.record(species_leaf, molecule_leaf, factors, drawn) } -> std::same_as<void>;
-};
+concept BlockModel =
+    requires(T &model, size_t species_leaf, size_t molecule_leaf, bool species_parent,
+	         bool molecule_parent, const TLeafPairFactors &factors,
+	         const field_math::TBlockStates &drawn) {
+	    {
+		    model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent)
+	    } -> std::same_as<TLeafPairFactors>;
+	    { model.record(species_leaf, molecule_leaf, factors, drawn) } -> std::same_as<void>;
+    };
 
 /// What one thread's share of a block update added up to.
 ///
@@ -96,7 +96,8 @@ struct TThreadTally {
 /// because the container shapes do.
 ///
 /// The field's linear index is the cell the loop hands over, because the loop walks the field's
-/// container space. The other two are asked of their own storage.
+/// container space. The two node states are addressed by the leaf pair's subscript instead, and
+/// each linearises it against its own dimensions.
 ///
 /// A write reaches the storage in place, or comes back as a deferred insert. That is the only exit
 /// a write inside a parallel region may take (ADR-0006).
@@ -107,28 +108,30 @@ void update_cell(size_t field_cell, Field &Y, NodeState &Z_species, NodeState &Z
                  const TCellUniforms &uniforms, TThreadTally &tally,
                  std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
                  std::vector<size_t> &molecule_inserts) {
+	// The loop walks the field, so `field_cell` is the field's linear index and names no cell of
+	// either node state: a linear index is `row * n_columns + column`, and the molecule node state
+	// has one column per molecule *node* where the field has one per leaf. The leaf pair is the
+	// same subscript in all three containers (ADR-0004), so the subscript is what the other two are
+	// addressed by.
 	const IndexArray leaf_pair = Y.get_multi_dimensional_index(field_cell);
 	const size_t species_leaf  = leaf_pair[0];
 	const size_t molecule_leaf = leaf_pair[1];
-
-	const size_t species_cell  = Z_species.get_linear_index_in_container_space(leaf_pair);
-	const size_t molecule_cell = Z_molecule.get_linear_index_in_container_space(leaf_pair);
 
 	// The species parent is the cell above this one in the species node state. The molecule parent
 	// is the cell beside it in the molecule node state. A leaf is never a root, so a parent is an
 	// internal node, and an internal node is never a leaf -- so no leaf pair of this update writes
 	// what this one reads there.
-	const bool species_parent  = Z_species.is_one(Z_species.get_linear_index_in_container_space(
-	    IndexArray{species.parent_of(species_leaf), molecule_leaf}));
-	const bool molecule_parent = Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space(
-	    IndexArray{species_leaf, molecule.parent_of(molecule_leaf)}));
+	const bool species_parent =
+	    Z_species.is_one(IndexArray{species.parent_of(species_leaf), molecule_leaf});
+	const bool molecule_parent =
+	    Z_molecule.is_one(IndexArray{species_leaf, molecule.parent_of(molecule_leaf)});
 
 	const TLeafPairFactors factors =
 	    model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent);
 
 	const field_math::TBlockStates current{.y   = Y.is_one(field_cell),
-	                                       .z_s = Z_species.is_one(species_cell),
-	                                       .z_m = Z_molecule.is_one(molecule_cell)};
+	                                       .z_s = Z_species.is_one(leaf_pair),
+	                                       .z_m = Z_molecule.is_one(leaf_pair)};
 
 	// The cell names the uniform it draws, so the thread that happens to reach this cell does not
 	// decide what it gets.
@@ -140,10 +143,10 @@ void update_cell(size_t field_cell, Field &Y, NodeState &Z_species, NodeState &Z
 	// place, and one that does not hands the cell back for a later insert.
 	if (current.y != draw.drawn.y) { write_or_defer(Y, field_cell, draw.drawn.y, field_inserts); }
 	if (current.z_s != draw.drawn.z_s) {
-		write_or_defer(Z_species, species_cell, draw.drawn.z_s, species_inserts);
+		write_or_defer(Z_species, leaf_pair, draw.drawn.z_s, species_inserts);
 	}
 	if (current.z_m != draw.drawn.z_m) {
-		write_or_defer(Z_molecule, molecule_cell, draw.drawn.z_m, molecule_inserts);
+		write_or_defer(Z_molecule, leaf_pair, draw.drawn.z_m, molecule_inserts);
 	}
 
 	tally.counters.add(draw.to.bucket, draw.to.y);
@@ -173,7 +176,7 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(static) default(none)                                                                 \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, tallies,           \
-               field_inserts, species_inserts, molecule_inserts, n_cells)
+	           field_inserts, species_inserts, molecule_inserts, n_cells)
 	for (size_t field_cell = 0; field_cell < n_cells; ++field_cell) {
 		const auto thread = static_cast<size_t>(omp_get_thread_num());
 		update_cell<Policy>(field_cell, Y, Z_species, Z_molecule, species, molecule, omega, model,
