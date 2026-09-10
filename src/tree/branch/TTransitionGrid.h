@@ -80,14 +80,21 @@ public:
 		}
 
 		const double delta = bins.delta();
-		// The first bin is half a step in, since bin k stands for the length at its centre.
-		_matrices[0]       = transition(alpha, nu, delta / 2.0);
 		// Step matrix is also called matrix alpha in the supplementary notes.
-		const auto step    = transition(alpha, nu, delta);
-		// Only the two base matrices are evaluated directly; the rest of the grid is walked by
-		// repeated multiplication. See docs/adr/0003 for why this is not a loop over `transition`.
-		for (size_t k = 1; k < _matrices.size(); ++k) {
-			_matrices[k] = product(_matrices[k - 1], step);
+		const auto step = transition(alpha, nu, delta);
+		// The first bin is half a step in, since bin k stands for the length at its centre. Only
+		// these two matrices are evaluated directly; the rest of the grid is walked by repeated
+		// multiplication. See docs/adr/0003 for why this is not a loop over `transition`.
+		auto matrix = transition(alpha, nu, delta / 2.0);
+
+		// The walk carries the previous bin's matrix instead of reading it back out of the vector.
+		// `_matrices[0]` after a `resize` leaves gcc unable to rule out a grid of no bins, which
+		// `TBinGrid` refuses (TBinGrid.h) where this constructor cannot see it -- so at -O3 it
+		// warns about dereferencing the null an empty vector hands back, and -Werror stops the
+		// build. Indexing nothing also states the invariant better than a guard would.
+		for (auto &bin_matrix : _matrices) {
+			bin_matrix = matrix;
+			matrix     = product(matrix, step);
 		}
 	}
 
