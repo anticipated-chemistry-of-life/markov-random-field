@@ -1,5 +1,7 @@
 # Each tree owns its leaf-level field, and the field is a noisy AND of the two
 
+_One paragraph of this record is superseded by [ADR-0008](0008-each-tree-draws-its-own-leaf-layer.md). The leaf layer is drawn one variable at a time, so the eight-state block update argued for in the consequences below no longer exists. **Everything the argument reaches still stands** -- the factorisation, the link table, the error probability's support, the six-counter collapse and the tree-field-versus-field distinction. ADR-0008 says which sentence of the support argument has to be re-read now that no block evaluates `log 0`, and it carries the measurement of what dropping the block costs -- the number this record predicted the shape of and could not give._
+
 ADR-0002 records that the field's joint density is formed as the product of the two trees' likelihoods, that the product is not normalised because both factors are functions of the same field, and that the missing constant `C(theta_s, theta_m)` drags `log_nu` downward without bound. The cause is one variable serving two processes: the field is simultaneously the leaf state of the species tree process and the leaf state of the molecule tree process.
 
 So stop sharing it. Each tree's node state extends down to its own leaves, giving that tree a complete leaf-level view of the field — its **tree field**. The field becomes a noisy reconciliation of the two, with a single **error probability** `omega`. The joint then factors as

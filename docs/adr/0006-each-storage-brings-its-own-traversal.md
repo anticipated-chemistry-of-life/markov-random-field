@@ -1,18 +1,8 @@
 # Each storage brings its own traversal, and the sampler keeps one kernel
 
-> **Status: the window is gone, and so is the sorted-vector matrix.** `open_window`, the window
-> concept, `close` and `take_buffered_inserts` were deleted once a storage could be addressed one
-> cell at a time. Both sparse storages then moved onto hash maps keyed by the linear index, so the
-> premise of the argument below -- that a point lookup costs a search of a line, and that a run of
-> cells must therefore amortise one -- no longer holds: a lookup is a hash, and the two backends
-> traverse alike.
->
-> What still stands, and what the code cites this record for, is the rest: no write inside a
-> parallel region may insert, so an absent cell that turns into a one is deferred and committed in
-> one bulk insert after the region; each storage is selected by its own alias; and the arithmetic
-> stays in one shared kernel. The readback the window owed is now the caller's, and `TCliqueView`
-> is where it is kept. Read the window and traversal sections below as the argument that was made,
-> not as the code that runs. A record superseding this one properly is still to be written.
+_Superseded by [ADR-0009](0009-a-storage-is-addressed-by-cell-handle.md), which addresses a storage by cell handle rather than through a window. The premise of the argument below -- that a sparse point lookup costs a search of a line, and that a run of cells must therefore amortise one -- no longer holds: both sparse storages hold their cells in a hash map keyed by the linear index, a lookup is a hash, and the two backends traverse alike. `open_window`, the window concept, `close` and `take_buffered_inserts` are deleted. Read the window and traversal sections below as the argument that was made, not as the code that runs._
+
+_ADR-0009 restates the four decisions here that were never about the traversal, and it is where the code should be read from: no write inside a parallel region may insert; each storage is selected by its own alias; the arithmetic stays in one shared kernel; and the parity gate rests on ADR-0007's stream. The readback the window owed is now the caller's, and `TCliqueView` is where it is kept. One section below is neither superseded nor restated -- the closed-form log link probabilities are a numerical-analysis result, `TFieldMath.h` points at them, and they stay here._
 
 ADR-0005 changed the model. This record changes the shape of the code that runs it, and it exists because that shape looks wrong from the outside: the storage seam promised one sampler over one concept, and what it delivers is **two traversals**. A reader who finds the dense path indexing a vector while the sparse path materialises a window will want to know whether that is a design or an accident.
 

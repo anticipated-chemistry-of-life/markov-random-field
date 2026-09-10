@@ -108,6 +108,10 @@ _Avoid_: likelihood, posterior, complete joint density
 The one uniform a cell's update draws, derived by hashing the seed, the stream, the tree, the iteration and the cell's linear index instead of taken from a running generator. Two cells, two iterations, two containers and two seeds share one only by chance, and the number a cell gets does not move when the thread count changes or when an update visits the cells in another order. That last property is what lets the dense and the sparse backend traverse their storage differently and still run one chain. `TCellUniforms`, `src/random/`. See ADR-0007.
 _Avoid_: random number, uniform variate, the cell's random draw
 
+**Window**:
+The strided view a storage opened over itself, given a start, a count and a stride. The term survives only to name what ADR-0006 built and ADR-0009 retired. A storage is addressed one cell at a time now: it hands an updater a pointer to the cell, and the updater writes the cell where it lies or defers the one insert it cannot make in place. ADR-0006 built the window so that each storage could bring the traversal that suits it, because a point lookup on the sorted-vector matrix cost a search of a line. Both sparse storages hold their cells in a hash map now, so a lookup is a hash and the two backends traverse alike. ADR-0009 records the two invariants the window's lifetime used to enforce for free. See ADR-0009.
+_Avoid_: slice, view, buffer, current state
+
 ## Branch lengths
 
 **Bin**:
