@@ -97,7 +97,7 @@ The field's own pass over its cells, drawing each cell from the two tree field c
 _Avoid_: Y update, Y sweep, leaf pair update
 
 **Block update**:
-The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. One thread takes a species leaf and walks the molecule leaves of its row, and the pass tallies the six link counters as it goes. The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `src/field/`. See ADR-0005 and ADR-0010.
+The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The pass is one flat parallel loop over the field's container space, one leaf pair to an iteration, and it tallies the six link counters as it goes. The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `src/field/`. See ADR-0005 and ADR-0010.
 _Avoid_: joint draw, eight-state sweep
 
 **Joint density**:

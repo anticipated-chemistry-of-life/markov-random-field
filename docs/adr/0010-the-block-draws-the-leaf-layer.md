@@ -36,9 +36,9 @@ At `omega = 0.1` the field's ratio is 1.23 against a 1.27 iteration cost, which 
 
 ## The decision
 
-**The block draws the triple.** One thread takes a species leaf and walks the molecule leaves of its row. Per leaf pair it reads five cells — the three the draw moves and the two tree parents — draws all three from the eight combinations at once, writes back the ones the draw changed, and adds the pair to the six link counters. `block_update::run`, `src/field/TBlockUpdate.h`. The arithmetic stays in `field/TFieldMath.h`.
+**The block draws the triple.** The update is one flat parallel loop over the field's container space, and a thread takes one leaf pair at a time. Per leaf pair it reads five cells — the three the draw moves and the two tree parents — draws all three from the eight combinations at once, writes back the ones the draw changed, and adds the pair to the six link counters. `block_update::update_cell` and `block_update::run`, `src/field/TBlockUpdate.h`. The arithmetic stays in `field/TFieldMath.h`.
 
-**The rows are conditionally independent.** A leaf pair's Markov blanket holds no cell of another leaf pair: it holds the two tree parents and the two data terms. A leaf is never a root and an internal node is never a leaf, so no thread writes a cell another row reads.
+**The leaf pairs are conditionally independent.** A leaf pair's Markov blanket holds no cell of another leaf pair: it holds the two tree parents and the two data terms. A leaf is never a root and an internal node is never a leaf, so no thread writes a cell another leaf pair reads. That is what lets the loop be flat over the field's cells, and the deferred-insert lists be one per thread rather than one per row.
 
 **A tree's walk covers roots and internal nodes, and `TCliqueView` refuses a leaf write.** The leaf layer is not a node state's own to draw.
 
@@ -70,7 +70,9 @@ So the reinstated binary **is** the reference binary of #69's measurement, and t
 
 **No new chains were run**, and that is a decision rather than an omission. A confirming run would measure the same source with different seeds: it would reproduce the reference column, and it could only weaken the record by inviting a reader to ask why the third digit moved.
 
-Three things after the revert do change the source, and none of them can change a chain: `field_update.h` and its tests are deleted, the `--K` message and the `--fix_Z` log line stop using a retired term, and that log line now says what the flag holds — every node above the leaves, with both tree fields still moving under the block.
+Four things after the revert do change the source. Three of them cannot change a chain: `field_update.h` and its tests are deleted, the `--K` message and the `--fix_Z` log line stop using a retired term, and that log line now says what the flag holds — every node above the leaves, with both tree fields still moving under the block.
+
+The fourth is the traversal, and it could have. The block used to split the leaf-pair space by species leaf, one row to a thread, with a deferred-insert list per row; it is now one flat loop over the field's container space with a list per thread. The conditional independence above is what makes that a free choice: every leaf pair reads state no other leaf pair's draw writes, and a cell's uniform is hashed from its position, so neither the visiting order nor the thread that arrives decides anything. **It was checked rather than argued.** One simulated data set and one inference chain on the parity fixture, same seed, one thread: 10 of 12 files and 16 of 19 files byte-identical to the row-split binary's, the rest being the log, `acol.parameters` and `acol_config.txt`, which echo the output path. A comparison at more than one thread would say nothing, because inference there is not reproducible against itself: the alpha and nu moves draw from a thread-local generator that no option seeds on a worker thread, so the same binary and the same seed give a different chain twice over. That is why the parity gate pins `--numThreads 1` as well. The unit suite's `gives_the_same_chain_at_any_thread_count` covers the seam's own share of the property, over the states and the integer counters, which is the part that does not depend on that generator.
 
 ## Considered options
 
