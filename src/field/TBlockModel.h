@@ -143,12 +143,14 @@ public:
 
 		block_update::TLeafPairFactors leaf_pair;
 		// A clique of one tree carries a leaf of every other tree, so the species tree's clique is
-		// named by the molecule leaf and the molecule tree's by the species leaf.
+		// named by the molecule leaf and the molecule tree's by the species leaf. Each tree drops
+		// the dimension it owns from the cell it is handed, so both take the whole leaf pair and
+		// neither caller names a slot to blank (ADR-0011).
 		leaf_pair.prob_z_s_is_one =
 		    prob_of_one(_species_tree.transition_grid_of_cell(cell),
 			            _species_tree.get_binned_branch_length(species_leaf), species_parent);
 		leaf_pair.prob_z_m_is_one =
-		    prob_of_one(_molecule_tree.transition_grid_of_cell(IndexArray{species_leaf, 0}),
+		    prob_of_one(_molecule_tree.transition_grid_of_cell(cell),
 			            _molecule_tree.get_binned_branch_length(molecule_leaf), molecule_parent);
 
 		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
