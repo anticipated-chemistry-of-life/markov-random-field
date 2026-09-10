@@ -144,6 +144,40 @@ set(ACOL_WARNINGS
     -Wundef
     $<$<CXX_COMPILER_ID:GNU>:-Wreturn-local-addr>)
 
+# The runtime search path for the build environment's own libraries.
+#
+# A binary built here links against the environment's libstdc++, libgomp, libz,
+# libopenblas and libarpack, and the system holds older copies of all of them
+# under the same sonames. CMake will not write a runtime search path in that
+# situation: it warns that it "cannot generate a safe runtime search path" and
+# writes none, so the loader takes the system copies and the binary fails to
+# start on a distribution whose libstdc++ predates the environment's gcc.
+# Conda sets no LD_LIBRARY_PATH either, by design, so running inside the
+# environment does not help.
+#
+# So name the directories outright. The environment's lib comes first, then
+# whichever of the compiler's own implicit link directories live inside the
+# environment -- libgomp sits in one of those, not in lib. Directories outside
+# the environment are left out, because /usr/lib is what this steps around.
+#
+# The cost: the environment's absolute path is written into the binary, so
+# moving or deleting the environment breaks it, and a binary copied to another
+# machine needs those libraries at that path. `-static-libstdc++` is the
+# alternative for a binary that travels, and it covers only libstdc++.
+set(ACOL_ENV_RPATH_DIRS "")
+if(DEFINED ENV{CONDA_PREFIX})
+  set(ACOL_ENV_RPATH_DIRS "$ENV{CONDA_PREFIX}/lib")
+  foreach(dir IN LISTS CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES)
+    # A prefix test and not a regex: a path may hold characters a regex reads.
+    string(FIND "${dir}" "$ENV{CONDA_PREFIX}/" position)
+    if(position EQUAL 0)
+      list(APPEND ACOL_ENV_RPATH_DIRS "${dir}")
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES ACOL_ENV_RPATH_DIRS)
+  message(STATUS "acol runtime search path: ${ACOL_ENV_RPATH_DIRS}")
+endif()
+
 # Everything src/**.cpp needs, regardless of which binary it ends up in. The
 # unit tests recompile src/ rather than linking a shared object library because
 # they add CHECK_INTERVALS, which changes the coretools headers the sources are
@@ -174,6 +208,12 @@ function(acol_add_common_sources target)
     target_link_libraries(${target} PRIVATE "-framework CoreFoundation"
                                             "-framework Security")
   endif()
+
+  # One flag per directory. The GNU linker takes a colon-separated list here and
+  # Apple's takes exactly one path, so the portable spelling is to repeat it.
+  foreach(dir IN LISTS ACOL_ENV_RPATH_DIRS)
+    target_link_options(${target} PRIVATE "-Wl,-rpath,${dir}")
+  endforeach()
 endfunction()
 
 # =============================================================================
