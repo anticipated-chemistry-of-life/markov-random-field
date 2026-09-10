@@ -97,7 +97,7 @@ using SpecEpsilonSimpleModel =
 // (ADR-0005). One scalar, shared by both trees.
 //
 // The support is the open interval (0, 0.5), which is a statement about the model rather than a
-// range on an argument: at 0 the link is the deterministic AND and a draw takes log(0),
+// range on an argument: at 0 the link is the deterministic AND and the block update takes log(0),
 // and at 0.5 and above the tree fields are anti-correlated with the field. No coretools interval
 // spells that, so the bounds are set at run time -- see
 // TMarkovField::set_error_probability_support, which must run before stattools sizes the parameter.

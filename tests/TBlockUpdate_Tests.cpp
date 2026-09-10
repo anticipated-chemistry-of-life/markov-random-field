@@ -1,18 +1,17 @@
 //
-// The field update's loop, over every pairing of the two storages.
+// The block update's loop, over every pairing of the two storages.
 //
-// The link is pure and tested against brute force (TFieldMath_Tests.cpp), and the storages are
+// The kernel is pure and tested against brute force (TFieldMath_Tests.cpp), and the storages are
 // conformance-tested against each other (TStorageConformance_Tests.cpp). What is left belongs to
-// the loop alone, and that is what this file asserts: every cell visited exactly once, the two tree
-// field cells read being the ones at that leaf pair, the data terms landing on the cell they were
-// scored for, the write reaching the storage, the same chain whatever the thread count, and a tally
-// that matches a naive recount of the configuration the pass left.
+// the loop alone, and that is what this file asserts: every leaf pair visited exactly once, the two
+// tree parents read being the right cells, the two data terms landing on the leaf pair they were
+// scored for, the writes reaching the storage, and the same chain whatever the thread count.
 //
-// The loop is asked those questions through a model of its own rather than through the data
-// sources, because a model the test writes can be *driven*: a data likelihood of zero for one field
-// state leaves the draw one state to take. Every write is then a known value at a known cell, and a
-// write that lands on the wrong cell is a wrong value rather than a coincidence. A stub model also
-// runs in a build that compiled no data source in.
+// The loop is asked those questions through a model of its own rather than through the trees and
+// the data sources, because a model the test writes can be *driven*: giving one tree field state no
+// mass at all, and the other field state a data likelihood of zero, leaves the draw exactly one
+// state to take. Every write is then a known value at a known cell, and a write that lands on the
+// wrong leaf pair is a wrong value rather than a coincidence.
 //
 // Every body is instantiated over all four field/node-state pairings. Continuous integration gates
 // two of them (`just parity`), so this is where the other two are exercised at all.
@@ -21,18 +20,17 @@
 #include "backend_pairings.h"
 #include "cli.h"
 #include "constants.h"
-#include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
+#include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
-#include "field/field_update.h"
 #include "field/link_backend.h"
 #include "random/TCellUniforms.h"
 #include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"
-#include "written_uniforms.h"
 #include "gtest/gtest.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -41,7 +39,8 @@
 
 namespace {
 
-/// Small enough that the link never runs degenerate, and recognisable in a failure message.
+/// Small enough that the block never sees a degenerate link, and small enough to be recognisable
+/// in a failure message.
 constexpr double OMEGA = 0.125;
 
 using backends::AllBackends;
@@ -68,48 +67,54 @@ template<typename Storage> std::vector<uint8_t> states_of(const Storage &storage
 // The models the loop is run against
 // -------------------------------------------------------------------------
 
-/// The field state one cell is driven to. An arbitrary but fixed function of the leaf pair, so that
+/// The states one leaf pair is driven to. An arbitrary but fixed function of the leaf pair, so that
 /// a write landing on the wrong cell writes the wrong value.
-bool target_at(size_t species_leaf, size_t molecule_leaf) {
+field_math::TBlockStates target_at(size_t species_leaf, size_t molecule_leaf) {
 	const uint64_t bits = (6364136223846793005ULL * (species_leaf + 1)) ^
 	                      (1442695040888963407ULL * (molecule_leaf + 3));
-	return ((bits >> 17U) & 1U) != 0U;
+	return {.y   = ((bits >> 17U) & 1U) != 0U,
+	        .z_s = ((bits >> 29U) & 1U) != 0U,
+	        .z_m = ((bits >> 41U) & 1U) != 0U};
 }
 
-/// A model that drives every cell to `target_at`, and records what the loop asked it.
+/// A model that drives every leaf pair to `target_at`, and records what the loop asked it.
 ///
-/// The forcing is what makes the recording checkable. A data likelihood of 0 for one field state
-/// leaves that state with no mass, so the draw has one state left to take whatever uniform it is
-/// given.
+/// The forcing is what makes the recording checkable. A tree factor of 0 leaves that tree field
+/// state with no mass, and a data likelihood of 0 for one field state does the same for the field,
+/// so the eight-state draw has exactly one state left to take whatever uniform it is given.
 class TForcingModel {
 public:
-	/// What the loop did at one cell.
+	/// What the loop did at one leaf pair.
 	struct TVisit {
-		size_t n_asked        = 0; ///< how often `factors` was asked about this cell
-		size_t n_recorded     = 0; ///< how often `record` was told about it
-		/// Whether `record` was handed back the factors `factors` scored this cell with.
-		bool kept_its_factors = false;
-		bool drawn            = false;
+		size_t n_asked       = 0; ///< how often `factors` was asked about this leaf pair
+		size_t n_recorded    = 0; ///< how often `record` was told about it
+		bool species_parent  = false;
+		bool molecule_parent = false;
+		field_math::TBlockStates drawn;
 	};
 
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
 	    : _n_molecule_leaves(n_molecule_leaves), _visits(n_species_leaves * n_molecule_leaves) {}
 
-	[[nodiscard]] field_update::TCellFactors factors(const IndexArray &cell) {
-		TVisit &recorded = visit(cell[0], cell[1]);
+	[[nodiscard]] block_update::TLeafPairFactors
+	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+		TVisit &recorded = visit(species_leaf, molecule_leaf);
 		++recorded.n_asked;
+		recorded.species_parent  = species_parent;
+		recorded.molecule_parent = molecule_parent;
 
-		const bool target = target_at(cell[0], cell[1]);
-		return {.lotus = {coretools::P(target ? 0.0 : 1.0), coretools::P(target ? 1.0 : 0.0)},
+		const auto target = target_at(species_leaf, molecule_leaf);
+		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
+		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
+		        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
 		        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
 	}
 
-	void record(const IndexArray &cell, const field_update::TCellFactors &factors, bool drawn) {
-		TVisit &recorded = visit(cell[0], cell[1]);
+	void record(size_t species_leaf, size_t molecule_leaf, const block_update::TLeafPairFactors &,
+	            const field_math::TBlockStates &drawn) {
+		TVisit &recorded = visit(species_leaf, molecule_leaf);
 		++recorded.n_recorded;
-		recorded.drawn            = drawn;
-		const bool target         = target_at(cell[0], cell[1]);
-		recorded.kept_its_factors = factors.lotus[1].get() == (target ? 1.0 : 0.0);
+		recorded.drawn = drawn;
 	}
 
 	[[nodiscard]] TVisit &visit(size_t species_leaf, size_t molecule_leaf) {
@@ -121,43 +126,37 @@ private:
 	std::vector<TVisit> _visits;
 };
 
-static_assert(field_update::FieldModel<TForcingModel>,
-              "The forcing model must answer what the field update asks a model.");
+static_assert(block_update::BlockModel<TForcingModel>,
+              "The forcing model must answer what the block update asks a model.");
 
-/// A model that says nothing about any cell, so the draw comes from the link alone.
-class TNeutralModel {
-public:
-	[[nodiscard]] static field_update::TCellFactors factors(const IndexArray &) { return {}; }
-	static void record(const IndexArray &, const field_update::TCellFactors &, bool) {}
-};
-
-static_assert(field_update::FieldModel<TNeutralModel>,
-              "The neutral model must answer what the field update asks a model.");
-
-/// A model that leaves the draw a real choice at every cell, and keeps no state of its own.
+/// A model that leaves the draw a real choice at every leaf pair, and keeps no state of its own.
 ///
 /// The forcing model above pins every cell, which would let a wrong uniform pass unnoticed. Here
-/// both field states carry mass, so the state a cell ends in depends on the uniform it drew --
+/// all eight states carry mass, so the state a leaf pair ends in depends on the uniform it drew --
 /// which is what makes a chain comparable between two thread counts. Being stateless is what makes
 /// it safe to run on many threads.
 class TFreeModel {
 public:
-	[[nodiscard]] static field_update::TCellFactors factors(const IndexArray &cell) {
-		// A value that depends on the whole leaf pair, so that a read of the wrong cell moves the
-		// chain.
-		const double drift = 0.1 * static_cast<double>((cell[0] + cell[1]) % 4U);
-		return {.lotus        = {coretools::P(0.4), coretools::P(0.6 - drift)},
-		        .simple_error = {coretools::P(0.55), coretools::P(0.45 + drift)}};
+	[[nodiscard]] static block_update::TLeafPairFactors
+	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+		// Values that depend on both the leaf pair and the parents, so that a read of the wrong
+		// parent, or of the wrong cell, moves the chain.
+		const double drift = 0.1 * static_cast<double>((species_leaf + molecule_leaf) % 4U);
+		return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
+		        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
+		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
+		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
 	}
 
-	static void record(const IndexArray &, const field_update::TCellFactors &, bool) {}
+	static void record(size_t, size_t, const block_update::TLeafPairFactors &,
+	                   const field_math::TBlockStates &) {}
 };
 
-static_assert(field_update::FieldModel<TFreeModel>,
-              "The free model must answer what the field update asks a model.");
+static_assert(block_update::BlockModel<TFreeModel>,
+              "The free model must answer what the block update asks a model.");
 
-/// The six counters recomputed from a whole configuration, sharing nothing with the tally the pass
-/// kept as it went.
+/// The six counters recomputed from a whole configuration, sharing nothing with the tally the
+/// update kept as it went.
 template<typename Field, typename NodeState>
 field_math::TLinkCounters recount(const Field &Y, const NodeState &Z_species,
                                   const NodeState &Z_molecule, const TTreePair &pair) {
@@ -175,10 +174,10 @@ field_math::TLinkCounters recount(const Field &Y, const NodeState &Z_species,
 	return counters;
 }
 
-/// The tallies of one pass, merged the way the caller of a field update merges them.
-field_math::TLinkCounters merged(const std::vector<field_math::TLinkCounters> &tallies) {
+/// The tallies of one run, merged the way the caller of a block update merges them.
+field_math::TLinkCounters merged(const std::vector<block_update::TThreadTally> &tallies) {
 	field_math::TLinkCounters counters;
-	for (const auto &tally : tallies) { counters.merge(tally); }
+	for (const auto &tally : tallies) { counters.merge(tally.counters); }
 	return counters;
 }
 
@@ -204,18 +203,16 @@ public:
 // The suite, over all four storage pairings
 // -------------------------------------------------------------------------
 
-template<typename Backends> class FieldUpdate : public ::testing::Test {
+template<typename Backends> class BlockUpdate : public ::testing::Test {
 public:
 	using Field     = typename Backends::field;
 	using NodeState = typename Backends::node_state;
 };
 
-TYPED_TEST_SUITE(FieldUpdate, AllBackends);
+TYPED_TEST_SUITE(BlockUpdate, AllBackends);
 
-/// Every cell is asked about once and told what it was given once, and no cell is missed. Each is
-/// handed back the factors it was scored with, which is what lets a data source keep its own
-/// likelihood bookkeeping.
-TYPED_TEST(FieldUpdate, visits_every_cell_exactly_once) {
+/// Every leaf pair is asked about once and told what it was given once, and no leaf pair is missed.
+TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
@@ -229,9 +226,9 @@ TYPED_TEST(FieldUpdate, visits_every_cell_exactly_once) {
 		seed_ones(Z_molecule, 3);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
 		                               tallies);
 
@@ -240,16 +237,15 @@ TYPED_TEST(FieldUpdate, visits_every_cell_exactly_once) {
 				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
 				EXPECT_EQ(model.visit(s, m).n_asked, 1U);
 				EXPECT_EQ(model.visit(s, m).n_recorded, 1U);
-				EXPECT_TRUE(model.visit(s, m).kept_its_factors);
 			}
 		}
 	}
 }
 
-/// The state the draw assigned is in the field afterwards, at the cell it was drawn for -- through
-/// an in-place write where the backend held the cell, and through the deferred insert where it did
-/// not.
-TYPED_TEST(FieldUpdate, writes_the_drawn_state_back) {
+/// The three states the draw assigned are in the three containers afterwards, at the leaf pair's
+/// own cell -- through an in-place write where the backend held the cell, and through the deferred
+/// insert where it did not.
+TYPED_TEST(BlockUpdate, writes_the_drawn_states_back) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
@@ -261,40 +257,36 @@ TYPED_TEST(FieldUpdate, writes_the_drawn_state_back) {
 		seed_ones(Y, 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
-
-		const std::vector<uint8_t> species_before  = states_of(Z_species);
-		const std::vector<uint8_t> molecule_before = states_of(Z_molecule);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
 		                               tallies);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
 				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
+				const auto target = target_at(s, m);
 				// the draw had one state to take, so the model was driven to the target
-				EXPECT_EQ(model.visit(s, m).drawn, target_at(s, m));
-				// and the target is what the field holds at that cell
-				EXPECT_EQ(Y.is_one(IndexArray{s, m}), target_at(s, m));
+				EXPECT_EQ(model.visit(s, m).drawn.y, target.y);
+				EXPECT_EQ(model.visit(s, m).drawn.z_s, target.z_s);
+				EXPECT_EQ(model.visit(s, m).drawn.z_m, target.z_m);
+				// and the target is what each container holds at that leaf pair
+				EXPECT_EQ(Y.is_one(IndexArray{s, m}), target.y);
+				EXPECT_EQ(Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m})),
+				          target.z_s);
+				EXPECT_EQ(Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space({s, m})),
+				          target.z_m);
 			}
 		}
-
-		// The pass draws the field alone. Both tree fields are their own tree's to draw.
-		EXPECT_EQ(states_of(Z_species), species_before);
-		EXPECT_EQ(states_of(Z_molecule), molecule_before);
 	}
 }
 
-/// The two tree field cells the loop reads are the ones at its own leaf pair.
-///
-/// With no data source saying anything and a uniform of exactly one half, the link decides the
-/// cell: two tree fields at one put the field at one, and any other pair puts it at zero. So the
-/// field the pass leaves is the AND of the two tree fields, and a read of the wrong cell shows up
-/// as a wrong state.
-TYPED_TEST(FieldUpdate, reads_the_tree_field_cells_of_its_own_leaf_pair) {
+/// The two tree parents the loop reads are the cells the two topologies name: the species parent's
+/// cell in the same column, and the molecule parent's cell in the same row.
+TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
@@ -307,34 +299,36 @@ TYPED_TEST(FieldUpdate, reads_the_tree_field_cells_of_its_own_leaf_pair) {
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
 
-		// (1 - omega)^2 is above one half and both other buckets are below it, so one half splits
-		// the three buckets exactly where the AND does.
-		ASSERT_GT(TLinkPolicy::prob_for_bucket(2, field_math::TErrorProbability(OMEGA)), 0.5);
-		ASSERT_LT(TLinkPolicy::prob_for_bucket(1, field_math::TErrorProbability(OMEGA)), 0.5);
+		// What the parents read before the update. The update writes leaves only, and a parent is
+		// an internal node, so these are what the loop had to see.
+		std::vector<uint8_t> species_before  = states_of(Z_species);
+		std::vector<uint8_t> molecule_before = states_of(Z_molecule);
 
-		TNeutralModel model;
-		std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
-		const uniforms::TWrittenUniforms uniforms(Y.total_size_of_container_space(), 0.5);
-		field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
+		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		const TCellUniforms uniforms(4242, TCellStream::field, 0);
+		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
 		                               tallies);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
 				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
-				const bool z_s =
-				    Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m}));
-				const bool z_m =
-				    Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space({s, m}));
-				EXPECT_EQ(Y.is_one(IndexArray{s, m}), z_s && z_m);
+				const size_t species_parent = Z_species.get_linear_index_in_container_space(
+				    IndexArray{pair.species.parent_of(s), m});
+				const size_t molecule_parent = Z_molecule.get_linear_index_in_container_space(
+				    IndexArray{s, pair.molecule.parent_of(m)});
+				EXPECT_EQ(model.visit(s, m).species_parent, species_before[species_parent] != 0);
+				EXPECT_EQ(model.visit(s, m).molecule_parent, molecule_before[molecule_parent] != 0);
 			}
 		}
 	}
 }
 
-/// One thread and many give the same field and the same six counters. A cell's uniform is hashed
-/// from its position (ADR-0007), so the thread that reaches it does not decide what it gets.
-TYPED_TEST(FieldUpdate, gives_the_same_chain_at_any_thread_count) {
+/// One thread and many give the same three containers and the same six counters. A cell's uniform
+/// is hashed from its position (ADR-0007), so the thread that reaches it does not decide what it
+/// gets.
+TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
@@ -352,18 +346,21 @@ TYPED_TEST(FieldUpdate, gives_the_same_chain_at_any_thread_count) {
 			seed_ones(Z_molecule, 3);
 
 			TFreeModel model;
-			std::vector<field_math::TLinkCounters> tallies(n_threads);
+			std::vector<block_update::TThreadTally> tallies(n_threads);
 			const TCellUniforms uniforms(4242, TCellStream::field, 7);
-			field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 			                               field_math::TErrorProbability(OMEGA), model, uniforms,
 			                               tallies);
-			return std::tuple{states_of(Y), merged(tallies)};
+			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
+			                  merged(tallies)};
 		};
 
-		const auto [one_Y, one_counters]   = run_once(1);
-		const auto [many_Y, many_counters] = run_once(4);
+		const auto [one_Y, one_species, one_molecule, one_counters]     = run_once(1);
+		const auto [many_Y, many_species, many_molecule, many_counters] = run_once(4);
 
 		EXPECT_EQ(one_Y, many_Y);
+		EXPECT_EQ(one_species, many_species);
+		EXPECT_EQ(one_molecule, many_molecule);
 		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
 			for (const bool y : {false, true}) {
 				EXPECT_EQ(one_counters.count(bucket, y), many_counters.count(bucket, y));
@@ -372,9 +369,9 @@ TYPED_TEST(FieldUpdate, gives_the_same_chain_at_any_thread_count) {
 	}
 }
 
-/// The counters the pass accumulated are the tally of the configuration it left behind, and they
-/// count every cell once.
-TYPED_TEST(FieldUpdate, counters_tally_the_configuration_it_left) {
+/// The counters the update accumulated are the tally of the configuration it left behind, and they
+/// count every leaf pair once.
+TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
@@ -389,9 +386,9 @@ TYPED_TEST(FieldUpdate, counters_tally_the_configuration_it_left) {
 		seed_ones(Z_molecule, 3);
 
 		TFreeModel model;
-		std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 		const TCellUniforms uniforms(4242, TCellStream::field, 11);
-		field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
 		                               tallies);
 
@@ -409,36 +406,13 @@ TYPED_TEST(FieldUpdate, counters_tally_the_configuration_it_left) {
 	}
 }
 
-/// A tally short of one per thread is rejected before the region opens.
+/// The two backends leave the same three containers and the same six counters.
 ///
-/// A thread writes the tally at its own index, so a short vector would be a write past the end from
-/// inside a parallel region. The caller sizes the vector, because the caller merges it.
-TYPED_TEST(FieldUpdate, rejects_fewer_tallies_than_threads) {
-	using Field     = typename TestFixture::Field;
-	using NodeState = typename TestFixture::NodeState;
-
-	const auto &pair = tree_pairs().front();
-	const TThreadCount threads(3);
-	auto Y          = make_storage<Field>(field_shape(pair));
-	auto Z_species  = make_storage<NodeState>(species_shape(pair));
-	auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
-
-	TFreeModel model;
-	std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS - 1);
-	const TCellUniforms uniforms(4242, TCellStream::field, 0);
-	EXPECT_THROW(field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
-	                                            field_math::TErrorProbability(OMEGA), model,
-	                                            uniforms, tallies),
-	             coretools::err::TError);
-}
-
-/// The two backends leave the same field and the same six counters.
-///
-/// The whole-binary gate (`just parity`) asserts this of a chain. Here it is asserted of one pass,
-/// where a failure names the loop rather than the run that diverged from it. The sparse storages
-/// hold only the cells they were given, so this is also where a deferred insert is compared against
-/// the write the dense storages take in place.
-TEST(FieldUpdate, gives_the_same_chain_under_both_backends) {
+/// The whole-binary gate (`just parity`) asserts this of a chain. Here it is asserted of one
+/// update, where a failure names the loop rather than the run that diverged from it. The sparse
+/// storages hold only the cells they were given, so this is also where a deferred insert is
+/// compared against the write the dense storages take in place.
+TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 
@@ -451,20 +425,23 @@ TEST(FieldUpdate, gives_the_same_chain_under_both_backends) {
 			seed_ones(Z_molecule, 3);
 
 			TFreeModel model;
-			std::vector<field_math::TLinkCounters> tallies(ProgramOptions::NUMBER_OF_THREADS);
+			std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
 			const TCellUniforms uniforms(4242, TCellStream::field, 13);
-			field_update::run<TLinkPolicy>(Y, Z_species, Z_molecule,
+			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 			                               field_math::TErrorProbability(OMEGA), model, uniforms,
 			                               tallies);
-			return std::tuple{states_of(Y), merged(tallies)};
+			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
+			                  merged(tallies)};
 		};
 
-		const auto [dense_Y, dense_counters] =
+		const auto [dense_Y, dense_species, dense_molecule, dense_counters] =
 		    run_once.template operator()<TStorageYDense, TStorageZDense>();
-		const auto [sparse_Y, sparse_counters] =
+		const auto [sparse_Y, sparse_species, sparse_molecule, sparse_counters] =
 		    run_once.template operator()<TStorageYSparse, TStorageZSparse>();
 
 		EXPECT_EQ(dense_Y, sparse_Y);
+		EXPECT_EQ(dense_species, sparse_species);
+		EXPECT_EQ(dense_molecule, sparse_molecule);
 		for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
 			for (const bool y : {false, true}) {
 				EXPECT_EQ(dense_counters.count(bucket, y), sparse_counters.count(bucket, y));

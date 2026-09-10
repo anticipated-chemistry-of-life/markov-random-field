@@ -164,45 +164,4 @@ void run(Field &Y, const NodeState &Z_species, const NodeState &Z_molecule,
 	Y.insert_in_Y(field_inserts);
 }
 
-/// The six counters over a whole configuration, with nothing drawn.
-///
-/// A held field still has to be retallied every iteration. Its own states do not move, but the two
-/// tree fields underneath it were just drawn by their trees, so the bucket a leaf pair falls in
-/// moves even where its field state does not -- and the error probability is scored against the
-/// tally the iteration leaves (ADR-0005).
-///
-/// It reads the three cells `update_cell` reads, the same way, and writes none of them. It splits
-/// the cells over the threads the way the pass above does, so holding the field is never the slower
-/// configuration.
-///
-/// The tallies are merged here rather than handed out. There is no draw beside them for a caller to
-/// interleave, so nothing outside wants the shares. Merging is exact integer addition, so the six
-/// numbers do not move with the thread count.
-template<field_math::LinkPolicy Policy, BinaryStorage Field, BinaryStorage NodeState>
-[[nodiscard]] field_math::TLinkCounters tally(const Field &Y, const NodeState &Z_species,
-                                              const NodeState &Z_molecule) {
-	// One tally per thread. A thread sees a share of the cells, and a share of a whole
-	// configuration is what `add` alone builds -- no count can go below zero.
-	// Not const: OpenMP made a const variable predetermined shared before version 4.0 and does not
-	// now, so a `default(none)` clause that names one is right under some compilers and wrong under
-	// others.
-	std::vector<field_math::TLinkCounters> shares(ProgramOptions::NUMBER_OF_THREADS);
-	size_t n_cells = Y.total_size_of_container_space();
-
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(static) default(none) shared(Y, Z_species, Z_molecule, shares, n_cells)
-	for (size_t field_cell = 0; field_cell < n_cells; ++field_cell) {
-		const IndexArray leaf_pair = Y.get_multi_dimensional_index(field_cell);
-		const bool z_s = Z_species.is_one(Z_species.get_linear_index_in_container_space(leaf_pair));
-		const bool z_m =
-		    Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space(leaf_pair));
-		shares[static_cast<size_t>(omp_get_thread_num())].add(Policy::bucket(z_s, z_m),
-		                                                      Y.is_one(field_cell));
-	}
-
-	field_math::TLinkCounters counters;
-	for (const auto &share : shares) { counters.merge(share); }
-	return counters;
-}
-
 } // namespace field_update

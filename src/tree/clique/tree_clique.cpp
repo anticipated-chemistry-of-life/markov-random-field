@@ -65,7 +65,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	}
 }
 
-void TTree::_initialize_clique_from_children(size_t c, TNodeStateStartView &states) const {
+void TTree::_initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const {
 	// Bottom-up start of Z, as one forward walk. The internal nodes are stored as the non-root
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
@@ -80,7 +80,7 @@ void TTree::_initialize_clique_from_children(size_t c, TNodeStateStartView &stat
 /// not a sampler move: it runs once, before the chain's first update, and it takes the mode rather
 /// than a draw.
 void TTree::_initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
-                                           TNodeStateStartView &states) const {
+                                           TNodeStateCliqueView &states) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 
 	// The same child terms the node-state walk adds, and from the same place. The start reads them

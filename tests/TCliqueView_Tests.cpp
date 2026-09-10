@@ -300,14 +300,13 @@ TYPED_TEST(CliqueView, a_view_writes_no_cell_outside_its_own_clique) {
 }
 
 #ifndef NDEBUG
-TYPED_TEST(CliqueView, a_view_the_chain_start_holds_refuses_a_write_to_a_leaf) {
-	// The chain start assigns internal nodes: it starts each of them at the state its children
-	// make most likely, and the leaves below it already carry the states it reads. The view is the
-	// only place left that can catch a write to the wrong block.
-	using StartView = TCliqueView<TypeParam, TCliqueWrites::internal_nodes>;
+TYPED_TEST(CliqueView, a_view_the_update_holds_refuses_a_write_to_a_leaf) {
+	// The update assigns internal nodes. A leaf's state is drawn with the field and the other
+	// tree's leaf, as one block, and not there. The view is the only place left that can catch a
+	// write to the wrong block. The distinction goes when the update covers leaves.
 	for_every_clique<TypeParam>(
 	    [](auto &Z, const TPhylogeny &topology, const IndexArray &clique, size_t dimension) {
-		    StartView view(Z, topology, clique, dimension);
+		    TCliqueView<TypeParam> view(Z, topology, clique, dimension);
 		    for (const size_t leaf : topology.leaves()) {
 			    EXPECT_ANY_THROW(view.set_state(leaf, true)) << "leaf " << leaf;
 			    // A write of the state the cell already carries is dropped, but not before the
@@ -319,17 +318,18 @@ TYPED_TEST(CliqueView, a_view_the_chain_start_holds_refuses_a_write_to_a_leaf) {
 }
 #endif
 
-TYPED_TEST(CliqueView, a_view_the_update_holds_writes_every_node) {
-	// A tree's update draws its whole node state, leaves included, because a tree field is the
-	// leaf block of it. So does a simulation's forward draw. That is the default view, and it
-	// takes the write the chain start's view refuses.
+TYPED_TEST(CliqueView, a_view_the_forward_draw_holds_writes_every_node) {
+	// The other walk: a simulation draws a whole node state, leaves included, because a simulated
+	// tree field is drawn with the rest of it. So the same view, told which walk holds it, takes
+	// the write the update's view refuses.
+	using SimulationView = TCliqueView<TypeParam, TCliqueWrites::every_node>;
 	for_every_clique<TypeParam>([](auto &Z, const TPhylogeny &topology, const IndexArray &clique,
 	                               size_t dimension) {
 		std::vector<uint8_t> expected(Z.total_size_of_container_space(), 0);
 
 		std::vector<size_t> deferred;
 		{
-			TCliqueView<TypeParam> view(Z, topology, clique, dimension);
+			SimulationView view(Z, topology, clique, dimension);
 			for (size_t node = 0; node < topology.n_nodes(); ++node) {
 				const bool state = node % 3 != 0;
 				view.set_state(node, state);
