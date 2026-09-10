@@ -155,10 +155,16 @@ set(ACOL_WARNINGS
 # Conda sets no LD_LIBRARY_PATH either, by design, so running inside the
 # environment does not help.
 #
-# So name the directories outright. The environment's lib comes first, then
-# whichever of the compiler's own implicit link directories live inside the
-# environment -- libgomp sits in one of those, not in lib. Directories outside
-# the environment are left out, because /usr/lib is what this steps around.
+# So name the directories outright: the environment's lib, and the compiler's
+# own runtime directory beside it, which is where libgomp sits.
+#
+# Nothing else, and the list is a whitelist on purpose. Most of the compiler's
+# implicit link directories are build-time ones. The sysroot holds the glibc
+# the compiler links against, so that the binary runs on an older system than
+# the one that built it -- put it on a runtime search path and the loader pairs
+# the system's ld.so with that libc, which fails as an undefined GLIBC_PRIVATE
+# symbol. lib/stubs holds libraries that exist only to satisfy a link. Either
+# one on the path is a binary that does not start.
 #
 # The cost: the environment's absolute path is written into the binary, so
 # moving or deleting the environment breaks it, and a binary copied to another
@@ -169,7 +175,9 @@ if(DEFINED ENV{CONDA_PREFIX})
   set(ACOL_ENV_RPATH_DIRS "$ENV{CONDA_PREFIX}/lib")
   foreach(dir IN LISTS CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES)
     # A prefix test and not a regex: a path may hold characters a regex reads.
-    string(FIND "${dir}" "$ENV{CONDA_PREFIX}/" position)
+    # The trailing slash matters -- it admits the versioned directory under
+    # lib/gcc and not lib/gcc itself, which holds no library.
+    string(FIND "${dir}" "$ENV{CONDA_PREFIX}/lib/gcc/" position)
     if(position EQUAL 0)
       list(APPEND ACOL_ENV_RPATH_DIRS "${dir}")
     endif()
