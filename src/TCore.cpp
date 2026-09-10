@@ -73,7 +73,6 @@ void TModel::_create_trees() {
 	// read filenames
 	std::string filename_tree_species   = parameters().get("tree_species");
 	std::string filename_tree_molecules = parameters().get("tree_molecules");
-	std::vector<std::string> filenames_tree_others;
 
 	_trees.reserve(NUMBER_OF_TREES);
 
