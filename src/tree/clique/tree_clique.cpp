@@ -6,31 +6,20 @@
 #include "../TTree.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
-#include "coretools/algorithms.h"
 #include "tree/node_state_walk.h"
 
 #include <array>
 #include <cstddef>
 
 IndexArray TTree::_clique_index(size_t c) const {
-	// The 0 this tree's own dimension carries comes from the 1 _dimension_cliques holds there.
-	// Setting that dimension to a node index gives that node's cell, which TCliqueView does and
-	// nothing else does.
-	return coretools::getSubscriptsAsArray(c, _dimension_cliques);
+	// Setting this tree's own dimension to a node index gives that node's cell, which TCliqueView
+	// does and nothing else does.
+	return _cliques().index_of(c);
 }
 
 const TTransitionGrid &
 TTree::transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
-	size_t ix_clique = 0;
-	size_t stride    = 1;
-
-	for (size_t i = 0; i < _dimension_cliques.size(); ++i) {
-		const size_t idx = (i == _dimension) ? 0 : index_in_leaves_space[i];
-		ix_clique += idx * stride;
-		stride *= _dimension_cliques[i];
-	}
-
-	return transition_grid(ix_clique);
+	return transition_grid(_cliques().clique_of(index_in_leaves_space));
 }
 
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
@@ -38,13 +27,11 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 	// clique of a tree: runs along that dimension
 	// the cliques of a tree are can only contain leaves in all trees except the one we are working
 	// on.
-	_dimension_cliques             = num_leaves_per_tree;
-	_dimension_cliques[_dimension] = 1;
+	// Clique space carries the extents and the convention (ADR-0011). It puts a 1 in this tree's
+	// own dimension, which is what makes the count below the product over every other tree.
+	_clique_space.emplace(num_leaves_per_tree, _dimension);
 
-	// we then caclulate how many cliques we will have in total for that tree. Which is the product
-	// of the number of leaves in each tree except the one we are working on (that is why we set it
-	// to 1 before).
-	const size_t clique_count = coretools::containerProduct(_dimension_cliques);
+	const size_t clique_count = _cliques().n_cliques();
 
 	// One grid slot per clique, in clique order, and all of them empty. A grid needs alpha and nu,
 	// which stattools has not drawn yet. TTree::guessInitialValues installs them.

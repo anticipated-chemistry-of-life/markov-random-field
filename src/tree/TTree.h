@@ -21,6 +21,7 @@
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/clique/TCliqueSpace.h"
 #include "tree/clique/TCliqueView.h"
 #include "tree/node_state_density.h"
 #include "tree/node_state_walk.h"
@@ -77,8 +78,13 @@ private:
 	/// empty until then, so asking for one before the parameters are drawn throws instead of
 	/// reading a grid of zeros.
 	std::vector<std::optional<TTransitionGrid>> _transition_grids;
-	IndexArray _dimension_cliques;
+
+	// The cliques of this tree, numbered. Set once by _initialize_cliques; every use goes through
+	// _cliques(), which throws rather than reading extents nothing has filled in yet.
+	std::optional<TCliqueSpace<>> _clique_space;
 	std::vector<std::string> _clique_names;
+
+	[[nodiscard]] const TCliqueSpace<> &_cliques() const { return _clique_space.value(); }
 
 	// Nus
 	TypeParamLogNu *_log_nu_c = nullptr;
@@ -116,11 +122,7 @@ private:
 	                                          const TNodeStateCliqueView &states) const;
 
 	/// The multidimensional index of clique `c`: a leaf in every dimension but this tree's own,
-	/// which carries a 0.
-	///
-	/// It reads `c` as a row-major subscript, and transition_grid_of_cell walks a column-major
-	/// stride. The two agree because clique space has one dimension above 1, this tree's own
-	/// carrying a 1 and there being two trees. A third tree would need one convention here.
+	/// which carries a 0. Clique space owns the convention (ADR-0011).
 	[[nodiscard]] IndexArray _clique_index(size_t c) const;
 
 	/// Installs the process of clique `c`. Called once the parameters exist, and again whenever a
@@ -316,8 +318,11 @@ public:
 
 	void initialize_cliques_and_Z(const std::vector<std::unique_ptr<TTree>> &all_trees);
 
-	/// The number of cliques of this tree, which is the number of transition grids it holds.
-	[[nodiscard]] size_t n_cliques() const { return _transition_grids.size(); }
+	/// The number of cliques of this tree: the product of every other tree's leaf count.
+	///
+	/// Clique space answers it, and the grid vector is sized from the same answer. The count is a
+	/// property of clique space and not of how many grids happen to be held.
+	[[nodiscard]] size_t n_cliques() const { return _cliques().n_cliques(); }
 
 	/// The process of clique `c`.
 	[[nodiscard]] const TTransitionGrid &transition_grid(size_t c) const {
