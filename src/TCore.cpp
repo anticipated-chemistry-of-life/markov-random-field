@@ -8,6 +8,7 @@
 #include "TCore.h"
 #include "Types.h"
 #include "cli.h"
+#include "constants.h"
 #include "coretools/Main/TError.h"
 #include "stattools/MCMC/TMCMC.h"
 #include <memory>
@@ -73,28 +74,14 @@ void TModel::_create_trees() {
 	std::string filename_tree_species   = parameters().get("tree_species");
 	std::string filename_tree_molecules = parameters().get("tree_molecules");
 	std::vector<std::string> filenames_tree_others;
-	if (parameters().exists("tree_others")) {
-		parameters().fill("tree_others", filenames_tree_others);
-	}
 
-	size_t num_trees = 2 + filenames_tree_others.size();
-	_trees.reserve(num_trees);
+	_trees.reserve(NUMBER_OF_TREES);
 
 	// first tree: molecules
 	_create_tree(0, filename_tree_species, "species");
 
-	// middle trees: all others (e.g. tissues)
-	for (size_t i = 1; i < num_trees - 1; ++i) {
-		std::string name = coretools::str::split(filenames_tree_others[i - 1], ':');
-		if (name.empty()) {
-			throw coretools::TUserError("Argument 'tree_others': Please provide a name for each "
-			                            "other tree, separated by a : from the "
-			                            "filename (e.g. myTreeName:pathToFile)");
-		}
-		_create_tree(i, filenames_tree_others[i - 1], name);
-	}
 	// last tree: species
-	_create_tree(num_trees - 1, filename_tree_molecules, "molecules");
+	_create_tree(1, filename_tree_molecules, "molecules");
 
 	for (auto &tree : _trees) { tree->initialize_cliques_and_Z(_trees); }
 }
@@ -117,7 +104,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
       ,
       _mass_spec_filters("filter_proba", &_prior_on_mass_spec_filter, {_prefix}),
       _contamination_proba("contamination_proba", &_prior_contamination_proba,
-                           {_prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
+	                       {_prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
 #endif
 {
 	// The support is set before stattools sizes any parameter. A value stattools makes then is
@@ -195,7 +182,7 @@ void TCore::infer() {
 
 void TCore::simulate() {
 	_started            = true;
-	std::string prefix = parameters().get("out", "acol");
+	std::string prefix  = parameters().get("out", "acol");
 	// A simulated field is drawn once and counted once, so this sizes the field's counter and
 	// decides nothing about the draw.
 	size_t n_iterations = ProgramOptions::NUM_ITERATIONS;
