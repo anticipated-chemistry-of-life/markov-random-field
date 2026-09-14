@@ -20,6 +20,7 @@
 
 #include "Types.h"
 #include "constants.h"
+#include "data_sources/data_source.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
@@ -51,18 +52,23 @@ private:
 
 	[[nodiscard]] double _eps() const { return (double)_epsilon->value(); }
 
+	/// Sizes D from the trees. D lives in the same space as Y, which is the shape both sparse
+	/// data sources take.
+	void _initialize_storage();
+
 public:
 	TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamEpsilon *epsilon);
 	~TSimpleErrorModel() = default;
 
-	/// Sizes D from the trees. Called in both inference and simulation: during simulation D starts
-	/// empty and is filled by simulate_D_from_Y.
-	void initialize_storage();
+	/// Sizes D and epsilon's storage, and reads the data file when not simulating -- D starts
+	/// empty during simulation instead, filled by simulate_from_Y. Satisfies DataSource.
+	void initialize(TDataModel *box, bool simulate);
 
 	void load_from_file(const std::string &filename);
 
-	/// Synchronises the disagreement count with the current Y. Must be called once before the first
-	/// likelihood evaluation, and after anything that changes Y outside of an update.
+	/// Sets epsilon to its configured starting value and synchronises the disagreement count with
+	/// the current Y. Satisfies DataSource. Must run once before the first likelihood evaluation,
+	/// and after anything that changes Y outside of an update.
 	void guess_initial_values(const TFieldStorage &Y);
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
@@ -84,6 +90,7 @@ public:
 
 	// --- likelihood ---
 
+	/// Satisfies DataSource.
 	[[nodiscard]] double log_likelihood() const {
 		return simple_error_model::log_likelihood_from_counts(_total_cells, _n_disagree, _eps());
 	}
@@ -98,17 +105,26 @@ public:
 	// --- simulation ---
 
 	/// Draws every cell of D from the corresponding cell of Y at the current error rate.
-	void simulate_D_from_Y(const TFieldStorage &Y);
+	/// Satisfies DataSource.
+	void simulate_from_Y(const TFieldStorage &Y);
 
 	/// Writes the simulated D as <prefix>_simulated_simple_data.tsv: a header naming every tree,
 	/// then one row of leaf node ids per cell whose state is 1 (same sparse format as the LOTUS
-	/// file, so it can be read straight back by load_from_file).
-	void write_simulated_D(const std::string &prefix) const;
+	/// file, so it can be read straight back by load_from_file). Satisfies DataSource.
+	void write_simulated(const std::string &prefix) const;
+
+	// --- notifier stats ---
+
+	/// Satisfies DataSource.
+	void contribute_stats(TNotifierStats &stats) const;
 
 	// --- accessors ---
 
 	[[nodiscard]] const TBinaryStorage &get_D() const { return _D; }
 	[[nodiscard]] size_t n_disagree() const { return _n_disagree; }
 };
+
+static_assert(DataSource<TSimpleErrorModel>,
+              "TSimpleErrorModel must satisfy the DataSource concept (data_sources/data_source.h)");
 
 #endif // USE_SIMPLE_ERROR_MODEL

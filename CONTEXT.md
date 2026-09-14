@@ -136,6 +136,10 @@ _Avoid_: branch-length grid, binning, discretisation
 
 ## Observations
 
+**Data source**:
+A likelihood term over the field, independent of every other data source and summed with them (ADR-0005's data factor, `log p(L, D | Y)`). A LOTUS record and simple error model data are the two shaped alike: each observes one cell of `Y` at a time and answers, per cell, `{P(observation | Y=0), P(observation | Y=1)}`. Mass spectrometry data is not shaped alike — it scores an assignment problem over a species' runs, not a per-cell state — so it is a data source but not this shape, and is not informed by the per-cell interface below. Whether a build carries a given data source is a compile-time choice, made once per binary. `src/data_sources/`.
+_Avoid_: observation, evidence, data
+
 **LOTUS record**:
 An observed (species, molecule) occurrence reported in the literature. Written `L`. Absence of a record is uninformative wherever research effort is low.
 _Avoid_: citation, literature record, observation

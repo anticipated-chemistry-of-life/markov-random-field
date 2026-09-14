@@ -6,6 +6,7 @@
 #ifdef USE_SIMPLE_ERROR_MODEL
 
 #include "TSparseDataFile.h"
+#include "cli.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
@@ -18,10 +19,18 @@ TSimpleErrorModel::TSimpleErrorModel(const std::vector<std::unique_ptr<TTree>> &
                                      TypeParamEpsilon *epsilon)
     : _trees(trees), _epsilon(epsilon) {}
 
-void TSimpleErrorModel::initialize_storage() {
+void TSimpleErrorModel::_initialize_storage() {
 	// D lives in the same space as Y, which is the shape both sparse data sources take.
 	_D.initialize_dimensions(sparse_data_file::leaf_shape(_trees));
 	_total_cells = _D.total_size_of_container_space();
+}
+
+void TSimpleErrorModel::initialize(TDataModel *box, bool simulate) {
+	// D always spans the full leaf space, so it can be sized from the trees alone -- in both
+	// inference (where load_from_file then fills it) and simulation (where simulate_from_Y does).
+	_initialize_storage();
+	_epsilon->initStorage(box, {1});
+	if (!simulate) { load_from_file(ProgramOptions::SIMPLE_DATA_FILENAME); }
 }
 
 void TSimpleErrorModel::load_from_file(const std::string &filename) {
@@ -47,10 +56,14 @@ void TSimpleErrorModel::load_from_file(const std::string &filename) {
 }
 
 void TSimpleErrorModel::guess_initial_values(const TFieldStorage &Y) {
+	_epsilon->set(TypeEpsilonSimpleModel(ProgramOptions::EPSILON_SIMPLE_MODEL));
 	_n_disagree = simple_error_model::count_disagreements(Y, _D);
+	coretools::instances::logfile().list(
+	    "Using simple error model data with initial epsilon_simple_model = ",
+	    ProgramOptions::EPSILON_SIMPLE_MODEL, ".");
 }
 
-void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
+void TSimpleErrorModel::simulate_from_Y(const TFieldStorage &Y) {
 	if (Y.dimensions() != _D.dimensions()) {
 		throw coretools::TDevError("Cannot simulate the simple error model data: Y is ",
 		                           Y.dimensions()[0], "x", Y.dimensions()[1], " but D is ",
@@ -70,7 +83,7 @@ void TSimpleErrorModel::simulate_D_from_Y(const TFieldStorage &Y) {
 	                                     " cells differ from Y.");
 }
 
-void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
+void TSimpleErrorModel::write_simulated(const std::string &prefix) const {
 	const std::string file_name = prefix + "_simulated_simple_data.tsv";
 	coretools::TOutputFile file(file_name, sparse_data_file::header_from_trees(_trees), "\t");
 
@@ -86,6 +99,11 @@ void TSimpleErrorModel::write_simulated_D(const std::string &prefix) const {
 		}
 		file.writeln(line);
 	}
+}
+
+void TSimpleErrorModel::contribute_stats(TNotifierStats &stats) const {
+	stats.scalar_stats.push_back(
+	    {"epsilon_simple_model", {_epsilon->mean(0), _epsilon->var(0), _epsilon->sd(0)}});
 }
 
 #endif // USE_SIMPLE_ERROR_MODEL

@@ -1,16 +1,24 @@
 //
 // The likelihood box that anchors the model in the stattools DAG.
 //
-// TDataModel owns the Markov random field (the latent Y and the per-tree Z) and every source of
-// information that is compiled in. Each source is an independent likelihood term over the same Y:
+// TDataModel owns the Markov random field (the latent Y and the per-tree Z) and every data source
+// that is compiled in. Each per-cell source (LOTUS, the simple error model) is an independent
+// likelihood term over the same Y, and satisfies the DataSource concept in
+// data_sources/data_source.h; ACOL_DATA_SOURCES(X) there lists whichever are compiled in and
+// drives six of this class's per-source sites (initialize, guess_initial_values, the likelihood
+// sum, notifier-stats collection, simulate + write, the accessor pair) from that one list. Mass
+// spectrometry (USE_MS_DATA, TMSMSData) is not this shape -- it scores an assignment problem, not
+// a per-cell state -- and stays dormant, hand-wired outside TDataModel.
 //
-//   USE_LOTUS              TLotus            reported occurrences, research effort
-//   USE_SIMPLE_ERROR_MODEL TSimpleErrorModel a flat-error-rate noisy copy of Y
-//   USE_MS_DATA            TMSMSData         mass spectrometry (still dormant)
+// Three things per source stay hand-written rather than generated: the member declaration, the
+// constructor's forwarding of that source's parameters, and the params-vector push in the
+// constructor body below. A source's parameter count varies source to source (LOTUS has two,
+// the simple error model one), so those three sites cannot be expressed as one uniform macro row
+// without losing that. The parameter-move dispatch (calculateLLRatio / updateTempVals) is
+// likewise hand-written per parameter type, because stattools dispatches a move by the
+// parameter's own type, not by its owning source.
 //
-// At least one must be compiled in; Types.h enforces that with a static_assert. Sources are guarded
-// with #ifdef rather than `if constexpr` because a discarded `if constexpr` branch must still
-// name-resolve, which it cannot once the members are gone.
+// At least one per-cell source must be compiled in; Types.h enforces that with a static_assert.
 //
 // This class is deliberately the *only* stattools box in the model. A second box would get its own
 // _simulateUnderPrior call, with no ordering guarantee relative to the single Markov field
@@ -23,6 +31,7 @@
 #include "lotus/TLotus.h"
 #include "TMarkovField.h"
 #include "Types.h"
+#include "data_sources/data_source.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "simple_error_model/TSimpleErrorModel.h"
 #include "tree/TTree.h"
@@ -100,11 +109,8 @@ private:
 
 	/// Everything the ntfy notifications report, collected once for all three hooks. Which entries
 	/// exist depends on the compiled-in sources; a build without LOTUS reports no gamma at all.
-	struct TNotifierStats {
-		std::vector<std::string> dim_names;
-		std::vector<TNtfyNotifier::ParamStats> gamma_stats;
-		std::vector<TNtfyNotifier::NamedStats> scalar_stats;
-	};
+	/// TNotifierStats itself lives in data_sources/data_source.h, so DataSource::contribute_stats
+	/// can name it.
 	[[nodiscard]] TNotifierStats _collect_notifier_stats() const;
 
 public:
@@ -165,14 +171,10 @@ public:
 	// --- accessors ---
 
 	[[nodiscard]] const TMarkovField &get_markov_field() const { return _markov_field; }
-#ifdef USE_LOTUS
-	[[nodiscard]] const TLotus &get_lotus() const { return _lotus; }
-	[[nodiscard]] TLotus &get_lotus() { return _lotus; }
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	[[nodiscard]] const TSimpleErrorModel &get_simple_error_model() const {
-		return _simple_error_model;
-	}
-	[[nodiscard]] TSimpleErrorModel &get_simple_error_model() { return _simple_error_model; }
-#endif
+	// Accessor pair generated for every source in ACOL_DATA_SOURCES.
+#define ACOL_DATA_SOURCE_ACCESSOR(member, Type)                                                    \
+	[[nodiscard]] const Type &get_##member() const { return _##member; }                             \
+	[[nodiscard]] Type &get_##member() { return _##member; }
+	ACOL_DATA_SOURCES(ACOL_DATA_SOURCE_ACCESSOR)
+#undef ACOL_DATA_SOURCE_ACCESSOR
 };

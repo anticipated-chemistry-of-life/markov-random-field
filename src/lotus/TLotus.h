@@ -18,6 +18,7 @@
 
 #include "cli.h"
 #include "constants.h"
+#include "data_sources/data_source.h"
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "stattools/ParametersObservations/TParameter.h"
@@ -86,7 +87,8 @@ public:
 	void guess_initial_values(const TFieldStorage &Y);
 
 	[[nodiscard]] double calculate_log_likelihood_of_L(const TFieldStorage &Y) const;
-	[[nodiscard]] double cur_LL() const { return _curLL; }
+	/// Satisfies DataSource.
+	[[nodiscard]] double log_likelihood() const { return _curLL; }
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
@@ -116,13 +118,13 @@ public:
 
 	/// Sizes L and sets gamma / epsilon to the values the data should be simulated under. The
 	/// parameter storages are sized in initialize(), on both paths. Must run before
-	/// simulate_L_from_Y.
+	/// simulate_from_Y.
 	void prepare_for_simulation();
-	/// Draws every cell of L given the simulated Y.
-	void simulate_L_from_Y(const TFieldStorage &Y);
+	/// Draws every cell of L given the simulated Y. Satisfies DataSource.
+	void simulate_from_Y(const TFieldStorage &Y);
 	/// Writes the simulated L as <prefix>_simulated_lotus.tsv: a header naming every tree, then
-	/// one row of leaf node ids per cell whose state is 1.
-	void write_simulated_L(const std::string &prefix) const;
+	/// one row of leaf node ids per cell whose state is 1. Satisfies DataSource.
+	void write_simulated(const std::string &prefix) const;
 
 	// --- accessors ---
 
@@ -131,7 +133,13 @@ public:
 	[[nodiscard]] std::vector<TNtfyNotifier::ParamStats> gamma_stats() const;
 	[[nodiscard]] TNtfyNotifier::ParamStats error_rate_stats() const;
 
+	/// Satisfies DataSource.
+	void contribute_stats(TNotifierStats &stats) const;
+
 	static std::string get_filename_lotus() { return ProgramOptions::LOTUS_FILENAME; }
 };
+
+static_assert(DataSource<TLotus>,
+              "TLotus must satisfy the DataSource concept (data_sources/data_source.h)");
 
 #endif // USE_LOTUS

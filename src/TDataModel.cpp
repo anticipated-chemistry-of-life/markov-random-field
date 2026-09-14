@@ -42,16 +42,9 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
 std::string TDataModel::name() const { return "data_model"; }
 
 void TDataModel::initialize() {
-#ifdef USE_LOTUS
-	_lotus.initialize(this, _simulate);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	// D always spans the full leaf space, so it can be sized from the trees alone -- in both
-	// inference (where load_from_file then fills it) and simulation (where simulate_D_from_Y does).
-	_simple_error_model.initialize_storage();
-	_epsilon_simple_model->initStorage(this, {1});
-	if (!_simulate) { _simple_error_model.load_from_file(ProgramOptions::SIMPLE_DATA_FILENAME); }
-#endif
+#define ACOL_INIT_DATA_SOURCE(member, Type) _##member.initialize(this, _simulate);
+	ACOL_DATA_SOURCES(ACOL_INIT_DATA_SOURCE)
+#undef ACOL_INIT_DATA_SOURCE
 
 	_omega->initStorage(this, {1});
 
@@ -76,16 +69,9 @@ void TDataModel::initialize() {
 void TDataModel::guessInitialValues() {
 	// Note: stattools only calls this when inferring, never when simulating.
 	const auto &Y = _markov_field.get_Y_matrix();
-#ifdef USE_LOTUS
-	_lotus.guess_initial_values(Y);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	_epsilon_simple_model->set(TypeEpsilonSimpleModel(ProgramOptions::EPSILON_SIMPLE_MODEL));
-	_simple_error_model.guess_initial_values(Y);
-	coretools::instances::logfile().list(
-	    "Using simple error model data with initial epsilon_simple_model = ",
-	    ProgramOptions::EPSILON_SIMPLE_MODEL, ".");
-#endif
+#define ACOL_GUESS_DATA_SOURCE(member, Type) _##member.guess_initial_values(Y);
+	ACOL_DATA_SOURCES(ACOL_GUESS_DATA_SOURCE)
+#undef ACOL_GUESS_DATA_SOURCE
 
 	_omega->set(TypeErrorProbability(ProgramOptions::ERROR_PROBABILITY));
 	coretools::instances::logfile().list(
@@ -98,12 +84,9 @@ double TDataModel::getSumLogPriorDensity(const Storage &) const { return data_lo
 
 double TDataModel::data_log_likelihood() const {
 	double sum = 0.0;
-#ifdef USE_LOTUS
-	sum += _lotus.cur_LL();
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	sum += _simple_error_model.log_likelihood();
-#endif
+#define ACOL_SUM_DATA_SOURCE(member, Type) sum += _##member.log_likelihood();
+	ACOL_DATA_SOURCES(ACOL_SUM_DATA_SOURCE)
+#undef ACOL_SUM_DATA_SOURCE
 	return sum;
 }
 
@@ -175,28 +158,18 @@ void TDataModel::_simulateUnderPrior(Storage *) {
 
 	// then derive each data source from that one simulated Y, and write it out
 	const auto &Y = _markov_field.get_Y_matrix();
-#ifdef USE_LOTUS
-	_lotus.simulate_L_from_Y(Y);
-	_lotus.write_simulated_L(_prefix);
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	_simple_error_model.simulate_D_from_Y(Y);
-	_simple_error_model.write_simulated_D(_prefix);
-#endif
+#define ACOL_SIMULATE_DATA_SOURCE(member, Type)                                                    \
+	_##member.simulate_from_Y(Y);                                                                     \
+	_##member.write_simulated(_prefix);
+	ACOL_DATA_SOURCES(ACOL_SIMULATE_DATA_SOURCE)
+#undef ACOL_SIMULATE_DATA_SOURCE
 }
 
-TDataModel::TNotifierStats TDataModel::_collect_notifier_stats() const {
+TNotifierStats TDataModel::_collect_notifier_stats() const {
 	TNotifierStats stats;
-#ifdef USE_LOTUS
-	stats.dim_names   = _lotus.tree_names();
-	stats.gamma_stats = _lotus.gamma_stats();
-	stats.scalar_stats.push_back({"epsilon", _lotus.error_rate_stats()});
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-	stats.scalar_stats.push_back({"epsilon_simple_model",
-	                              {_epsilon_simple_model->mean(0), _epsilon_simple_model->var(0),
-	                               _epsilon_simple_model->sd(0)}});
-#endif
+#define ACOL_STATS_DATA_SOURCE(member, Type) _##member.contribute_stats(stats);
+	ACOL_DATA_SOURCES(ACOL_STATS_DATA_SOURCE)
+#undef ACOL_STATS_DATA_SOURCE
 	stats.scalar_stats.push_back({"omega", {_omega->mean(0), _omega->var(0), _omega->sd(0)}});
 	return stats;
 }

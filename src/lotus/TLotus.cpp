@@ -11,7 +11,6 @@
 #include "constants.h"
 #include "coretools/Files/TInputFile.h"
 #include "coretools/Files/TOutputFile.h"
-#include "coretools/Main/TError.h"
 #include "coretools/Types/probability.h"
 #include "lotus/paper_counts.h"
 #include <algorithm>
@@ -199,19 +198,19 @@ void TLotus::prepare_for_simulation() {
 	_reporting_model = _build_reporting_model(); // counts + parameters ready -> ready to simulate L
 }
 
-void TLotus::simulate_L_from_Y(const TFieldStorage &Y) {
+void TLotus::simulate_from_Y(const TFieldStorage &Y) {
 	for (size_t i = 0; i < _L.total_size_of_container_space(); ++i) {
 		const auto multi_dim_index_in_L_space = _L.get_multi_dimensional_index(i);
 		// L has the field's dimensions, so cell i of one is cell i of the other (a missing cell
 		// reads as 0).
-		const bool x       = Y.is_one(i);
+		const bool x                          = Y.is_one(i);
 		const double proba = _reporting().probability(x, true, multi_dim_index_in_L_space);
 		const coretools::Probability p(proba);
 		if (coretools::instances::randomGenerator().pickOneOfTwo(p)) { _L.insert_one(i); }
 	}
 }
 
-void TLotus::write_simulated_L(const std::string &prefix) const {
+void TLotus::write_simulated(const std::string &prefix) const {
 	const std::string file_name = prefix + "_simulated_lotus.tsv";
 
 	// we get the tree name for the header of the file.
@@ -232,6 +231,12 @@ void TLotus::write_simulated_L(const std::string &prefix) const {
 		}
 		file.writeln(line);
 	}
+}
+
+void TLotus::contribute_stats(TNotifierStats &stats) const {
+	stats.dim_names   = tree_names();
+	stats.gamma_stats = gamma_stats();
+	stats.scalar_stats.push_back({"epsilon", error_rate_stats()});
 }
 
 #endif // USE_LOTUS
