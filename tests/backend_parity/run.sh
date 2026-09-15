@@ -122,6 +122,19 @@ build_binary() {
                 *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
             esac
         fi
+        # See justfile:_drive for why -- same conda-linker-vs-new-SDK fallback.
+        if [[ "$(uname -s)" == "Darwin" ]] && command -v xcrun >/dev/null 2>&1; then
+            probe="$(mktemp -d)"
+            printf "int main(){return 0;}" > "$probe/t.c"
+            printf "int main(){return 0;}" > "$probe/t.cpp"
+            if { ! "$CC" "$probe/t.c" -o "$probe/t_c" >/dev/null 2>&1 \
+                 || ! "$CXX" "$probe/t.cpp" -o "$probe/t_cxx" >/dev/null 2>&1; } \
+               && xcrun -f clang++ >/dev/null 2>&1; then
+                export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
+                export SDKROOT="$(xcrun --show-sdk-path)"
+            fi
+            rm -rf "$probe"
+        fi
         flags="${CXXFLAGS:-} $3"
         if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$2/CMakeCache.txt" 2>/dev/null; then
             cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF \

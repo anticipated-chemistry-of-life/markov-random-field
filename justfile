@@ -183,6 +183,24 @@ _drive action *args:
                     *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
                 esac
             fi
+            # The conda toolchain ships a linker pinned to the SDKs it knew about when built.
+            # A macOS SDK newer than that -- the weeks after an OS or Xcode upgrade, before
+            # conda-forge catches up -- fails to link even an empty program (sometimes only for
+            # C, not C++, depending on which default flags the failing tbd parse falls under).
+            # Probe both and fall back to the Xcode SDK, which always matches its own compiler,
+            # rather than fail every build until conda-forge ships a fix.
+            if [[ "$(uname -s)" == "Darwin" ]] && command -v xcrun >/dev/null 2>&1; then
+                probe="$(mktemp -d)"
+                printf "int main(){return 0;}" > "$probe/t.c"
+                printf "int main(){return 0;}" > "$probe/t.cpp"
+                if { ! "$CC" "$probe/t.c" -o "$probe/t_c" >/dev/null 2>&1 \
+                     || ! "$CXX" "$probe/t.cpp" -o "$probe/t_cxx" >/dev/null 2>&1; } \
+                   && xcrun -f clang++ >/dev/null 2>&1; then
+                    export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
+                    export SDKROOT="$(xcrun --show-sdk-path)"
+                fi
+                rm -rf "$probe"
+            fi
             exec cmake --preset "$1" -DLOTUS="$2" -DSIMPLE_DATA="$3" -DUSE_MS_DATA="$4"
         ' _ "$mode" "$lotus" "$simple" "$ms"
     fi
