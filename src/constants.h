@@ -15,6 +15,13 @@ using IndexArray                                  = std::array<size_t, NUMBER_OF
 // that keeps the one filter every constructed run currently has addressable.
 static constexpr size_t NUMBER_OF_MS_FILTERS = 1;
 
+// The largest index TypeFilterProbability's domain can reach. stattools's automatic
+// state-posterior tracking (TParameter::_initMeanVar) sizes a uint8_t counter to Type::max()+1
+// slots for any byte-domain parameter, so max cannot be 255. TMSMSData's constructor calls
+// TypeFilterProbability::setMax(MAX_FILTER_PROBABILITY_INDEX) once, before the parameter's
+// storage is sized.
+static constexpr uint8_t MAX_FILTER_PROBABILITY_INDEX = 254;
+
 static constexpr auto LINEAR_SPACE_PROBA = [] {
 	std::array<double, 256> a{};
 	for (std::size_t i = 0; i < a.size(); ++i) a[i] = static_cast<double>(i) / 255.0;

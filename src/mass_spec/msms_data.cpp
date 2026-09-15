@@ -43,6 +43,10 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
                      TypeParamMassSpecFilter *filter_proba,
                      TypeParamContamination *contamination_proba)
     : _number_of_filters(number_of_filters), _markov_field(markov_field) {
+	// Must run before initialize() sizes this parameter's storage: stattools's automatic
+	// state-posterior tracking for a byte-domain parameter needs max() <= 254 (see constants.h).
+	TypeFilterProbability::setMax(MAX_FILTER_PROBABILITY_INDEX);
+
 	for (size_t d = 0; d < trees.size(); ++d) {
 		const auto &tree = trees[d];
 		if (tree->get_tree_name() == "species") {

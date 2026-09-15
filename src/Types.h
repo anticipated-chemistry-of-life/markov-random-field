@@ -55,7 +55,7 @@ using TypeNu                       = coretools::StrictlyPositive;
 using TypeMeanLogNu                = coretools::Unbounded;
 using TypeVarLogNu                 = coretools::StrictlyPositive;
 using TypeBinnedBranchLengths      = coretools::UnsignedInt8WithMax<0>;
-using TypeFilterProbability        = coretools::UnsignedInt8;
+using TypeFilterProbability        = coretools::UnsignedInt8WithMax<coretools::toHash("filter_proba")>;
 using TypeContaminationProbability = coretools::ZeroOneOpen;
 
 // Gamma
@@ -145,7 +145,13 @@ using SpecBinnedBranches =
     stattools::ParamSpec<TypeBinnedBranchLengths, stattools::Hash<coretools::toHash("bin_branch")>,
                          PriorOnBinnedBranches>;
 
-// Probability to pass mass spec filter
+// Probability to pass mass spec filter.
+//
+// stattools turns on automatic state-posterior tracking for any byte-domain parameter, and that
+// tracking sizes a uint8_t counter to Type::max()+1 slots -- so max cannot reach 255.
+// TMSMSData's constructor caps it to MAX_FILTER_PROBABILITY_INDEX (254), which is why this is
+// UnsignedInt8WithMax rather than the fixed-range UnsignedInt8: exact probability 1.0 (index 255
+// of LINEAR_SPACE_PROBA) is not one of the 255 representable levels.
 using PriorOnMassSpecFilter =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeFilterProbability, 1>;
 using SpecMassSpecFilter =
