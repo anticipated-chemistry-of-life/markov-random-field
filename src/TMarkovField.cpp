@@ -97,6 +97,8 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 		_read_Y_from_file(filename);
 		_field_came_from_a_file = true;
 	}
+
+	_coretools_thinning = (int)parameters().get<double>("thinning", 10.0);
 }
 
 void TMarkovField::_read_Y_from_file(const std::string &filename) {
@@ -162,7 +164,8 @@ void TMarkovField::_trace_link_counters(size_t iteration) {
 		_link_counters_file.open(_prefix + suffix, header, "\t");
 	}
 
-	if (iteration % _Y.get_thinning_factor() != 0) { return; }
+	using namespace coretools::instances;
+	if (iteration % _coretools_thinning == 0) { return; }
 
 	std::vector<size_t> line;
 	line.reserve(2 * field_math::TLinkCounters::n_buckets);
@@ -286,8 +289,7 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// at the very end: sum the per-thread accumulators and store them in the data sources
 	accumulator.commit(data_model);
 	using namespace coretools::instances;
-	if (ProgramOptions::WRITE_Y_TRACE &&
-	    (iteration % (int)parameters().get<double>("thinning", 10.0) == 0) && !_fix_Y) {
+	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _coretools_thinning == 0) && !_fix_Y) {
 		_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 	}
 }

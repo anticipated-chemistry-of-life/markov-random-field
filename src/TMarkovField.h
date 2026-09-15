@@ -47,8 +47,9 @@ private:
 	bool _simulate = false;
 
 	// fix values?
-	bool _fix_Y = false;
-	bool _fix_Z = false;
+	bool _fix_Y             = false;
+	bool _fix_Z             = false;
+	int _coretools_thinning = 0;
 
 	// Mass spectrometry data, still dormant. Nothing builds it. The block update does not read it
 	// either: the eight-state block takes the LOTUS and the simple-error term, and adapting a third
@@ -170,8 +171,7 @@ private:
 		}
 		if (_fix_Z) { return; }
 		using namespace coretools::instances;
-		if (ProgramOptions::WRITE_Z_TRACE &&
-		    iteration % (int)parameters().get<double>("thinning", 10.0) == 0) {
+		if (ProgramOptions::WRITE_Z_TRACE && iteration % _coretools_thinning == 0) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];
 				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
