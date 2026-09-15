@@ -165,7 +165,7 @@ void TMarkovField::_trace_link_counters(size_t iteration) {
 	}
 
 	using namespace coretools::instances;
-	if (iteration % _coretools_thinning == 0) { return; }
+	if (iteration % _coretools_thinning != 0) { return; }
 
 	std::vector<size_t> line;
 	line.reserve(2 * field_math::TLinkCounters::n_buckets);
