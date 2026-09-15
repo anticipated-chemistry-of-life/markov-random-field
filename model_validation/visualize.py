@@ -56,7 +56,7 @@ PLOT_ORDER = (
 DEFAULT_RUN_PREFIX = "acol"
 DEFAULT_TRUE_VALUES = ("acol_input_simulated.txt", "acol_simulated.txt")
 DEFAULT_TRUE_BRANCH_LENGTHS = "acol_{tree}_simulated.txt"
-DEFAULT_TRUE_Y = "acol_simulated_Y.txt"
+DEFAULT_TRUE_Y = "acol_simulated_Y.tsv"
 
 STATE_POSTERIORS_SUFFIX = "_statePosteriors.txt"
 
@@ -200,7 +200,7 @@ def _resolve_inputs(
     return ResolvedInputs(
         mean_var=mean_var,
         trace=base / f"{run_prefix}_trace.txt",
-        y_posterior=base / f"{run_prefix}_Y_posterior.txt",
+        y_posterior=base / f"{run_prefix}_Y_posterior.tsv",
         true_values=tuple(value_paths),
         true_y=y_path,
         true_scalars=true_scalars,
