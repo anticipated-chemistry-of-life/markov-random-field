@@ -33,7 +33,9 @@ class TreeFieldPosterior:
         return float(self.fractions.mean())
 
 
-def read_tree_field_posterior(path: str | pathlib.Path, n_cells: int) -> TreeFieldPosterior:
+def read_tree_field_posterior(
+    path: str | pathlib.Path, n_cells: int
+) -> TreeFieldPosterior:
     """Read `*_tree_field_posterior.txt` into the whole leaf-pair space.
 
     The file holds one row per leaf pair that is a one now or was counted a one
@@ -70,7 +72,9 @@ class PosteriorAgreement:
     correlation: float
 
 
-def compare_posteriors(left: TreeFieldPosterior, right: TreeFieldPosterior) -> PosteriorAgreement:
+def compare_posteriors(
+    left: TreeFieldPosterior, right: TreeFieldPosterior
+) -> PosteriorAgreement:
     if left.n_cells != right.n_cells:
         raise ValueError(
             f"The two posteriors cover a different leaf-pair space: {left.n_cells} "
@@ -119,7 +123,9 @@ class RidgePoint:
         return math.log(self.species) - math.log(self.molecules)
 
 
-def ridge_point(species: TreeFieldPosterior, molecules: TreeFieldPosterior) -> RidgePoint:
+def ridge_point(
+    species: TreeFieldPosterior, molecules: TreeFieldPosterior
+) -> RidgePoint:
     return RidgePoint(species=species.mean, molecules=molecules.mean)
 
 

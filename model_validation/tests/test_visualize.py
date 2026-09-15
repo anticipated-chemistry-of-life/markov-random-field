@@ -72,7 +72,10 @@ def scenario(tmp_path: pathlib.Path) -> pathlib.Path:
     _write_tsv(
         run / "acol_Y_posterior.txt", ("position", "fraction_of_one"), [(0, 0.9)]
     )
-    for tree, branch in (("species", "species_branch_lengths_a"), ("molecules", "molecules_branch_lengths_b")):
+    for tree, branch in (
+        ("species", "species_branch_lengths_a"),
+        ("molecules", "molecules_branch_lengths_b"),
+    ):
         _write_tsv(
             run / f"acol_{tree}_statePosteriors.txt",
             ("name", "state_0", "state_1"),
@@ -133,7 +136,9 @@ def test_defaults_resolve_to_the_historical_names(scenario):
 def test_run_prefix_and_truth_dir_redirect_independently(tmp_path):
     run = tmp_path / "rung"
     elsewhere = tmp_path / "elsewhere"
-    _write_tsv(run / "zzz_meanVar.txt", ("name", "m", "v"), [("gamma_species", 1.0, 0.1)])
+    _write_tsv(
+        run / "zzz_meanVar.txt", ("name", "m", "v"), [("gamma_species", 1.0, 0.1)]
+    )
     _write_tsv(
         run / "zzz_species_statePosteriors.txt",
         ("name", "state_0"),
@@ -169,9 +174,7 @@ def test_absolute_truth_paths_ignore_truth_dir(scenario, tmp_path):
     absolute = tmp_path / "away" / "truth.txt"
     _write_tsv(absolute, ("name", "value"), [("gamma_species", 1.1)])
 
-    inputs = _resolve(
-        scenario, _ctx("true_values"), true_values=(str(absolute),)
-    )
+    inputs = _resolve(scenario, _ctx("true_values"), true_values=(str(absolute),))
 
     assert inputs.true_values == (absolute,)
 

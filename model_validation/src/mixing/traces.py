@@ -23,9 +23,13 @@ def autocorrelation(trace, max_lag: int | None = None) -> np.ndarray:
     """
     x = np.asarray(trace, dtype=float)
     if x.ndim != 1:
-        raise ValueError(f"A trace is one dimensional, but this one has shape {x.shape}.")
+        raise ValueError(
+            f"A trace is one dimensional, but this one has shape {x.shape}."
+        )
     if x.size < 2:
-        raise ValueError(f"An autocorrelation needs at least two samples, but got {x.size}.")
+        raise ValueError(
+            f"An autocorrelation needs at least two samples, but got {x.size}."
+        )
 
     centred = x - x.mean()
     if max_lag is None:
@@ -36,7 +40,9 @@ def autocorrelation(trace, max_lag: int | None = None) -> np.ndarray:
     # computes is the linear one.
     size = 1 << int(2 * x.size - 1).bit_length()
     spectrum = np.fft.rfft(centred, size)
-    autocovariance = np.fft.irfft(spectrum * np.conjugate(spectrum), size)[: max_lag + 1]
+    autocovariance = np.fft.irfft(spectrum * np.conjugate(spectrum), size)[
+        : max_lag + 1
+    ]
 
     if autocovariance[0] <= 0.0:
         raise ValueError("The trace does not vary, so it has no autocorrelation.")
@@ -93,7 +99,9 @@ def half_split_drift(trace) -> float:
         raise ValueError(f"A drift needs at least two samples, but got {x.size}.")
     sd = float(np.std(x))
     if sd <= 0.0:
-        raise ValueError("The trace does not vary, so there is nothing to scale a drift by.")
+        raise ValueError(
+            "The trace does not vary, so there is nothing to scale a drift by."
+        )
     first, second = np.array_split(x, 2)
     return float(second.mean() - first.mean()) / sd
 
@@ -154,5 +162,3 @@ def read_joint_density_factors(
     """
     frame = _read_trace_frame(path, burn_in_rows)
     return {name: frame[name].to_numpy(dtype=float) for name in frame.columns}
-
-

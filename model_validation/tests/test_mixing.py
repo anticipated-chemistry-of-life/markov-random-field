@@ -102,13 +102,18 @@ def test_autocorrelation_time_of_ar1_matches_the_closed_form(phi):
 
 
 def test_autocorrelation_time_grows_with_the_correlation():
-    taus = [integrated_autocorrelation_time(ar1(phi, 100_000, seed=6)) for phi in (0.0, 0.5, 0.9)]
+    taus = [
+        integrated_autocorrelation_time(ar1(phi, 100_000, seed=6))
+        for phi in (0.0, 0.5, 0.9)
+    ]
     assert taus[0] < taus[1] < taus[2]
 
 
 def test_effective_sample_size_is_the_length_over_the_autocorrelation_time():
     x = ar1(0.8, 20_000, seed=7)
-    assert effective_sample_size(x) == pytest.approx(x.size / integrated_autocorrelation_time(x))
+    assert effective_sample_size(x) == pytest.approx(
+        x.size / integrated_autocorrelation_time(x)
+    )
 
 
 def test_effective_sample_size_of_white_noise_is_about_the_whole_trace():
@@ -153,7 +158,9 @@ def test_summarise_trace_reports_what_the_report_prints():
     assert summary.n_samples == 4_000
     assert summary.mean == pytest.approx(float(np.mean(x)))
     assert summary.sd == pytest.approx(float(np.std(x, ddof=1)))
-    assert summary.autocorrelation_time == pytest.approx(integrated_autocorrelation_time(x))
+    assert summary.autocorrelation_time == pytest.approx(
+        integrated_autocorrelation_time(x)
+    )
     assert summary.effective_sample_size == pytest.approx(effective_sample_size(x))
     assert summary.acf_lag_one == pytest.approx(autocorrelation(x, max_lag=1)[1])
     assert summary.drift == pytest.approx(half_split_drift(x))
@@ -276,7 +283,8 @@ def test_agreement_reports_the_largest_cell_difference(tmp_path):
     write_posterior(left, [(0, 1, 0.5), (1, 1, 0.5)])
     write_posterior(right, [(0, 1, 0.5), (1, 1, 0.9)])
     agreement = compare_posteriors(
-        read_tree_field_posterior(left, n_cells=4), read_tree_field_posterior(right, n_cells=4)
+        read_tree_field_posterior(left, n_cells=4),
+        read_tree_field_posterior(right, n_cells=4),
     )
     assert agreement.n_cells == 4
     assert agreement.max_abs_diff == pytest.approx(0.4)
@@ -332,4 +340,3 @@ def test_the_ridge_shift_is_signed_so_the_direction_reads():
     forward = ridge_shift(ridge_point_of(0.8, 0.5), ridge_point_of(0.5, 0.8))
     backward = ridge_shift(ridge_point_of(0.5, 0.8), ridge_point_of(0.8, 0.5))
     assert forward.along == pytest.approx(-backward.along)
-
