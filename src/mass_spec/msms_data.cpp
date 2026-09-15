@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <vector>
 
-void TMSMSData::initialize() {
+void TMSMSData::initialize(TDataModel *box) {
 	// build molecule leaf names in leaf-index order
 	const size_t n = _molecules_tree->get_number_of_leaves();
 	std::vector<std::string> molecule_names;
@@ -23,14 +23,14 @@ void TMSMSData::initialize() {
 	}
 
 	_proba_to_pass_filter->initStorage(
-	    this, {n * _number_of_filters},
+	    box, {n * _number_of_filters},
 	    {std::make_shared<coretools::TNamesStrings>(molecule_names)});
 
 	// scalar — default 1-slot names are correct
-	_proba_contamination->initStorage(this, {1});
+	_proba_contamination->initStorage(box, {1});
 }
 
-void TMSMSData::guessInitialValues() {
+void TMSMSData::guess_initial_values() {
 	for (size_t i = 0; i < _molecules_tree->get_number_of_leaves(); ++i) {
 		_proba_to_pass_filter->set(i, ProgramOptions::INDEX_PROBA_TO_PASS_MS_FILTER);
 	}
@@ -40,11 +40,9 @@ void TMSMSData::guessInitialValues() {
 
 TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
                      const TMarkovField &markov_field, size_t number_of_filters,
-                     const MarkovFieldParams &markov_field_stattools_param,
                      TypeParamMassSpecFilter *filter_proba,
                      TypeParamContamination *contamination_proba)
-    : _number_of_filters(number_of_filters), _markov_field(markov_field),
-      _markov_field_stattools_param(markov_field_stattools_param) {
+    : _number_of_filters(number_of_filters), _markov_field(markov_field) {
 	for (size_t d = 0; d < trees.size(); ++d) {
 		const auto &tree = trees[d];
 		if (tree->get_tree_name() == "species") {
@@ -75,12 +73,12 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
-	// Register parameters with the DAG — same pattern as TLotus
-	this->addPriorParameter({_proba_to_pass_filter, _proba_contamination});
-	for (auto &it : _markov_field_stattools_param) { this->addPriorParameter(it.get()); }
+	// Registering these two with the DAG, and the DAG edge to the Markov field's stattools
+	// parameters, is now TDataModel's job: it owns this object's parameters the same way it owns
+	// TLotus's and TSimpleErrorModel's (see TDataModel's constructor).
 }
 
-double TMSMSData::calculateLLRatio(TypeParamMassSpecFilter *, size_t index) {
+double TMSMSData::ll_ratio_after_filter_move(size_t index) const {
 	const auto &multidim      = _get_filter_molecule_pair_multidimensional_index_(index);
 	const size_t filter_index = multidim[0];
 	const size_t molecule_idx = multidim[1];

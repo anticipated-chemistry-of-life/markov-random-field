@@ -182,11 +182,4 @@ constexpr static size_t NumDimDataObs = 2;
 using StorageDataObs = coretools::TMultiDimensionalStorage<TypeDataObs, NumDimDataObs>;
 using SpecDataObs    = stattools::TObservation<TypeDataObs, NumDimDataObs, TDataModel>;
 
-// Observations: Mass Spec
-class TMSMSData;
-using TypeMSData                     = coretools::Boolean;
-constexpr static size_t NumDimMSData = 1;
-using StorageMSData = coretools::TMultiDimensionalStorage<TypeMSData, NumDimMSData>;
-using SpecMSData    = stattools::TObservation<TypeMSData, NumDimMSData, TMSMSData>;
-
 #endif // ACOL_TYPES_H

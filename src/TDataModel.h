@@ -6,9 +6,15 @@
 // likelihood term over the same Y, and satisfies the DataSource concept in
 // data_sources/data_source.h; ACOL_DATA_SOURCES(X) there lists whichever are compiled in and
 // drives six of this class's per-source sites (initialize, guess_initial_values, the likelihood
-// sum, notifier-stats collection, simulate + write, the accessor pair) from that one list. Mass
-// spectrometry (USE_MS_DATA, TMSMSData) is not this shape -- it scores an assignment problem, not
-// a per-cell state -- and stays dormant, hand-wired outside TDataModel.
+// sum, notifier-stats collection, simulate + write, the accessor pair) from that one list.
+//
+// Mass spectrometry (USE_MS_DATA, TMSMSData) does not satisfy DataSource -- it scores an
+// assignment problem over a species' runs, not a per-cell state, and it carries its own latent
+// state (the feature<->molecule assignments) that needs its own Metropolis sweep every iteration
+// (update_all_MS_assignments) -- so it stays hand-wired rather than joining ACOL_DATA_SOURCES. It
+// is still an ordinary member of this class, constructed, initialized and swept the same way the
+// DataSource-shaped sources are; only the sites that list generates are written out by hand for
+// it, the same way they are hand-written per source below.
 //
 // Three things per source stay hand-written rather than generated: the member declaration, the
 // constructor's forwarding of that source's parameters, and the params-vector push in the
@@ -23,7 +29,8 @@
 // This class is deliberately the *only* stattools box in the model. A second box would get its own
 // _simulateUnderPrior call, with no ordering guarantee relative to the single Markov field
 // simulation that produces Y -- so all sources must derive their simulated data from the same Y
-// here.
+// here. Mass spec being an ordinary member rather than its own box (as it used to be) is what
+// keeps this true: it no longer has a _simulateUnderPrior of its own to race against this one.
 //
 
 #pragma once
@@ -31,9 +38,12 @@
 #include "lotus/TLotus.h"
 #include "TMarkovField.h"
 #include "Types.h"
+#include "constants.h"
 #include "data_sources/data_source.h"
+#include "mass_spec/msms_data.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "simple_error_model/TSimpleErrorModel.h"
+#include "stattools/Priors/TBaseLikelihoodPrior.h"
 #include "tree/TTree.h"
 #include <cstddef>
 #include <memory>
@@ -49,6 +59,10 @@ struct TDataSources {
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
 	TSimpleErrorModel::TypeParamEpsilon *epsilon_simple_model = nullptr;
+#endif
+#ifdef USE_MS_DATA
+	TMSMSData::TypeParamMassSpecFilter *mass_spec_filters   = nullptr;
+	TMSMSData::TypeParamContamination *contamination_proba = nullptr;
 #endif
 };
 
@@ -86,6 +100,13 @@ private:
 #ifdef USE_SIMPLE_ERROR_MODEL
 	TSimpleErrorModel _simple_error_model;
 	TSimpleErrorModel::TypeParamEpsilon *_epsilon_simple_model = nullptr;
+#endif
+#ifdef USE_MS_DATA
+	// Not a DataSource (see the file comment); still an ordinary member TDataModel constructs,
+	// initializes and sweeps by hand.
+	TMSMSData _msms_data;
+	TMSMSData::TypeParamMassSpecFilter *_mass_spec_filters   = nullptr;
+	TMSMSData::TypeParamContamination *_contamination_proba = nullptr;
 #endif
 
 	// output file
@@ -139,9 +160,10 @@ public:
 	/// is the data factor of the ADR-0005 factorisation, and stattools' own accessor takes a
 	/// storage the field has nothing to hand it.
 	///
-	/// The LOTUS records and the simple error model, and nothing else. The mass spectrometry
-	/// source is dormant -- nothing builds it, and it hangs off the field rather than this class --
-	/// so it has no term to add. A build that wakes it adds it here, or the joint density stops
+	/// The LOTUS records and the simple error model, and nothing else. Mass spectrometry is a
+	/// member of this class like the others, but its likelihood is not summed here: it scores an
+	/// assignment problem rather than a per-cell term, so it does not join ACOL_DATA_SOURCES' sum.
+	/// Wiring it into the joint density is a separate piece of work, or the joint density stops
 	/// being the whole of the model.
 	[[nodiscard]] double data_log_likelihood() const;
 
@@ -160,6 +182,12 @@ public:
 #ifdef USE_SIMPLE_ERROR_MODEL
 	[[nodiscard]] double calculateLLRatio(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/);
 	void updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*Index*/, bool Accepted);
+#endif
+#ifdef USE_MS_DATA
+	[[nodiscard]] double calculateLLRatio(TMSMSData::TypeParamMassSpecFilter *, size_t Index);
+	[[nodiscard]] double calculateLLRatio(TMSMSData::TypeParamContamination *, size_t /*Index*/);
+	void updateTempVals(TMSMSData::TypeParamMassSpecFilter *, size_t /*Index*/, bool Accepted);
+	void updateTempVals(TMSMSData::TypeParamContamination *, size_t /*Index*/, bool Accepted);
 #endif
 
 	// The error probability is not a data source's parameter, so it is never behind an #ifdef: the

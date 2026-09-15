@@ -122,6 +122,10 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 #ifdef USE_SIMPLE_ERROR_MODEL
 	sources.epsilon_simple_model = &_epsilon_simple_model;
 #endif
+#ifdef USE_MS_DATA
+	sources.mass_spec_filters   = &_mass_spec_filters;
+	sources.contamination_proba = &_contamination_proba;
+#endif
 
 	// create the likelihood box that owns the Markov field and all data sources
 	_data_model = std::make_unique<TDataModel>(_trees, sources, &_error_probability, n_iterations,
@@ -134,13 +138,6 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
 	// create (fake) observation for stattools
 	_obs = std::make_unique<SpecDataObs>("data_obs", _data_model.get(), StorageDataObs(),
 	                                     stattools::TObservationDefinition{});
-
-#ifdef USE_MS_DATA
-	_msms_data  = std::make_unique<TMSMSData>(_trees, _markov_field_stattools_param,
-	                                          &_mass_spec_filters, &_contamination_proba);
-	_msdata_obs = std::make_unique<SpecMSData>("msdata_obs", _msms_data.get(), StorageMSData(),
-	                                           stattools::TObservationDefinition{});
-#endif
 
 	// define function that is called when updating
 	_fun_update_mrf = &TDataModel::update_markov_field;

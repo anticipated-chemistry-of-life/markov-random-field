@@ -51,11 +51,6 @@ private:
 	bool _fix_Z             = false;
 	int _coretools_thinning = 0;
 
-	// Mass spectrometry data, still dormant. Nothing builds it. The block update does not read it
-	// either: the eight-state block takes the LOTUS and the simple-error term, and adapting a third
-	// source is that source's own work.
-	std::optional<TMSMSData> _ms_data;
-
 	// The error probability standing between the two tree fields and the field. stattools owns the
 	// value and moves it; this is where the field reads it.
 	TypeParamErrorProbability *_omega = nullptr;

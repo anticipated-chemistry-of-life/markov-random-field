@@ -36,9 +36,6 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
     : _trees(Trees), _prefix(std::move(_prefix)), _simulate(simulate), _omega(omega) {
 	using namespace coretools::instances;
 
-	// find molecule and species dimensions; construct mass spec data if both trees are present
-	// _ms_data.emplace(_trees); // TODO: once we have data, we can remove this
-
 	// read: fix Y or Z?
 	_fix_Y = ProgramOptions::FIX_Y;
 	if (_fix_Y) {
@@ -310,7 +307,6 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 	} else {
 		_update_all_Z<false>(iteration);
 	}
-	if (_ms_data.has_value()) _ms_data->update_all_MS_assignments();
 	_Y.add_to_counter(iteration);
 	_count_the_tree_fields(iteration);
 

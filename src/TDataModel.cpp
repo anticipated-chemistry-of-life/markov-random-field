@@ -23,6 +23,12 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
       _simple_error_model(trees, sources.epsilon_simple_model),
       _epsilon_simple_model(sources.epsilon_simple_model),
 #endif
+#ifdef USE_MS_DATA
+      _msms_data(trees, _markov_field, NUMBER_OF_MS_FILTERS, sources.mass_spec_filters,
+                sources.contamination_proba),
+      _mass_spec_filters(sources.mass_spec_filters),
+      _contamination_proba(sources.contamination_proba),
+#endif
       _prefix(std::move(prefix)), _simulate(simulate) {
 
 	// Tell stattools which parameters hang off this box. Only the compiled-in sources contribute.
@@ -33,6 +39,10 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL
 	params.push_back(_epsilon_simple_model);
+#endif
+#ifdef USE_MS_DATA
+	params.push_back(_mass_spec_filters);
+	params.push_back(_contamination_proba);
 #endif
 	params.push_back(_omega);
 	for (const auto &it : _markov_field_stattools_param) { params.push_back(it.get()); }
@@ -45,6 +55,10 @@ void TDataModel::initialize() {
 #define ACOL_INIT_DATA_SOURCE(member, Type) _##member.initialize(this, _simulate);
 	ACOL_DATA_SOURCES(ACOL_INIT_DATA_SOURCE)
 #undef ACOL_INIT_DATA_SOURCE
+
+#ifdef USE_MS_DATA
+	_msms_data.initialize(this);
+#endif
 
 	_omega->initStorage(this, {1});
 
@@ -73,6 +87,10 @@ void TDataModel::guessInitialValues() {
 	ACOL_DATA_SOURCES(ACOL_GUESS_DATA_SOURCE)
 #undef ACOL_GUESS_DATA_SOURCE
 
+#ifdef USE_MS_DATA
+	_msms_data.guess_initial_values();
+#endif
+
 	_omega->set(TypeErrorProbability(ProgramOptions::ERROR_PROBABILITY));
 	coretools::instances::logfile().list(
 	    "Starting the error probability omega at ", ProgramOptions::ERROR_PROBABILITY,
@@ -90,7 +108,15 @@ double TDataModel::data_log_likelihood() const {
 	return sum;
 }
 
-void TDataModel::update_markov_field() { _markov_field.update(*this, _mrf_update_iteration++); }
+void TDataModel::update_markov_field() {
+	_markov_field.update(*this, _mrf_update_iteration++);
+#ifdef USE_MS_DATA
+	// Sweeps the feature<->molecule assignments against the Y this iteration's block update just
+	// produced. Order-independent with respect to everything else here: the sweep does not change
+	// Y, and its likelihood is not (yet) part of data_log_likelihood or the joint density.
+	_msms_data.update_all_MS_assignments();
+#endif
+}
 
 #ifdef USE_LOTUS
 double TDataModel::calculateLLRatio(TLotus::TypeParamGamma *, size_t /*Index*/) {
@@ -123,6 +149,29 @@ void TDataModel::updateTempVals(TSimpleErrorModel::TypeParamEpsilon *, size_t /*
 	// Nothing to undo: the likelihood is recomputed in O(1) from the disagreement count and the
 	// current epsilon, and stattools restores the value itself when a proposal is rejected. The
 	// overload still has to exist -- stattools throws at runtime if it is missing.
+}
+#endif
+
+#ifdef USE_MS_DATA
+double TDataModel::calculateLLRatio(TMSMSData::TypeParamMassSpecFilter *, size_t index) {
+	return _msms_data.ll_ratio_after_filter_move(index);
+}
+
+double TDataModel::calculateLLRatio(TMSMSData::TypeParamContamination *, size_t /*Index*/) {
+	return _msms_data.ll_ratio_after_contamination_move();
+}
+
+void TDataModel::updateTempVals(TMSMSData::TypeParamMassSpecFilter *, size_t /*Index*/,
+                                bool /*Accepted*/) {
+	// Nothing to undo: ll_ratio_after_filter_move recomputes from the stored old/new parameter
+	// values each time, and stattools restores the value itself when a proposal is rejected.
+}
+
+void TDataModel::updateTempVals(TMSMSData::TypeParamContamination *, size_t /*Index*/,
+                                bool /*Accepted*/) {
+	// Nothing to undo: ll_ratio_after_contamination_move recomputes the whole likelihood at the
+	// old and the proposed value each time, and stattools restores the value itself when a
+	// proposal is rejected.
 }
 #endif
 

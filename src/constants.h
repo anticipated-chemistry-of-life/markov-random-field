@@ -9,6 +9,12 @@ static constexpr uint32_t MAX_NUMBER_OF_MOLECULES = (1 << 24) - 1;
 static constexpr size_t NUMBER_OF_TREES           = 2;
 using IndexArray                                  = std::array<size_t, NUMBER_OF_TREES>;
 
+// Number of mass-spec filters the model sizes the filter-probability parameter for. Loading MS
+// runs from a file (and deriving this from what the file actually contains) is not implemented
+// yet -- TMSMSData::TMSMSData has a `// TODO: load ms data from file` -- so this is a placeholder
+// that keeps the one filter every constructed run currently has addressable.
+static constexpr size_t NUMBER_OF_MS_FILTERS = 1;
+
 static constexpr auto LINEAR_SPACE_PROBA = [] {
 	std::array<double, 256> a{};
 	for (std::size_t i = 0; i < a.size(); ++i) a[i] = static_cast<double>(i) / 255.0;

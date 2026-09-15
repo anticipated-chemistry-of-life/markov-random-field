@@ -79,14 +79,11 @@ private:
 	// Mass spec stuff
 	// The probability to pass a filter
 	PriorOnMassSpecFilter _prior_on_mass_spec_filter{};
-	stattools::TParameter<SpecMassSpecFilter, TMSMSData> _mass_spec_filters;
+	TMSMSData::TypeParamMassSpecFilter _mass_spec_filters;
 
 	// Mass spec contamination parameters
 	PriorOnContaminationProba _prior_contamination_proba{};
-	stattools::TParameter<SpecContaminationProba, TMSMSData> _contamination_proba;
-
-	std::unique_ptr<TMSMSData> _msms_data;
-	std::unique_ptr<SpecMSData> _msdata_obs; // "fake" observation, only needed for stattools
+	TMSMSData::TypeParamContamination _contamination_proba;
 #endif
 
 	// functions that are called when updating

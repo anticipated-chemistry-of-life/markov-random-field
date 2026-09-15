@@ -9,7 +9,6 @@
 #include "coretools/algorithms.h"
 #include "mass_spec/msms_run.h"
 #include "stattools/ParametersObservations/TParameter.h"
-#include "stattools/Priors/TBaseLikelihoodPrior.h"
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
@@ -34,18 +33,19 @@ class TMarkovField;
 /// to have first the species WITH mass spec data, then the species without mass spec data. This
 /// will avoid have the indices being repeated and store a size_t for each species even it has no
 /// data.
-class TMSMSData : public stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase,
-                                                                TypeMSData, NumDimMSData> {
+///
+/// This class is not a stattools box: its parameters (the filter and contamination
+/// probabilities) hang off TDataModel, which owns this object and forwards the MCMC callbacks --
+/// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h). Unlike them it does not
+/// satisfy the DataSource concept (data_sources/data_source.h): it scores an assignment problem
+/// over a species' runs, not a per-cell state, and it carries its own latent state (the
+/// feature<->molecule assignments) that needs its own Metropolis sweep every iteration
+/// (update_all_MS_assignments), so TDataModel hand-wires it rather than folding it into
+/// ACOL_DATA_SOURCES.
+class TMSMSData {
 public:
-	// some type aliases, for better readability
-	using BoxType = TMSMSData;
-	using Base    = stattools::prior::TBaseLikelihoodPrior<stattools::TObservationBase, TypeMSData,
-	                                                       NumDimMSData>;
-	using typename Base::Storage;
-	using typename Base::UpdatedStorage;
-
-	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, BoxType>;
-	using TypeParamContamination  = stattools::TParameter<SpecContaminationProba, BoxType>;
+	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, TDataModel>;
+	using TypeParamContamination  = stattools::TParameter<SpecContaminationProba, TDataModel>;
 
 private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
@@ -60,9 +60,6 @@ private:
 
 	TypeParamContamination *_proba_contamination   = nullptr;
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
-
-	// Markov field parameter (only needed for stattools purposes to build a valid DAG)
-	const MarkovFieldParams &_markov_field_stattools_param;
 
 	std::vector<uint8_t> _species_has_ms_data;
 
@@ -107,18 +104,15 @@ private:
 public:
 	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 	                   const TMarkovField &markov_field, size_t number_of_filters,
-	                   const MarkovFieldParams &markov_field_stattools_param,
 	                   TypeParamMassSpecFilter *filter_proba,
 	                   TypeParamContamination *contamination_proba);
-	~TMSMSData() override = default;
+	~TMSMSData() = default;
 
-	// stattools overrides
-	[[nodiscard]] std::string name() const override { return "msmsdata"; }
-	void _simulateUnderPrior(Storage *) override {
-		throw coretools::TDevError("TMSMSData: simulation under prior is not implemented.");
-	}
-	void initialize() override;
-	void guessInitialValues() override;
+	/// Sizes the filter-probability and contamination parameter storages. `box` is the TDataModel
+	/// the parameters hang off; it has to be passed in because this class is no longer the box
+	/// itself.
+	void initialize(TDataModel *box);
+	void guess_initial_values();
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
@@ -128,6 +122,10 @@ public:
 	// the per-run detection term (filter / contamination) for this molecule given its current
 	// assignment status in each run. The feature term P(feature | assigned molecule) does not
 	// depend on Y and would cancel between the two states, so it is intentionally omitted here.
+	//
+	// Still dormant: the block update does not read this either (TMarkovField's eight-state block
+	// takes the LOTUS and the simple-error term), and adapting a third source is that source's own
+	// work.
 	void add_log_likelihood(const IndexArray &indices_in_leaves,
 	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
 		const auto species_idx = indices_in_leaves[_species_dim];
@@ -181,15 +179,15 @@ public:
 	/// assignments, all of which change in other updates; rather than cache the value and keep it
 	/// in sync, we recompute the full likelihood at both the old and the proposed contamination
 	/// value here, which is always correct regardless of the order of updates.
-	[[nodiscard]] double calculateLLRatio(TypeParamContamination *, size_t /*Index*/) {
+	[[nodiscard]] double ll_ratio_after_contamination_move() const {
 		const double old_LL =
 		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->oldValue());
 		const double cur_LL =
 		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->value());
 		return cur_LL - old_LL;
-	};
+	}
 
-	double calculateLLRatio(TypeParamMassSpecFilter *, size_t index);
+	[[nodiscard]] double ll_ratio_after_filter_move(size_t index) const;
 
 	/// Log-likelihood ratio (new - old) of a proposed assignment move in a single run. Y and the
 	/// mass-spec filter/contamination parameters are held fixed; only the terms that the move
