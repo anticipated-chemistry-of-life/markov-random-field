@@ -254,32 +254,13 @@ public:
 	      TypeParamBinBranches *Binned_Branch_Lenghts);
 	~TTree() override;
 
-	[[nodiscard]] size_t size() const { return _topology().n_nodes(); };
-
 	/// The topology this tree is built on. Everything that does not need the parameters -- the
 	/// current state, the sheet, the clique's walks -- should ask this rather than the tree.
 	[[nodiscard]] const TPhylogeny &phylogeny() const { return _topology(); }
 
-	[[nodiscard]] size_t parent_of(size_t index) const { return _topology().parent_of(index); }
-	[[nodiscard]] std::span<const size_t> children_of(size_t index) const {
-		return _topology().children_of(index);
-	}
-	[[nodiscard]] bool is_root(size_t index) const { return _topology().is_root(index); }
-	[[nodiscard]] bool isLeaf(size_t index) const { return _topology().is_leaf(index); }
-
-	/** Get the index of a node by its id
-	 * @param Id: the id of the node
-	 * @return the index of the node with the given id
-	 */
-	[[nodiscard]] size_t get_node_index(const std::string &Id) const {
-		return _topology().index_of(Id);
-	}
-
 	/** @return the number of leaves in the tree
 	 */
 	[[nodiscard]] size_t get_number_of_leaves() const { return _topology().n_leaves(); }
-	[[nodiscard]] size_t get_number_of_nodes() const { return _topology().n_nodes(); }
-	[[nodiscard]] size_t get_number_of_roots() const { return _topology().n_roots(); }
 
 	/** @param node_index: the index of the node within the tree
 	 * @return The index of the node in leaf space. Meaningless if the node is not a leaf; the node
@@ -289,24 +270,11 @@ public:
 		return _topology().leaf_index(node_index);
 	}
 	[[nodiscard]] size_t get_index_within_leaves(const std::string &node_name) const {
-		return _topology().leaf_index(get_node_index(node_name));
+		return _topology().leaf_index(_topology().index_of(node_name));
 	}
 	[[nodiscard]] size_t get_node_index_from_leaf_index(size_t leaf_index) const {
 		return _topology().leaves()[leaf_index];
 	}
-
-	/** @return The root nodes of the tree, as the range of node indices they occupy
-	 */
-	[[nodiscard]] auto get_root_nodes() const { return _topology().roots(); }
-	[[nodiscard]] auto get_internal_nodes() const { return _topology().internal_nodes(); }
-
-	/** Checks whether a node is in the tree
-	 * @param node_id: the id of the node
-	 * @return true if the node is in the tree, false otherwise
-	 */
-	[[nodiscard]] bool in_tree(const std::string &node_id) const {
-		return _topology().contains(node_id);
-	};
 
 	// stattools stuff
 	[[nodiscard]] std::string name() const override;

@@ -92,11 +92,12 @@ inline void validate_header_against_trees(const coretools::TInputFile &file,
 /// TTree::get_node_index) or if it is an internal node: the data files may only reference leaves,
 /// since the observed matrices are indexed in leaf space.
 [[nodiscard]] inline size_t leaf_index_or_throw(const TTree &tree, const std::string &node_name) {
-	if (!tree.isLeaf(tree.get_node_index(node_name))) {
+	const size_t node_index = tree.phylogeny().index_of(node_name);
+	if (!tree.phylogeny().is_leaf(node_index)) {
 		throw coretools::TUserError("Node '", node_name, "' in tree '", tree.get_tree_name(),
 		                            "' is not a leaf !");
 	}
-	return tree.get_index_within_leaves(node_name);
+	return tree.phylogeny().leaf_index(node_index);
 }
 
 } // namespace sparse_data_file

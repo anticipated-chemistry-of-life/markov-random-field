@@ -81,7 +81,7 @@ void TTree::initialize() {
 	for (size_t node_idx : _topology().branches()) {
 		branch_names.push_back(get_node_id(node_idx));
 	}
-	_binned_branch_lengths->initStorage(this, {get_number_of_nodes() - get_number_of_roots()},
+	_binned_branch_lengths->initStorage(this, {_topology().n_branches()},
 	                                    {std::make_shared<coretools::TNamesStrings>(branch_names)});
 }
 

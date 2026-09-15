@@ -58,7 +58,7 @@ void TTree::_initialize_clique_from_children(size_t c, TNodeStateCliqueView &sta
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
 	// children.
 	const TTransitionGrid &process = transition_grid(c);
-	for (const size_t node_index : get_internal_nodes()) {
+	for (const size_t node_index : _topology().internal_nodes()) {
 		_initialize_node_from_children(node_index, process, states);
 	}
 }
