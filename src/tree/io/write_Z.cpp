@@ -10,7 +10,7 @@
 void write_branch_length_grid(const TTree &tree) {
 	const std::vector<std::string> header = {"grid_position", "branch_length"};
 	coretools::TOutputFile file(
-	    "acol_simulated_" + tree.get_tree_name() + "_branch_length_grid.txt", header, "\t");
+	    "acol_simulated_" + tree.get_tree_name() + "_branch_length_grid.tsv", header, "\t");
 
 	const auto &grid_branch_lengths = tree.grid_branch_lengths();
 	for (size_t i = 0; i < grid_branch_lengths.size(); ++i) {

@@ -93,7 +93,7 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
 	}
 
 	if (parameters().exists("set_Y")) {
-		std::string filename = parameters().get("set_Y", "acol_simulated_Y.txt");
+		std::string filename = parameters().get("set_Y", "acol_simulated_Y.tsv");
 		_read_Y_from_file(filename);
 		_field_came_from_a_file = true;
 	}
@@ -146,7 +146,7 @@ void TMarkovField::_open_Y_trace_file() {
 	std::vector<size_t> Y_trace_header;
 	Y_trace_header.reserve(_Y.total_size_of_container_space());
 	for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) { Y_trace_header.push_back(i); }
-	_Y_trace_file.open(_prefix + "_Y_trace.txt", Y_trace_header, "\t");
+	_Y_trace_file.open(_prefix + "_Y_trace.tsv", Y_trace_header, "\t");
 }
 
 void TMarkovField::_trace_link_counters(size_t iteration) {
@@ -158,7 +158,7 @@ void TMarkovField::_trace_link_counters(size_t iteration) {
 			header.push_back("n_bucket" + std::to_string(bucket) + "_field1");
 		}
 		const std::string suffix =
-		    _simulate ? "_simulated_link_counters_trace.txt" : "_link_counters_trace.txt";
+		    _simulate ? "_simulated_link_counters_trace.tsv" : "_link_counters_trace.tsv";
 		_link_counters_file.open(_prefix + suffix, header, "\t");
 	}
 
@@ -285,7 +285,9 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 
 	// at the very end: sum the per-thread accumulators and store them in the data sources
 	accumulator.commit(data_model);
-	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _Y.get_thinning_factor() == 0) && !_fix_Y) {
+	using namespace coretools::instances;
+	if (ProgramOptions::WRITE_Y_TRACE &&
+	    (iteration % (int)parameters().get<double>("thinning", 10.0) == 0) && !_fix_Y) {
 		_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
 	}
 }
@@ -349,10 +351,10 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	// rather than a finding about data (ADR-0005).
 	_report_link_diagnostic();
 
-	if (ProgramOptions::WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.txt"); }
+	if (ProgramOptions::WRITE_Y) { _write_Y_to_file<true>(_prefix + "_simulated_Y.tsv"); }
 	if (ProgramOptions::WRITE_Z) {
 		for (const auto &tree : _trees) {
-			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".txt",
+			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".tsv",
 			                tree->get_Z(), node_state_columns(_trees), /*write_full_Z =*/true);
 			if (ProgramOptions::WRITE_BRANCH_LENGTHS) { write_branch_length_grid(*tree); }
 		}
@@ -382,7 +384,7 @@ void TMarkovField::oneBurninHasFinished() { _Y.remove_zeros(); }
 
 void TMarkovField::MCMCHasFinished() {
 	// write function to write the posterior state of Y to file
-	_write_Y_to_file<false>(_prefix + "_Y_posterior.txt");
+	_write_Y_to_file<false>(_prefix + "_Y_posterior.tsv");
 	// Each tree field's posterior stands beside it, in a file of its own. The field's own says
 	// nothing about how the two trees split the rate between them (ADR-0005, derivation 3).
 	_write_tree_field_posteriors();
@@ -419,14 +421,16 @@ joint_density::TJointDensity TMarkovField::_calculate_joint_density(const TDataM
 
 void TMarkovField::_trace_joint_density(size_t iteration, const TDataModel &data_model) {
 	if (!ProgramOptions::WRITE_JOINT_LOG_PROB_DENSITY) { return; }
-	if (iteration % _Y.get_thinning_factor() != 0) { return; }
+	if (iteration % (int)coretools::instances::parameters().get<double>("thinning", 10.0) != 0) {
+		return;
+	}
 
 	if (!_joint_density_file.isOpen()) {
 		std::vector<std::string> tree_names;
 		tree_names.reserve(_trees.size());
 		for (const auto &tree : _trees) { tree_names.push_back(tree->get_tree_name()); }
 		const std::string suffix =
-		    _simulate ? "_simulated_joint_density.txt" : "_joint_density.txt";
+		    _simulate ? "_simulated_joint_density.tsv" : "_joint_density.tsv";
 		_joint_density_file.open(_prefix + suffix, joint_density::trace_header(tree_names), "\t");
 	}
 
@@ -445,7 +449,7 @@ void TMarkovField::_write_tree_field_posteriors() const {
 	const auto columns = node_state_columns(_trees);
 	for (size_t tree_idx = 0; tree_idx < _tree_field_posteriors.size(); ++tree_idx) {
 		write_tree_field_posterior(
-		    _prefix + "_" + _trees[tree_idx]->get_tree_name() + "_tree_field_posterior.txt", _Y,
+		    _prefix + "_" + _trees[tree_idx]->get_tree_name() + "_tree_field_posterior.tsv", _Y,
 		    _trees[tree_idx]->get_Z(), _tree_field_posteriors[tree_idx], columns);
 	}
 }

@@ -160,7 +160,7 @@ private:
 				for (size_t i = 0; i < tree->get_Z().total_size_of_container_space(); ++i) {
 					Z_trace_header.push_back(i);
 				}
-				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.txt",
+				_Z_trace_files.emplace_back(_prefix + "_" + tree->get_tree_name() + "_Z_trace.tsv",
 				                            Z_trace_header, "\t");
 			}
 		}
@@ -169,7 +169,9 @@ private:
 			_tree->update_Z_and_nus_and_alphas_and_branch_lengths<FixZ>(iteration);
 		}
 		if (_fix_Z) { return; }
-		if (iteration % _Y.get_thinning_factor() == 0 && ProgramOptions::WRITE_Z_TRACE) {
+		using namespace coretools::instances;
+		if (ProgramOptions::WRITE_Z_TRACE &&
+		    iteration % (int)parameters().get<double>("thinning", 10.0) == 0) {
 			for (size_t tree_idx = 0; tree_idx < _trees.size(); ++tree_idx) {
 				const auto &tree = _trees[tree_idx];
 				_Z_trace_files[tree_idx].writeln(tree->get_Z().get_full_Z_binary_vector());
@@ -262,7 +264,6 @@ public:
 
 	// get Y
 	[[nodiscard]] const TFieldStorage &get_Y_matrix() const;
-
 
 	// functions to perform stuff on Y after burnin / MCMC finished
 	void burninHasFinished();
