@@ -21,6 +21,7 @@
 #include "data_sources/data_source.h"
 #include "lotus/TLotusMath.h"
 #include "ntfy/TNtfyNotifier.h"
+#include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/TSparse.h"
 #include "storages/storage_backend.h"
@@ -44,6 +45,14 @@ private:
 
 	// data
 	TSparseBinary _L;
+
+	/// One forward cursor per thread into `_L`'s sorted-ones cache. `prepare_for_block_update`
+	/// seeds every slot to that thread's own chunk of the block update's leaf-pair traversal,
+	/// once, single-threaded, before the parallel region begins; after that each thread only
+	/// ever advances its own slot forward, which is what `holds_a_record` does. Safe for every
+	/// thread to hold at once for the same reason `TDataUpdateAccumulator::add` is: nothing
+	/// writes `_L` once a block update starts, and no thread touches another's slot.
+	mutable std::vector<TSparseBinary::OnesCursor> _block_update_cursors;
 
 	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
@@ -92,11 +101,33 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
+	/// Seeds every thread's cursor into `_L`'s sorted-ones cache to the start of that thread's
+	/// own chunk of the traversal: thread `t` gets the cursor `ones_cursor_from(t * chunk_size)`
+	/// (TSparse.h). Has to run once, single-threaded, before the block update's parallel region
+	/// starts -- `ones_cursor()` is not safe to call concurrently with itself -- and `chunk_size`
+	/// has to be the exact chunk size `block_update::run` schedules threads with
+	/// (`schedule(static, chunk_size)`, TBlockUpdate.h), or a thread's first query could land
+	/// before its cursor's seek point. `TBlockModel::prepare_for_traversal` calls this once per
+	/// block update, with the same `chunk_size` the traversal computed.
+	void prepare_for_block_update(size_t chunk_size) {
+		_block_update_cursors.clear();
+		_block_update_cursors.reserve(ProgramOptions::NUMBER_OF_THREADS);
+		for (size_t thread = 0; thread < ProgramOptions::NUMBER_OF_THREADS; ++thread) {
+			_block_update_cursors.push_back(_L.ones_cursor_from(thread * chunk_size));
+		}
+	}
+
 	/// Whether LOTUS holds a record for one cell of the field. L has the field's dimensions, so
-	/// the field's index is already L's. The update asks this one cell at a time. Nothing writes
-	/// L.
+	/// the field's index is already L's. The update asks this once per leaf pair, in ascending
+	/// linear-index order within each thread's chunk -- `block_update::run` schedules threads
+	/// statically, one contiguous chunk each -- which is what lets this walk `_L`'s sorted-ones
+	/// cache forward with the calling thread's own cursor instead of hashing.
+	/// `prepare_for_block_update` has to have seeded that cursor first. Nothing else calls this
+	/// out of order: it is `TBlockModel::factors`'s alone.
 	[[nodiscard]] bool holds_a_record(const IndexArray &index_in_leaves_space) const {
-		return _L.is_one(_L.get_linear_index_in_container_space(index_in_leaves_space));
+		const size_t linear_index = _L.get_linear_index_in_container_space(index_in_leaves_space);
+		const auto thread         = static_cast<size_t>(omp_get_thread_num());
+		return _block_update_cursors[thread].advance_to_and_check(linear_index);
 	}
 
 	/// prob[0] = P(L_cell | Y = 0), prob[1] = P(L_cell | Y = 1). `reports_the_cell` is whether

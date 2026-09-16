@@ -110,6 +110,10 @@ public:
 		        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
 	}
 
+	/// Neither mock model has a point query that cares about visit order, so this is a no-op --
+	/// it exists only to satisfy `BlockModel` (TBlockUpdate.h).
+	void prepare_for_traversal(size_t) {}
+
 	void record(size_t species_leaf, size_t molecule_leaf, const block_update::TLeafPairFactors &,
 	            const field_math::TBlockStates &drawn) {
 		TVisit &recorded = visit(species_leaf, molecule_leaf);
@@ -147,6 +151,9 @@ public:
 		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
 		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
 	}
+
+	/// No point query cares about visit order here either; a no-op to satisfy `BlockModel`.
+	static void prepare_for_traversal(size_t) {}
 
 	static void record(size_t, size_t, const block_update::TLeafPairFactors &,
 	                   const field_math::TBlockStates &) {}

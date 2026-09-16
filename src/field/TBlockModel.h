@@ -131,6 +131,17 @@ public:
 	    : _species_tree(*trees.front()), _molecule_tree(*trees.back()), _data_model(data_model),
 	      _accumulator(accumulator) {}
 
+	/// Told the traversal's chunk size once, before the parallel region starts: `block_update::run`
+	/// calls this right after computing the chunk size it schedules threads with
+	/// (`schedule(static, chunk_size)`, TBlockUpdate.h), so a source whose point query wants the
+	/// leaf pairs in ascending order can ready one cursor per thread instead of hashing every
+	/// cell. Only LOTUS uses this today; a build without it is an empty function.
+	void prepare_for_traversal([[maybe_unused]] size_t chunk_size) {
+#ifdef USE_LOTUS
+		_data_model.get_lotus().prepare_for_block_update(chunk_size);
+#endif
+	}
+
 	/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
 	template<TransitionGridLike Process>
 	[[nodiscard]] static coretools::Probability

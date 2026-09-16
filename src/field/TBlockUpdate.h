@@ -63,15 +63,22 @@ struct TLeafPairFactors {
 ///
 /// The model answers one leaf pair at a time. Threads ask it at once, so `factors` reads and
 /// writes nothing a second thread also touches.
+///
+/// `prepare_for_traversal` is told the chunk size once, single-threaded, before the parallel
+/// region starts (`run`, below): a source whose point query wants the leaf pairs in ascending
+/// order -- LOTUS's records, addressed by `TBlockModel::factors` -- readies one cursor per
+/// thread there instead of hashing every cell. A model with nothing to ready answers with an
+/// empty function; `TBlockModel`'s does, in a build without LOTUS.
 template<typename T>
 concept BlockModel =
     requires(T &model, size_t species_leaf, size_t molecule_leaf, bool species_parent,
 	         bool molecule_parent, const TLeafPairFactors &factors,
-	         const field_math::TBlockStates &drawn) {
+	         const field_math::TBlockStates &drawn, size_t chunk_size) {
 	    {
 		    model.factors(species_leaf, molecule_leaf, species_parent, molecule_parent)
 	    } -> std::same_as<TLeafPairFactors>;
 	    { model.record(species_leaf, molecule_leaf, factors, drawn) } -> std::same_as<void>;
+	    { model.prepare_for_traversal(chunk_size) } -> std::same_as<void>;
     };
 
 /// What one thread's share of a block update added up to.
@@ -169,14 +176,25 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	// now, so a `default(none)` clause that names one is right under some compilers and wrong under
 	// others.
 	size_t n_cells = Y.total_size_of_container_space();
+
+	// One contiguous chunk per thread, computed once so the scheduler below and
+	// `model.prepare_for_traversal` agree exactly on where each thread's slice starts. Ceiling
+	// division: every thread but possibly the last gets exactly this many cells.
+	// `schedule(static, chunk_size)` is specified to hand chunks to threads in this exact order
+	// (unlike a bare `schedule(static)`, whose split is implementation-defined), which is the
+	// only reason a source may assume it.
+	const size_t chunk_size =
+	    (n_cells + ProgramOptions::NUMBER_OF_THREADS - 1) / ProgramOptions::NUMBER_OF_THREADS;
+	model.prepare_for_traversal(chunk_size);
+
 	std::vector<std::vector<size_t>> field_inserts(ProgramOptions::NUMBER_OF_THREADS);
 	std::vector<std::vector<size_t>> species_inserts(ProgramOptions::NUMBER_OF_THREADS);
 	std::vector<std::vector<size_t>> molecule_inserts(ProgramOptions::NUMBER_OF_THREADS);
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(dynamic) default(none)                                                                \
+    schedule(static, chunk_size) default(none)                                                    \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, tallies,           \
-	           field_inserts, species_inserts, molecule_inserts, n_cells)
+	           field_inserts, species_inserts, molecule_inserts, n_cells, chunk_size)
 	for (size_t field_cell = 0; field_cell < n_cells; ++field_cell) {
 		const auto thread = static_cast<size_t>(omp_get_thread_num());
 		update_cell<Policy>(field_cell, Y, Z_species, Z_molecule, species, molecule, omega, model,

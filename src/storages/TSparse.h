@@ -253,6 +253,10 @@ public:
 	class OnesCursor {
 		const std::vector<size_t> *_ones = nullptr;
 		size_t _position                 = 0;
+#ifndef NDEBUG
+		size_t _last_query = 0;
+		bool _queried       = false;
+#endif
 
 	public:
 		OnesCursor() = default;
@@ -261,6 +265,36 @@ public:
 		[[nodiscard]] bool valid() const { return _ones != nullptr && _position < _ones->size(); }
 		[[nodiscard]] size_t linear_index() const { return (*_ones)[_position]; }
 		void advance() { ++_position; }
+
+		/// Positions the cursor at the first one at or after `linear_index`, by binary search.
+		/// What a caller that owns one contiguous slice of the container space wants: seeking
+		/// there once, before it starts walking that slice, costs it nothing next to the slice
+		/// itself, and it is the only way many independent slices can each get a forward-only
+		/// cursor without one of them re-walking every one another slice already owns.
+		void seek(size_t linear_index) {
+			_position = static_cast<size_t>(
+			    std::lower_bound(_ones->begin(), _ones->end(), linear_index) - _ones->begin());
+#ifndef NDEBUG
+			_last_query = linear_index;
+			_queried    = true;
+#endif
+		}
+
+		/// Advances to the first one at or after `query`, then answers whether that one is
+		/// exactly `query`. Never moves backward, so a caller whose queries arrive in ascending
+		/// order -- the block update's leaf-pair loop, one cursor per thread, in particular --
+		/// pays this once per record it steps over rather than once per query. A caller whose
+		/// queries are not ascending gets a wrong answer silently in release; the debug build
+		/// asserts the order instead, because nothing else can catch that misuse.
+		[[nodiscard]] bool advance_to_and_check(size_t query) {
+#ifndef NDEBUG
+			DEBUG_ASSERT(!_queried || query >= _last_query);
+			_last_query = query;
+			_queried    = true;
+#endif
+			while (valid() && linear_index() < query) { advance(); }
+			return valid() && linear_index() == query;
+		}
 	};
 
 	/// The ones, in ascending linear-index order.
@@ -274,6 +308,16 @@ public:
 	[[nodiscard]] OnesCursor ones_cursor() const {
 		if (_ones_are_stale || _handed_out_a_handle.is_set()) { _rebuild_sorted_ones(); }
 		return OnesCursor(_sorted_ones);
+	}
+
+	/// The ones cursor, seeded to the first one at or after `linear_index` instead of the start.
+	/// For a caller that owns one contiguous slice of the container space -- one thread's share
+	/// of a statically-scheduled traversal, in particular -- and wants a forward-only cursor of
+	/// its own without re-walking every one the slices before it already own.
+	[[nodiscard]] OnesCursor ones_cursor_from(size_t linear_index) const {
+		OnesCursor cursor = ones_cursor();
+		cursor.seek(linear_index);
+		return cursor;
 	}
 };
 
