@@ -17,11 +17,6 @@ IndexArray TTree::_clique_index(size_t c) const {
 	return _cliques().index_of(c);
 }
 
-TTransitionGridView
-TTree::transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
-	return transition_grid(_cliques().clique_of(index_in_leaves_space));
-}
-
 void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
                                 const std::vector<std::unique_ptr<TTree>> &all_trees) {
 	// clique of a tree: runs along that dimension

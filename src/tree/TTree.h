@@ -136,10 +136,9 @@ private:
 	/// P(node | parent) under an explicitly given process, so a Metropolis proposal can ask the
 	/// same question of the clique's current grid and of its candidate.
 	template<TransitionGridLike Process>
-	[[nodiscard]] double _prob_to_parent(size_t index_in_tree,
-	                                     TypeBinnedBranchLengths binned_branch_length,
-	                                     const TNodeStateCliqueView &states,
-	                                     const Process &process) const {
+	[[nodiscard]] double
+	_prob_to_parent(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
+	                const TNodeStateCliqueView &states, const Process &process) const {
 		const size_t parent_index = _topology().parent_of(index_in_tree);
 		const bool parent_state   = states.is_one(parent_index);
 		const bool child_state    = states.is_one(index_in_tree);
@@ -305,7 +304,9 @@ public:
 	/// The process of the clique a cell belongs to. A clique of this tree is named by a leaf of
 	/// every other tree, so the cell's own dimension is dropped on the way in.
 	[[nodiscard]] TTransitionGridView
-	transition_grid_of_cell(const IndexArray &index_in_leaves_space) const;
+	transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
+		return transition_grid(_cliques().clique_of(index_in_leaves_space));
+	};
 	[[nodiscard]] const TNodeStateStorage &get_Z() const;
 	TNodeStateStorage &get_Z();
 
