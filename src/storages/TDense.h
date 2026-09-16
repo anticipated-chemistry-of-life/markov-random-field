@@ -60,7 +60,7 @@ public:
 	/// Sizes the array to the container space and puts every cell in state 0.
 	void initialize_dimensions(const IndexArray &dimensions) {
 		_dimensions = dimensions;
-		_states.assign(coretools::containerProduct(dimensions), Cell());
+		_states.assign(container_product(dimensions), Cell());
 	}
 
 	[[nodiscard]] bool is_one(size_t linear_index) const {

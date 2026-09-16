@@ -74,7 +74,7 @@ std::vector<IndexArray> cliques_of(const IndexArray &leaf_counts, size_t dimensi
 	IndexArray clique_counts = leaf_counts;
 	clique_counts[dimension] = 1;
 
-	const size_t n_cliques = coretools::containerProduct(clique_counts);
+	const size_t n_cliques = container_product(clique_counts);
 	std::vector<IndexArray> cliques;
 	cliques.reserve(n_cliques);
 	for (size_t i = 0; i < n_cliques; ++i) {

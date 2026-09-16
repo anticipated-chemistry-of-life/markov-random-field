@@ -9,6 +9,22 @@ static constexpr uint32_t MAX_NUMBER_OF_MOLECULES = (1 << 24) - 1;
 static constexpr size_t NUMBER_OF_TREES           = 2;
 using IndexArray                                  = std::array<size_t, NUMBER_OF_TREES>;
 
+/// The product of a container's elements, accumulated in the container's own value type.
+///
+/// `coretools::containerProduct` accumulates in `std::accumulate`'s init-value type, which is the
+/// bare literal `1` -- `int`, 32 bits -- regardless of what `Container::value_type` is. A
+/// container space whose dimensions multiply past `INT_MAX` (e.g. two leaf counts north of about
+/// 46000 each) then silently truncates: the size a storage allocates or bounds-checks against is
+/// wrong, and every linear index computed the same space's own, correctly widened, arithmetic
+/// reads as "outside the container" even though it is not. This is that function with the
+/// accumulator's type pinned to `Container::value_type` from the first multiply.
+template<typename Container>
+[[nodiscard]] constexpr typename Container::value_type container_product(const Container &vs) {
+	typename Container::value_type product{1};
+	for (const auto &v : vs) { product *= v; }
+	return product;
+}
+
 // Number of mass-spec filters the model sizes the filter-probability parameter for. Loading MS
 // runs from a file (and deriving this from what the file actually contains) is not implemented
 // yet -- TMSMSData::TMSMSData has a `// TODO: load ms data from file` -- so this is a placeholder

@@ -142,7 +142,7 @@ public:
 	/// can trust its cache.
 	void initialize_dimensions(const IndexArray &dimensions) {
 		_dimensions = dimensions;
-		_total_size = coretools::containerProduct(dimensions);
+		_total_size = container_product(dimensions);
 		_states.clear();
 		_sorted_ones.clear();
 		_ones_are_stale      = true;
