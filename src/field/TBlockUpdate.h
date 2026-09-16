@@ -174,7 +174,7 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	std::vector<std::vector<size_t>> molecule_inserts(ProgramOptions::NUMBER_OF_THREADS);
 
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(static) default(none)                                                                 \
+    schedule(dynamic) default(none)                                                                \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, tallies,           \
 	           field_inserts, species_inserts, molecule_inserts, n_cells)
 	for (size_t field_cell = 0; field_cell < n_cells; ++field_cell) {
