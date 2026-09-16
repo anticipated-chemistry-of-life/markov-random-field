@@ -81,11 +81,8 @@ public:
 
 	/// The rate at which `tree`'s field is corrupted. One value today, one per tree later --
 	/// which is the whole reason this is a type and not a double.
-	[[nodiscard]] double for_tree(size_t tree) const {
-		if (tree >= NUMBER_OF_TREES) {
-			throw std::invalid_argument("There is no tree " + std::to_string(tree) +
-			                            "; there are " + std::to_string(NUMBER_OF_TREES) + ".");
-		}
+	[[nodiscard]] double for_tree([[maybe_unused]] size_t tree) const {
+		DEBUG_ASSERT(tree < NUMBER_OF_TREES);
 		return _omega;
 	}
 
