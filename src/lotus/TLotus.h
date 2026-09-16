@@ -105,10 +105,10 @@ public:
 	/// own chunk of the traversal: thread `t` gets the cursor `ones_cursor_from(t * chunk_size)`
 	/// (TSparse.h). Has to run once, single-threaded, before the block update's parallel region
 	/// starts -- `ones_cursor()` is not safe to call concurrently with itself -- and `chunk_size`
-	/// has to be the exact chunk size `block_update::run` schedules threads with
-	/// (`schedule(static, chunk_size)`, TBlockUpdate.h), or a thread's first query could land
-	/// before its cursor's seek point. `TBlockModel::prepare_for_traversal` calls this once per
-	/// block update, with the same `chunk_size` the traversal computed.
+	/// has to be the number of *cells* each thread is handed, which is the rows it is scheduled
+	/// times the row width (`block_update::run`, TBlockUpdate.h), or a thread's first query could
+	/// land before its cursor's seek point. `TBlockModel::prepare_for_traversal` calls this once
+	/// per block update, with the chunk the traversal computed.
 	void prepare_for_block_update(size_t chunk_size) {
 		_block_update_cursors.clear();
 		_block_update_cursors.reserve(ProgramOptions::NUMBER_OF_THREADS);
@@ -119,11 +119,11 @@ public:
 
 	/// Whether LOTUS holds a record for one cell of the field. L has the field's dimensions, so
 	/// the field's index is already L's. The update asks this once per leaf pair, in ascending
-	/// linear-index order within each thread's chunk -- `block_update::run` schedules threads
-	/// statically, one contiguous chunk each -- which is what lets this walk `_L`'s sorted-ones
-	/// cache forward with the calling thread's own cursor instead of hashing.
-	/// `prepare_for_block_update` has to have seeded that cursor first. Nothing else calls this
-	/// out of order: it is `TBlockModel::factors`'s alone.
+	/// linear-index order within each thread's chunk -- `block_update::run` gives a thread a
+	/// contiguous block of field rows and walks each row's columns in order -- which is what lets
+	/// this walk `_L`'s sorted-ones cache forward with the calling thread's own cursor instead of
+	/// hashing. `prepare_for_block_update` has to have seeded that cursor first. Nothing else
+	/// calls this out of order: it is `TBlockModel::factors`'s alone.
 	[[nodiscard]] bool holds_a_record(const IndexArray &index_in_leaves_space) const {
 		const size_t linear_index = _L.get_linear_index_in_container_space(index_in_leaves_space);
 		const auto thread         = static_cast<size_t>(omp_get_thread_num());

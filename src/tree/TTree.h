@@ -307,6 +307,15 @@ public:
 	transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
 		return transition_grid(_cliques().clique_of(index_in_leaves_space));
 	};
+
+	/// The clique a cell belongs to. A clique of this tree is named by a leaf of every other tree,
+	/// so the cell's own dimension is dropped on the way in -- which is what makes the clique of
+	/// every cell of one field row the same, in the tree that does not own the row's dimension.
+	/// The block update leans on that (field/TBlockUpdate.h) and checks it in a debug build.
+	[[nodiscard]] size_t clique_of_cell(const IndexArray &index_in_leaves_space) const {
+		return _cliques().clique_of(index_in_leaves_space);
+	}
+
 	[[nodiscard]] const TNodeStateStorage &get_Z() const;
 	TNodeStateStorage &get_Z();
 

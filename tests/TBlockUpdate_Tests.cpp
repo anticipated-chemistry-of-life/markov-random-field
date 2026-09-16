@@ -96,14 +96,22 @@ public:
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
 	    : _n_molecule_leaves(n_molecule_leaves), _visits(n_species_leaves * n_molecule_leaves) {}
 
+	/// The row the loop is walking: this model needs nothing of it but the species leaf, which
+	/// every leaf pair of the row shares.
+	struct TRow {
+		size_t species_leaf = 0;
+	};
+
+	[[nodiscard]] static TRow begin_row(size_t species_leaf) { return TRow{species_leaf}; }
+
 	[[nodiscard]] block_update::TLeafPairFactors
-	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
-		TVisit &recorded = visit(species_leaf, molecule_leaf);
+	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+		TVisit &recorded = visit(row.species_leaf, molecule_leaf);
 		++recorded.n_asked;
 		recorded.species_parent  = species_parent;
 		recorded.molecule_parent = molecule_parent;
 
-		const auto target = target_at(species_leaf, molecule_leaf);
+		const auto target = target_at(row.species_leaf, molecule_leaf);
 		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
 		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
 		        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
@@ -141,11 +149,18 @@ static_assert(block_update::BlockModel<TForcingModel>,
 /// it safe to run on many threads.
 class TFreeModel {
 public:
+	/// Stateless, so the row carries only the species leaf the loop is on.
+	struct TRow {
+		size_t species_leaf = 0;
+	};
+
+	[[nodiscard]] static TRow begin_row(size_t species_leaf) { return TRow{species_leaf}; }
+
 	[[nodiscard]] static block_update::TLeafPairFactors
-	factors(size_t species_leaf, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
 		// Values that depend on both the leaf pair and the parents, so that a read of the wrong
 		// parent, or of the wrong cell, moves the chain.
-		const double drift = 0.1 * static_cast<double>((species_leaf + molecule_leaf) % 4U);
+		const double drift = 0.1 * static_cast<double>((row.species_leaf + molecule_leaf) % 4U);
 		return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
 		        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
 		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},

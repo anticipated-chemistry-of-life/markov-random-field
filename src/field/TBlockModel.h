@@ -115,9 +115,9 @@ public:
 /// An inferred chain is the only one that has a model to ask. A simulated one draws its whole
 /// configuration forward and runs no update (TMarkovField::simulate).
 ///
-/// Every thread of the update asks this one object. `factors` therefore reads and writes nothing
-/// another thread also touches, and `record` writes the accumulator slot of the calling thread
-/// alone.
+/// Every thread of the update asks this one object. `begin_row` and `factors` therefore read and
+/// write nothing another thread also touches, and `record` writes the accumulator slot of the
+/// calling thread alone.
 class TBlockModel {
 private:
 	const TTree &_species_tree;
@@ -132,10 +132,10 @@ public:
 	      _accumulator(accumulator) {}
 
 	/// Told the traversal's chunk size once, before the parallel region starts: `block_update::run`
-	/// calls this right after computing the chunk size it schedules threads with
-	/// (`schedule(static, chunk_size)`, TBlockUpdate.h), so a source whose point query wants the
-	/// leaf pairs in ascending order can ready one cursor per thread instead of hashing every
-	/// cell. Only LOTUS uses this today; a build without it is an empty function.
+	/// calls this right after computing the rows it hands each thread, and states the chunk in
+	/// cells (TBlockUpdate.h), so a source whose point query wants the leaf pairs in ascending
+	/// order can ready one cursor per thread instead of hashing every cell. Only LOTUS uses this
+	/// today; a build without it is an empty function.
 	void prepare_for_traversal([[maybe_unused]] size_t chunk_size) {
 #ifdef USE_LOTUS
 		_data_model.get_lotus().prepare_for_block_update(chunk_size);
@@ -149,21 +149,52 @@ public:
 		return coretools::P(process.probability(branch, parent_state, /*to=*/true));
 	}
 
-	[[nodiscard]] block_update::TLeafPairFactors factors(size_t species_leaf, size_t molecule_leaf,
+	/// What one field row -- one species leaf, every molecule leaf -- settles before it is walked.
+	///
+	/// A clique of one tree is named by a leaf of every other tree (ADR-0011), so the molecule
+	/// tree's clique *is* the species leaf: its process is the same for every cell of the row, and
+	/// asking the table for it once per row rather than once per cell is the whole point of this
+	/// type. The species tree's branch is the row's too -- a species leaf sits on one branch,
+	/// whichever molecule leaf the cell pairs it with. What is left per cell is the species tree's
+	/// clique (the molecule leaf) and the molecule tree's branch (likewise).
+	struct TRow {
+		/// The molecule tree's process for this row.
+		TTransitionGridView molecule_process;
+		/// The bin the species leaf's branch sits in.
+		TypeBinnedBranchLengths species_branch;
+		/// The species leaf the row is, which `factors` needs to name a cell.
+		size_t species_leaf;
+		/// The molecule tree's clique this row is, kept so a debug build can check that it really
+		/// does not move down the row.
+		size_t molecule_clique;
+	};
+
+	[[nodiscard]] TRow begin_row(size_t species_leaf) const {
+		// The molecule tree drops the molecule coordinate, so any molecule leaf names this row's
+		// clique; 0 is the one every field row has.
+		const IndexArray first_cell_of_row{species_leaf, 0};
+		return TRow{.molecule_process = _molecule_tree.transition_grid_of_cell(first_cell_of_row),
+		            .species_branch   = _species_tree.get_binned_branch_length(species_leaf),
+		            .species_leaf     = species_leaf,
+		            .molecule_clique  = _molecule_tree.clique_of_cell(first_cell_of_row)};
+	}
+
+	[[nodiscard]] block_update::TLeafPairFactors factors(const TRow &row, size_t molecule_leaf,
 	                                                     bool species_parent,
 	                                                     bool molecule_parent) const {
-		const IndexArray cell{species_leaf, molecule_leaf};
+		const IndexArray cell{row.species_leaf, molecule_leaf};
+		// What the row settled once has to be what this cell would have asked for.
+		DEBUG_ASSERT(_molecule_tree.clique_of_cell(cell) == row.molecule_clique);
 
 		block_update::TLeafPairFactors leaf_pair;
-		// A clique of one tree carries a leaf of every other tree, so the species tree's clique is
-		// named by the molecule leaf and the molecule tree's by the species leaf. Each tree drops
-		// the dimension it owns from the cell it is handed, so both take the whole leaf pair and
-		// neither caller names a slot to blank (ADR-0011).
-		leaf_pair.prob_z_s_is_one =
-		    prob_of_one(_species_tree.transition_grid_of_cell(cell),
-			            _species_tree.get_binned_branch_length(species_leaf), species_parent);
+		// The species tree's clique is named by the molecule leaf, so it moves along the row and is
+		// read here. The molecule tree's is the species leaf, so it came from the row. Each tree
+		// drops the dimension it owns from the cell it is handed, so both take the whole leaf pair
+		// and neither caller names a slot to blank (ADR-0011).
+		leaf_pair.prob_z_s_is_one = prob_of_one(_species_tree.transition_grid_of_cell(cell),
+		                                        row.species_branch, species_parent);
 		leaf_pair.prob_z_m_is_one =
-		    prob_of_one(_molecule_tree.transition_grid_of_cell(cell),
+		    prob_of_one(row.molecule_process,
 			            _molecule_tree.get_binned_branch_length(molecule_leaf), molecule_parent);
 
 		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
