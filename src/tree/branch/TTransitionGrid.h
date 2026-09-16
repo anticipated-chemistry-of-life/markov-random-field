@@ -28,6 +28,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 /// One clique's transition matrices, one per bin, plus its stationary distribution.
@@ -108,6 +109,11 @@ public:
 
 	[[nodiscard]] double alpha() const { return _alpha; }
 	[[nodiscard]] size_t n_bins() const { return _matrices.size(); }
+
+	/// Every bin's matrix, in bin order. `TTransitionGridTable` (TTransitionGridTable.h) reads
+	/// this once, to copy a newly-installed grid into its own contiguous storage; nothing else
+	/// needs the bins in bulk.
+	[[nodiscard]] std::span<const std::array<double, 4>> matrices() const { return _matrices; }
 };
 
 #endif // ACOL_TTRANSITIONGRID_H

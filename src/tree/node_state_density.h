@@ -18,6 +18,7 @@
 
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/branch/TTransitionGridTable.h"
 
 #include <cmath>
 #include <concepts>
@@ -45,10 +46,9 @@ concept BranchBins = requires(const T &bins, size_t node) {
 /// The states are the ones the clique holds now, and the bins are the ones its branches sit in
 /// now, so the answer is the density of the configuration as it stands rather than of the states
 /// as they were drawn.
-template<CliqueStates States, BranchBins Bins>
-[[nodiscard]] double log_density_of_clique(const TPhylogeny &topology,
-                                           const TTransitionGrid &process, const States &states,
-                                           const Bins &bin_of) {
+template<CliqueStates States, BranchBins Bins, TransitionGridLike Process>
+[[nodiscard]] double log_density_of_clique(const TPhylogeny &topology, const Process &process,
+                                           const States &states, const Bins &bin_of) {
 	double sum = 0.0;
 	for (size_t node = 0; node < topology.n_nodes(); ++node) {
 		const bool state = states.is_one(node);

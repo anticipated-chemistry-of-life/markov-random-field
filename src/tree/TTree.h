@@ -21,6 +21,7 @@
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TBinGrid.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/branch/TTransitionGridTable.h"
 #include "tree/clique/TCliqueSpace.h"
 #include "tree/clique/TCliqueView.h"
 #include "tree/node_state_density.h"
@@ -77,7 +78,7 @@ private:
 	/// whenever a proposal on alpha or nu is accepted. There is no mutable "try" copy. A grid is
 	/// empty until then, so asking for one before the parameters are drawn throws instead of
 	/// reading a grid of zeros.
-	std::vector<std::optional<TTransitionGrid>> _transition_grids;
+	TTransitionGridTable _transition_grids;
 
 	// The cliques of this tree, numbered. Set once by _initialize_cliques; every use goes through
 	// _cliques(), which throws rather than reading extents nothing has filled in yet.
@@ -116,9 +117,10 @@ private:
 	void _add_to_LL_branch_lengths(size_t c, const TNodeStateCliqueView &states,
 	                               std::vector<coretools::TSumLogProbability> &log_sum,
 	                               const stattools::TPairIndexSampler &pairs) const;
+	template<TransitionGridLike Process>
 	[[nodiscard]] double
 	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-	                                          const TTransitionGrid &process,
+	                                          const Process &process,
 	                                          const TNodeStateCliqueView &states) const;
 
 	/// The multidimensional index of clique `c`: a leaf in every dimension but this tree's own,
@@ -127,16 +129,17 @@ private:
 
 	/// Installs the process of clique `c`. Called once the parameters exist, and again whenever a
 	/// proposal on alpha or nu is accepted. Nothing outside the tree installs a grid.
-	void _set_transition_grid(size_t c, TTransitionGrid grid) {
-		_transition_grids[c] = std::move(grid);
+	void _set_transition_grid(size_t c, const TTransitionGrid &grid) {
+		_transition_grids.set(c, grid);
 	}
 
 	/// P(node | parent) under an explicitly given process, so a Metropolis proposal can ask the
 	/// same question of the clique's current grid and of its candidate.
+	template<TransitionGridLike Process>
 	[[nodiscard]] double _prob_to_parent(size_t index_in_tree,
 	                                     TypeBinnedBranchLengths binned_branch_length,
 	                                     const TNodeStateCliqueView &states,
-	                                     const TTransitionGrid &process) const {
+	                                     const Process &process) const {
 		const size_t parent_index = _topology().parent_of(index_in_tree);
 		const bool parent_state   = states.is_one(parent_index);
 		const bool child_state    = states.is_one(index_in_tree);
@@ -145,7 +148,8 @@ private:
 
 	/// The bottom-up start of one clique. It shares its child terms with the node-state walk.
 	void _initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const;
-	void _initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
+	template<TransitionGridLike Process>
+	void _initialize_node_from_children(size_t node_index, const Process &process,
 	                                    TNodeStateCliqueView &states) const;
 
 	/// The bin every branch of this tree sat in before the current round of proposals. Branch
@@ -160,11 +164,12 @@ private:
 
 	/// One node's contribution to a clique's log-likelihood under `process`. Called twice per
 	/// node, once with the clique's current grid and once with the proposal's candidate.
+	template<TransitionGridLike Process>
 	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, bool state_of_node,
 	                                         coretools::TSumLogProbability &LL,
 	                                         const TNodeStateCliqueView &states,
 	                                         std::optional<size_t> branch_len_bin,
-	                                         const TTransitionGrid &process) const {
+	                                         const Process &process) const {
 		if (_topology().is_root(index_in_tree)) {
 			LL.add(process.stationary(state_of_node));
 		} else {
@@ -187,7 +192,7 @@ private:
 		// No need to mutate anything: the candidate is a second grid built from the proposed value,
 		// and the clique keeps whichever of the two is accepted. The old value is not read back
 		// from the parameter either -- the clique's current grid still carries it.
-		const TTransitionGrid &current  = transition_grid(c);
+		const auto current              = transition_grid(c);
 		const TTransitionGrid candidate = [&] {
 			if constexpr (IsAlpha) {
 				return TTransitionGrid(new_value, _nu_c[c], _grid());
@@ -293,13 +298,13 @@ public:
 	[[nodiscard]] size_t n_cliques() const { return _cliques().n_cliques(); }
 
 	/// The process of clique `c`.
-	[[nodiscard]] const TTransitionGrid &transition_grid(size_t c) const {
-		return _transition_grids[c].value();
+	[[nodiscard]] TTransitionGridView transition_grid(size_t c) const {
+		return _transition_grids.at(c);
 	}
 
 	/// The process of the clique a cell belongs to. A clique of this tree is named by a leaf of
 	/// every other tree, so the cell's own dimension is dropped on the way in.
-	[[nodiscard]] const TTransitionGrid &
+	[[nodiscard]] TTransitionGridView
 	transition_grid_of_cell(const IndexArray &index_in_leaves_space) const;
 	[[nodiscard]] const TNodeStateStorage &get_Z() const;
 	TNodeStateStorage &get_Z();

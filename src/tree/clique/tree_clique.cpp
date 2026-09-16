@@ -17,7 +17,7 @@ IndexArray TTree::_clique_index(size_t c) const {
 	return _cliques().index_of(c);
 }
 
-const TTransitionGrid &
+TTransitionGridView
 TTree::transition_grid_of_cell(const IndexArray &index_in_leaves_space) const {
 	return transition_grid(_cliques().clique_of(index_in_leaves_space));
 }
@@ -35,7 +35,7 @@ void TTree::_initialize_cliques(const IndexArray &num_leaves_per_tree,
 
 	// One grid slot per clique, in clique order, and all of them empty. A grid needs alpha and nu,
 	// which stattools has not drawn yet. TTree::guessInitialValues installs them.
-	_transition_grids.resize(clique_count);
+	_transition_grids.resize(clique_count, _grid().n_bins());
 
 	for (size_t i = 0; i < clique_count; ++i) {
 		const IndexArray clique_index = _clique_index(i);
@@ -57,7 +57,7 @@ void TTree::_initialize_clique_from_children(size_t c, TNodeStateCliqueView &sta
 	// block in post-order followed by the roots (ADR-0004), so every node's children are already
 	// done by the time it comes up -- leaves before all of them, and each parent after its own
 	// children.
-	const TTransitionGrid &process = transition_grid(c);
+	const auto process = transition_grid(c);
 	for (const size_t node_index : _topology().internal_nodes()) {
 		_initialize_node_from_children(node_index, process, states);
 	}
@@ -66,7 +66,8 @@ void TTree::_initialize_clique_from_children(size_t c, TNodeStateCliqueView &sta
 /// Starts one internal node at the state its children make most likely. This is initialisation and
 /// not a sampler move: it runs once, before the chain's first update, and it takes the mode rather
 /// than a draw.
-void TTree::_initialize_node_from_children(size_t node_index, const TTransitionGrid &process,
+template<TransitionGridLike Process>
+void TTree::_initialize_node_from_children(size_t node_index, const Process &process,
                                            TNodeStateCliqueView &states) const {
 	std::array<coretools::TSumLogProbability, 2> sum_log;
 

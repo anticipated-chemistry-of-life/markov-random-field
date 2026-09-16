@@ -56,8 +56,9 @@ void TTree::_propose_new_branch_lengths(const stattools::TPairIndexSampler &pair
 ///
 /// Both lengths are scored under the clique's current process. This move proposes a branch length,
 /// not a parameter, so the caller passes one grid and it stands on either side of the ratio.
+template<TransitionGridLike Process>
 double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-                                                        const TTransitionGrid &process,
+                                                        const Process &process,
                                                         const TNodeStateCliqueView &states) const {
 	// translate index in binned branch length vector (of size leaves + internal nodes without
 	// roots) to index in nodes
@@ -79,7 +80,7 @@ double TTree::_calculate_likelihood_ratio_branch_length(size_t index_in_binned_b
 void TTree::_add_to_LL_branch_lengths(size_t c, const TNodeStateCliqueView &states,
                                       std::vector<coretools::TSumLogProbability> &log_sum,
                                       const stattools::TPairIndexSampler &pairs) const {
-	const TTransitionGrid &process = transition_grid(c);
+	const auto process = transition_grid(c);
 
 	for (size_t p = 0; p < pairs.length(); ++p) { // loop over all possible pairs
 		// get index of branches to calculate LL: p1 and p2

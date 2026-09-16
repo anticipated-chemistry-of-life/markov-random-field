@@ -25,6 +25,7 @@
 #include "omp.h"
 #include "tree/TTree.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/branch/TTransitionGridTable.h"
 #include <array>
 #include <cstddef>
 #include <memory>
@@ -131,8 +132,9 @@ public:
 	      _accumulator(accumulator) {}
 
 	/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
+	template<TransitionGridLike Process>
 	[[nodiscard]] static coretools::Probability
-	prob_of_one(const TTransitionGrid &process, TypeBinnedBranchLengths branch, bool parent_state) {
+	prob_of_one(const Process &process, TypeBinnedBranchLengths branch, bool parent_state) {
 		return coretools::P(process.probability(branch, parent_state, /*to=*/true));
 	}
 

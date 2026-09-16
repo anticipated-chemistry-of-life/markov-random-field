@@ -19,6 +19,7 @@
 #include "random/TCellUniforms.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/branch/TTransitionGridTable.h"
 #include "tree/node_state_density.h"
 
 #include <concepts>
@@ -46,8 +47,8 @@ concept CliqueColumn = requires(T &column, const T &const_column, size_t node, b
 /// Canonical order puts every child below its parent (ADR-0004), so one backward pass over the
 /// node indices reaches every parent before its children. There is no queue and no traversal to
 /// set up, and a tree with several roots needs no special case.
-template<CliqueColumn Column, BranchBins Bins, CellUniforms Uniforms>
-void draw_clique(const TPhylogeny &topology, const TTransitionGrid &process, const Bins &bin_of,
+template<CliqueColumn Column, BranchBins Bins, CellUniforms Uniforms, TransitionGridLike Process>
+void draw_clique(const TPhylogeny &topology, const Process &process, const Bins &bin_of,
                  const Uniforms &uniforms, Column &column) {
 	for (size_t node = topology.n_nodes(); node-- > 0;) {
 		const double probability_of_one =

@@ -23,6 +23,7 @@
 #include "random/two_state_draw.h"
 #include "tree/TPhylogeny.h"
 #include "tree/branch/TTransitionGrid.h"
+#include "tree/branch/TTransitionGridTable.h"
 #include "tree/node_state_density.h"
 #include "tree/node_state_draw.h"
 
@@ -42,8 +43,8 @@ using node_state_draw::CliqueColumn;
 /// A child's own branch carries the term, so `bin_of` is asked for the child and never for the
 /// node. The child's state is the one the column holds now, which on a bottom-up walk is the state
 /// that walk has just given it.
-template<CliqueStates States, BranchBins Bins>
-void add_log_prob_of_children(const TPhylogeny &topology, const TTransitionGrid &process,
+template<CliqueStates States, BranchBins Bins, TransitionGridLike Process>
+void add_log_prob_of_children(const TPhylogeny &topology, const Process &process,
                               const Bins &bin_of, const States &states, size_t node,
                               std::array<coretools::TSumLogProbability, 2> &sum_log) {
 	for (const size_t child : topology.children_of(node)) {
@@ -64,8 +65,8 @@ void add_log_prob_of_children(const TPhylogeny &topology, const TTransitionGrid 
 /// The walk keeps no running density. Scoring a node against its parent *and* against each of its
 /// children counts every internal branch twice, which is a conditional and not a density.
 /// tree/node_state_density.h answers that question over the configuration the walk leaves behind.
-template<CliqueColumn Column, BranchBins Bins, CellUniforms Uniforms>
-void update_clique(const TPhylogeny &topology, const TTransitionGrid &process, const Bins &bin_of,
+template<CliqueColumn Column, BranchBins Bins, CellUniforms Uniforms, TransitionGridLike Process>
+void update_clique(const TPhylogeny &topology, const Process &process, const Bins &bin_of,
                    const Uniforms &uniforms, Column &column) {
 	for (const size_t node : topology.internal_nodes()) {
 		std::array<coretools::TSumLogProbability, 2> sum_log;
