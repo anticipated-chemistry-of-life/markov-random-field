@@ -161,14 +161,18 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
-	/// One node's contribution to a clique's log-likelihood under `process`. Called twice per
-	/// node, once with the clique's current grid and once with the proposal's candidate.
+	/// One node's contribution to a clique's log-likelihood under `process`: scored against its
+	/// parent, or against the stationary distribution if it is a root.
+	///
+	/// `branch_len_bin` is the bin the branch sat in *before* this iteration's proposals, because
+	/// branch lengths are proposed before the cliques are walked and `value` is already the
+	/// candidate by the time this runs.
 	template<TransitionGridLike Process>
-	void _compute_LL_old_and_new_nu_or_alpha(size_t index_in_tree, bool state_of_node,
-	                                         coretools::TSumLogProbability &LL,
-	                                         const TNodeStateCliqueView &states,
-	                                         std::optional<size_t> branch_len_bin,
-	                                         const Process &process) const {
+	void _add_node_to_clique_LL(size_t index_in_tree, bool state_of_node,
+	                            coretools::TSumLogProbability &LL,
+	                            const TNodeStateCliqueView &states,
+	                            std::optional<size_t> branch_len_bin,
+	                            const Process &process) const {
 		if (_topology().is_root(index_in_tree)) {
 			LL.add(process.stationary(state_of_node));
 		} else {
@@ -176,57 +180,54 @@ private:
 		}
 	}
 
-	template<bool IsAlpha, typename TypeParam>
-	void _update_nu_or_alpha(const TNodeStateCliqueView &states, size_t c, TypeParam *param) {
-		// propose a new value
-		param->propose(coretools::TRange(c));
-
-		double new_value;
-		if constexpr (IsAlpha) {
-			new_value = param->value(c);
-		} else {
-			new_value = std::exp(param->value(c));
-		}
-
-		// No need to mutate anything: the candidate is a second grid built from the proposed value,
-		// and the clique keeps whichever of the two is accepted. The old value is not read back
-		// from the parameter either -- the clique's current grid still carries it.
-		const auto current              = transition_grid(c);
-		const TTransitionGrid candidate = [&] {
-			if constexpr (IsAlpha) {
-				return TTransitionGrid(new_value, _nu_c[c], _grid());
-			} else {
-				return TTransitionGrid(_alpha_c->value(c), new_value, _grid());
-			}
-		}();
-
-		coretools::TSumLogProbability LL_old;
-		coretools::TSumLogProbability LL_new;
+	/// One clique's log-likelihood under each of two processes, in one pass over its nodes.
+	///
+	/// Two processes rather than one because a Metropolis move on alpha or nu needs the current
+	/// grid and the candidate scored over the same states, and a node's state is the expensive
+	/// thing to read: one pass reads it once and the compiler shares the load between both scores.
+	template<TransitionGridLike ProcessA, TransitionGridLike ProcessB>
+	[[nodiscard]] std::array<double, 2> _clique_LL(const TNodeStateCliqueView &states,
+	                                              const ProcessA &a, const ProcessB &b) const {
+		coretools::TSumLogProbability LL_a;
+		coretools::TSumLogProbability LL_b;
 		const auto &topology = _topology();
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
-			bool state_of_node = states.is_one(i);
-
-			// Note: need to take oldValue because we update _binned_branch_length before
-			// starting the loop!!!
+			const bool state_of_node = states.is_one(i);
 			std::optional<size_t> branch_len_bin;
 			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
-
-			_compute_LL_old_and_new_nu_or_alpha(i, state_of_node, LL_old, states, branch_len_bin,
-			                                    current);
-			_compute_LL_old_and_new_nu_or_alpha(i, state_of_node, LL_new, states, branch_len_bin,
-			                                    candidate);
+			_add_node_to_clique_LL(i, state_of_node, LL_a, states, branch_len_bin, a);
+			_add_node_to_clique_LL(i, state_of_node, LL_b, states, branch_len_bin, b);
 		}
+		return {LL_a.getSum(), LL_b.getSum()};
+	}
 
-		// calculate Hastings ratio
-		const double LLRatio       = LL_new.getSum() - LL_old.getSum();
-		const double logPriorRatio = param->getLogDensityRatio(c);
-		const double logH          = LLRatio + logPriorRatio;
+	/// One clique's log-likelihood under one process. The nu move needs only this: the likelihood
+	/// its ratio divides by is the one the alpha move already computed -- after the alpha move a
+	/// clique's grid is either the one alpha started from or the candidate it accepted, and both
+	/// of those sums were summed over these same nodes in this same order, so reading them back is
+	/// the same double rather than a near one.
+	template<TransitionGridLike Process>
+	[[nodiscard]] double _clique_LL(const TNodeStateCliqueView &states,
+	                                const Process &process) const {
+		coretools::TSumLogProbability LL;
+		const auto &topology = _topology();
+		for (size_t i = 0; i < topology.n_nodes(); ++i) {
+			const bool state_of_node = states.is_one(i);
+			std::optional<size_t> branch_len_bin;
+			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
+			_add_node_to_clique_LL(i, state_of_node, LL, states, branch_len_bin, process);
+		}
+		return LL.getSum();
+	}
 
-		// accept or reject
-		bool accepted = param->acceptOrReject(logH, coretools::TRange(c));
-		if (accepted) {
-			_set_transition_grid(c, candidate);
-			if constexpr (!IsAlpha) { _nu_c[c] = new_value; }
+	/// The grid a proposed alpha or nu would give clique `c`. Built from the value the parameter
+	/// currently holds, so it has to be asked before `acceptOrReject` puts a rejected value back.
+	template<bool IsAlpha> [[nodiscard]] TTransitionGrid _candidate_grid(size_t c,
+	                                                                     double proposed) const {
+		if constexpr (IsAlpha) {
+			return TTransitionGrid(proposed, _nu_c[c], _grid());
+		} else {
+			return TTransitionGrid(_alpha_c->value(c), std::exp(proposed), _grid());
 		}
 	}
 
@@ -239,18 +240,27 @@ private:
 	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
 	                                   const stattools::TPairIndexSampler &pairs);
 
-	/// @brief Helper function to reduce the parallelized log_sum into a log_sum
-	static std::vector<coretools::TSumLogProbability> _reduce_log_sum_per_thread(
-	    std::vector<std::vector<coretools::TSumLogProbability>> &log_sum_per_thread,
-	    size_t n_pairs) {
-		auto &log_sum_b = log_sum_per_thread[0];
-		for (size_t t = 1; t < ProgramOptions::NUMBER_OF_THREADS; ++t) {
-			for (size_t p = 0; p < n_pairs; ++p) {
-				log_sum_b[p] = log_sum_b[p] + log_sum_per_thread[t][p];
-			}
+	/// How many slots the branch-length likelihood is summed in before it is reduced.
+	///
+	/// A fixed number, and not one per thread. The sum runs over every clique, and a
+	/// thread-indexed slot holds whichever cliques the schedule handed that thread -- so the last
+	/// bits of the total, and with them the branch-length move's accept or reject, moved with the
+	/// thread count and with `schedule(dynamic)`'s run-to-run assignment. A clique belongs to slot
+	/// `c * N / n_cliques` whatever runs it, and the slots are reduced in slot order, so the total
+	/// is a function of the seed. Large enough to keep a big team busy, small enough that the
+	/// slots are a few tens of MB.
+	static constexpr size_t N_BRANCH_LL_SLOTS = 64;
+
+	/// The slots above, reduced in slot order.
+	[[nodiscard]] static std::vector<coretools::TSumLogProbability>
+	_reduce_branch_LL_slots(std::vector<std::vector<coretools::TSumLogProbability>> &slots,
+	                        size_t n_pairs) {
+		auto reduced = slots[0];
+		for (size_t slot = 1; slot < slots.size(); ++slot) {
+			for (size_t p = 0; p < n_pairs; ++p) { reduced[p] = reduced[p] + slots[slot][p]; }
 		}
-		return log_sum_b;
-	};
+		return reduced;
+	}
 
 public:
 	TTree(size_t dimension, const std::string &filename, const std::string &tree_name,
@@ -328,8 +338,23 @@ public:
 	///
 	/// Every read and write of a cell goes through the clique's view, which is the one place a
 	/// node index becomes a cell of the node state.
+	///
+	/// Not one random number is drawn inside a parallel region. Every proposal and every accept
+	/// or reject is taken here, single-threaded, walking the cliques in order; the regions only
+	/// read states and add up likelihoods. That is what makes the chain a function of the seed:
+	/// `coretools::instances::randomGenerator()` is `thread_local`, and a worker thread's copy is
+	/// constructed inside the region, where `setSeed` seeds it from the wall clock -- so
+	/// `--fixedSeed` never reached the alpha and nu moves at all, and which clique got which draw
+	/// depended on how `schedule(dynamic)` happened to hand the cliques out that run. ADR-0007
+	/// bought the node state this property by hashing a cell's uniform from its position; these
+	/// moves get it by drawing where there is only one thread to draw on.
+	///
+	/// The cost is three regions where there was one, and two serial passes over the cliques that
+	/// do no likelihood work. A proposal and an accept are a few tens of nanoseconds against the
+	/// tens of milliseconds a clique's likelihood costs.
 	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
-		std::vector<std::vector<size_t>> indices_to_insert(n_cliques());
+		const size_t n = n_cliques();
+		std::vector<std::vector<size_t>> indices_to_insert(n);
 
 		// The stream this tree's node state draws from this iteration, built before the parallel
 		// region (see run_seed). Each tree names its own dimension, so the two never share a
@@ -337,45 +362,86 @@ public:
 		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
 		                                        _dimension);
 
-		// build pairs of branch lengths to update
+		// build pairs of branch lengths to update, and propose them: both draw, both serial
 		auto pairs         = _build_pairs_branch_lengths();
 		const auto n_pairs = pairs.length();
-		std::vector<std::vector<coretools::TSumLogProbability>> log_sum_per_thread(
-		    ProgramOptions::NUMBER_OF_THREADS, std::vector<coretools::TSumLogProbability>(n_pairs));
-
-		// propose new branch lengths
 		_propose_new_branch_lengths(pairs);
 
+		// Every clique's alpha, proposed here rather than inside the region.
+		_alpha_c->propose(coretools::TRange(0, n, 1));
+
+		// --- region 1: the node-state walk, and alpha's two likelihoods ---
+		std::vector<std::array<double, 2>> alpha_LL(n);
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(pairs, log_sum_per_thread, indices_to_insert, node_state_uniforms)
-		for (size_t i = 0; i < n_cliques(); ++i) {
-			auto &log_sum_local = log_sum_per_thread[omp_get_thread_num()];
+    schedule(dynamic) shared(indices_to_insert, node_state_uniforms, alpha_LL, n)
+		for (size_t i = 0; i < n; ++i) {
 			// The cells this clique reads and writes. The view lives across the moves below,
 			// because those moves read the states the walk assigns.
-			auto states         = _clique_view(i);
-			// update Z
+			auto states = _clique_view(i);
 			if constexpr (!FixZ) {
 				node_state_walk::update_clique(_topology(), transition_grid(i), _previous_bins(),
 				                               node_state_uniforms, states);
 			}
-
-			// update nu and alpha
-			_update_nu_or_alpha<true>(states, i, _alpha_c);
-			_update_nu_or_alpha<false>(states, i, _log_nu_c);
-
-			// add to likelihood ratio for branch length
-			_add_to_LL_branch_lengths(i, states, log_sum_local, pairs);
-
+			alpha_LL[i] = _clique_LL(states, transition_grid(i),
+			                         _candidate_grid<true>(i, _alpha_c->value(i)));
 			// The view ends here, inside the parallel region, so it hands its inserts out rather
 			// than making them. The list is taken whether or not the walk ran.
 			indices_to_insert[i] = states.take_deferred_inserts();
 		}
-
-		// update branch lengths
-		auto log_sum_b = TTree::_reduce_log_sum_per_thread(log_sum_per_thread, n_pairs);
-		_evalute_update_branch_length(log_sum_b, pairs);
-
 		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
+
+		// --- alpha's decision, and the likelihood the nu move inherits ---
+		// Whichever of the two alpha ends on is the likelihood of the clique as nu finds it, so
+		// the nu move below scores one grid instead of two.
+		std::vector<double> LL_after_alpha(n);
+		for (size_t i = 0; i < n; ++i) {
+			const double proposed = _alpha_c->value(i);
+			const double logH     = alpha_LL[i][1] - alpha_LL[i][0] + _alpha_c->getLogDensityRatio(i);
+			if (_alpha_c->acceptOrReject(logH, coretools::TRange(i))) {
+				_set_transition_grid(i, _candidate_grid<true>(i, proposed));
+				LL_after_alpha[i] = alpha_LL[i][1];
+			} else {
+				LL_after_alpha[i] = alpha_LL[i][0];
+			}
+		}
+
+		// --- region 2: nu's candidate likelihood ---
+		_log_nu_c->propose(coretools::TRange(0, n, 1));
+		std::vector<double> nu_LL_new(n);
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    schedule(dynamic) shared(nu_LL_new, n)
+		for (size_t i = 0; i < n; ++i) {
+			auto states  = _clique_view(i);
+			nu_LL_new[i] = _clique_LL(states, _candidate_grid<false>(i, _log_nu_c->value(i)));
+			DEBUG_ASSERT(states.take_deferred_inserts().empty());
+		}
+
+		for (size_t i = 0; i < n; ++i) {
+			const double proposed = _log_nu_c->value(i);
+			const double logH = nu_LL_new[i] - LL_after_alpha[i] + _log_nu_c->getLogDensityRatio(i);
+			if (_log_nu_c->acceptOrReject(logH, coretools::TRange(i))) {
+				_set_transition_grid(i, _candidate_grid<false>(i, proposed));
+				_nu_c[i] = std::exp(proposed);
+			}
+		}
+
+		// --- region 3: the branch-length likelihood, summed in fixed slots ---
+		// A clique belongs to slot `i / cliques_per_slot`, and `schedule(static, cliques_per_slot)`
+		// hands each of those blocks to one thread, so a slot has one writer and its contents do
+		// not depend on the team size.
+		const size_t cliques_per_slot = (n + N_BRANCH_LL_SLOTS - 1) / N_BRANCH_LL_SLOTS;
+		std::vector<std::vector<coretools::TSumLogProbability>> branch_LL(
+		    N_BRANCH_LL_SLOTS, std::vector<coretools::TSumLogProbability>(n_pairs));
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    schedule(static, cliques_per_slot) shared(pairs, branch_LL, n, cliques_per_slot)
+		for (size_t i = 0; i < n; ++i) {
+			auto states = _clique_view(i);
+			_add_to_LL_branch_lengths(i, states, branch_LL[i / cliques_per_slot], pairs);
+			DEBUG_ASSERT(states.take_deferred_inserts().empty());
+		}
+
+		auto log_sum = TTree::_reduce_branch_LL_slots(branch_LL, n_pairs);
+		_evalute_update_branch_length(log_sum, pairs);
 	}
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {

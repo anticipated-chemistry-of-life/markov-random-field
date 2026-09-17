@@ -160,14 +160,13 @@ done
 RUNDIR="$WORKDIR/run"
 rm -rf "$WORKDIR"
 
-# Both chains below pass `--numThreads 1`. Every cell draw is now hashed from the cell's position
-# (ADR-0007), so `simulate` gives the same bytes at any thread count -- and it is a forward draw on
-# one thread anyway. `infer` does not: the alpha
-# and nu moves run inside the same parallel loop over cliques and still draw from the thread-local
-# generator, which no option seeds on a worker thread. Pinning one thread keeps the gate about the
-# storage backend and nothing else. What that costs is the multi-batch commit of the deferred
-# inserts, which one thread never produces -- that path is covered at the storage seam instead, by
-# StorageEquivalence in tests/TStorageConformance_Tests.cpp.
+# Both chains below pass `--numThreads 1`, which keeps the backend gate about the storage backend
+# and nothing else. Neither has to: every cell draw is hashed from the cell's position (ADR-0007),
+# and no proposal or accept is drawn inside a parallel region any more, so `simulate` and `infer`
+# both give the same bytes at any thread count. The foot of this script gates both of them.
+# What one thread costs the gate is the multi-batch commit of the deferred inserts, which one
+# thread never produces -- that path is covered at the storage seam instead, by StorageEquivalence
+# in tests/TStorageConformance_Tests.cpp.
 run_acol() {
     local index="$1"; shift
     (cd "$RUNDIR" && "${BINARIES[$index]}" "$@" >/dev/null)
@@ -189,6 +188,23 @@ run_simulate() {
         --write_joint_log_prob_density
 }
 
+# One infer invocation, spelled once, for the same reason.
+run_infer() {
+    local index="$1" out="$2" threads="$3"
+    run_acol "$index" infer \
+        --out "$out" \
+        --tree_species species.txt --tree_molecules molecules.txt \
+        --species_paper_counts species_papers.txt \
+        --molecules_paper_counts molecules_papers.txt \
+        --lotus simulate/acol_simulated_lotus.tsv \
+        --simple_data simulate/acol_simulated_simple_data.tsv \
+        --iterations "$ITERATIONS" --burnin 50 --numBurnin 2 --n_bins 6 \
+        --epsilon_simple_model 0.1 --gamma 1.1 \
+        --numThreads "$threads" --fixedSeed "$SEED" \
+        --write_Y_trace --write_Z_trace --write_joint_log_prob_density \
+        --write_tree_field_posteriors
+}
+
 for index in "${!BACKENDS[@]}"; do
     backend="${BACKENDS[$index]}"
 
@@ -202,18 +218,7 @@ for index in "${!BACKENDS[@]}"; do
     # Inference reads the field and data this same run just simulated, so both backends infer from
     # bytes the simulate comparison below has already proven identical.
     echo "==> $backend: infer"
-    run_acol "$index" infer \
-        --out infer/acol \
-        --tree_species species.txt --tree_molecules molecules.txt \
-        --species_paper_counts species_papers.txt \
-        --molecules_paper_counts molecules_papers.txt \
-        --lotus simulate/acol_simulated_lotus.tsv \
-        --simple_data simulate/acol_simulated_simple_data.tsv \
-        --iterations "$ITERATIONS" --burnin 50 --numBurnin 2 --n_bins 6 \
-        --epsilon_simple_model 0.1 --gamma 1.1 \
-        --numThreads 1 --fixedSeed "$SEED" \
-        --write_Y_trace --write_Z_trace --write_joint_log_prob_density \
-        --write_tree_field_posteriors
+    run_infer "$index" infer/acol 1
 
     # Everything compared below is written under the two --out prefixes, so anything that appears
     # beside them is an output the gate would not see. Today nothing does; `--write_branch_lengths`
@@ -291,11 +296,12 @@ compare_backends infer || divergences=1
 # ---------------------------------------------------------------------------
 # One backend, two thread counts
 #
-# Every cell draw is hashed from the cell's position (ADR-0007), so a draw that takes nothing from
-# the thread-local generator gives one answer however many threads it runs on. `simulate` is that
-# draw: it walks each tree's node state top-down and then the field, and no parameter moves. So
-# this gates the half of "reproducible at any thread count" that holds today. `infer` is the other
-# half and is not gated, which is why both chains above stay at one thread.
+# Every cell draw is hashed from the cell's position (ADR-0007), and no proposal or accept is drawn
+# inside a parallel region, so neither phase can tell how many threads it ran on. `simulate` walks
+# each tree's node state top-down and then the field, with no parameter moves. `infer` adds the
+# block update, the node-state walk, and the alpha, nu and branch-length moves -- the moves that
+# used to draw from a thread-local generator no option seeds on a worker thread, and to sum the
+# branch-length likelihood in slots the schedule chose. Both halves are gated here.
 #
 # The dense pair is the default build, so it is the one this runs again.
 # ---------------------------------------------------------------------------
@@ -310,17 +316,21 @@ if [[ -z "$dense_index" ]]; then
     exit 1
 fi
 
-echo "==> checking that simulate gives the same bytes at $THREADS threads"
+echo "==> checking that simulate and infer give the same bytes at $THREADS threads"
 rm -rf "$RUNDIR"
-mkdir -p "$RUNDIR/simulate"
+mkdir -p "$RUNDIR/simulate" "$RUNDIR/infer"
 cp "${FIXTURE[@]/#/$SCRIPT_DIR/}" "$RUNDIR/"
 run_simulate "$dense_index" simulate/acol "$THREADS"
+run_infer "$dense_index" infer/acol "$THREADS"
 
 # acol.parameters echoes the command line, and the command line is where the two runs differ on
 # purpose. Everything else the run wrote has to match.
 compare_dirs "$WORKDIR/dense/simulate" "$RUNDIR/simulate" \
              "simulate, 1 thread against $THREADS" '\.log$|^acol\.parameters$' || divergences=1
+compare_dirs "$WORKDIR/dense/infer" "$RUNDIR/infer" \
+             "infer, 1 thread against $THREADS" '\.log$|^acol\.parameters$' || divergences=1
 rm -rf "$RUNDIR"
 
 ((divergences == 0)) || exit 1
-echo "the dense and sparse backends agree byte for byte, and simulate ignores the thread count"
+echo "the dense and sparse backends agree byte for byte, and neither simulate nor infer can tell"
+echo "how many threads it ran on"
