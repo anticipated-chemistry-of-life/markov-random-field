@@ -27,6 +27,7 @@
 #include "tree/clique/clique_traversal.h"
 #include "tree/node_state_density.h"
 #include "tree/node_state_walk.h"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -479,23 +480,23 @@ public:
 	/// the density of the configuration as the iteration leaves it. It is a pass over the whole
 	/// node state, which is why writing the joint density is behind a command-line flag.
 	[[nodiscard]] double log_node_state_density() {
-		// One slot per clique, and not one per thread. A thread-indexed accumulator adds its
-		// cliques in whatever order the schedule handed them out, so the sum's rounding would move
-		// with the thread count and the trace would stop being reproducible from its seed.
-		std::vector<double> per_clique(n_cliques(), 0.0);
-
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(dynamic) default(none) shared(per_clique)
-		for (size_t i = 0; i < n_cliques(); ++i) {
-			auto states   = _clique_view(i);
-			per_clique[i] = node_state_density::log_density_of_clique(
-			    _topology(), transition_grid(i), states,
+		// The kernel returns one double per clique, and the helper gathers them into a vector in
+		// clique order (clique_traversal::run). A thread-indexed accumulator would add its
+		// cliques in whatever order the schedule handed them out, so the sum's rounding would
+		// move with the thread count and the trace would stop being reproducible from its seed.
+		auto view_factory = [this](size_t c) { return _clique_view(c); };
+		auto kernel = [this](size_t c, TNodeStateCliqueView &states) {
+			return node_state_density::log_density_of_clique(
+			    _topology(), transition_grid(c), states,
 			    [this](size_t node) { return get_binned_branch_length(node); });
-			// The view is read and never written, so it defers nothing. Its list is taken here
-			// all the same, so that no view reaches its storage from inside the parallel region.
-			const std::vector<size_t> inserts = states.take_deferred_inserts();
-			DEBUG_ASSERT(inserts.empty());
-		}
+		};
+		auto [per_clique, inserts] = clique_traversal::run(n_cliques(), view_factory, kernel);
+
+		// This pass is read-only, so every view defers nothing. Checked once here, against the
+		// whole collected result, rather than once per clique inside the loop.
+		DEBUG_ASSERT(std::all_of(inserts.begin(), inserts.end(),
+		                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
+
 		// In clique order, so the answer does not depend on how the cliques were shared out.
 		return coretools::containerSum(per_clique);
 	}
