@@ -28,6 +28,7 @@
 #include "random/TCellUniforms.h"
 #include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZSparse.h"
+#include "thread_count.h"
 #include "tree/TPhylogeny.h"
 #include "gtest/gtest.h"
 
@@ -239,23 +240,7 @@ field_math::TLinkCounters merged(const std::vector<field_math::TLinkCounters> &p
 	return counters;
 }
 
-/// Sets the thread count for one test and puts it back afterwards. The count is a global, and a
-/// test that left it raised would change what every later test runs on.
-class TThreadCount {
-private:
-	size_t _previous;
-
-public:
-	explicit TThreadCount(size_t n_threads) : _previous(ProgramOptions::NUMBER_OF_THREADS) {
-		ProgramOptions::NUMBER_OF_THREADS = n_threads;
-	}
-	~TThreadCount() { ProgramOptions::NUMBER_OF_THREADS = _previous; }
-
-	TThreadCount(const TThreadCount &)            = delete;
-	TThreadCount &operator=(const TThreadCount &) = delete;
-	TThreadCount(TThreadCount &&)                 = delete;
-	TThreadCount &operator=(TThreadCount &&)      = delete;
-};
+using threads::TThreadCount;
 
 // -------------------------------------------------------------------------
 // The suite, over all four storage pairings
