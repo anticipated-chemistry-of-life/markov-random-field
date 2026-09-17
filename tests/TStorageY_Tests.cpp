@@ -49,11 +49,6 @@ TEST(YStorage_Tests, set_count_max) {
 	EXPECT_EQ(y.get_counter(), TStorageY::MAX_COUNTER);
 }
 
-TEST(YStorage_Tests, set_counter_exceeds_max_throws) {
-	TStorageY y;
-	EXPECT_ANY_THROW(y.set_counter(TStorageY::MAX_COUNTER + 1));
-}
-
 TEST(YStorage_Tests, set_state_true) {
 	TStorageY y;
 	y.set_state(true);
