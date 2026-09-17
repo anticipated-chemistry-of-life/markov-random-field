@@ -73,6 +73,18 @@ public:
 	/// Counts every cell that is currently a one, on one iteration in `get_thinning_factor()`.
 	void add_to_counter(size_t iteration) {
 		if (iteration % _thinning_factor != 0) { return; }
+		// Checked here, and not per cell inside the loop below: `update_counter` throws when a
+		// counter would pass its 15-bit maximum, and an exception that leaves an OpenMP region
+		// calls std::terminate rather than unwinding. A cell is counted only while it is one, so
+		// no counter can be larger than the number of counted iterations -- which makes this the
+		// same guard, asked once instead of 4.58e9 times.
+		if (_total_counts >= MAX_COUNTER) {
+			throw coretools::TDevError(
+			    "The posterior field has counted ", _total_counts,
+			    " iterations, which is the most a 15-bit counter holds. The thinning factor is "
+			    "what keeps a chain inside that; it was built for a shorter one.");
+		}
+#pragma omp parallel for default(none)
 		for (auto &cell : cells()) { cell.update_counter(); }
 		// after the loop, so a counter that overflows does not leave the denominator counting an
 		// iteration the cells never got
@@ -80,6 +92,7 @@ public:
 	}
 
 	void reset_counts() {
+#pragma omp parallel for default(none)
 		for (auto &cell : cells()) { cell.reset_counter(); }
 		_total_counts = 0;
 	}
