@@ -44,9 +44,7 @@ public:
 
 	[[nodiscard]] uint16_t get_counter() const { return _value & COUNTER_MASK; }
 	void set_counter(uint16_t counter) {
-		if (counter > MAX_COUNTER) {
-			throw coretools::TDevError("counter exceeds 15-bit maximum (", MAX_COUNTER, ")");
-		}
+		DEBUG_ASSERT(counter <= MAX_COUNTER);
 		_value = (_value & STATE_MASK) | counter;
 	}
 	void update_counter() {
