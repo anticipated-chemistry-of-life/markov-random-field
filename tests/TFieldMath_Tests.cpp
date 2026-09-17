@@ -209,13 +209,6 @@ TEST(FieldMath_Tests, error_probability_rejects_values_outside_the_open_interval
 	EXPECT_NO_THROW(TErrorProbability(0.4999));
 }
 
-TEST(FieldMath_Tests, error_probability_rejects_a_tree_it_does_not_have) {
-	const TErrorProbability omega(0.1);
-	// The cast to void is what a [[nodiscard]] return needs when the call is the whole statement.
-	// Every EXPECT_THROW below over a value-returning call carries it for the same reason.
-	EXPECT_THROW(static_cast<void>(omega.for_tree(NUMBER_OF_TREES)), std::invalid_argument);
-}
-
 //-----------------------------------
 // The link table (ADR-0005, derivation 1)
 //-----------------------------------

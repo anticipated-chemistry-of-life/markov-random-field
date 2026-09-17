@@ -299,8 +299,13 @@ void check_invariants(const TPhylogeny &tree) {
 
 	// Every node is reachable from a root.
 	std::vector<bool> seen(n, false);
-	std::vector<size_t> stack(tree.roots().begin(), tree.roots().end());
-	for (const size_t r : tree.roots()) { seen[r] = true; }
+	// Built by hand rather than from the root range's iterators: `roots()` hands back a view whose
+	// iterators are not a pair `std::vector` will construct from under GCC 15.
+	std::vector<size_t> stack;
+	for (const size_t r : tree.roots()) {
+		stack.push_back(r);
+		seen[r] = true;
+	}
 	while (!stack.empty()) {
 		const size_t node = stack.back();
 		stack.pop_back();
