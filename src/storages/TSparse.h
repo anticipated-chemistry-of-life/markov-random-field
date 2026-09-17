@@ -319,6 +319,31 @@ public:
 		cursor.seek(linear_index);
 		return cursor;
 	}
+
+	/// Rebuilds the sorted-ones cache if it is stale, so that `fresh_ones_cursor_from` may then be
+	/// called from many threads at once. Single-threaded, and the one place a parallel traversal
+	/// is allowed to pay for the sort.
+	void refresh_ones() const {
+		if (_ones_are_stale || _handed_out_a_handle.is_set()) { _rebuild_sorted_ones(); }
+	}
+
+	/// A cursor seeded at `linear_index`, on the standing guarantee that the cache is already
+	/// fresh. Unlike `ones_cursor_from` this never rebuilds, so every row of a parallel traversal
+	/// may take one of its own: the block update seeds one per field row rather than one per
+	/// thread, which is what keeps the traversal's schedule its own business (ADR-0006).
+	///
+	/// Throws when the cache is stale rather than sorting, because sorting here is exactly the
+	/// thing that would not be safe to do from a parallel region. Call `refresh_ones` first.
+	[[nodiscard]] OnesCursor fresh_ones_cursor_from(size_t linear_index) const {
+		if (_ones_are_stale || _handed_out_a_handle.is_set()) {
+			throw coretools::TDevError(
+			    "The sorted-ones cache is stale, and rebuilding it from a parallel region is not "
+			    "safe. Call refresh_ones() once, single-threaded, first.");
+		}
+		OnesCursor cursor(_sorted_ones);
+		cursor.seek(linear_index);
+		return cursor;
+	}
 };
 
 /// The sparse array of bare states: one byte per stored cell, and nothing else. The LOTUS records

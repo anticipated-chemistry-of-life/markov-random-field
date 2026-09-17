@@ -20,6 +20,7 @@
 #include "backend_pairings.h"
 #include "cli.h"
 #include "constants.h"
+#include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
@@ -102,7 +103,9 @@ public:
 		size_t species_leaf = 0;
 	};
 
-	[[nodiscard]] static TRow begin_row(size_t species_leaf) { return TRow{species_leaf}; }
+	[[nodiscard]] static TRow begin_row(size_t species_leaf, size_t /*first_field_cell*/) {
+		return TRow{species_leaf};
+	}
 
 	[[nodiscard]] block_update::TLeafPairFactors
 	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
@@ -118,16 +121,19 @@ public:
 		        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
 	}
 
-	/// Neither mock model has a point query that cares about visit order, so this is a no-op --
+	/// Neither mock model has anything it cannot ready inside the region, so this is a no-op --
 	/// it exists only to satisfy `BlockModel` (TBlockUpdate.h).
-	void prepare_for_traversal(size_t) {}
+	static void prepare_for_traversal() {}
 
-	void record(size_t species_leaf, size_t molecule_leaf, const block_update::TLeafPairFactors &,
+	void record(const TRow &row, size_t molecule_leaf, const block_update::TLeafPairFactors &,
 	            const field_math::TBlockStates &drawn) {
-		TVisit &recorded = visit(species_leaf, molecule_leaf);
+		TVisit &recorded = visit(row.species_leaf, molecule_leaf);
 		++recorded.n_recorded;
 		recorded.drawn = drawn;
 	}
+
+	/// Nothing to hand over: this model's bookkeeping is per leaf pair, not per row.
+	static void end_row(const TRow &) {}
 
 	[[nodiscard]] TVisit &visit(size_t species_leaf, size_t molecule_leaf) {
 		return _visits[species_leaf * _n_molecule_leaves + molecule_leaf];
@@ -141,20 +147,31 @@ private:
 static_assert(block_update::BlockModel<TForcingModel>,
               "The forcing model must answer what the block update asks a model.");
 
-/// A model that leaves the draw a real choice at every leaf pair, and keeps no state of its own.
+/// A model that leaves the draw a real choice at every leaf pair, and accumulates a likelihood the
+/// way a real data source does: one running sum of logs per field row, handed over when the row
+/// ends.
 ///
 /// The forcing model above pins every cell, which would let a wrong uniform pass unnoticed. Here
 /// all eight states carry mass, so the state a leaf pair ends in depends on the uniform it drew --
-/// which is what makes a chain comparable between two thread counts. Being stateless is what makes
-/// it safe to run on many threads.
+/// which is what makes a chain comparable between two thread counts.
+///
+/// The row slots are what makes the sum comparable too. A row writes only its own slot, so many
+/// threads may run at once, and summing the slots in row order gives a double that does not depend
+/// on how the rows were shared out. `TDataUpdateAccumulator` keeps its slots the same way, and for
+/// the same reason (TBlockModel.h).
 class TFreeModel {
 public:
-	/// Stateless, so the row carries only the species leaf the loop is on.
+	explicit TFreeModel(size_t n_species_leaves) : _per_row(n_species_leaves) {}
+
+	/// The row carries the species leaf the loop is on, and what that row has summed so far.
 	struct TRow {
 		size_t species_leaf = 0;
+		coretools::TSumLogProbability log_likelihood;
 	};
 
-	[[nodiscard]] static TRow begin_row(size_t species_leaf) { return TRow{species_leaf}; }
+	[[nodiscard]] static TRow begin_row(size_t species_leaf, size_t /*first_field_cell*/) {
+		return TRow{.species_leaf = species_leaf, .log_likelihood = {}};
+	}
 
 	[[nodiscard]] static block_update::TLeafPairFactors
 	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
@@ -167,11 +184,29 @@ public:
 		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
 	}
 
-	/// No point query cares about visit order here either; a no-op to satisfy `BlockModel`.
-	static void prepare_for_traversal(size_t) {}
+	/// Nothing here cannot be readied inside the region; a no-op to satisfy `BlockModel`.
+	static void prepare_for_traversal() {}
 
-	static void record(size_t, size_t, const block_update::TLeafPairFactors &,
-	                   const field_math::TBlockStates &) {}
+	/// Folds what the leaf pair was given into the row's running sum, exactly as a data source
+	/// does: the probability kept is the one the drawn field state selects.
+	static void record(TRow &row, size_t /*molecule_leaf*/,
+	                   const block_update::TLeafPairFactors &factors,
+	                   const field_math::TBlockStates &drawn) {
+		row.log_likelihood.add(factors.lotus[static_cast<size_t>(drawn.y)].get());
+	}
+
+	void end_row(TRow &row) { _per_row[row.species_leaf] = row.log_likelihood; }
+
+	/// Not const: `TSumLogProbability::getSum` is not, and the production accumulator's `commit`
+	/// reads its slots the same way.
+	[[nodiscard]] double log_likelihood() {
+		double sum = 0.0;
+		for (auto &row : _per_row) { sum += row.getSum(); }
+		return sum;
+	}
+
+private:
+	std::vector<coretools::TSumLogProbability> _per_row;
 };
 
 static_assert(block_update::BlockModel<TFreeModel>,
@@ -196,10 +231,11 @@ field_math::TLinkCounters recount(const Field &Y, const NodeState &Z_species,
 	return counters;
 }
 
-/// The tallies of one run, merged the way the caller of a block update merges them.
-field_math::TLinkCounters merged(const std::vector<block_update::TThreadTally> &tallies) {
+/// The row tallies of one run, merged the way the caller of a block update merges them: in row
+/// order.
+field_math::TLinkCounters merged(const std::vector<field_math::TLinkCounters> &per_row) {
 	field_math::TLinkCounters counters;
-	for (const auto &tally : tallies) { counters.merge(tally.counters); }
+	for (const auto &row : per_row) { counters.merge(row); }
 	return counters;
 }
 
@@ -248,11 +284,11 @@ TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 		seed_ones(Z_molecule, 3);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
 		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               tallies);
+		                               per_row);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -281,11 +317,11 @@ TYPED_TEST(BlockUpdate, writes_the_drawn_states_back) {
 		seed_ones(Z_molecule, 3);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
 		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               tallies);
+		                               per_row);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -327,11 +363,11 @@ TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 		std::vector<uint8_t> molecule_before = states_of(Z_molecule);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
 		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               tallies);
+		                               per_row);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -347,9 +383,16 @@ TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 	}
 }
 
-/// One thread and many give the same three containers and the same six counters. A cell's uniform
-/// is hashed from its position (ADR-0007), so the thread that reaches it does not decide what it
-/// gets.
+/// One thread and many give the same three containers, the same six counters, and the same
+/// likelihood, to the last bit. A cell's uniform is hashed from its position (ADR-0007), so the
+/// thread that reaches it does not decide what it gets.
+///
+/// The likelihood is the part a thread-indexed accumulator used to get wrong. A slot per thread
+/// sums whichever rows the schedule handed that thread, in that order, so the last bits of the
+/// total moved with the thread count -- and that total is what the gamma and error-rate Metropolis
+/// ratios read (`TLotus::ll_ratio_after_parameter_move`), so two thread counts could accept
+/// different proposals from one seed. Slots per row, summed in row order, is what makes this an
+/// exact equality rather than a near one.
 TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
@@ -367,18 +410,18 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 			seed_ones(Z_species, 2);
 			seed_ones(Z_molecule, 3);
 
-			TFreeModel model;
-			std::vector<block_update::TThreadTally> tallies(n_threads);
+			TFreeModel model(pair.species.n_leaves());
+			std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 			const TCellUniforms uniforms(4242, TCellStream::field, 7);
 			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 			                               field_math::TErrorProbability(OMEGA), model, uniforms,
-			                               tallies);
+			                               per_row);
 			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
-			                  merged(tallies)};
+			                  merged(per_row), model.log_likelihood()};
 		};
 
-		const auto [one_Y, one_species, one_molecule, one_counters]     = run_once(1);
-		const auto [many_Y, many_species, many_molecule, many_counters] = run_once(4);
+		const auto [one_Y, one_species, one_molecule, one_counters, one_LL]     = run_once(1);
+		const auto [many_Y, many_species, many_molecule, many_counters, many_LL] = run_once(4);
 
 		EXPECT_EQ(one_Y, many_Y);
 		EXPECT_EQ(one_species, many_species);
@@ -388,6 +431,8 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 				EXPECT_EQ(one_counters.count(bucket, y), many_counters.count(bucket, y));
 			}
 		}
+		// Bitwise, not near: a Metropolis ratio turns a last-bit difference into a different chain.
+		EXPECT_EQ(one_LL, many_LL);
 	}
 }
 
@@ -407,14 +452,14 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
 
-		TFreeModel model;
-		std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+		TFreeModel model(pair.species.n_leaves());
+		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 11);
 		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               tallies);
+		                               per_row);
 
-		const field_math::TLinkCounters kept     = merged(tallies);
+		const field_math::TLinkCounters kept     = merged(per_row);
 		const field_math::TLinkCounters expected = recount(Y, Z_species, Z_molecule, pair);
 
 		EXPECT_EQ(kept.total(), pair.species.n_leaves() * pair.molecule.n_leaves());
@@ -446,14 +491,14 @@ TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 			seed_ones(Z_species, 2);
 			seed_ones(Z_molecule, 3);
 
-			TFreeModel model;
-			std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+			TFreeModel model(pair.species.n_leaves());
+			std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 			const TCellUniforms uniforms(4242, TCellStream::field, 13);
 			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
 			                               field_math::TErrorProbability(OMEGA), model, uniforms,
-			                               tallies);
+			                               per_row);
 			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
-			                  merged(tallies)};
+			                  merged(per_row)};
 		};
 
 		const auto [dense_Y, dense_species, dense_molecule, dense_counters] =

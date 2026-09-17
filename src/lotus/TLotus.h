@@ -46,14 +46,6 @@ private:
 	// data
 	TSparseBinary _L;
 
-	/// One forward cursor per thread into `_L`'s sorted-ones cache. `prepare_for_block_update`
-	/// seeds every slot to that thread's own chunk of the block update's leaf-pair traversal,
-	/// once, single-threaded, before the parallel region begins; after that each thread only
-	/// ever advances its own slot forward, which is what `holds_a_record` does. Safe for every
-	/// thread to hold at once for the same reason `TDataUpdateAccumulator::add` is: nothing
-	/// writes `_L` once a block update starts, and no thread touches another's slot.
-	mutable std::vector<TSparseBinary::OnesCursor> _block_update_cursors;
-
 	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
 	std::vector<std::vector<size_t>> _paper_counts;
@@ -101,33 +93,36 @@ public:
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
-	/// Seeds every thread's cursor into `_L`'s sorted-ones cache to the start of that thread's
-	/// own chunk of the traversal: thread `t` gets the cursor `ones_cursor_from(t * chunk_size)`
-	/// (TSparse.h). Has to run once, single-threaded, before the block update's parallel region
-	/// starts -- `ones_cursor()` is not safe to call concurrently with itself -- and `chunk_size`
-	/// has to be the number of *cells* each thread is handed, which is the rows it is scheduled
-	/// times the row width (`block_update::run`, TBlockUpdate.h), or a thread's first query could
-	/// land before its cursor's seek point. `TBlockModel::prepare_for_traversal` calls this once
-	/// per block update, with the chunk the traversal computed.
-	void prepare_for_block_update(size_t chunk_size) {
-		_block_update_cursors.clear();
-		_block_update_cursors.reserve(ProgramOptions::NUMBER_OF_THREADS);
-		for (size_t thread = 0; thread < ProgramOptions::NUMBER_OF_THREADS; ++thread) {
-			_block_update_cursors.push_back(_L.ones_cursor_from(thread * chunk_size));
-		}
+	/// The cursor a row of the block update walks `_L`'s sorted-ones cache with. One per field
+	/// row, seeded at that row's first cell, and owned by the row rather than by the thread that
+	/// happens to draw it.
+	using RecordCursor = TSparseBinary::OnesCursor;
+
+	/// Makes `_L`'s sorted-ones cache fresh, so that every row of the block update may seed a
+	/// cursor of its own from inside the parallel region. Has to run once, single-threaded,
+	/// before that region starts, because the sort is what is not safe to do concurrently.
+	///
+	/// It is told nothing about how the traversal shares its rows out. The cursor used to be one
+	/// per thread, which meant this had to be handed the exact chunk size
+	/// `schedule(static, ...)` would use -- and so the block update had to derive its schedule
+	/// from `ProgramOptions::NUMBER_OF_THREADS` rather than from the team it actually got.
+	void prepare_for_block_update() const { _L.refresh_ones(); }
+
+	/// A cursor seeded at the first cell of one field row. `prepare_for_block_update` has to have
+	/// run first. Safe to call from every row at once: it reads the cache and never rebuilds it.
+	[[nodiscard]] RecordCursor cursor_for_row(size_t first_cell_of_row) const {
+		return _L.fresh_ones_cursor_from(first_cell_of_row);
 	}
 
 	/// Whether LOTUS holds a record for one cell of the field. L has the field's dimensions, so
 	/// the field's index is already L's. The update asks this once per leaf pair, in ascending
-	/// linear-index order within each thread's chunk -- `block_update::run` gives a thread a
-	/// contiguous block of field rows and walks each row's columns in order -- which is what lets
-	/// this walk `_L`'s sorted-ones cache forward with the calling thread's own cursor instead of
-	/// hashing. `prepare_for_block_update` has to have seeded that cursor first. Nothing else
-	/// calls this out of order: it is `TBlockModel::factors`'s alone.
-	[[nodiscard]] bool holds_a_record(const IndexArray &index_in_leaves_space) const {
+	/// linear-index order down the row -- a row walks its columns in order -- which is what lets
+	/// this walk the sorted-ones cache forward with the row's own cursor instead of hashing.
+	/// Nothing else calls this out of order: it is `TBlockModel::factors`'s alone.
+	[[nodiscard]] bool holds_a_record(RecordCursor &cursor,
+	                                  const IndexArray &index_in_leaves_space) const {
 		const size_t linear_index = _L.get_linear_index_in_container_space(index_in_leaves_space);
-		const auto thread         = static_cast<size_t>(omp_get_thread_num());
-		return _block_update_cursors[thread].advance_to_and_check(linear_index);
+		return cursor.advance_to_and_check(linear_index);
 	}
 
 	/// prob[0] = P(L_cell | Y = 0), prob[1] = P(L_cell | Y = 1). `reports_the_cell` is whether

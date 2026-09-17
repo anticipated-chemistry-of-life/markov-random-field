@@ -268,22 +268,27 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	TDataUpdateAccumulator accumulator(ProgramOptions::NUMBER_OF_THREADS);
+	// One slot per field row, merged in row order below. Not one per thread: the model sums a
+	// likelihood in these same slots, and a thread-indexed slot makes that sum's rounding a
+	// function of how the schedule shared the rows out (TBlockUpdate.h).
+	const size_t n_rows = _Y.dimensions()[0];
+	TDataUpdateAccumulator accumulator(n_rows);
 	TBlockModel model(_trees, data_model, accumulator);
-	std::vector<block_update::TThreadTally> tallies(ProgramOptions::NUMBER_OF_THREADS);
+	std::vector<field_math::TLinkCounters> per_row_counters(n_rows);
 
 	const field_math::TErrorProbability omega = _error_probability();
 	block_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
 	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), omega,
-	                               model, field_uniforms, tallies);
+	                               model, field_uniforms, per_row_counters);
 
 	// The update covered every leaf pair, so the tally it built is the configuration itself.
 	_link_counters = field_math::TLinkCounters();
-	for (const auto &tally : tallies) { _link_counters.merge(tally.counters); }
+	for (const auto &row : per_row_counters) { _link_counters.merge(row); }
 
 	_trace_link_counters(iteration);
 
-	// at the very end: sum the per-thread accumulators and store them in the data sources
+	// at the very end: sum the per-row accumulators, in row order, and store them in the data
+	// sources
 	accumulator.commit(data_model);
 	using namespace coretools::instances;
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _coretools_thinning == 0) && !_fix_Y) {
