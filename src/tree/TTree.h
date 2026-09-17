@@ -356,7 +356,6 @@ public:
 	/// tens of milliseconds a clique's likelihood costs.
 	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
 		const size_t n = n_cliques();
-		std::vector<std::vector<size_t>> indices_to_insert(n);
 
 		// The stream this tree's node state draws from this iteration, built before the parallel
 		// region (see run_seed). Each tree names its own dimension, so the two never share a
@@ -373,23 +372,24 @@ public:
 		_alpha_c->propose(coretools::TRange(0, n, 1));
 
 		// --- region 1: the node-state walk, and alpha's two likelihoods ---
-		std::vector<std::array<double, 2>> alpha_LL(n);
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(indices_to_insert, node_state_uniforms, alpha_LL, n)
-		for (size_t i = 0; i < n; ++i) {
-			// The cells this clique reads and writes. The view lives across the moves below,
-			// because those moves read the states the walk assigns.
-			auto states = _clique_view(i);
+		// The kernel's result lands in `alpha_LL[clique]`. Nothing sums it across cliques, so it
+		// is order-independent. Gathering it through the helper costs nothing the hand-written
+		// loop did not already pay.
+		auto view_factory = [this](size_t c) { return _clique_view(c); };
+		auto kernel = [this, &node_state_uniforms](size_t c, TNodeStateCliqueView &states) {
+			// The view lives across the moves below. Those moves read the states the walk
+			// assigns. `FixZ` discards this branch entirely when set; without the `else` below
+			// the capture would go unused.
 			if constexpr (!FixZ) {
-				node_state_walk::update_clique(_topology(), transition_grid(i), _previous_bins(),
+				node_state_walk::update_clique(_topology(), transition_grid(c), _previous_bins(),
 				                               node_state_uniforms, states);
+			} else {
+				(void)node_state_uniforms;
 			}
-			alpha_LL[i] = _clique_LL(states, transition_grid(i),
-			                         _candidate_grid<true>(i, _alpha_c->value(i)));
-			// The view ends here, inside the parallel region, so it hands its inserts out rather
-			// than making them. The list is taken whether or not the walk ran.
-			indices_to_insert[i] = states.take_deferred_inserts();
-		}
+			return _clique_LL(states, transition_grid(c),
+			                   _candidate_grid<true>(c, _alpha_c->value(c)));
+		};
+		auto [alpha_LL, indices_to_insert] = clique_traversal::run(n, view_factory, kernel);
 		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
 
 		// --- alpha's decision, and the likelihood the nu move inherits ---
