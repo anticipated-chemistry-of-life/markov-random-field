@@ -409,14 +409,16 @@ public:
 
 		// --- region 2: nu's candidate likelihood ---
 		_log_nu_c->propose(coretools::TRange(0, n, 1));
-		std::vector<double> nu_LL_new(n);
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(dynamic) shared(nu_LL_new, n)
-		for (size_t i = 0; i < n; ++i) {
-			auto states  = _clique_view(i);
-			nu_LL_new[i] = _clique_LL(states, _candidate_grid<false>(i, _log_nu_c->value(i)));
-			DEBUG_ASSERT(states.take_deferred_inserts().empty());
-		}
+		auto nu_kernel = [this](size_t c, TNodeStateCliqueView &states) {
+			return _clique_LL(states, _candidate_grid<false>(c, _log_nu_c->value(c)));
+		};
+		auto [nu_LL_new, nu_indices_to_insert] = clique_traversal::run(n, view_factory, nu_kernel);
+
+		// This region is read-only: it opens a clique view only to score the candidate grid, and
+		// writes nothing. Checked once here, against the whole collected result, rather than once
+		// per clique inside the loop.
+		DEBUG_ASSERT(std::all_of(nu_indices_to_insert.begin(), nu_indices_to_insert.end(),
+		                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
 
 		for (size_t i = 0; i < n; ++i) {
 			const double proposed = _log_nu_c->value(i);
