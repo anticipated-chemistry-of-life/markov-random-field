@@ -24,6 +24,7 @@
 #include "tree/branch/TTransitionGridTable.h"
 #include "tree/clique/TCliqueSpace.h"
 #include "tree/clique/TCliqueView.h"
+#include "tree/clique/clique_traversal.h"
 #include "tree/node_state_density.h"
 #include "tree/node_state_walk.h"
 #include <array>
@@ -507,16 +508,11 @@ public:
 		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 
-		// Each clique is independent of each other so we should be able to parallelize this
-		std::vector<std::vector<size_t>> indices_to_insert(n_cliques());
-
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(dynamic) default(none) shared(indices_to_insert)
-		for (size_t i = 0; i < n_cliques(); ++i) {
-			auto states = _clique_view(i);
-			_initialize_clique_from_children(i, states);
-			indices_to_insert[i] = states.take_deferred_inserts();
-		}
+		auto view_factory = [this](size_t c) { return _clique_view(c); };
+		auto kernel = [this](size_t c, TNodeStateCliqueView &states) {
+			_initialize_clique_from_children(c, states);
+		};
+		const auto indices_to_insert = clique_traversal::run(n_cliques(), view_factory, kernel);
 
 		_Z.insert_in_Z(indices_to_insert);
 	};
