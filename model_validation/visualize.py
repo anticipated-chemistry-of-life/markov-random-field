@@ -364,6 +364,45 @@ def _kde_posterior(
     ax.legend(fontsize=8)
 
 
+def _joint_posterior_2d(
+    ax: plt.Axes,
+    x_name: str,
+    y_name: str,
+    true_x: float,
+    true_y: float,
+    trace: pd.DataFrame,
+) -> None:
+    """Scatter of the joint MCMC trace for two scalar parameters.
+
+    Both are corruption rates that trade off in the model (the link's `omega`
+    and one of the two `epsilon`s), so a genuine identifiability problem shows
+    up here as a diagonal ridge in the point cloud rather than a blob centered
+    on the true pair.
+    """
+    x = trace[x_name].to_numpy(dtype=float)
+    y = trace[y_name].to_numpy(dtype=float)
+    finite = np.isfinite(x) & np.isfinite(y)
+    x, y = x[finite], y[finite]
+
+    ax.scatter(x, y, s=8, alpha=0.15, color="#3F51B5", linewidths=0, label="trace")
+    ax.axvline(true_x, color="#E53935", linestyle="--", linewidth=1)
+    ax.axhline(true_y, color="#E53935", linestyle="--", linewidth=1)
+    ax.plot(
+        [true_x],
+        [true_y],
+        marker="x",
+        color="#E53935",
+        markersize=10,
+        markeredgewidth=2,
+        linestyle="none",
+        label=f"true ({true_x:.4g}, {true_y:.4g})",
+    )
+    ax.set_xlabel(x_name)
+    ax.set_ylabel(y_name)
+    ax.set_title(f"{y_name} vs {x_name} (n={len(x)} samples)")
+    ax.legend(fontsize=8)
+
+
 def _hpd_inclusion_level(probs: np.ndarray, true_bins: np.ndarray) -> np.ndarray:
     """Smallest HPD credible mass that already contains the true bin, per branch.
 
@@ -842,6 +881,39 @@ def main(
     if show:
         plt.show()
     plt.close(fig)
+
+    # --- joint posteriors: omega vs each epsilon, the corruption rates that trade off ---
+    true_by_name = dict(zip(merged["name"], merged["true_value"]))
+    joint_pairs = [
+        pair
+        for pair in (("omega", "epsilon_simple_model"), ("omega", "epsilon"))
+        if trace_df is not None
+        and pair[0] in trace_df.columns
+        and pair[1] in trace_df.columns
+        and pair[0] in true_by_name
+        and pair[1] in true_by_name
+    ]
+    if not joint_pairs:
+        click.echo(
+            "Skipping joint posteriors: omega and epsilon/epsilon_simple_model "
+            "are not both in the trace."
+        )
+    else:
+        fig_j, axes_j = plt.subplots(
+            1, len(joint_pairs), figsize=(6 * len(joint_pairs), 5), squeeze=False
+        )
+        for ax, (x_name, y_name) in zip(axes_j[0], joint_pairs):
+            _joint_posterior_2d(
+                ax, x_name, y_name, true_by_name[x_name], true_by_name[y_name], trace_df
+            )
+        fig_j.suptitle(f"Joint posteriors — {base.name}", fontsize=13)
+        fig_j.tight_layout()
+        out_file_j = out_dir / "joint_posteriors.pdf"
+        fig_j.savefig(out_file_j, bbox_inches="tight")
+        click.echo(f"Saved: {out_file_j}")
+        if show:
+            plt.show()
+        plt.close(fig_j)
 
     # --- Y distribution comparison ---
     sim_y = _load_y_file(inputs.true_y)
