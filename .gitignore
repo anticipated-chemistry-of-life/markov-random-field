@@ -63,7 +63,6 @@ tests/test_data/ott_taxonomy.tsv
 .venv/
 *_trace.txt
 documentation/
-inference_test/
 inference_test_small/
 CLAUDE.md
 .rtk/

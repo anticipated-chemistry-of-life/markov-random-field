@@ -1,0 +1,9 @@
+__marimo__/
+data/
+lotus.tsv
+molecules.tsv
+molecules_paper_counts.tsv
+species_paper_counts.tsv
+test_out/
+species.tsv
+lotus_retreival.ipynb
