@@ -24,8 +24,8 @@ MODE="${{ACOL_MODE:-release}}"
 FLAGS="${{ACOL_DATA_FLAGS:-ls}}"
 
 cd "$ROOT"
-just build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 
 cd "$SCRIPT_DIR"
 # --out is required: without it coretools registers an empty 'out', so the simulated files would
@@ -72,8 +72,8 @@ MODE="${{ACOL_MODE:-release}}"
 FLAGS="${{ACOL_DATA_FLAGS:-ls}}"
 
 cd "$ROOT"
-just build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 
 cd "$SCRIPT_DIR"
 # Both data files are always passed: which sources are actually read is decided at compile time

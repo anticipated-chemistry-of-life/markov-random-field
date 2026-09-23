@@ -17,7 +17,7 @@
 # the same seed yields a different chain each time -- verified empirically, the
 # whole species trace diverges. With --numThreads 1 the run is byte-stable.
 # This is an infer run, so it is the half that is still affected; a simulate run
-# is now byte-stable at any thread count, and `just parity` gates that.
+# is now byte-stable at any thread count, and `pixi run parity` gates that.
 #
 # Nothing is neutralised. Both trees are active, so the rung infers both of them
 # (ADR-0005). The manifests in this directory predate that change and have to be
@@ -46,8 +46,8 @@ case "$RUNG" in
 esac
 
 cd "$ROOT"
-just build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 
 cd "$SCENARIO"
 rm -rf "${RUNG}_gate" && mkdir -p "${RUNG}_gate"

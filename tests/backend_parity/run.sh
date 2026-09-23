@@ -26,12 +26,10 @@
 # Only `*.log` is left out: it carries a fresh ntfy topic UUID and wall-clock timings, so it
 # differs between two runs of the *same* binary.
 #
-# Usage:  bash tests/backend_parity/run.sh          (or: just parity)
+# Usage:  pixi run parity        (or: bash tests/backend_parity/run.sh, inside `pixi shell`)
 #
 # Environment:
 #   ACOL_MODE        debug | release          (default release)
-#   ACOL_ENV         micromamba environment   (default acol_env)
-#   MAMBA_EXE        path to micromamba       (default: the one on PATH)
 #   ACOL_PARITY_DIR  where to run             (default build/parity)
 #   ACOL_PARITY_SEED fixed seed               (default 42)
 #   ACOL_PARITY_ITERATIONS  chain length      (default 400)
@@ -43,8 +41,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="${ACOL_MODE:-release}"
-CONDA_ENV="${ACOL_ENV:-acol_env}"
-MAMBA="${MAMBA_EXE:-micromamba}"
 SEED="${ACOL_PARITY_SEED:-42}"
 ITERATIONS="${ACOL_PARITY_ITERATIONS:-400}"
 WORKDIR="${ACOL_PARITY_DIR:-$ROOT/build/parity}"
@@ -87,26 +83,23 @@ FIXTURE=(species.txt molecules.txt species_papers.txt molecules_papers.txt)
 # ---------------------------------------------------------------------------
 # Build one binary per gated pair
 #
-# The gate drives cmake itself rather than going through `just`. `just` knows nothing about the
-# storages, because nothing in the build system chooses them any more, and this is the one build
-# that overrides the aliases.
-# ---------------------------------------------------------------------------
+# The gate drives cmake itself rather than going through the pixi tasks. Those know nothing about
+# the storages, because nothing in the build system chooses them any more, and this is the one
+# build that overrides the aliases.
 
-command -v "$MAMBA" >/dev/null 2>&1 || {
-    echo "error: micromamba not found (set MAMBA_EXE to its path)" >&2
+# pixi exports CONDA_PREFIX when it activates the environment, so an unset one means the toolchain
+# this build needs is not on PATH.
+if [[ -z "${CONDA_PREFIX:-}" ]]; then
+    echo "error: no pixi environment; run this through pixi, e.g. 'pixi run parity'" >&2
     exit 1
-}
-"$MAMBA" run -n "$CONDA_ENV" true >/dev/null 2>&1 || {
-    echo "error: micromamba environment '$CONDA_ENV' is missing or broken; run 'just setup'" >&2
-    exit 1
-}
+fi
 
 # One directory per pair, beside the ordinary ones, so a rerun rebuilds only what changed.
 #
-# Everything below runs inside the environment, because the flags are built from CXXFLAGS. The
-# conda compiler packages export CC, CXX and the matching sysroot flags from their activation
-# scripts. The defines are appended to CXXFLAGS rather than replacing it, so the sysroot flags
-# survive. The plain compiler names are the fallback when nothing exported them.
+# Everything below is built from CXXFLAGS. The conda compiler packages export CC, CXX and the
+# matching sysroot flags from their activation scripts. The defines are appended to CXXFLAGS rather
+# than replacing it, so the sysroot flags survive. The plain compiler names are the fallback when
+# nothing exported them.
 #
 # Configure only when the cache does not already hold exactly these flags. Re-running cmake
 # regenerates armadillo's headers, which invalidates every object that includes them. Ninja
@@ -115,20 +108,20 @@ build_binary() {
     local suffix="$1" field="$2" node_state="$3"
     local defines="-DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
 
-    ACOL_FLAG_SUFFIX="$suffix" "$MAMBA" run -n "$CONDA_ENV" bash -eu -c '
+    ACOL_FLAG_SUFFIX="$suffix" bash -eu -c '
         if [[ -z "${CXX:-}" ]]; then
             case "$(uname -s)" in
                 Darwin) export CC="$CONDA_PREFIX/bin/clang" CXX="$CONDA_PREFIX/bin/clang++" ;;
                 *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
             esac
         fi
-        # See justfile:_drive for why -- same conda-linker-vs-new-SDK fallback.
+        # See scripts/acol.sh for why -- same conda-linker-vs-new-SDK fallback.
         if [[ "$(uname -s)" == "Darwin" ]] && command -v xcrun >/dev/null 2>&1; then
             probe="$(mktemp -d)"
             printf "int main(){return 0;}" > "$probe/t.c"
-            printf "int main(){return 0;}" > "$probe/t.cpp"
+            printf "#include <random>\nint main(){return 0;}" > "$probe/t.cpp"
             if { ! "$CC" "$probe/t.c" -o "$probe/t_c" >/dev/null 2>&1 \
-                 || ! "$CXX" "$probe/t.cpp" -o "$probe/t_cxx" >/dev/null 2>&1; } \
+                 || ! "$CXX" -std=c++20 "$probe/t.cpp" -o "$probe/t_cxx" >/dev/null 2>&1; } \
                && xcrun -f clang++ >/dev/null 2>&1; then
                 export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
                 export SDKROOT="$(xcrun --show-sdk-path)"

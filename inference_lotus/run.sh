@@ -5,12 +5,10 @@ ROOT="$SCRIPT_DIR/.."
 
 MODE="${ACOL_MODE:-release}"
 FLAGS="${ACOL_DATA_FLAGS:-l}"
-MAMBA="${MAMBA_EXE:-micromamba}"
-CONDA_ENV="${ACOL_ENV:-acol_env}"
 
 cd "$ROOT"
-just build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(just bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS"
+ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 
 cd "$SCRIPT_DIR"
 # The binary is linked against the environment's libstdc++ and carries no rpath, so it has to be
@@ -18,8 +16,8 @@ cd "$SCRIPT_DIR"
 #
 # `samply record --save-only` writes ./profile.json.gz and opens nothing. The profile is only as
 # useful as the symbols it is read with, so do not rebuild the binary before reading it: samply
-# stores addresses, and `just build` relinks them somewhere else.
-"$MAMBA" run -n "$CONDA_ENV" "$ACOL" infer \
+# stores addresses, and `pixi run build` relinks them somewhere else.
+pixi run "$ACOL" infer \
     --out ./test_out/acol \
     --tree_species species.tsv \
     --tree_molecules molecules.tsv \

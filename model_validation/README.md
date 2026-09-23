@@ -115,7 +115,7 @@ says so at more length.
   thread-local generator inside the clique loop. Any test that compares `infer`
   runs exactly must pass `--numThreads 1`. A `simulate` run is reproducible at any
   thread count -- it is a forward draw and takes nothing from the thread-local
-  generator -- and `just parity` gates it.
+  generator -- and `pixi run parity` gates it.
 - **"internal nodes" means two different things.** The startup log line counts
   internal nodes _excluding_ roots, while `TPhylogeny::n_internal_nodes()`
   _includes_ them. Neither sizes the node state any more: since ADR-0005 that

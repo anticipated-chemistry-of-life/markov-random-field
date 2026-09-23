@@ -22,8 +22,8 @@ concurrency:
   group: backend-parity-${{ github.ref }}
   cancel-in-progress: true
 
-# The default shell for a `run:` step is `bash -e` without `pipefail`, under which a failed `curl`
-# piped into `tar` or `bash` leaves the step green and the failure surfaces later as something else.
+# `shell: bash` rather than the default `bash -e`, so that a pipeline in the step below fails on
+# the first command that fails rather than on the last one.
 defaults:
   run:
     shell: bash
@@ -37,33 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install just
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
-            | bash -s -- --to "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Install micromamba
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
-            | tar -xj -C "$HOME/.local" bin/micromamba
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          echo "MAMBA_EXE=$HOME/.local/bin/micromamba" >> "$GITHUB_ENV"
-          echo "MAMBA_ROOT_PREFIX=$HOME/micromamba" >> "$GITHUB_ENV"
-
-      # The environment is whatever `just setup` installs, so the key is the recipe that installs
-      # it. A miss costs a few minutes of solving and downloading; a stale hit cannot happen,
-      # because changing the package list changes the justfile.
-      - name: Cache the build environment
-        uses: actions/cache@v4
+      # setup-pixi installs pixi, then the environment pixi.toml describes, and caches it keyed on
+      # pixi.lock. A stale hit cannot happen: changing a dependency changes the lock file.
+      - name: Install pixi and the build environment
+        uses: prefix-dev/setup-pixi@v0.10.2
         with:
-          path: ~/micromamba
-          key: micromamba-${{ runner.os }}-${{ hashFiles('justfile') }}
-
-      - name: Create the build environment
-        run: just setup
+          cache: true
 
       - name: Dense and sparse must agree byte for byte
-        run: just parity
+        run: pixi run parity
