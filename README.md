@@ -29,7 +29,9 @@ on the first configure.
 ```bash
 pixi run build             # debug build of ./acol
 pixi run build release     # release build
-pixi run run               # build and run ./acol
+pixi run simulate          # build, then ./acol simulate
+pixi run infer             # build, then ./acol infer
+pixi run run               # build and run ./acol with no task name
 pixi run test              # build and run the unit tests
 pixi run test release      # ... in release mode
 ```
@@ -38,10 +40,11 @@ The build mode and the data-source letters may be given in either order, and eit
 out. They are typed task arguments, so everything meant for the executable goes after `--`:
 
 ```bash
-pixi run run release -- --out results/acol --numThreads all
+pixi run infer release -- --out results/acol --numThreads all
 ```
 
-is the same as running `./acol --out results/acol --numThreads all` from a release build.
+is the same as running `./acol infer --out results/acol --numThreads all` from a release build.
+`pixi run run` is the same binary with no task name in front, for the runs that name neither.
 
 ### Choosing the data sources
 

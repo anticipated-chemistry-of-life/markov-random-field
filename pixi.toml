@@ -1,9 +1,11 @@
 # acol -- build/run helpers.
 #
-#   pixi install                         create or update the build environment
-#   pixi run build [MODE] [FLAGS]        configure + compile ./acol
-#   pixi run run   [MODE] [FLAGS] -- ARGS   build, then run ./acol ARGS
-#   pixi run test  [MODE] [FLAGS] -- ARGS   build, then run ./acol_unitTests ARGS
+#   pixi install                             create or update the build environment
+#   pixi run build    [MODE] [FLAGS]         configure + compile ./acol
+#   pixi run simulate [MODE] [FLAGS] -- ARGS build, then run ./acol simulate ARGS
+#   pixi run infer    [MODE] [FLAGS] -- ARGS build, then run ./acol infer ARGS
+#   pixi run run      [MODE] [FLAGS] -- ARGS build, then run ./acol ARGS
+#   pixi run test     [MODE] [FLAGS] -- ARGS build, then run ./acol_unitTests ARGS
 #
 # MODE  is `debug` (the default) or `release`.
 # FLAGS is one of the letter sets below; it defaults to `ls`. A set is spelled
@@ -138,6 +140,26 @@ depends-on = [{ task = "_build", args = [
 ] }]
 cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol"
 description = "Compile ./acol and run it with the arguments after `--`."
+
+# The two things acol does. `pixi run run` is the same binary without a task
+# name in front, for the runs that name neither.
+[tasks.simulate]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol simulate"
+description = "Compile ./acol and draw a data set with it (arguments after `--`)."
+
+[tasks.infer]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol infer"
+description = "Compile ./acol and run a chain with it (arguments after `--`)."
 
 [tasks.test]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
