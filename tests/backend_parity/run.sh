@@ -96,45 +96,23 @@ fi
 
 # One directory per pair, beside the ordinary ones, so a rerun rebuilds only what changed.
 #
-# Everything below is built from CXXFLAGS. The conda compiler packages export CC, CXX and the
-# matching sysroot flags from their activation scripts. The defines are appended to CXXFLAGS rather
-# than replacing it, so the sysroot flags survive. The plain compiler names are the fallback when
-# nothing exported them.
+# The defines are appended to CXXFLAGS rather than replacing it, so anything the environment put
+# there survives. Which compiler the build uses is decided by cmake/toolchain.cmake, which the
+# preset names.
 #
 # Configure only when the cache does not already hold exactly these flags. Re-running cmake
 # regenerates armadillo's headers, which invalidates every object that includes them. Ninja
 # re-runs cmake by itself when CMakeLists.txt or the presets change, so skipping it is safe.
 build_binary() {
     local suffix="$1" field="$2" node_state="$3"
-    local defines="-DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
+    local build_dir="build/${MODE}${suffix}"
+    local flags="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
 
-    ACOL_FLAG_SUFFIX="$suffix" bash -eu -c '
-        if [[ -z "${CXX:-}" ]]; then
-            case "$(uname -s)" in
-                Darwin) export CC="$CONDA_PREFIX/bin/clang" CXX="$CONDA_PREFIX/bin/clang++" ;;
-                *)      export CC="$CONDA_PREFIX/bin/gcc"   CXX="$CONDA_PREFIX/bin/g++" ;;
-            esac
-        fi
-        # See scripts/acol.sh for why -- same conda-linker-vs-new-SDK fallback.
-        if [[ "$(uname -s)" == "Darwin" ]] && command -v xcrun >/dev/null 2>&1; then
-            probe="$(mktemp -d)"
-            printf "int main(){return 0;}" > "$probe/t.c"
-            printf "#include <random>\nint main(){return 0;}" > "$probe/t.cpp"
-            if { ! "$CC" "$probe/t.c" -o "$probe/t_c" >/dev/null 2>&1 \
-                 || ! "$CXX" -std=c++20 "$probe/t.cpp" -o "$probe/t_cxx" >/dev/null 2>&1; } \
-               && xcrun -f clang++ >/dev/null 2>&1; then
-                export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
-                export SDKROOT="$(xcrun --show-sdk-path)"
-            fi
-            rm -rf "$probe"
-        fi
-        flags="${CXXFLAGS:-} $3"
-        if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$2/CMakeCache.txt" 2>/dev/null; then
-            cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF \
-                  -DCMAKE_CXX_FLAGS="$flags"
-        fi
-        exec cmake --build "$2" --target acol
-    ' _ "$MODE" "build/${MODE}${suffix}" "$defines"
+    if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$build_dir/CMakeCache.txt" 2>/dev/null; then
+        ACOL_FLAG_SUFFIX="$suffix" cmake --preset "$MODE" \
+            -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DCMAKE_CXX_FLAGS="$flags"
+    fi
+    cmake --build "$build_dir" --target acol
 }
 
 cd "$ROOT"

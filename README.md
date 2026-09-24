@@ -34,11 +34,11 @@ pixi run test              # build and run the unit tests
 pixi run test release      # ... in release mode
 ```
 
-Everything after the task name, the build mode and the data-source letters is forwarded verbatim to
-the executable, so
+`MODE` and `FLAGS` are positional task arguments, so everything meant for the executable goes after
+`--`:
 
 ```bash
-pixi run run release --out results/acol --numThreads all
+pixi run run release -- --out results/acol --numThreads all
 ```
 
 is the same as running `./acol --out results/acol --numThreads all` from a release build.
@@ -59,7 +59,7 @@ The default is `ls`. At least one of `l` and `s` is required — with neither, n
 
 ```bash
 pixi run build l           # debug, LOTUS only
-pixi run run release lsm --out results/acol --numThreads all
+pixi run run release lsm -- --out results/acol --numThreads all
 ```
 
 Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
@@ -121,6 +121,10 @@ Other tasks: `pixi run configure` (configure only), `pixi run bin` / `pixi run d
 binary or the build directory path), `pixi run clean`, `pixi run distclean`. `pixi task list` lists
 them all, and `pixi shell` opens a shell inside the environment.
 
+Every task is a cmake invocation in `pixi.toml`; there is no wrapper script. Which compiler a
+build uses is decided in `cmake/toolchain.cmake`, which the presets name, so a plain
+`cmake --preset` picks the same one.
+
 ### Using cmake directly
 
 The pixi tasks are a convenience wrapper; the presets in `CMakePresets.json` work on their own.
@@ -134,3 +138,4 @@ cmake --build build/debug
 
 The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; the tasks set
 `ACOL_FLAG_SUFFIX` to the data-source letters, and it is empty when you invoke cmake yourself.
+`cmake/toolchain.cmake` still chooses the compiler, because `CMakePresets.json` names it.

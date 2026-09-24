@@ -2,8 +2,8 @@
 #
 #   pixi install                         create or update the build environment
 #   pixi run build [MODE] [FLAGS]        configure + compile ./acol
-#   pixi run run   [MODE] [FLAGS] ARGS   build, then run ./acol ARGS
-#   pixi run test  [MODE] [FLAGS] ARGS   build, then run ./acol_unitTests ARGS
+#   pixi run run   [MODE] [FLAGS] -- ARGS   build, then run ./acol ARGS
+#   pixi run test  [MODE] [FLAGS] -- ARGS   build, then run ./acol_unitTests ARGS
 #
 # MODE  is `debug` (the default) or `release`.
 # FLAGS is any combination of the letters below; it defaults to `ls`.
@@ -12,12 +12,13 @@
 #     s -> -DSIMPLE_DATA=ON  (simple error model data)
 #     m -> -DUSE_MS_DATA=ON  (mass spec data)
 #
-# Anything left after MODE and FLAGS is forwarded verbatim to the executable:
+# Everything after `--` goes to the executable verbatim:
 #
-#     pixi run run release lsm --input file.txt --scalar 0.6
+#     pixi run run release lsm -- --input file.txt --scalar 0.6
 #
 # is `./acol --input file.txt --scalar 0.6` compiled at -O3 with all three data
-# sources.
+# sources. MODE and FLAGS are positional and both take their default when left
+# out, so `pixi run run -- --input file.txt` is a debug `ls` build.
 #
 # Which storage backs the field, and which backs the node state, are not build
 # arguments. They are two aliases in src/storages/storage_backend.h, edited by
@@ -26,6 +27,13 @@
 #
 # Every combination of MODE and FLAGS gets its own build directory
 # (build/<MODE>-<FLAGS>), so switching back and forth does not force a rebuild.
+# `configure` runs once per directory: pixi repeats it when CMakeLists.txt, the
+# presets or the toolchain file change, and skips it otherwise, because
+# re-running cmake regenerates armadillo's headers and that invalidates every
+# object including them.
+#
+# Which compiler a build uses is decided in cmake/toolchain.cmake, which the
+# presets name.
 #
 # A task runs inside the environment below, so there is nothing to activate by
 # hand. `pixi shell` opens a shell in it. `pixi task list` lists every task.
@@ -53,31 +61,79 @@ libopenblas = { version = "*", build = "*openmp*" }
 [target.osx.dependencies]
 llvm-openmp = "*"
 
-# Every task below hands its arguments to one script, which parses [MODE]
-# [FLAGS] off the front. pixi appends the arguments of `pixi run <task> ...`
-# verbatim, so they arrive as the script's "$@".
+# The build directory of a MODE/FLAGS pair. The letters are put back in a fixed
+# order, so `sl` and `ls` name one directory. ACOL_FLAG_SUFFIX is also what
+# binaryDir in CMakePresets.json reads.
 [tasks.configure]
-cmd = "bash scripts/acol.sh configure"
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "cmake --preset {{ mode }} -DLOTUS={{ 'ON' if 'l' in flags else 'OFF' }} -DSIMPLE_DATA={{ 'ON' if 's' in flags else 'OFF' }} -DUSE_MS_DATA={{ 'ON' if 'm' in flags else 'OFF' }}"
+inputs = ["CMakeLists.txt", "CMakePresets.json", "cmake/*.cmake"]
+outputs = [
+  "build/{{ mode }}-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}/CMakeCache.txt",
+]
 description = "Configure the build directory without compiling anything."
 
+# .clangd points at build/compile_commands.json; keep it on the directory last
+# asked for.
+[tasks._compile_commands]
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+depends-on = [{ task = "configure", args = ["{{ mode }}", "{{ flags }}"] }]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "ln -sfn {{ mode }}$ACOL_FLAG_SUFFIX/compile_commands.json build/compile_commands.json"
+
 [tasks.build]
-cmd = "bash scripts/acol.sh build"
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "cmake --build build/{{ mode }}$ACOL_FLAG_SUFFIX --target acol"
 description = "Compile ./acol."
 
 [tasks.run]
-cmd = "bash scripts/acol.sh run"
-description = "Compile ./acol and run it with the remaining arguments."
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+depends-on = [{ task = "build", args = ["{{ mode }}", "{{ flags }}"] }]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "./build/{{ mode }}$ACOL_FLAG_SUFFIX/acol"
+description = "Compile ./acol and run it with the arguments after `--`."
 
 [tasks.test]
-cmd = "bash scripts/acol.sh test"
-description = "Compile and run the unit tests (extra arguments go to gtest)."
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "cmake --build build/{{ mode }}$ACOL_FLAG_SUFFIX --target acol_unitTests && ./build/{{ mode }}$ACOL_FLAG_SUFFIX/acol_unitTests"
+description = "Compile and run the unit tests (arguments after `--` go to gtest)."
 
 [tasks.bin]
-cmd = "bash scripts/acol.sh bin"
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "echo build/{{ mode }}$ACOL_FLAG_SUFFIX/acol"
 description = "Print the path of the acol binary for a given MODE/FLAGS."
 
 [tasks.dir]
-cmd = "bash scripts/acol.sh dir"
+args = [
+  { arg = "mode", default = "debug", choices = ["debug", "release"] },
+  { arg = "flags", default = "ls" },
+]
+env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
+cmd = "echo build/{{ mode }}$ACOL_FLAG_SUFFIX"
 description = "Print the build directory for a given MODE/FLAGS."
 
 [tasks.parity]

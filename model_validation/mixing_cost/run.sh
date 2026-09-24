@@ -118,8 +118,8 @@ fi
 cd "$ROOT"
 
 echo "==> building the current binary"
-bash "$ROOT/scripts/acol.sh" build "$MODE" "$FLAGS" >/dev/null
-CURRENT_BIN="$ROOT/$(bash "$ROOT/scripts/acol.sh" bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS" >/dev/null
+CURRENT_BIN="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 CURRENT_REV="$(git rev-parse --short HEAD)"
 
 REFERENCE_REV="$(git rev-parse --short "$REFERENCE_REV")"
