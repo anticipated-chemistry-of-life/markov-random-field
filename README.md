@@ -34,8 +34,8 @@ pixi run test              # build and run the unit tests
 pixi run test release      # ... in release mode
 ```
 
-`MODE` and `FLAGS` are positional task arguments, so everything meant for the executable goes after
-`--`:
+The build mode and the data-source letters may be given in either order, and either may be left
+out. They are typed task arguments, so everything meant for the executable goes after `--`:
 
 ```bash
 pixi run run release -- --out results/acol --numThreads all
@@ -46,7 +46,7 @@ is the same as running `./acol --out results/acol --numThreads all` from a relea
 ### Choosing the data sources
 
 Which sources of information get compiled in is a compile-time decision. Pass one of the letter
-sets right after the build mode:
+sets, before or after the build mode:
 
 | letter | cmake option       | data source             |
 | ------ | ------------------ | ----------------------- |
@@ -61,6 +61,7 @@ compiles anything.
 
 ```bash
 pixi run build l           # debug, LOTUS only
+pixi run build lsm         # debug, all three
 pixi run run release lsm -- --out results/acol --numThreads all
 ```
 
