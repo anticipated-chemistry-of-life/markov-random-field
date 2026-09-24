@@ -32,8 +32,8 @@ endif()
 # -> USE_MS_DATA (see `pixi task list`).
 # =============================================================================
 
-option(LOTUS "Compile in the LOTUS data source" ON)
-option(SIMPLE_DATA "Compile in the simple error model data source" ON)
+option(LOTUS "Compile in the LOTUS data source" OFF)
+option(SIMPLE_DATA "Compile in the simple error model data source" OFF)
 option(USE_MS_DATA "Compile in the mass spec data source" OFF)
 option(BUILD_TESTING "Configure the acol_unitTests target" ON)
 
