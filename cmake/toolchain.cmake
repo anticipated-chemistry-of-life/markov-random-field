@@ -1,4 +1,4 @@
-# Pick the compiler the machine can build with.
+# Pick the compiler the machine can build with, and the prefix it looks for libraries in.
 #
 # The presets name this file, so every configure goes through it: the pixi tasks, `pixi run
 # parity`, and a bare `cmake --preset debug`.
@@ -12,6 +12,21 @@
 # program, sometimes only for C. Its libc++ headers fail to compile `<random>` at C++20, where
 # they meet a newer `math.h` and stop at an undeclared INFINITY. Both are compiled here, and a
 # failure falls back to the Xcode toolchain, which always matches its own SDK.
+
+# Look in the environment before the machine. cmake searches CMAKE_PREFIX_PATH ahead of the
+# platform's own prefixes, so a library the environment ships wins over one the machine happens
+# to carry. Without this, find_package(OpenSSL) takes the distribution's libcrypto and hands it
+# to the environment's linker, whose sysroot is older than the glibc that library was built
+# against:
+#
+#     x86_64-conda-linux-gnu-ld: /usr/lib/x86_64-linux-gnu/libcrypto.so:
+#     undefined reference to `dlopen@GLIBC_2.34'
+#
+# This runs before the early return below, because a reconfigure re-reads the file with the
+# compilers already chosen and still has to search the same prefixes.
+if(DEFINED ENV{CONDA_PREFIX})
+  list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+endif()
 
 # CMake re-reads this file for every language it detects and for every try_compile. The compilers
 # are on the command line by then, so the work below happens once per build directory.
