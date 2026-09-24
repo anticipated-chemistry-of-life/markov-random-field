@@ -1,0 +1,202 @@
+# acol -- build/run helpers.
+#
+#   pixi install                             create or update the build environment
+#   pixi run build    [MODE] [FLAGS]         configure + compile ./acol
+#   pixi run simulate [MODE] [FLAGS] -- ARGS build, then run ./acol simulate ARGS
+#   pixi run infer    [MODE] [FLAGS] -- ARGS build, then run ./acol infer ARGS
+#   pixi run run      [MODE] [FLAGS] -- ARGS build, then run ./acol ARGS
+#   pixi run test     [MODE] [FLAGS] -- ARGS build, then run ./acol_unitTests ARGS
+#
+# MODE  is `debug` (the default) or `release`.
+# FLAGS is one of the letter sets below; it defaults to `ls`. A set is spelled
+# in l, s, m order: l, m, s, ls, lm, sm, lsm.
+#
+# Either may be left out, and they may be given in either order, so
+# `pixi run build lsm` and `pixi run build lsm release` both read as intended.
+#
+#     l -> -DLOTUS=ON        (LOTUS data)
+#     s -> -DSIMPLE_DATA=ON  (simple error model data)
+#     m -> -DUSE_MS_DATA=ON  (mass spec data)
+#
+# Everything after `--` goes to the executable verbatim:
+#
+#     pixi run run release lsm -- --input file.txt --scalar 0.6
+#
+# is `./acol --input file.txt --scalar 0.6` compiled at -O3 with all three data
+# sources. `pixi run run -- --input file.txt` is the same in a debug `ls`
+# build.
+#
+# Which storage backs the field, and which backs the node state, are not build
+# arguments. They are two aliases in src/storages/storage_backend.h, edited by
+# hand. `pixi run parity` is the one build that overrides them, and it drives
+# cmake itself.
+#
+# Every combination of MODE and FLAGS gets its own build directory
+# (build/<MODE>-<FLAGS>), so switching back and forth does not force a rebuild.
+# `configure` runs once per directory: pixi repeats it when CMakeLists.txt, the
+# presets or the toolchain file change, and skips it otherwise, because
+# re-running cmake regenerates armadillo's headers and that invalidates every
+# object including them.
+#
+# Which compiler a build uses is decided in cmake/toolchain.cmake, which the
+# presets name.
+#
+# A task runs inside the environment below, so there is nothing to activate by
+# hand. `pixi shell` opens a shell in it. `pixi task list` lists every task.
+
+[workspace]
+name = "acol"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+# git is deliberately not in here: FetchContent uses the system git, which you
+# already need to have cloned this repository.
+[dependencies]
+cmake = ">=3.30"
+ninja = "*"
+cxx-compiler = "*"
+zlib = "*"
+fmt = "*"
+armadillo = "*"
+openssl = "*"
+nlohmann_json = "*"
+libopenblas = { version = "*", build = "*openmp*" }
+
+# On Linux the conda gcc brings its own libgomp; forcing llvm-openmp there would
+# flip _openmp_mutex to the llvm variant and break it.
+[target.osx.dependencies]
+llvm-openmp = "*"
+
+# Two layers of tasks.
+#
+# The hidden ones take MODE and FLAGS already sorted out, and their `choices`
+# are what names a mode or a letter set nothing spells. ACOL_FLAG_SUFFIX is
+# what binaryDir in CMakePresets.json reads.
+#
+# The ones you call take the two in either order, and either may be left out:
+# `pixi run build`, `pixi run build lsm`, `pixi run build release` and
+# `pixi run build release lsm` all work. Two expressions sort one from the
+# other: the mode is `release` when either word is `release`, and the letter
+# set is whichever argument is not a mode, or `ls` when there is none.
+[tasks._configure]
+args = [
+  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
+]
+env = { ACOL_FLAG_SUFFIX = "-{{ flags }}" }
+cmd = "cmake --preset {{ mode }} -DLOTUS={{ 'ON' if 'l' in flags else 'OFF' }} -DSIMPLE_DATA={{ 'ON' if 's' in flags else 'OFF' }} -DUSE_MS_DATA={{ 'ON' if 'm' in flags else 'OFF' }}"
+inputs = ["CMakeLists.txt", "CMakePresets.json", "cmake/*.cmake"]
+outputs = ["build/{{ mode }}-{{ flags }}/CMakeCache.txt"]
+
+# .clangd points at build/compile_commands.json; keep it on the directory last
+# asked for.
+[tasks._compile_commands]
+args = [
+  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
+]
+depends-on = [{ task = "_configure", args = ["{{ mode }}", "{{ flags }}"] }]
+cmd = "ln -sfn {{ mode }}-{{ flags }}/compile_commands.json build/compile_commands.json"
+
+[tasks._build]
+args = [
+  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
+]
+depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
+cmd = "cmake --build build/{{ mode }}-{{ flags }} --target acol"
+
+# Nothing to do: it is the `choices` above that a task printing a path wants,
+# so that a set nothing spells is named here rather than in whatever reads the
+# path.
+[tasks._check]
+args = [
+  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
+]
+cmd = "exit 0"
+
+[tasks.configure]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_configure", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+description = "Configure the build directory without compiling anything."
+
+[tasks.build]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+description = "Compile ./acol."
+
+[tasks.run]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol"
+description = "Compile ./acol and run it with the arguments after `--`."
+
+# The two things acol does. `pixi run run` is the same binary without a task
+# name in front, for the runs that name neither.
+[tasks.simulate]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol simulate"
+description = "Compile ./acol and draw a data set with it (arguments after `--`)."
+
+[tasks.infer]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_build", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol infer"
+description = "Compile ./acol and run a chain with it (arguments after `--`)."
+
+[tasks.test]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_compile_commands", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "cmake --build build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }} --target acol_unitTests && ./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol_unitTests"
+description = "Compile and run the unit tests (arguments after `--` go to gtest)."
+
+[tasks.bin]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_check", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "echo build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol"
+description = "Print the path of the acol binary for a given MODE/FLAGS."
+
+[tasks.dir]
+args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
+depends-on = [{ task = "_check", args = [
+  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+] }]
+cmd = "echo build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}"
+description = "Print the build directory for a given MODE/FLAGS."
+
+[tasks.parity]
+cmd = "bash tests/backend_parity/run.sh"
+description = "Build both storage backends and check they produce byte-identical output."
+
+[tasks.clean]
+cmd = "rm -rf build"
+description = "Delete every build directory."
+
+[tasks.distclean]
+cmd = "rm -rf coretools stattools"
+depends-on = ["clean"]
+description = "Delete build directories *and* the fetched coretools/stattools checkouts."

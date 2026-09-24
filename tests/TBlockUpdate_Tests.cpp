@@ -14,7 +14,7 @@
 // wrong leaf pair is a wrong value rather than a coincidence.
 //
 // Every body is instantiated over all four field/node-state pairings. Continuous integration gates
-// two of them (`just parity`), so this is where the other two are exercised at all.
+// two of them (`pixi run parity`), so this is where the other two are exercised at all.
 //
 
 #include "backend_pairings.h"
@@ -460,7 +460,7 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 
 /// The two backends leave the same three containers and the same six counters.
 ///
-/// The whole-binary gate (`just parity`) asserts this of a chain. Here it is asserted of one
+/// The whole-binary gate (`pixi run parity`) asserts this of a chain. Here it is asserted of one
 /// update, where a failure names the loop rather than the run that diverged from it. The sparse
 /// storages hold only the cells they were given, so this is also where a deferred insert is
 /// compared against the write the dense storages take in place.

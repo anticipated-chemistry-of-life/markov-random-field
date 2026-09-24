@@ -2,7 +2,7 @@
 
 Two binaries, built from the same sources and differing only in which storage the aliases in
 `src/storages/storage_backend.h` select, have to produce byte-identical output from the same seed.
-`run.sh` is the check; `just parity` runs it, and so does CI on every push
+`run.sh` is the check; `pixi run parity` runs it, and so does CI on every push
 (`.github/workflows/backend-parity.yml`).
 
 The comparison is between two *builds* because the storage is a compile-time choice. That is the
@@ -25,9 +25,9 @@ binary array as well. The **LOTUS records** are pinned: they are a `TSparseBinar
 build, because a run reads them in once and never writes them again. So neither of them is a third
 define to pass, and the sparse binary array is in both gated builds rather than one.
 
-`run.sh` drives cmake itself rather than going through `just`, because nothing in the build system
-chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE` on the
-compiler command line, which is how an external define overrides an alias.
+`run.sh` drives cmake itself rather than going through the pixi tasks, because nothing in the build
+system chooses a storage any more. It passes `-DACOL_FIELD_STORAGE` and `-DACOL_NODE_STATE_STORAGE`
+on the compiler command line, which is how an external define overrides an alias.
 
 ## The fixture
 

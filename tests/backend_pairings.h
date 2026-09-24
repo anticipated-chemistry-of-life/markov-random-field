@@ -8,8 +8,8 @@
 // a single leaf, a star has a single internal node, and a container one cell wide is where an
 // index property stops being a coincidence.
 //
-// Continuous integration gates two of the four pairings (`just parity`), so a suite instantiated
-// over this list is where the other two are exercised at all.
+// Continuous integration gates two of the four pairings (`pixi run parity`), so a suite
+// instantiated over this list is where the other two are exercised at all.
 //
 
 #pragma once

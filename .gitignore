@@ -13,6 +13,9 @@ stattools_cmake/
 coretools/
 stattools/
 
+# The pixi environment (pixi.toml and pixi.lock describe it; this is the install)
+.pixi/
+
 # TNode artifact files
 node_modules/
 dist/

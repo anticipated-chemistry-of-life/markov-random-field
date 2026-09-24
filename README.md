@@ -2,12 +2,11 @@
 
 ## Compiling the repo
 
-The build is driven by [`just`](https://github.com/casey/just), which wraps cmake and takes care of
-the micromamba environment for you. Install the two prerequisites once:
+The build is driven by [`pixi`](https://pixi.sh), which wraps cmake and takes care of the conda
+environment for you. Install the one prerequisite once:
 
 ```bash
-brew install just          # or: cargo install just
-"${SHELL}" <(curl -L micro.mamba.pm)
+brew install pixi          # or: curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
 Then clone the repo and create the build environment:
@@ -15,12 +14,12 @@ Then clone the repo and create the build environment:
 ```bash
 git clone https://github.com/anticipated-chemistry-of-life/markov-random-field
 cd markov-random-field
-just setup
+pixi install
 ```
 
-`just setup` creates (or updates) a micromamba environment called `acol_env` with cmake, ninja, a
-compiler toolchain and the third-party libraries. Every other recipe runs inside that environment,
-so there is nothing to `micromamba activate` by hand.
+`pixi install` creates (or updates) the environment in `.pixi/envs/default` with cmake, ninja, a
+compiler toolchain and the third-party libraries, as `pixi.toml` lists them. Every task runs inside
+that environment, so there is nothing to activate by hand; `pixi shell` opens a shell in it.
 
 `coretools` and `stattools` are no longer git submodules: cmake checks them out via `FetchContent`
 on the first configure.
@@ -28,25 +27,29 @@ on the first configure.
 ### Building and running
 
 ```bash
-just build                 # debug build of ./acol
-just build release         # release build
-just run                   # build and run ./acol
-just test                  # build and run the unit tests
-just test release          # ... in release mode
+pixi run build             # debug build of ./acol
+pixi run build release     # release build
+pixi run simulate          # build, then ./acol simulate
+pixi run infer             # build, then ./acol infer
+pixi run run               # build and run ./acol with no task name
+pixi run test              # build and run the unit tests
+pixi run test release      # ... in release mode
 ```
 
-Everything after the build mode is forwarded verbatim to the executable, so
+The build mode and the data-source letters may be given in either order, and either may be left
+out. They are typed task arguments, so everything meant for the executable goes after `--`:
 
 ```bash
-just run release --out results/acol --numThreads all
+pixi run infer release -- --out results/acol --numThreads all
 ```
 
-is the same as running `./acol --out results/acol --numThreads all` from a release build.
+is the same as running `./acol infer --out results/acol --numThreads all` from a release build.
+`pixi run run` is the same binary with no task name in front, for the runs that name neither.
 
 ### Choosing the data sources
 
-Which sources of information get compiled in is a compile-time decision. Pass any combination of
-these letters right after the build mode:
+Which sources of information get compiled in is a compile-time decision. Pass one of the letter
+sets, before or after the build mode:
 
 | letter | cmake option       | data source             |
 | ------ | ------------------ | ----------------------- |
@@ -54,12 +57,15 @@ these letters right after the build mode:
 | `s`    | `-DSIMPLE_DATA=ON` | simple error model data |
 | `m`    | `-DUSE_MS_DATA=ON` | mass spec data          |
 
-The default is `ls`. At least one of `l` and `s` is required — with neither, nothing informs `Y` and
-`src/Types.h` fails a `static_assert`.
+The default is `ls`. The task takes the seven sets `l`, `m`, `s`, `ls`, `lm`, `sm` and `lsm`, and
+names the rest — a set is spelled in l, s, m order, so `ls` is a set and `sl` is a typo. At least
+one of `l` and `s` is required: with neither, nothing informs `Y`, and cmake stops before it
+compiles anything.
 
 ```bash
-just build l               # debug, LOTUS only
-just run release lsm --out results/acol --numThreads all
+pixi run build l           # debug, LOTUS only
+pixi run build lsm         # debug, all three
+pixi run run release lsm -- --out results/acol --numThreads all
 ```
 
 Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
@@ -112,25 +118,30 @@ An external define overrides either alias:
 cmake --preset debug -DCMAKE_CXX_FLAGS="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=TStorageYDense"
 ```
 
-That is how `just parity` builds two binaries from one source tree. It gates two of the four
+That is how `pixi run parity` builds two binaries from one source tree. It gates two of the four
 pairings, sparse against sparse and dense against dense. It runs the same simulation and the same
 chain under each from a fixed seed, then compares every file they write byte for byte. It runs in
 CI on every push. See `tests/backend_parity/`.
 
-Other recipes: `just configure` (configure only), `just bin` / `just dir` (print the binary or build
-directory path), `just shell` (a shell inside the environment), `just clean`, `just distclean`.
-Run `just` with no arguments for the full list.
+Other tasks: `pixi run configure` (configure only), `pixi run bin` / `pixi run dir` (print the
+binary or the build directory path), `pixi run clean`, `pixi run distclean`. `pixi task list` lists
+them all, and `pixi shell` opens a shell inside the environment.
+
+Every task is a cmake invocation in `pixi.toml`; there is no wrapper script. Which compiler a
+build uses is decided in `cmake/toolchain.cmake`, which the presets name, so a plain
+`cmake --preset` picks the same one.
 
 ### Using cmake directly
 
-`just` is a convenience wrapper; the presets in `CMakePresets.json` work on their own. Activate the
-environment first, since the presets do not do it for you:
+The pixi tasks are a convenience wrapper; the presets in `CMakePresets.json` work on their own.
+Enter the environment first, since the presets do not do it for you:
 
 ```bash
-micromamba activate acol_env
+pixi shell
 cmake --preset debug -DLOTUS=ON -DSIMPLE_DATA=ON
 cmake --build build/debug
 ```
 
-The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; `just` sets `ACOL_FLAG_SUFFIX` to
-the data-source letters, and it is empty when you invoke cmake yourself.
+The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; the tasks set
+`ACOL_FLAG_SUFFIX` to the data-source letters, and it is empty when you invoke cmake yourself.
+`cmake/toolchain.cmake` still chooses the compiler, because `CMakePresets.json` names it.

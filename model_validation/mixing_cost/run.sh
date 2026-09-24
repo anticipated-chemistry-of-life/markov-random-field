@@ -32,12 +32,10 @@
 # against a different dependency revision would put the difference somewhere the measurement cannot
 # see.
 #
-# Usage:  bash model_validation/mixing_cost/run.sh
+# Usage:  pixi run bash model_validation/mixing_cost/run.sh
 #
 # Environment:
 #   ACOL_MODE                    debug | release          (default release)
-#   ACOL_ENV                     micromamba environment   (default acol_env)
-#   MAMBA_EXE                    path to micromamba       (default: the one on PATH)
 #   ACOL_MIXING_DIR              where to run             (default build/mixing_cost/run)
 #   ACOL_MIXING_REFERENCE        the pre-refactor revision (default a3d1ae6, the parent of
 #                                "Draw the leaf layer with its tree, and the field on its own")
@@ -56,8 +54,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="${ACOL_MODE:-release}"
-CONDA_ENV="${ACOL_ENV:-acol_env}"
-MAMBA="${MAMBA_EXE:-micromamba}"
 REFERENCE_REV="${ACOL_MIXING_REFERENCE:-a3d1ae6}"
 FIXTURE_DIR="${ACOL_MIXING_FIXTURE:-$ROOT/model_validation/s_balanced_255_m_balanced_511}"
 ITERATIONS="${ACOL_MIXING_ITERATIONS:-20000}"
@@ -107,13 +103,13 @@ for file in "${FIXTURE[@]}"; do
     }
 done
 
-command -v "$MAMBA" >/dev/null 2>&1 || {
-    echo "error: micromamba not found (set MAMBA_EXE to its path)" >&2; exit 1
-}
-"$MAMBA" run -n "$CONDA_ENV" true >/dev/null 2>&1 || {
-    echo "error: micromamba environment '$CONDA_ENV' is missing or broken; run 'just setup'" >&2
+# pixi exports CONDA_PREFIX when it activates the environment, so an unset one means the toolchain
+# the reference build needs is not on PATH.
+if [[ -z "${CONDA_PREFIX:-}" ]]; then
+    echo "error: no pixi environment; run this through pixi:" >&2
+    echo "       pixi run bash model_validation/mixing_cost/run.sh" >&2
     exit 1
-}
+fi
 
 # ---------------------------------------------------------------------------
 # The two binaries
@@ -122,8 +118,8 @@ command -v "$MAMBA" >/dev/null 2>&1 || {
 cd "$ROOT"
 
 echo "==> building the current binary"
-just build "$MODE" "$FLAGS" >/dev/null
-CURRENT_BIN="$ROOT/$(just bin "$MODE" "$FLAGS")"
+pixi run build "$MODE" "$FLAGS" >/dev/null
+CURRENT_BIN="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
 CURRENT_REV="$(git rev-parse --short HEAD)"
 
 REFERENCE_REV="$(git rev-parse --short "$REFERENCE_REV")"
@@ -141,7 +137,7 @@ else
     git worktree add --detach "$WORKTREE" "$REFERENCE_REV" >/dev/null
 fi
 
-ACOL_FLAG_SUFFIX="-$FLAGS" "$MAMBA" run -n "$CONDA_ENV" bash -eu -c '
+ACOL_FLAG_SUFFIX="-$FLAGS" bash -eu -c '
     if [[ -z "${CXX:-}" ]]; then
         case "$(uname -s)" in
             Darwin) export CC="$CONDA_PREFIX/bin/clang" CXX="$CONDA_PREFIX/bin/clang++" ;;

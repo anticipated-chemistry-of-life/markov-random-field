@@ -28,12 +28,12 @@ endif()
 # combination is valid except LOTUS=OFF and SIMPLE_DATA=OFF, which Types.h
 # rejects with a static_assert (Y would not be informed by anything).
 #
-# The justfile drives these with single letters: l -> LOTUS, s -> SIMPLE_DATA, m
-# -> USE_MS_DATA (see `just --list`).
+# The pixi tasks drive these with single letters: l -> LOTUS, s -> SIMPLE_DATA, m
+# -> USE_MS_DATA (see `pixi task list`).
 # =============================================================================
 
-option(LOTUS "Compile in the LOTUS data source" ON)
-option(SIMPLE_DATA "Compile in the simple error model data source" ON)
+option(LOTUS "Compile in the LOTUS data source" OFF)
+option(SIMPLE_DATA "Compile in the simple error model data source" OFF)
 option(USE_MS_DATA "Compile in the mass spec data source" OFF)
 option(BUILD_TESTING "Configure the acol_unitTests target" ON)
 
@@ -45,7 +45,7 @@ if(NOT LOTUS AND NOT SIMPLE_DATA)
   message(
     FATAL_ERROR
       "No source of data was compiled in: Y could not be informed by anything. "
-      "Configure with at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON (or 'just build l')."
+      "Configure with at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON (or 'pixi run build l')."
   )
 endif()
 
@@ -236,7 +236,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE ${ACOL_WARNINGS})
 # =============================================================================
 # Unit tests
 #
-# EXCLUDE_FROM_ALL: `just build` only builds acol, `just test` asks for this
+# EXCLUDE_FROM_ALL: `pixi run build` only builds acol, `pixi run test` asks for this
 # target explicitly.
 # =============================================================================
 

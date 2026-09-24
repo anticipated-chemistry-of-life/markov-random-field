@@ -83,7 +83,7 @@ timings, neither of which say anything about the model.
 A consequence worth knowing outside this directory: **a multi-threaded acol
 `infer` run is not reproducible from its seed.** A `simulate` run is, at any
 thread count, because it is a forward draw and takes nothing from the
-thread-local generator; `just parity` gates that. Both are properties of the
+thread-local generator; `pixi run parity` gates that. Both are properties of the
 harness, not of
 any one refactor.
 

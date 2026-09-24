@@ -23,7 +23,7 @@
 // satisfy, and the foot of this file asserts it.
 //
 // An external define wins over the alias it guards. Passing
-// `-DACOL_FIELD_STORAGE=TStorageYDense` to the compiler is how `just parity`
+// `-DACOL_FIELD_STORAGE=TStorageYDense` to the compiler is how `pixi run parity`
 // (tests/backend_parity/) builds two binaries from one source tree.
 //
 // Both defaults are dense for now, which is one of the two pairs the gate covers. ADR-0006 argues
@@ -65,8 +65,8 @@ static_assert(std::is_same_v<TFieldStorage, TStorageYDense> ||
 //
 //     field   node state   gated
 //     ------  -----------  ---------------------
-//     sparse  sparse       yes, by `just parity`
-//     dense   dense        yes, by `just parity`  <- the default
+//     sparse  sparse       yes, by `pixi run parity`
+//     dense   dense        yes, by `pixi run parity`  <- the default
 //     sparse  dense        no
 //     dense   sparse       no
 //

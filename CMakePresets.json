@@ -11,6 +11,7 @@
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}$penv{ACOL_FLAG_SUFFIX}",
+      "toolchainFile": "${sourceDir}/cmake/toolchain.cmake",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "BUILD_TESTING": "ON"
