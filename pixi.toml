@@ -6,7 +6,8 @@
 #   pixi run test  [MODE] [FLAGS] -- ARGS   build, then run ./acol_unitTests ARGS
 #
 # MODE  is `debug` (the default) or `release`.
-# FLAGS is any combination of the letters below; it defaults to `ls`.
+# FLAGS is one of the letter sets below; it defaults to `ls`. A set is spelled
+# in l, s, m order: l, m, s, ls, lm, sm, lsm.
 #
 #     l -> -DLOTUS=ON        (LOTUS data)
 #     s -> -DSIMPLE_DATA=ON  (simple error model data)
@@ -67,7 +68,7 @@ llvm-openmp = "*"
 [tasks.configure]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
 cmd = "cmake --preset {{ mode }} -DLOTUS={{ 'ON' if 'l' in flags else 'OFF' }} -DSIMPLE_DATA={{ 'ON' if 's' in flags else 'OFF' }} -DUSE_MS_DATA={{ 'ON' if 'm' in flags else 'OFF' }}"
@@ -82,7 +83,7 @@ description = "Configure the build directory without compiling anything."
 [tasks._compile_commands]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "configure", args = ["{{ mode }}", "{{ flags }}"] }]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
@@ -91,7 +92,7 @@ cmd = "ln -sfn {{ mode }}$ACOL_FLAG_SUFFIX/compile_commands.json build/compile_c
 [tasks.build]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
@@ -101,7 +102,7 @@ description = "Compile ./acol."
 [tasks.run]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "build", args = ["{{ mode }}", "{{ flags }}"] }]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
@@ -111,7 +112,7 @@ description = "Compile ./acol and run it with the arguments after `--`."
 [tasks.test]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
@@ -121,7 +122,7 @@ description = "Compile and run the unit tests (arguments after `--` go to gtest)
 [tasks.bin]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
 cmd = "echo build/{{ mode }}$ACOL_FLAG_SUFFIX/acol"
@@ -130,7 +131,7 @@ description = "Print the path of the acol binary for a given MODE/FLAGS."
 [tasks.dir]
 args = [
   { arg = "mode", default = "debug", choices = ["debug", "release"] },
-  { arg = "flags", default = "ls" },
+  { arg = "flags", default = "ls", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 env = { ACOL_FLAG_SUFFIX = "-{{ 'l' if 'l' in flags else '' }}{{ 's' if 's' in flags else '' }}{{ 'm' if 'm' in flags else '' }}" }
 cmd = "echo build/{{ mode }}$ACOL_FLAG_SUFFIX"

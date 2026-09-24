@@ -45,8 +45,8 @@ is the same as running `./acol --out results/acol --numThreads all` from a relea
 
 ### Choosing the data sources
 
-Which sources of information get compiled in is a compile-time decision. Pass any combination of
-these letters right after the build mode:
+Which sources of information get compiled in is a compile-time decision. Pass one of the letter
+sets right after the build mode:
 
 | letter | cmake option       | data source             |
 | ------ | ------------------ | ----------------------- |
@@ -54,8 +54,10 @@ these letters right after the build mode:
 | `s`    | `-DSIMPLE_DATA=ON` | simple error model data |
 | `m`    | `-DUSE_MS_DATA=ON` | mass spec data          |
 
-The default is `ls`. At least one of `l` and `s` is required — with neither, nothing informs `Y` and
-`src/Types.h` fails a `static_assert`.
+The default is `ls`. The task takes the seven sets `l`, `m`, `s`, `ls`, `lm`, `sm` and `lsm`, and
+names the rest — a set is spelled in l, s, m order, so `ls` is a set and `sl` is a typo. At least
+one of `l` and `s` is required: with neither, nothing informs `Y`, and cmake stops before it
+compiles anything.
 
 ```bash
 pixi run build l           # debug, LOTUS only
