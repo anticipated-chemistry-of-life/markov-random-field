@@ -103,8 +103,8 @@ private:
 	/// detected in this run?" and "which feature holds m?" into O(1) lookups. A hash map rather
 	/// than a vector over the molecule space: it holds one entry per assigned feature, never one
 	/// per molecule leaf. Every write to `_current_assignments` (`_assign`, `_write_move`,
-	/// `initialize_assignments_to_unknown`) keeps it in sync, so it is correct at every point, not
-	/// only during an update.
+	/// `initialize_assignments_to_unknown`) keeps it in sync. It is therefore correct at every
+	/// point, not only during an update.
 	std::unordered_map<uint32_t, uint32_t> _holder_of_molecule;
 
 private:

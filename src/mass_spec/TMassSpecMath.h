@@ -1,29 +1,28 @@
 //
 // The likelihood of the mass-spectrometry data source.
 //
-// A species' runs observe the field through their assignments (CONTEXT.md, "Mass spectrometry"):
-// a molecule is detected in a run when some feature is assigned to it, and whether it is detected
-// depends on whether it is present. Given the field state `y` of the (species, molecule) cell,
-// the filter probability `f` of (run's filter, molecule) and the contamination probability `c`,
-// one run contributes
+// A species' runs observe the field through their assignments (CONTEXT.md, "Mass spectrometry").
+// A molecule is detected in a run when some feature is assigned to it. Whether it is detected
+// depends on whether it is present. Take the field state `y` of the (species, molecule) cell.
+// Take the filter probability `f` of (run's filter, molecule) and the contamination probability
+// `c`. One run then contributes
 //
 //     P(detected | y = 1) = f          P(detected | y = 0) = c
 //     P(not detected | y = 1) = 1 - f  P(not detected | y = 0) = 1 - c
 //
-// which is `TMassSpecRun::probability_of_assignment`. Every run also carries a feature term, the
-// probability of each feature given the molecule it is assigned to, which does not read the field.
+// which is `TMassSpecRun::probability_of_assignment`. Every run also carries a feature term. It is
+// the probability of each feature given the molecule it is assigned to. It does not read the field.
 //
-// Conditional on the assignments, the source is therefore per-cell shaped: a cell's factor is the
-// product over the species' runs of its detection term, and the whole log-likelihood is the sum of
-// every feature term and every detection term. The two agree exactly, so the field update and the
-// parameter moves score the same model.
+// Conditional on the assignments, the source is therefore per-cell shaped. A cell's factor is the
+// product over the species' runs of its detection term. The whole log-likelihood is the sum of
+// every feature term and every detection term. The two agree exactly. A field draw that reads the
+// factor and a parameter move that reads the whole log-likelihood therefore score the same model.
 //
-// A run without features is skipped by both: it contributes no feature term and no detection
-// term.
+// Both skip a run without features. Such a run contributes no feature term and no detection term.
 //
-// Everything here is free-standing: it is deliberately NOT guarded by USE_MS_DATA, so it compiles
-// (and is unit-tested) in every build configuration. The filter probability is passed in as a
-// callable `(size_t filter, uint32_t molecule) -> double`, so nothing here reads a parameter.
+// Nothing here is guarded by USE_MS_DATA. It compiles, and is unit-tested, in every build
+// configuration. The caller passes the filter probability as a callable
+// `(size_t filter, uint32_t molecule) -> double`, so nothing here reads a parameter.
 //
 
 #pragma once
@@ -44,8 +43,8 @@
 namespace mass_spec_math {
 
 /// The feature term of one feature: the probability of the feature given the molecule it is
-/// assigned to, read off the assignment's bin. For the unknown molecule the bin is the feature's
-/// unknown probability, so it reads the same way.
+/// assigned to. It reads the assignment's bin. The unknown molecule carries its bin in the same
+/// place, so it reads the same way.
 [[nodiscard]] inline double probability_of_feature(const TFeatureLikelihood &assignment) {
 	return PHRED_LIKE_PROBA[assignment.get_binned_likelihood()];
 }
@@ -62,10 +61,9 @@ template<typename FilterProbability>
 	for (const auto &run : runs) {
 		if (run.empty()) { continue; }
 		const bool detected = run.is_detected(molecule);
-		const double filter = filter_probability(run.filter_index(), molecule);
-		factor[0] *=
-		    TMassSpecRun::probability_of_assignment(false, detected, filter, contamination);
-		factor[1] *= TMassSpecRun::probability_of_assignment(true, detected, filter, contamination);
+		const double pass   = filter_probability(run.filter_index(), molecule);
+		factor[0] *= TMassSpecRun::probability_of_assignment(false, detected, pass, contamination);
+		factor[1] *= TMassSpecRun::probability_of_assignment(true, detected, pass, contamination);
 	}
 	return factor;
 }
