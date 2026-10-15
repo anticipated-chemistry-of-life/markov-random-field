@@ -7,6 +7,7 @@
 #include "coretools/Main/TError.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
+#include "mass_spec/TMassSpecMath.h"
 #include "mass_spec/msms_run.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "tree/TTree.h"
@@ -84,22 +85,16 @@ private:
 		return coretools::getSubscriptsAsArray(filter_molecule_pair_index, _dimensions_for_filters);
 	}
 
-	/// Complete log-likelihood of all the mass-spec data given the current assignments, the current
-	/// Y (molecule presence/absence), and the current filter/contamination parameters. Per run it
-	/// is
-	///   sum_features  log P(feature | assigned molecule)              [feature term, PHRED table]
-	/// + sum_molecules log probability_of_assignment(Y, ms, filter, c) [detection term, all
-	/// molecules] where `ms` = "molecule is assigned to some feature in this run". The detection
-	/// term spans the whole molecule space; the dominant (absent & unassigned -> 1-contamination)
-	/// case is added as a /// single bulk term, only present or assigned molecules are scored
-	/// individually. The contamination probability is passed in (rather than read from the
-	/// parameter) so the same routine can score both the old and the proposed contamination value
-	/// in a ratio.
-	[[nodiscard]] double _calculate_log_likelihood_of_MSData(double contamination) const;
+	/// The probability that a present molecule passes `filter`, in linear space.
+	[[nodiscard]] double _filter_probability(size_t filter, uint32_t molecule) const {
+		return LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
+		    _get_linear_index_filter_molecule_pair({filter, molecule}))];
+	}
 
-	/// Tells every run how large the molecule space is, which it needs to size the lookup table
-	/// that maps a molecule to the feature holding it during an assignment update.
-	void _initialize_runs(size_t number_of_molecules);
+	/// The whole mass-spec log-likelihood at `contamination`, given the current field, assignments
+	/// and filter probabilities (`mass_spec_math::log_likelihood`). The contamination is passed in
+	/// rather than read from the parameter, so the old and the proposed value can both be scored.
+	[[nodiscard]] double _log_likelihood(double contamination) const;
 
 public:
 	explicit TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
@@ -116,12 +111,10 @@ public:
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	// Add the MS-data log-likelihood contribution of the Y cell (species, molecule) for both Y
-	// states into sum_log[0] (molecule absent) and sum_log[1] (molecule present). This is the hook
-	// used by the Y Gibbs update, so only the terms that depend on Y[species, molecule] are scored:
-	// the per-run detection term (filter / contamination) for this molecule given its current
-	// assignment status in each run. The feature term P(feature | assigned molecule) does not
-	// depend on Y and would cancel between the two states, so it is intentionally omitted here.
+	// Add the MS-data factor of the field cell (species, molecule) for both field states into
+	// sum_log[0] (molecule absent) and sum_log[1] (molecule present), i.e.
+	// `mass_spec_math::per_cell_factor`. The feature terms do not read the field and cancel between
+	// the two states, so the factor leaves them out.
 	//
 	// Still dormant: the block update does not read this either (TMarkovField's eight-state block
 	// takes the LOTUS and the simple-error term), and adapting a third source is that source's own
@@ -132,18 +125,15 @@ public:
 
 		// if the species does not have MS data, skip it
 		if (!_species_has_ms_data.at(species_idx)) { return; }
-		const auto molecule_idx                    = indices_in_leaves[_molecule_dim];
-		const double cont                          = _proba_contamination->value();
-		std::array<size_t, 2> filter_molecule_pair = {0, molecule_idx};
-		for (const auto &run : this->get_ms_data_for_species(species_idx)) {
-			if (run.empty()) { continue; }
-			filter_molecule_pair[0] = run.filter_index();
-			const bool ms           = run.is_molecule_assigned(molecule_idx);
-			const double filt       = LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
-			    _get_linear_index_filter_molecule_pair(filter_molecule_pair))];
-			sum_log[0].add(TMassSpecRun::probability_of_assignment(false, ms, filt, cont)); // Y = 0
-			sum_log[1].add(TMassSpecRun::probability_of_assignment(true, ms, filt, cont));  // Y = 1
-		}
+		const auto factor = mass_spec_math::per_cell_factor(
+		    this->get_ms_data_for_species(species_idx),
+		    static_cast<uint32_t>(indices_in_leaves[_molecule_dim]),
+		    [this](size_t filter, uint32_t molecule) {
+			    return _filter_probability(filter, molecule);
+		    },
+		    (double)_proba_contamination->value());
+		sum_log[0].add(factor[0]);
+		sum_log[1].add(factor[1]);
 	}
 
 	[[nodiscard]] coretools::TConstView<TMassSpecRun>
@@ -180,11 +170,8 @@ public:
 	/// in sync, we recompute the full likelihood at both the old and the proposed contamination
 	/// value here, which is always correct regardless of the order of updates.
 	[[nodiscard]] double ll_ratio_after_contamination_move() const {
-		const double old_LL =
-		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->oldValue());
-		const double cur_LL =
-		    _calculate_log_likelihood_of_MSData((double)_proba_contamination->value());
-		return cur_LL - old_LL;
+		return _log_likelihood((double)_proba_contamination->value()) -
+		       _log_likelihood((double)_proba_contamination->oldValue());
 	}
 
 	[[nodiscard]] double ll_ratio_after_filter_move(size_t index) const;

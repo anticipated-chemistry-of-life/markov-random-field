@@ -5,9 +5,7 @@
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "storages/storage_backend.h"
-#include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -72,9 +70,6 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 	// TODO: load ms data from file
 	// load_ms_data_from_file()
 
-	// must happen after the runs have been created by the loader above
-	_initialize_runs(number_of_molecules);
-
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
 	// Registering these two with the DAG, and the DAG edge to the Markov field's stattools
@@ -113,7 +108,7 @@ double TMSMSData::ll_ratio_after_filter_move(size_t index) const {
 		if (!y) { continue; }
 		for (const auto &run : get_ms_data_for_species(species_idx)) {
 			if (run.filter_index() != filter_index) { continue; }   // not this extraction
-			const bool ms = run.is_molecule_assigned(molecule_idx); // hook (2)
+			const bool ms = run.is_detected(molecule_idx);
 			if (ms) {
 				log_lik[1] += new_p_pos;
 				log_lik[0] += old_p_pos;
@@ -139,17 +134,13 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	coretools::TSumLogProbability p_new{};
 	coretools::TSumLogProbability p_old{};
 
-	// --- feature term: P(feature | assigned molecule) = assigned binned likelihood through the
-	// _log_lik_present table; the unknown molecule's binned value lives in the same assignment, so
-	// it flows through the same table. ---
-	auto feature_prob = [](const TFeatureLikelihood &assignment) {
-		return PHRED_LIKE_PROBA[assignment.get_binned_likelihood()];
-	};
-	p_old.add(feature_prob(move.old_a));
-	p_new.add(feature_prob(move.new_a));
+	// --- feature term: P(feature | assigned molecule); the unknown molecule's binned value lives in
+	// the same assignment, so it reads the same way. ---
+	p_old.add(mass_spec_math::probability_of_feature(move.old_a));
+	p_new.add(mass_spec_math::probability_of_feature(move.new_a));
 	if (move.touches_two_features()) {
-		p_old.add(feature_prob(move.old_b));
-		p_new.add(feature_prob(move.new_b));
+		p_old.add(mass_spec_math::probability_of_feature(move.old_b));
+		p_new.add(mass_spec_math::probability_of_feature(move.new_b));
 	}
 
 	// --- filter / contamination term: only real molecules whose "is assigned" status flips matter.
@@ -185,9 +176,7 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 		    y_storage.get_linear_index_in_Y_space({species_idx, (size_t)molecule_idx}));
 	};
 	auto filter_prob = [&](uint32_t molecule_idx) {
-		const size_t idx =
-		    _get_linear_index_filter_molecule_pair({run.filter_index(), molecule_idx});
-		return LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(idx)];
+		return _filter_probability(run.filter_index(), molecule_idx);
 	};
 
 	// molecules that were assigned and now are not: ms 1 -> 0
@@ -212,74 +201,11 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	return p_new.getSum() - p_old.getSum();
 }
 
-double TMSMSData::_calculate_log_likelihood_of_MSData(double contamination) const {
-	const double cont             = contamination;
-	const double log_1_minus_cont = std::log(1.0 - cont);
-	const size_t n_molecules      = _molecules_tree->get_number_of_leaves();
-	const TFieldStorage &Y        = _markov_field.get_Y_matrix();
-
-	// Present (Y == 1) molecules grouped by species. The streaming cursor walks exactly those
-	// without materializing a vector, so this is O(ones(Y)).
-	std::vector<std::vector<uint32_t>> present_per_species(_number_of_species);
-	for (auto cursor = Y.ones_cursor(); cursor.valid(); cursor.advance()) {
-		const auto md = Y.get_multi_dimensional_index(cursor.linear_index()); // {species, molecule}
-		present_per_species[md[0]].push_back((uint32_t)md[1]);
-	}
-
-	coretools::TSumLogProbability sum_log{};
-	double bulk_log = 0.0; // (1 - contamination) terms for absent & unassigned molecules
-
-	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
-		const auto runs = get_ms_data_for_species(species_idx);
-		if (runs.empty()) { continue; }
-		const auto &present = present_per_species[species_idx];
-
-		for (const auto &run : runs) {
-			if (run.size() == 0) { continue; }
-			const size_t filter_index = run.filter_index();
-			auto filter_prob          = [&](uint32_t m) {
-				return LINEAR_SPACE_PROBA[_proba_to_pass_filter->value(
-				    _get_linear_index_filter_molecule_pair({filter_index, m}))];
-			};
-
-			// feature term P(feature | assigned molecule); collect the real molecules currently
-			// assigned in this run (ms == 1).
-			std::vector<uint32_t> assigned;
-			assigned.reserve(run.number_of_assignments());
-			for (size_t f = 0; f < run.number_of_assignments(); ++f) {
-				const auto &a = run.get_current_assignment(f);
-				sum_log.add(PHRED_LIKE_PROBA[a.get_binned_likelihood()]);
-				if (!a.is_unknown_molecule()) { assigned.push_back(a.get_molecule_index()); }
-			}
-			std::sort(assigned.begin(), assigned.end());
-
-			// detection term. The default case (Y = 0, ms = 0) -> (1 - cont) is deferred to the
-			// bulk term; only present (Y = 1) and assigned (ms = 1) molecules deviate from it.
-			size_t n_special = 0;
-			for (const uint32_t m : present) { // Y = 1
-				const bool ms = std::binary_search(assigned.begin(), assigned.end(), m);
-				sum_log.add(
-				    TMassSpecRun::probability_of_assignment(true, ms, filter_prob(m), cont));
-				++n_special;
-			}
-			for (const uint32_t m : assigned) { // ms = 1; skip those already scored as present
-				if (Y.is_one(Y.get_linear_index_in_Y_space({species_idx, (size_t)m}))) { continue; }
-				sum_log.add(
-				    TMassSpecRun::probability_of_assignment(false, true, filter_prob(m), cont));
-				++n_special;
-			}
-			bulk_log += (double)(n_molecules - n_special) * log_1_minus_cont;
-		}
-	}
-	return sum_log.getSum() + bulk_log;
-}
-
-void TMSMSData::_initialize_runs(size_t number_of_molecules) {
-	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
-		for (auto &run : _msms_data.at(species_idx)) {
-			run.set_number_of_molecules(number_of_molecules);
-		}
-	}
+double TMSMSData::_log_likelihood(double contamination) const {
+	return mass_spec_math::log_likelihood(
+	    _msms_data, _markov_field.get_Y_matrix(),
+	    [this](size_t filter, uint32_t molecule) { return _filter_probability(filter, molecule); },
+	    contamination);
 }
 
 namespace {

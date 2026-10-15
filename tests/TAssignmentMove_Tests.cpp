@@ -46,7 +46,7 @@ TEST(TAssignmentMove_Tests, initialize_to_unknown) {
 		EXPECT_EQ(run.get_current_assignment(f).get_binned_likelihood(),
 		          run.probability_of_unknown(f));
 	}
-	EXPECT_FALSE(run.is_molecule_assigned(10));
+	EXPECT_FALSE(run.is_detected(10));
 	EXPECT_TRUE(no_molecule_assigned_twice(run));
 }
 
@@ -61,7 +61,7 @@ TEST(TAssignmentMove_Tests, initialize_requires_matching_unknown_sizes) {
 TEST(TAssignmentMove_Tests, apply_revert_to_unknown) {
 	auto run = make_run();
 	run.set_current_assignment(0, TFeatureLikelihood(10, 100));
-	ASSERT_TRUE(run.is_molecule_assigned(10));
+	ASSERT_TRUE(run.is_detected(10));
 
 	TAssignmentProposal p;
 	p.type      = AssignmentMoveType::ToUnknown;
@@ -71,12 +71,12 @@ TEST(TAssignmentMove_Tests, apply_revert_to_unknown) {
 
 	run.apply_move(p);
 	EXPECT_TRUE(run.get_current_assignment(0).is_unknown_molecule());
-	EXPECT_FALSE(run.is_molecule_assigned(10));
+	EXPECT_FALSE(run.is_detected(10));
 
 	run.revert_move(p);
 	EXPECT_FALSE(run.get_current_assignment(0).is_unknown_molecule());
 	EXPECT_EQ(run.get_current_assignment(0).get_molecule_index(), 10u);
-	EXPECT_TRUE(run.is_molecule_assigned(10));
+	EXPECT_TRUE(run.is_detected(10));
 }
 
 TEST(TAssignmentMove_Tests, swap_apply_revert) {

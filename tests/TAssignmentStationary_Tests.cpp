@@ -22,8 +22,7 @@
 
 namespace {
 
-constexpr size_t NUMBER_OF_MOLECULES = 40;
-constexpr uint32_t UNKNOWN           = 0; // stands in for the unknown molecule in the state key
+constexpr uint32_t UNKNOWN = 0; // stands in for the unknown molecule in the state key
 
 /// Unnormalized weight of assigning `molecule` (or the unknown molecule, coded as UNKNOWN) to
 /// feature `f`.
@@ -83,7 +82,6 @@ TMassSpecRun make_run() {
 	run.add_likelihood_vector(f1);
 	run.set_probabilities_of_unknowns({50, 60});
 	run.initialize_assignments_to_unknown();
-	run.set_number_of_molecules(NUMBER_OF_MOLECULES);
 	return run;
 }
 

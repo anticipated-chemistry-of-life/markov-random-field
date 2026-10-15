@@ -9,9 +9,6 @@
 
 namespace {
 
-/// Enough molecules for every candidate index used below.
-constexpr size_t NUMBER_OF_MOLECULES = 40;
-
 /// Records every proposal it is asked to score and returns a constant log-likelihood ratio.
 /// `+ACCEPT_ALL` makes the update accept everything, `-ACCEPT_ALL` makes it reject everything while
 /// still going through the real Metropolis-Hastings acceptance (the value stays finite, so the
@@ -36,7 +33,6 @@ TMassSpecRun make_run(std::vector<std::vector<TFeatureLikelihood>> features,
 	for (auto &feature : features) { run.add_likelihood_vector(feature); }
 	run.set_probabilities_of_unknowns(probabilities_of_unknowns);
 	run.initialize_assignments_to_unknown();
-	run.set_number_of_molecules(NUMBER_OF_MOLECULES);
 	return run;
 }
 
@@ -285,8 +281,8 @@ TEST(TAssignmentUpdate_Tests, illegal_swap_is_skipped) {
 	EXPECT_EQ(count_of_type(scorer, AssignmentMoveType::Swap), 0u);
 }
 
-// The holder map is rebuilt at the start of every update and throws if it finds a molecule held by
-// two features, so a bookkeeping bug in one update surfaces at the start of the next one.
+// Every accepted move claims its molecules in the holder map, which throws if one is already held
+// by another feature, so a bookkeeping bug surfaces at the move that causes it.
 TEST(TAssignmentUpdate_Tests, holder_map_stays_in_sync_across_updates) {
 	coretools::instances::randomGenerator().setSeed(42, true);
 	auto run = make_overlapping_run();
@@ -302,38 +298,24 @@ TEST(TAssignmentUpdate_Tests, update_on_run_with_zero_features_is_noop) {
 	TMassSpecRun run;
 	run.set_probabilities_of_unknowns({});
 	run.initialize_assignments_to_unknown();
-	run.set_number_of_molecules(NUMBER_OF_MOLECULES);
 
 	TFixedScorer scorer;
 	EXPECT_NO_THROW(run.update_all_assignments(scorer, 0.1));
 	EXPECT_TRUE(scorer.seen.empty());
 }
 
-TEST(TAssignmentUpdate_Tests, update_throws_when_number_of_molecules_unset) {
-	TMassSpecRun run;
-	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100)};
-	run.add_likelihood_vector(f0);
-	run.set_probabilities_of_unknowns({50});
-	run.initialize_assignments_to_unknown();
-	// set_number_of_molecules() deliberately not called
-
-	TFixedScorer scorer;
-	EXPECT_ANY_THROW(run.update_all_assignments(scorer, 0.1));
-}
-
 TEST(TAssignmentUpdate_Tests, update_throws_when_assignments_were_not_initialized) {
 	TMassSpecRun run;
 	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100)};
 	run.add_likelihood_vector(f0);
-	run.set_number_of_molecules(NUMBER_OF_MOLECULES);
 	// initialize_assignments_to_unknown() deliberately not called
 
 	TFixedScorer scorer;
 	EXPECT_ANY_THROW(run.update_all_assignments(scorer, 0.1));
 }
 
-// The unknown molecule has a sentinel index far outside the molecule space, so the holder map must
-// skip unknown assignments rather than index itself with it.
+// The unknown molecule is shared by any number of features, so the holder map must skip unknown
+// assignments rather than count them as one molecule held twice.
 TEST(TAssignmentUpdate_Tests, update_does_not_throw_when_all_features_unknown) {
 	coretools::instances::randomGenerator().setSeed(42, true);
 	auto run = make_overlapping_run();
