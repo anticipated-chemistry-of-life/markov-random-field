@@ -18,22 +18,8 @@
 #include <vector>
 
 class TMarkovField;
-/// Class TRun that stores 2 vectors :
-/// - vector of 32 bit with value uin8t which is the binned likelihood and molecule index
-/// - vector of size_t that tells where the feature starts
-/// Use TNestedVector from coretools
-///
-/// TMSMSData (which is also a wrapper around nested vector)
-/// - vector of TRun
-/// - nested vecctor
-
-/// Need to sort species. First species with MS data, then the ones with no data.
-
-/// Class that stores all the mass spec data. This class will iterate over all the species and
-/// return the mass spec runs for a species of interest. WE will need to sort the species in order
-/// to have first the species WITH mass spec data, then the species without mass spec data. This
-/// will avoid have the indices being repeated and store a size_t for each species even it has no
-/// data.
+/// Class that stores all the mass spec data: the runs of every species leaf, read from the
+/// mass-spec file by `mass_spec_file::load`. A species leaf without runs holds an empty list.
 ///
 /// This class is not a stattools box: its parameters (the filter and contamination
 /// probabilities) hang off TDataModel, which owns this object and forwards the MCMC callbacks --
@@ -66,9 +52,8 @@ private:
 
 	/// Private functions
 private:
-	void _add_mass_spec_runs_for_species(const std::vector<TMassSpecRun> &runs) {
-		_msms_data.push_back(runs);
-	}
+	/// Reads the runs of every species leaf from `--ms_data` and logs the load report.
+	void _load_runs();
 	void _check_trees_exist() const {
 		if (!_species_tree || !_molecules_tree) {
 			throw coretools::TDevError("TMSMSData : missing required tree(s) ");
@@ -179,10 +164,8 @@ public:
 	/// Log-likelihood ratio (new - old) of a proposed assignment move in a single run. Y and the
 	/// mass-spec filter/contamination parameters are held fixed; only the terms that the move
 	/// changes are scored:
-	///   * the feature term(s): P(feature | assigned molecule), the assigned binned likelihood
-	///   mapped
-	///     through `_log_lik_present` (for the unknown molecule the per-feature unknown probability
-	///     is mapped through the same table);
+	///   * the feature term(s): the relative calibration score of the assigned molecule, read
+	///     through `RELATIVE_CALIBRATION_SCORE`. The unknown molecule's bin reads the same way;
 	///   * the filter/contamination term(s) for the real molecules whose "is assigned" status flips
 	///     (none flip for either swap type, so only feature terms change there), via
 	///     probability_of_assignment.

@@ -1,24 +1,78 @@
 #include "./msms_data.h"
+#include "mass_spec/mass_spec_file.h"
 #include "TMarkovField.h"
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
+#include "coretools/Main/TLog.h"
 #include "storages/storage_backend.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
-void TMSMSData::initialize(TDataModel *box) {
-	// build molecule leaf names in leaf-index order
-	const size_t n = _molecules_tree->get_number_of_leaves();
-	std::vector<std::string> molecule_names;
-	molecule_names.reserve(n);
+namespace {
+/// The leaf names of `tree`, in leaf-index order.
+std::vector<std::string> leaf_names(const TTree &tree) {
+	const size_t n = tree.get_number_of_leaves();
+	std::vector<std::string> names;
+	names.reserve(n);
 	for (size_t i = 0; i < n; ++i) {
-		molecule_names.push_back(
-		    _molecules_tree->get_node_id(_molecules_tree->get_node_index_from_leaf_index(i)));
+		names.push_back(tree.get_node_id(tree.get_node_index_from_leaf_index(i)));
 	}
+	return names;
+}
+} // namespace
+
+void TMSMSData::_load_runs() {
+	const auto &filename = ProgramOptions::MS_DATA_FILENAME;
+	if (filename.empty()) {
+		throw coretools::TUserError("--ms_data is required. This build carries the mass spec data "
+		                            "source, so it needs the mass-spec file.");
+	}
+	auto loaded = mass_spec_file::load(filename, leaf_names(*_species_tree),
+	                                   leaf_names(*_molecules_tree),
+	                                   ProgramOptions::MS_UNKNOWN_FRACTION);
+	_msms_data  = std::move(loaded.runs_per_species);
+
+	_species_has_ms_data.assign(_number_of_species, false);
+	size_t n_runs     = 0;
+	size_t n_features = 0;
+	size_t n_species  = 0;
+	for (size_t s = 0; s < _number_of_species; ++s) {
+		const auto runs         = _msms_data.at(s);
+		_species_has_ms_data[s] = !runs.empty();
+		n_species += !runs.empty();
+		n_runs += runs.size();
+		for (const auto &run : runs) { n_features += run.number_of_features(); }
+	}
+
+	const auto &report = loaded.report;
+	auto &log          = coretools::instances::logfile();
+	log.startIndent("Read the mass-spec file '", filename, "' (argument 'ms_data'):");
+	log.list("Loaded ", n_runs, " runs of ", n_species, " species leaves, with ", n_features,
+	         " features. Every assignment starts at the unknown molecule.");
+	log.list("The unknown fraction is ", ProgramOptions::MS_UNKNOWN_FRACTION,
+	         " (argument 'ms_unknown_fraction').");
+	log.list("Skipped ", report.skipped_species, " distinct species that are not species leaves.");
+	log.list("Skipped ", report.skipped_molecules,
+	         " distinct molecules that are not molecule leaves. Their scores still set their "
+	         "features' reference.");
+	log.list("Did not load ", report.features_not_loaded,
+	         " features that have no candidate left.");
+	log.list("Clamped ", report.clamped_candidates,
+	         " candidates whose relative calibration score is below the floor of the last bin.");
+	log.list("SIRIUS keeps at most 200 candidates per feature upstream, so a feature can lack "
+	         "its true molecule even when the molecule is a leaf.");
+	log.endIndent();
+}
+
+void TMSMSData::initialize(TDataModel *box) {
+	const auto molecule_names = leaf_names(*_molecules_tree);
+	const size_t n            = molecule_names.size();
 
 	_proba_to_pass_filter->initStorage(
 	    box, {n * _number_of_filters},
@@ -64,11 +118,7 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 	_number_of_species      = _species_tree->get_number_of_leaves();
 	// once the trees are checked we can initialize the MSMS data
 	_dimensions_for_filters = {_number_of_filters, number_of_molecules};
-	_msms_data.resize(_number_of_species);
-	_species_has_ms_data.resize(_number_of_species, false);
-
-	// TODO: load ms data from file
-	// load_ms_data_from_file()
+	_load_runs();
 
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
@@ -134,13 +184,13 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	coretools::TSumLogProbability p_new{};
 	coretools::TSumLogProbability p_old{};
 
-	// --- feature term: P(feature | assigned molecule); the unknown molecule's binned value lives in
-	// the same assignment, so it reads the same way. ---
-	p_old.add(mass_spec_math::probability_of_feature(move.old_a));
-	p_new.add(mass_spec_math::probability_of_feature(move.new_a));
+	// --- feature term: the relative calibration score of the assigned molecule; the unknown
+	// molecule's bin lives in the same assignment, so it reads the same way. ---
+	p_old.add(mass_spec_math::feature_term(move.old_a));
+	p_new.add(mass_spec_math::feature_term(move.new_a));
 	if (move.touches_two_features()) {
-		p_old.add(mass_spec_math::probability_of_feature(move.old_b));
-		p_new.add(mass_spec_math::probability_of_feature(move.new_b));
+		p_old.add(mass_spec_math::feature_term(move.old_b));
+		p_new.add(mass_spec_math::feature_term(move.new_b));
 	}
 
 	// --- filter / contamination term: only real molecules whose "is assigned" status flips matter.

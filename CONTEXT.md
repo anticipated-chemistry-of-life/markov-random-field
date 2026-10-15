@@ -137,7 +137,7 @@ _Avoid_: branch-length grid, binning, discretisation
 ## Observations
 
 **Data source**:
-A likelihood term over the field, independent of every other data source and summed with them (ADR-0005's data factor, `log p(L, D | Y)`). A LOTUS record and simple error model data are the two shaped alike: each observes one cell of `Y` at a time and answers, per cell, `{P(observation | Y=0), P(observation | Y=1)}`. Mass spectrometry data is not shaped alike — it scores an assignment problem over a species' runs, not a per-cell state — so it is a data source but not this shape, and is not informed by the per-cell interface below. Whether a build carries a given data source is a compile-time choice, made once per binary. `src/data_sources/`.
+A likelihood term over the field, independent of every other data source and summed with them (ADR-0005's data factor, `log p(L, D | Y)`). Each observes one cell of `Y` at a time and answers, per cell, `{P(observation | Y=0), P(observation | Y=1)}`. A LOTUS record and simple error model data do so outright; mass spectrometry data does so only conditional on its current assignments, because it carries latent state of its own. Whether a build carries a given data source is a compile-time choice, made once per binary. `src/data_sources/`.
 _Avoid_: observation, evidence, data
 
 **LOTUS record**:
@@ -155,3 +155,45 @@ _Avoid_: occurrence counter, citation count
 **Simple error model data**:
 An observation of the field in which every cell is independently misreported with a fixed probability. Written `D`. Unlike a LOTUS record, it is dense: every cell is observed.
 _Avoid_: noisy Y, simple data, flipped field
+
+## Mass spectrometry
+
+**Extract**:
+One physical sample of one species, prepared by one extraction protocol.
+_Avoid_: sample, specimen
+
+**Run**:
+One LC-MS/MS acquisition of one extract, identified by its species and its extract. Its features are what the run observed.
+_Avoid_: experiment, injection, MS run, acquisition
+
+**Filter**:
+The extraction protocol a run's extract went through, which decides which molecules a run can detect at all. Every run has exactly one. The probability that a present molecule passes it is a parameter per (filter, molecule leaf).
+_Avoid_: extraction (as a noun for the protocol), method, protocol
+
+**Feature**:
+One signal a run detected, unique within that run and not across runs. It is explained by exactly one candidate or by the unknown molecule.
+_Avoid_: peak, signal, spectrum, ion
+
+**Candidate**:
+A molecule leaf proposed as the explanation of one feature. A molecule that is not a leaf of the molecule tree is not a candidate.
+_Avoid_: hit, annotation, match
+
+**Calibration score**:
+A candidate's density under a kernel density estimate, fitted on correct identifications, over the CSI:FingerID score and the feature's ion mass. Being a density, its absolute scale carries nothing; only ratios between the candidates of one feature do.
+_Avoid_: probability, likelihood, confidence, PHRED score
+
+**Unknown molecule**:
+The explanation of a feature by no candidate: a molecule outside the molecule tree, or no molecule at all. Any number of features may be assigned to it at once.
+_Avoid_: unassigned, null molecule, decoy
+
+**Assignment**:
+The latent choice, for every feature of a run, of the candidate or the unknown molecule that explains it. Within one run a molecule explains at most one feature. A molecule is *detected* in a run when some feature is assigned to it.
+_Avoid_: annotation, match, identification
+
+**Relative calibration score**:
+A candidate's calibration score divided by the best calibration score among all of its feature's rows, candidates or not; so at most 1. The unknown molecule's is the unknown fraction. It is all the model reads of a calibration score, since every ratio the assignment moves take is between scores of one feature.
+_Avoid_: normalised score, feature likelihood, PHRED score
+
+**Unknown fraction**:
+The relative calibration score of the unknown molecule, the same for every feature. Written `c`, in `(0, 1]`.
+_Avoid_: unknown probability, unknown prior

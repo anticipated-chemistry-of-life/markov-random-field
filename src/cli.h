@@ -77,6 +77,13 @@ public:
 	/// ratio), at 1 no feature ever moves between two real molecules.
 	static inline double MS_PROBA_MOVE_TO_UNKNOWN = 0.1;
 
+	/// The mass-spec file, empty when not given. A build with mass spec requires it.
+	static inline std::string MS_DATA_FILENAME;
+
+	/// The unknown fraction `c`: the relative calibration score of the unknown molecule, in
+	/// (0, 1]. The mass-spec loader checks the range.
+	static inline double MS_UNKNOWN_FRACTION = 0.1;
+
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0,2.0";
@@ -166,6 +173,12 @@ public:
 			                            "1, but got ",
 			                            MS_PROBA_MOVE_TO_UNKNOWN, ".");
 		}
+
+#ifdef USE_MS_DATA
+		// Empty when not given. The mass-spec loader requires it, so `--help` still works without.
+		MS_DATA_FILENAME    = params.get<std::string>("ms_data", "");
+		MS_UNKNOWN_FRACTION = params.get<double>("ms_unknown_fraction", MS_UNKNOWN_FRACTION);
+#endif
 	}
 
 	/// The file the default output prefix is derived from when '--out' is not given. Which data
@@ -203,5 +216,10 @@ public:
 		             "(> 0). A rate of 20 puts the prior mean at 0.05\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
+		std::cout << "--ms_data                      Mass-spec file, tab-separated, with the header "
+		             "'species extract feature molecule calibration_score' (required in a build "
+		             "with mass spec, letter 'm')\n";
+		std::cout << "--ms_unknown_fraction          Relative calibration score of the unknown "
+		             "molecule, in (0,1]. Default 0.1\n";
 	}
 };

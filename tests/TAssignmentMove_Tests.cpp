@@ -147,23 +147,8 @@ TEST(TAssignmentMove_Tests, touches_two_features_covers_both_swap_types) {
 	}
 }
 
-TEST(TAssignmentMove_Tests, add_likelihood_vector_rejects_zero_binned_likelihood) {
-	TMassSpecRun run;
-	// binned likelihood 0 maps to probability 0, which no assignment could ever have
-	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100), TFeatureLikelihood(20, 0)};
-	EXPECT_ANY_THROW(run.add_likelihood_vector(f0));
-}
-
 TEST(TAssignmentMove_Tests, add_likelihood_vector_rejects_duplicate_molecules) {
 	TMassSpecRun run;
 	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100), TFeatureLikelihood(10, 90)};
 	EXPECT_ANY_THROW(run.add_likelihood_vector(f0));
-}
-
-TEST(TAssignmentMove_Tests, initialize_to_unknown_rejects_zero_probability) {
-	TMassSpecRun run;
-	std::vector<TFeatureLikelihood> f0 = {TFeatureLikelihood(10, 100)};
-	run.add_likelihood_vector(f0);
-	run.set_probabilities_of_unknowns({0});
-	EXPECT_ANY_THROW(run.initialize_assignments_to_unknown());
 }

@@ -172,8 +172,9 @@ TEST(TMassSpecMath_Tests, whole_log_likelihood_of_a_worked_example) {
 	// species 0: molecule 0 detected but absent (contamination), molecule 2 present but not
 	// detected (1 - filter), the other six absent and not detected (1 - contamination). Species 1
 	// has no runs, so its present cell adds nothing.
-	const double expected = std::log(PHRED_LIKE_PROBA[100]) + std::log(PHRED_LIKE_PROBA[50]) +
-	                        std::log(0.1) + std::log(0.6) + 6.0 * std::log(0.9);
+	const double expected = std::log(RELATIVE_CALIBRATION_SCORE[100]) +
+	                        std::log(RELATIVE_CALIBRATION_SCORE[50]) + std::log(0.1) +
+	                        std::log(0.6) + 6.0 * std::log(0.9);
 	EXPECT_NEAR(mass_spec_math::log_likelihood(runs_per_species, make_field({{0, 2}, {1, 4}}),
 	                                           flat_filter, 0.1),
 	            expected, 1e-12);

@@ -281,13 +281,6 @@ public:
 		_current_assignments.assign(n, TFeatureLikelihood{});
 		_holder_of_molecule.clear();
 		for (size_t f = 0; f < n; ++f) {
-			// bin 0 maps to probability 0 (see PHRED_LIKE_PROBA), which would make the initial
-			// state impossible and every likelihood ratio involving it undefined.
-			if (_probabilities_of_unkowns[f] == 0) {
-				throw coretools::TUserError("TMassSpecRun: the probability of the unknown molecule "
-				                            "for feature ",
-				                            f, " is 0, which makes that feature impossible.");
-			}
 			_current_assignments[f] =
 			    TFeatureLikelihood::new_unknown_molecule(_probabilities_of_unkowns[f]);
 		}

@@ -45,14 +45,6 @@
 
 void TMassSpecRun::add_likelihood_vector(std::vector<TFeatureLikelihood> &feature_likelihoods) {
 	std::sort(feature_likelihoods.begin(), feature_likelihoods.end());
-	for (const auto &likelihood : feature_likelihoods) {
-		// bin 0 maps to probability 0 (see PHRED_LIKE_PROBA), so such a candidate could never be
-		// assigned and would make any likelihood ratio involving it undefined.
-		if (likelihood.get_binned_likelihood() == 0) {
-			throw coretools::TUserError("TMassSpecRun: molecule ", likelihood.get_molecule_index(),
-			                            " has a binned likelihood of 0 for this feature.");
-		}
-	}
 	// duplicates would skew c_f and let a single feature hold the same molecule twice
 	const auto duplicate =
 	    std::adjacent_find(feature_likelihoods.begin(), feature_likelihoods.end(),

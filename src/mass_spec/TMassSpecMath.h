@@ -11,7 +11,8 @@
 //     P(not detected | y = 1) = 1 - f  P(not detected | y = 0) = 1 - c
 //
 // which is `TMassSpecRun::probability_of_assignment`. Every run also carries a feature term. It is
-// the probability of each feature given the molecule it is assigned to. It does not read the field.
+// the relative calibration score of the molecule each feature is assigned to (ADR-0012). It does
+// not read the field.
 //
 // Conditional on the assignments, the source is therefore per-cell shaped. A cell's factor is the
 // product over the species' runs of its detection term. The whole log-likelihood is the sum of
@@ -42,11 +43,11 @@
 
 namespace mass_spec_math {
 
-/// The feature term of one feature: the probability of the feature given the molecule it is
-/// assigned to. It reads the assignment's bin. The unknown molecule carries its bin in the same
-/// place, so it reads the same way.
-[[nodiscard]] inline double probability_of_feature(const TFeatureLikelihood &assignment) {
-	return PHRED_LIKE_PROBA[assignment.get_binned_likelihood()];
+/// The feature term of one feature: the relative calibration score of the molecule it is assigned
+/// to. It reads the assignment's bin. The unknown molecule carries its bin in the same place, so it
+/// reads the same way.
+[[nodiscard]] inline double feature_term(const TFeatureLikelihood &assignment) {
+	return RELATIVE_CALIBRATION_SCORE[assignment.get_binned_likelihood()];
 }
 
 /// `{P(runs | Y = 0), P(runs | Y = 1)}` for the cell of `molecule` in a species whose runs are
@@ -107,7 +108,7 @@ template<BinaryStorage Field, typename FilterProbability>
 			size_t n_scored = 0;
 			for (size_t f = 0; f < run.number_of_assignments(); ++f) {
 				const auto &assignment = run.get_current_assignment(f);
-				sum_log.add(probability_of_feature(assignment));
+				sum_log.add(feature_term(assignment));
 				if (assignment.is_unknown_molecule()) { continue; }
 				const uint32_t m = assignment.get_molecule_index();
 				if (Y.is_one(Y.get_linear_index_in_container_space({species, m}))) { continue; }
