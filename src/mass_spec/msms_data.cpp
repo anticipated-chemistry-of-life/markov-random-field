@@ -99,14 +99,11 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 	// state-posterior tracking for a byte-domain parameter needs max() <= 254 (see constants.h).
 	TypeFilterProbability::setMax(MAX_FILTER_PROBABILITY_INDEX);
 
-	for (size_t d = 0; d < trees.size(); ++d) {
-		const auto &tree = trees[d];
+	for (const auto &tree : trees) {
 		if (tree->get_tree_name() == "species") {
 			_species_tree = tree.get();
-			_species_dim  = d;
 		} else if (tree->get_tree_name() == "molecules") {
 			_molecules_tree = tree.get();
-			_molecule_dim   = d;
 		}
 	}
 	this->_check_trees_exist();

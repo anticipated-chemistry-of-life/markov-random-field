@@ -62,7 +62,8 @@ double brute_force_log_likelihood(const std::vector<TCell> &cells, double omega)
 /// corrupted-rate identity.
 std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
                                         const std::array<double, 2> &lotus,
-                                        const std::array<double, 2> &simple_error) {
+                                        const std::array<double, 2> &simple_error,
+                                        const std::array<double, 2> &mass_spec) {
 	std::array<double, 8> weight{};
 	double total = 0.0;
 	for (const bool y : {false, true}) {
@@ -71,7 +72,8 @@ std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
 				const double link = brute_force_prob_y_is_one(z_s, z_m, omega);
 				const double w    = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m) *
 				                 (y ? link : 1.0 - link) * lotus[static_cast<size_t>(y)] *
-				                 simple_error[static_cast<size_t>(y)];
+				                 simple_error[static_cast<size_t>(y)] *
+				                 mass_spec[static_cast<size_t>(y)];
 				weight[state_index(y, z_s, z_m)] = w;
 				total += w;
 			}
@@ -86,6 +88,9 @@ std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
 std::array<coretools::Probability, 2> as_probabilities(const std::array<double, 2> &pair) {
 	return {coretools::P(pair[0]), coretools::P(pair[1])};
 }
+
+/// The pair of a source that says nothing about the field cell, as a build without it passes.
+std::array<coretools::Probability, 2> says_nothing() { return as_probabilities({1.0, 1.0}); }
 
 /// The range of values across the open interval the error probability is constrained to.
 const std::vector<double> &omega_values() {
@@ -155,6 +160,7 @@ struct TCellScalars {
 	double p_m = 0.5;
 	std::array<double, 2> lotus{1.0, 1.0};
 	std::array<double, 2> simple_error{1.0, 1.0};
+	std::array<double, 2> mass_spec{1.0, 1.0};
 };
 
 /// The midpoint of the i-th of n equal steps across [0, 1).
@@ -600,7 +606,7 @@ TEST(FieldMath_Tests, a_field_cell_is_the_block_conditioned_on_the_two_tree_fiel
 			for (const double p_m : {0.15, 0.5, 0.85}) {
 				const auto block = block_probabilities<TLinkPolicy>(
 				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
-				    as_probabilities(lotus), as_probabilities(simple_error));
+				    as_probabilities(lotus), as_probabilities(simple_error), says_nothing());
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
 						const double at_zero = block[state_index(false, z_s, z_m)];
@@ -649,13 +655,15 @@ TEST(FieldMath_Tests, state_index_is_a_bijection_onto_the_eight_states) {
 TEST(FieldMath_Tests, block_probabilities_match_brute_force_enumeration) {
 	const std::array<double, 2> lotus        = {0.7, 0.2};
 	const std::array<double, 2> simple_error = {0.15, 0.85};
+	const std::array<double, 2> mass_spec    = {0.4, 0.95};
 	for (const double w : {0.01, 0.1, 0.3, 0.45}) {
 		for (const double p_s : {0.05, 0.5, 0.95}) {
 			for (const double p_m : {0.1, 0.5, 0.8}) {
 				const auto got = block_probabilities<TLinkPolicy>(
 				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
-				    as_probabilities(lotus), as_probabilities(simple_error));
-				const auto want = brute_force_block(p_s, p_m, w, lotus, simple_error);
+				    as_probabilities(lotus), as_probabilities(simple_error),
+				    as_probabilities(mass_spec));
+				const auto want = brute_force_block(p_s, p_m, w, lotus, simple_error, mass_spec);
 				for (size_t i = 0; i < 8; ++i) {
 					EXPECT_NEAR(got[i], want[i], 1e-14)
 					    << "state " << i << ", omega = " << w << ", p_s = " << p_s
@@ -669,10 +677,11 @@ TEST(FieldMath_Tests, block_probabilities_match_brute_force_enumeration) {
 TEST(FieldMath_Tests, block_probabilities_are_normalised) {
 	const std::array<double, 2> lotus        = {0.9, 0.05};
 	const std::array<double, 2> simple_error = {0.3, 0.7};
+	const std::array<double, 2> mass_spec    = {0.5, 0.2};
 	for (const double w : {0.02, 0.2, 0.49}) {
 		const auto block = block_probabilities<TLinkPolicy>(
 		    coretools::P(0.3), coretools::P(0.6), TErrorProbability(w), as_probabilities(lotus),
-		    as_probabilities(simple_error));
+		    as_probabilities(simple_error), as_probabilities(mass_spec));
 		double sum       = 0.0;
 		for (const double p : block) {
 			EXPECT_GE(p, 0.0) << "omega = " << w;
@@ -691,7 +700,7 @@ TEST(FieldMath_Tests, the_block_reduces_to_the_link_when_the_data_says_nothing) 
 			for (const double p_m : {0.3, 0.7}) {
 				const auto block = block_probabilities<TLinkPolicy>(
 				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
-				    as_probabilities(flat), as_probabilities(flat));
+				    as_probabilities(flat), as_probabilities(flat), as_probabilities(flat));
 				double prob_y_is_one = 0.0;
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
@@ -727,7 +736,7 @@ TEST(FieldMath_Tests, the_block_leaves_the_tree_priors_alone_when_the_data_says_
 			for (const double p_m : {0.25, 0.75}) {
 				const auto block = block_probabilities<TLinkPolicy>(
 				    coretools::P(p_s), coretools::P(p_m), TErrorProbability(w),
-				    as_probabilities(flat), as_probabilities(flat));
+				    as_probabilities(flat), as_probabilities(flat), as_probabilities(flat));
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
 						const double want = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
@@ -749,16 +758,17 @@ TEST(FieldMath_Tests, the_block_tilts_the_link_by_the_data_odds) {
 	// forms an odds ratio.
 	const std::array<double, 2> lotus        = {0.6, 0.25};
 	const std::array<double, 2> simple_error = {0.2, 0.9};
+	const std::array<double, 2> mass_spec    = {0.7, 0.35};
 	for (const double w : {0.05, 0.2, 0.45}) {
 		const TErrorProbability omega(w);
 		const auto block = block_probabilities<TLinkPolicy>(
 		    coretools::P(0.35), coretools::P(0.7), omega, as_probabilities(lotus),
-		    as_probabilities(simple_error));
+		    as_probabilities(simple_error), as_probabilities(mass_spec));
 		for (const bool z_s : {false, true}) {
 			for (const bool z_m : {false, true}) {
 				const double link = TLinkPolicy::prob_y_is_one(z_s, z_m, omega);
-				const double want =
-				    (link * lotus[1] * simple_error[1]) / ((1.0 - link) * lotus[0] * simple_error[0]);
+				const double want = (link * lotus[1] * simple_error[1] * mass_spec[1]) /
+				                    ((1.0 - link) * lotus[0] * simple_error[0] * mass_spec[0]);
 				const double got =
 				    block[state_index(true, z_s, z_m)] / block[state_index(false, z_s, z_m)];
 				EXPECT_NEAR(got, want, 1e-12 * want)
@@ -779,7 +789,8 @@ TEST(FieldMath_Tests, the_block_rejects_a_configuration_with_no_mass) {
 	const std::array<double, 2> nothing = {0.0, 0.0};
 	EXPECT_THROW(static_cast<void>(block_probabilities<TLinkPolicy>(
 	                 coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
-	                 as_probabilities(nothing), as_probabilities(nothing))),
+	                 as_probabilities(nothing), as_probabilities(nothing),
+	                 as_probabilities(nothing))),
 	             std::invalid_argument);
 }
 
@@ -814,21 +825,22 @@ TEST(FieldMath_Tests, the_draw_reproduces_the_eight_probabilities_over_many_unif
 	// distribution rather than a sample of it.
 	const std::array<double, 2> lotus        = {0.6, 0.3};
 	const std::array<double, 2> simple_error = {0.25, 0.8};
+	const std::array<double, 2> mass_spec    = {0.45, 0.85};
 	constexpr size_t n_uniforms              = 100000;
 
 	for (const double w : {0.02, 0.2, 0.45}) {
 		for (const double p_s : {0.15, 0.7}) {
 			// the brute force above, so that the draw is not checked against the closed form it
 			// draws from
-			const auto want = brute_force_block(p_s, 0.4, w, lotus, simple_error);
+			const auto want = brute_force_block(p_s, 0.4, w, lotus, simple_error, mass_spec);
 
 			std::array<size_t, n_block_states> drawn{};
 			for (size_t i = 0; i < n_uniforms; ++i) {
 				const double uniform = uniform_on_grid(i, n_uniforms);
 				const auto draw      = draw_block<TLinkPolicy>(
 				    coretools::P(p_s), coretools::P(0.4), TErrorProbability(w),
-				    as_probabilities(lotus), as_probabilities(simple_error), TBlockStates{},
-				    uniform);
+				    as_probabilities(lotus), as_probabilities(simple_error),
+				    as_probabilities(mass_spec), TBlockStates{}, uniform);
 				++drawn[state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m)];
 			}
 
@@ -851,7 +863,7 @@ TEST(FieldMath_Tests, the_draw_rises_with_the_uniform) {
 		const double uniform = uniform_on_grid(i, 5000);
 		const auto draw      = draw_block<TLinkPolicy>(
 		    coretools::P(0.3), coretools::P(0.6), TErrorProbability(0.1), as_probabilities(lotus),
-		    as_probabilities(simple_error), TBlockStates{}, uniform);
+		    as_probabilities(simple_error), says_nothing(), TBlockStates{}, uniform);
 		const size_t index = state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m);
 		EXPECT_GE(index, previous) << "uniform = " << uniform;
 		previous = index;
@@ -872,7 +884,7 @@ TEST(FieldMath_Tests, the_draw_never_reaches_a_state_with_no_mass) {
 		    i < n_uniforms ? uniform_on_grid(i, n_uniforms) : std::nextafter(1.0, 0.0);
 		const auto draw = draw_block<TLinkPolicy>(
 		    coretools::P(0.9), coretools::P(0.9), TErrorProbability(0.01), as_probabilities(lotus),
-		    as_probabilities(simple_error), TBlockStates{}, uniform);
+		    as_probabilities(simple_error), says_nothing(), TBlockStates{}, uniform);
 		ASSERT_FALSE(draw.drawn.y) << "uniform = " << uniform;
 	}
 }
@@ -882,7 +894,7 @@ TEST(FieldMath_Tests, the_draw_rejects_a_uniform_outside_the_unit_interval) {
 	const auto draw_at               = [&flat](double uniform) {
 		return draw_block<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
 		                               as_probabilities(flat), as_probabilities(flat),
-		                               TBlockStates{}, uniform);
+		                               as_probabilities(flat), TBlockStates{}, uniform);
 	};
 	EXPECT_THROW(draw_at(1.0), std::invalid_argument);
 	EXPECT_THROW(draw_at(-1e-9), std::invalid_argument);
@@ -898,9 +910,9 @@ TEST(FieldMath_Tests, the_counter_move_names_the_cells_the_states_fall_in) {
 		for (const bool z_s : {false, true}) {
 			for (const bool z_m : {false, true}) {
 				const TBlockStates current{.y = y, .z_s = z_s, .z_m = z_m};
-				const auto draw = draw_block<TLinkPolicy>(coretools::P(0.4), coretools::P(0.6),
-				                                          omega, as_probabilities(flat),
-				                                          as_probabilities(flat), current, 0.37);
+				const auto draw = draw_block<TLinkPolicy>(
+				    coretools::P(0.4), coretools::P(0.6), omega, as_probabilities(flat),
+				    as_probabilities(flat), as_probabilities(flat), current, 0.37);
 				// the cell it leaves is named by the states it was in
 				EXPECT_EQ(draw.from.bucket,
 				          bucket_written_out(TCell{.z_s = z_s, .z_m = z_m, .y = y}));
@@ -920,13 +932,14 @@ TEST(FieldMath_Tests, the_states_drawn_do_not_depend_on_the_states_read) {
 	// block's conditional, and the current states are not a factor of it.
 	const std::array<double, 2> lotus        = {0.7, 0.2};
 	const std::array<double, 2> simple_error = {0.35, 0.65};
+	const std::array<double, 2> mass_spec    = {0.55, 0.3};
 	const TErrorProbability omega(0.08);
 	for (size_t i = 0; i < 200; ++i) {
 		const double uniform = uniform_on_grid(i, 200);
 		const auto draw_from = [&](const TBlockStates &current) {
 			return draw_block<TLinkPolicy>(coretools::P(0.45), coretools::P(0.55), omega,
 			                               as_probabilities(lotus), as_probabilities(simple_error),
-			                               current, uniform);
+			                               as_probabilities(mass_spec), current, uniform);
 		};
 		const auto zeros = draw_from(TBlockStates{});
 		const auto ones  = draw_from(TBlockStates{.y = true, .z_s = true, .z_m = true});
@@ -957,6 +970,7 @@ TEST(FieldMath_Tests, the_counter_moves_match_a_full_recomputation_after_many_dr
 		scalars[i] = {generator.next_between(0.05, 0.95),
 		              generator.next_between(0.05, 0.95),
 		              {generator.next_between(0.05, 0.95), generator.next_between(0.05, 0.95)},
+		              {generator.next_between(0.05, 0.95), generator.next_between(0.05, 0.95)},
 		              {generator.next_between(0.05, 0.95), generator.next_between(0.05, 0.95)}};
 	}
 	const auto first_configuration = cells;
@@ -971,7 +985,7 @@ TEST(FieldMath_Tests, the_counter_moves_match_a_full_recomputation_after_many_dr
 			const auto draw    = draw_block<TLinkPolicy>(
 			    coretools::P(scalar.p_s), coretools::P(scalar.p_m), omega,
 			    as_probabilities(scalar.lotus), as_probabilities(scalar.simple_error),
-			    as_block_states(cells[i]), generator.next());
+			    as_probabilities(scalar.mass_spec), as_block_states(cells[i]), generator.next());
 			// the two lines a traversal writes, and the only two
 			counters.remove(draw.from.bucket, draw.from.y);
 			counters.add(draw.to.bucket, draw.to.y);

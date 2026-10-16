@@ -23,12 +23,12 @@ class TMarkovField;
 ///
 /// This class is not a stattools box: its parameters (the filter and contamination
 /// probabilities) hang off TDataModel, which owns this object and forwards the MCMC callbacks --
-/// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h). Unlike them it does not
-/// satisfy the DataSource concept (data_sources/data_source.h): it scores an assignment problem
-/// over a species' runs, not a per-cell state, and it carries its own latent state (the
-/// feature<->molecule assignments) that needs its own Metropolis sweep every iteration
-/// (update_all_MS_assignments), so TDataModel hand-wires it rather than folding it into
-/// ACOL_DATA_SOURCES.
+/// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h). Conditional on its
+/// assignments, mass spec is per-cell shaped: the block update reads `per_cell_factor`, and the
+/// data log-likelihood reads `log_likelihood`. It still does not satisfy the DataSource concept
+/// (data_sources/data_source.h). It carries latent state of its own, the assignments, and they
+/// need their own Metropolis sweep every iteration (update_all_MS_assignments). So TDataModel
+/// wires it by hand rather than folding it into ACOL_DATA_SOURCES.
 class TMSMSData {
 public:
 	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, TDataModel>;
@@ -38,8 +38,6 @@ private:
 	coretools::TNestedVector<TMassSpecRun> _msms_data;
 	TTree *_molecules_tree = nullptr;
 	TTree *_species_tree   = nullptr;
-	size_t _molecule_dim   = 0;
-	size_t _species_dim    = 0;
 	std::array<size_t, 2> _dimensions_for_filters{};
 	size_t _number_of_filters;
 	size_t _number_of_species;
@@ -96,29 +94,24 @@ public:
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	// Add the MS-data factor of the field cell (species, molecule) for both field states into
-	// sum_log[0] (molecule absent) and sum_log[1] (molecule present), i.e.
-	// `mass_spec_math::per_cell_factor`. The feature terms do not read the field and cancel between
-	// the two states, so the factor leaves them out.
-	//
-	// Still dormant: the block update does not read this either (TMarkovField's eight-state block
-	// takes the LOTUS and the simple-error term), and adapting a third source is that source's own
-	// work.
-	void add_log_likelihood(const IndexArray &indices_in_leaves,
-	                        std::array<coretools::TSumLogProbability, 2> &sum_log) const {
-		const auto species_idx = indices_in_leaves[_species_dim];
-
-		// if the species does not have MS data, skip it
-		if (!_species_has_ms_data.at(species_idx)) { return; }
-		const auto factor = mass_spec_math::per_cell_factor(
-		    this->get_ms_data_for_species(species_idx),
-		    static_cast<uint32_t>(indices_in_leaves[_molecule_dim]),
-		    [this](size_t filter, uint32_t molecule) {
-			    return _filter_probability(filter, molecule);
-		    },
+	/// `{P(runs | Y = 0), P(runs | Y = 1)}` for the field cell (species, molecule), given the
+	/// current assignments, filter probabilities and contamination
+	/// (`mass_spec_math::per_cell_factor`). The feature terms do not read the field, so the factor
+	/// leaves them out. `{1, 1}` for a species without runs.
+	///
+	/// The block update calls this from many threads at once. It only reads: the assignments and
+	/// the parameters do not move during the block update.
+	[[nodiscard]] std::array<double, 2> per_cell_factor(size_t species, size_t molecule) const {
+		if (!_species_has_ms_data[species]) { return {1.0, 1.0}; }
+		return mass_spec_math::per_cell_factor(
+		    _msms_data.at(species), static_cast<uint32_t>(molecule),
+		    [this](size_t filter, uint32_t m) { return _filter_probability(filter, m); },
 		    (double)_proba_contamination->value());
-		sum_log[0].add(factor[0]);
-		sum_log[1].add(factor[1]);
+	}
+
+	/// The whole mass-spec log-likelihood at the current field, assignments and parameters.
+	[[nodiscard]] double log_likelihood() const {
+		return _log_likelihood((double)_proba_contamination->value());
 	}
 
 	[[nodiscard]] coretools::TConstView<TMassSpecRun>

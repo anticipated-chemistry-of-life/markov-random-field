@@ -1,9 +1,10 @@
 //
 // The seam every per-cell data source satisfies: an independent likelihood term over the field,
 // observing Y one cell at a time (ADR-0005's data factor, `log p(L, D | Y)`). LOTUS and the simple
-// error model are this shape. Mass spectrometry data is not -- it scores an assignment problem
-// over a species' runs, not a per-cell state (see mass_spec/msms_data.h) -- so it is not named by
-// ACOL_DATA_SOURCES and does not satisfy DataSource below.
+// error model are this shape. Mass spectrometry data is too, conditional on its assignments: the
+// block update reads its per-cell factor, and its log-likelihood joins the data log-likelihood.
+// It still does not satisfy DataSource below, and ACOL_DATA_SOURCES does not name it. It carries
+// latent state of its own, the assignments, with a sweep of their own (see mass_spec/msms_data.h).
 //
 // ACOL_DATA_SOURCES(X) lists whichever per-cell sources are compiled in, once, so that
 // TDataModel's six uniform per-source sites -- initialize, guess_initial_values, the likelihood
@@ -48,8 +49,9 @@ struct TNotifierStats {
 /// - append whatever it has to report to a shared stats collector (`contribute_stats`).
 ///
 /// Not part of this concept: the per-cell hook the block update reads (TLotus::calculate_LL_update_Y,
-/// TSimpleErrorModel::probabilities_for_Y_update) -- their shapes still differ source to source --
-/// and the parameter-move dispatch, which stattools forces to be one overload per parameter type.
+/// TSimpleErrorModel::probabilities_for_Y_update, TMSMSData::per_cell_factor) -- their shapes
+/// still differ source to source -- and the parameter-move dispatch, which stattools forces to be
+/// one overload per parameter type.
 template <typename T>
 concept DataSource =
     requires(T &s, TDataModel *box, bool simulate, const TFieldStorage &Y,

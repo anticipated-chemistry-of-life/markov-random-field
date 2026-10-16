@@ -105,6 +105,9 @@ double TDataModel::data_log_likelihood() const {
 #define ACOL_SUM_DATA_SOURCE(member, Type) sum += _##member.log_likelihood();
 	ACOL_DATA_SOURCES(ACOL_SUM_DATA_SOURCE)
 #undef ACOL_SUM_DATA_SOURCE
+#ifdef USE_MS_DATA
+	sum += _msms_data.log_likelihood();
+#endif
 	return sum;
 }
 
@@ -112,8 +115,7 @@ void TDataModel::update_markov_field() {
 	_markov_field.update(*this, _mrf_update_iteration++);
 #ifdef USE_MS_DATA
 	// Sweeps the feature<->molecule assignments against the Y this iteration's block update just
-	// produced. Order-independent with respect to everything else here: the sweep does not change
-	// Y, and its likelihood is not (yet) part of data_log_likelihood or the joint density.
+	// produced. The sweep does not change Y. The next block update reads the assignments it leaves.
 	_msms_data.update_all_MS_assignments();
 #endif
 }

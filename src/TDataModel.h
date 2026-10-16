@@ -8,13 +8,14 @@
 // drives six of this class's per-source sites (initialize, guess_initial_values, the likelihood
 // sum, notifier-stats collection, simulate + write, the accessor pair) from that one list.
 //
-// Mass spectrometry (USE_MS_DATA, TMSMSData) does not satisfy DataSource -- it scores an
-// assignment problem over a species' runs, not a per-cell state, and it carries its own latent
-// state (the feature<->molecule assignments) that needs its own Metropolis sweep every iteration
-// (update_all_MS_assignments) -- so it stays hand-wired rather than joining ACOL_DATA_SOURCES. It
-// is still an ordinary member of this class, constructed, initialized and swept the same way the
+// Mass spectrometry (USE_MS_DATA, TMSMSData) does not satisfy DataSource. It carries latent state
+// of its own, the feature<->molecule assignments, and they need their own Metropolis sweep every
+// iteration (update_all_MS_assignments). So it stays hand-wired rather than joining
+// ACOL_DATA_SOURCES. Conditional on its assignments it is per-cell shaped, like the others: the
+// block update reads its per-cell factor, and its log-likelihood joins the data log-likelihood.
+// It is an ordinary member of this class, constructed, initialized and swept the same way the
 // DataSource-shaped sources are; only the sites that list generates are written out by hand for
-// it, the same way they are hand-written per source below.
+// it.
 //
 // Three things per source stay hand-written rather than generated: the member declaration, the
 // constructor's forwarding of that source's parameters, and the params-vector push in the
@@ -160,11 +161,8 @@ public:
 	/// is the data factor of the ADR-0005 factorisation, and stattools' own accessor takes a
 	/// storage the field has nothing to hand it.
 	///
-	/// The LOTUS records and the simple error model, and nothing else. Mass spectrometry is a
-	/// member of this class like the others, but its likelihood is not summed here: it scores an
-	/// assignment problem rather than a per-cell term, so it does not join ACOL_DATA_SOURCES' sum.
-	/// Wiring it into the joint density is a separate piece of work, or the joint density stops
-	/// being the whole of the model.
+	/// Every compiled-in source, mass spectrometry included. Mass spec enters at its current
+	/// assignments, so the joint density stays the whole of the model.
 	[[nodiscard]] double data_log_likelihood() const;
 
 	void update_markov_field();
@@ -205,4 +203,8 @@ public:
 	[[nodiscard]] Type &get_##member() { return _##member; }
 	ACOL_DATA_SOURCES(ACOL_DATA_SOURCE_ACCESSOR)
 #undef ACOL_DATA_SOURCE_ACCESSOR
+#ifdef USE_MS_DATA
+	// Hand-written, like the rest of mass spec's wiring (see the file comment).
+	[[nodiscard]] const TMSMSData &get_msms_data() const { return _msms_data; }
+#endif
 };

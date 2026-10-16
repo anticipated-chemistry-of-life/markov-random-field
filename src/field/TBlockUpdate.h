@@ -65,6 +65,8 @@ struct TLeafPairFactors {
 	std::array<coretools::Probability, 2> lotus;
 	/// {P(D | Y = 0), P(D | Y = 1)} for this cell.
 	std::array<coretools::Probability, 2> simple_error;
+	/// {P(runs | Y = 0), P(runs | Y = 1)} for this cell, given the current assignments.
+	std::array<coretools::Probability, 2> mass_spec;
 };
 
 /// The type a model's `begin_row` hands back. Named here so that the concept below can ask for an
@@ -180,7 +182,7 @@ void update_cell(TRow<ModelRow> &row, size_t molecule_leaf, Field &Y, NodeState 
 	// decide what it gets.
 	const auto draw = field_math::draw_block<Policy>(
 	    factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega, factors.lotus,
-	    factors.simple_error, current, uniforms.at(field_cell));
+	    factors.simple_error, factors.mass_spec, current, uniforms.at(field_cell));
 
 	// Write each cell back where it was read from. A storage that holds the cell takes the write in
 	// place, and one that does not hands the cell back for a later insert.

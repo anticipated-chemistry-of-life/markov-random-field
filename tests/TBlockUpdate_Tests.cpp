@@ -119,7 +119,8 @@ public:
 		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
 		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
 		        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
-		        .simple_error = {coretools::P(1.0), coretools::P(1.0)}};
+		        .simple_error = {coretools::P(1.0), coretools::P(1.0)},
+		        .mass_spec    = {coretools::P(1.0), coretools::P(1.0)}};
 	}
 
 	/// Neither mock model has anything it cannot ready inside the region, so this is a no-op --
@@ -182,7 +183,8 @@ public:
 		return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
 		        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
 		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
-		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)}};
+		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)},
+		        .mass_spec       = {coretools::P(0.3 + drift), coretools::P(0.5)}};
 	}
 
 	/// Nothing here cannot be readied inside the region; a no-op to satisfy `BlockModel`.

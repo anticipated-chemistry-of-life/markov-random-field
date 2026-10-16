@@ -22,9 +22,9 @@
 // is the same trick the simple error model's disagreement count plays for its own rate.
 //
 // Everything here is free-standing. It takes two transition probabilities, an error probability
-// and two data-likelihood pairs, and it touches no storage, no tree, no parameter and no random
-// generator -- which is what makes the closed forms below testable against brute-force definitions
-// for a few lines of arithmetic, instead of through a constructed field.
+// and one data-likelihood pair per data source. It touches no storage, no tree, no parameter and
+// no random generator -- which is what makes the closed forms below testable against brute-force
+// definitions for a few lines of arithmetic, instead of through a constructed field.
 //
 // It is also deliberately NOT guarded by the data-source build flags, so it compiles and is unit
 // tested in every build configuration, following lotus/TLotusMath.h and
@@ -407,12 +407,15 @@ prob_field_cell_is_one(bool z_s, bool z_m, const TErrorProbability &omega,
 /// @param omega            The error probability standing between the tree fields and the field.
 /// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
 /// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
+/// @param mass_spec        {P(runs | Y = 0), P(runs | Y = 1)} for this cell, given the current
+///                         assignments.
 template<LinkPolicy Policy>
 [[nodiscard]] std::array<double, n_block_states>
 block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
                     const TErrorProbability &omega,
                     const std::array<coretools::Probability, 2> &lotus,
-                    const std::array<coretools::Probability, 2> &simple_error) {
+                    const std::array<coretools::Probability, 2> &simple_error,
+                    const std::array<coretools::Probability, 2> &mass_spec) {
 	// These are probabilities by type, so the range check happens where the caller builds the
 	// value, the way TSimpleErrorModelMath.h already does it. Note the bargain: coretools checks
 	// its intervals only under CHECK_INTERVALS, which CMakeLists.txt defines for the unit tests and
@@ -432,7 +435,7 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 			for (const bool y : {false, true}) {
 				const auto data     = static_cast<size_t>(y);
 				const double weight = tree_factor * (y ? link : 1.0 - link) * lotus[data].get() *
-				                      simple_error[data].get();
+				                      simple_error[data].get() * mass_spec[data].get();
 				probability[state_index(y, z_s, z_m)] = weight;
 				total += weight;
 			}
@@ -476,6 +479,8 @@ struct TBlockDraw {
 /// @param omega            The error probability standing between the tree fields and the field.
 /// @param lotus            {P(L | Y = 0), P(L | Y = 1)} for this cell.
 /// @param simple_error     {P(D | Y = 0), P(D | Y = 1)} for this cell.
+/// @param mass_spec        {P(runs | Y = 0), P(runs | Y = 1)} for this cell, given the current
+///                         assignments.
 /// @param current          The states the leaf pair is in now. Only the cell it leaves depends on
 ///                         them.
 /// @param uniform          The cell's uniform, on [0, 1).
@@ -483,7 +488,8 @@ template<LinkPolicy Policy>
 [[nodiscard]] TBlockDraw
 draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
            const TErrorProbability &omega, const std::array<coretools::Probability, 2> &lotus,
-           const std::array<coretools::Probability, 2> &simple_error, const TBlockStates &current,
+           const std::array<coretools::Probability, 2> &simple_error,
+           const std::array<coretools::Probability, 2> &mass_spec, const TBlockStates &current,
            double uniform) {
 	// Written as two negations, so that a NaN uniform is rejected rather than drawn on.
 	if (!(uniform >= 0.0) || !(uniform < 1.0)) {
@@ -491,8 +497,8 @@ draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z
 		                            std::to_string(uniform) + ".");
 	}
 
-	const auto probability =
-	    block_probabilities<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, lotus, simple_error);
+	const auto probability = block_probabilities<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega,
+	                                                     lotus, simple_error, mass_spec);
 
 	size_t index      = n_block_states;
 	double cumulative = 0.0;

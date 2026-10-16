@@ -3,8 +3,9 @@
 //
 // The traversal in field/TBlockUpdate.h reads three states and two tree parents from its storages.
 // It asks this for the rest. Each tree says what its own tree field cell should be, given that
-// tree's parent. Each compiled-in data source says what it makes of the field cell. Every answer
-// is about one leaf pair, because that is the unit the traversal works in.
+// tree's parent. Each compiled-in data source says what it makes of the field cell. Mass spec does
+// so too: conditional on its assignments, it is per-cell shaped. Every answer is about one leaf
+// pair, because that is the unit the traversal works in.
 //
 // This is the whole of what the traversal must not know about. So the traversal keeps no tree, no
 // clique and no data source, and a test can run its loop against a model of its own.
@@ -37,6 +38,8 @@
 
 /// Per-cell outcome of one block update. Each data source keeps its own likelihood bookkeeping
 /// (they are independent terms), so the results are handed back separately instead of merged.
+/// Mass spec keeps none: its log-likelihood is computed from the field on demand
+/// (`TMSMSData::log_likelihood`), so nothing here moves with it.
 struct TCellOutcome {
 #ifdef USE_LOTUS
 	/// P(L_cell | Y = the drawn state). Neutral value 1.0 (log 0).
@@ -229,6 +232,7 @@ public:
 		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
 		leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};
 		leaf_pair.simple_error = {coretools::P(1.0), coretools::P(1.0)};
+		leaf_pair.mass_spec    = {coretools::P(1.0), coretools::P(1.0)};
 #ifdef USE_LOTUS
 		const TLotus &lotus = _data_model.get_lotus();
 		std::array<double, 2> prob_lotus{1.0, 1.0};
@@ -241,6 +245,12 @@ public:
 		std::array<double, 2> prob_simple{};
 		simple.probabilities_for_Y_update(simple.observed_state_of(cell), prob_simple);
 		leaf_pair.simple_error = {coretools::P(prob_simple[0]), coretools::P(prob_simple[1])};
+#endif
+#ifdef USE_MS_DATA
+		// Exactly {1, 1} for a species without runs, so its draws match a build without mass spec.
+		const auto prob_mass_spec =
+		    _data_model.get_msms_data().per_cell_factor(row.species_leaf, molecule_leaf);
+		leaf_pair.mass_spec = {coretools::P(prob_mass_spec[0]), coretools::P(prob_mass_spec[1])};
 #endif
 		return leaf_pair;
 	}
