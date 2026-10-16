@@ -3,9 +3,10 @@
 //
 // The traversal in field/TBlockUpdate.h reads three states and two tree parents from its storages.
 // It asks this for the rest. Each tree says what its own tree field cell should be, given that
-// tree's parent. Each compiled-in data source says what it makes of the field cell. Mass spec does
-// so too: conditional on its assignments, it is per-cell shaped. Every answer is about one leaf
-// pair, because that is the unit the traversal works in.
+// tree's parent. Each compiled-in data source says what it makes of the field cell. Mass spec is
+// one of them, because it is per-cell shaped conditional on its assignments
+// (mass_spec/msms_data.h). Every answer is about one leaf pair, because that is the unit the
+// traversal works in.
 //
 // This is the whole of what the traversal must not know about. So the traversal keeps no tree, no
 // clique and no data source, and a test can run its loop against a model of its own.
@@ -38,8 +39,8 @@
 
 /// Per-cell outcome of one block update. Each data source keeps its own likelihood bookkeeping
 /// (they are independent terms), so the results are handed back separately instead of merged.
-/// Mass spec keeps none: its log-likelihood is computed from the field on demand
-/// (`TMSMSData::log_likelihood`), so nothing here moves with it.
+/// Mass spec keeps none. `TMSMSData::log_likelihood` computes its log-likelihood from the field on
+/// demand.
 struct TCellOutcome {
 #ifdef USE_LOTUS
 	/// P(L_cell | Y = the drawn state). Neutral value 1.0 (log 0).

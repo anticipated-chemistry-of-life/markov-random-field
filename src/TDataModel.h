@@ -9,13 +9,9 @@
 // sum, notifier-stats collection, simulate + write, the accessor pair) from that one list.
 //
 // Mass spectrometry (USE_MS_DATA, TMSMSData) does not satisfy DataSource. It carries latent state
-// of its own, the feature<->molecule assignments, and they need their own Metropolis sweep every
-// iteration (update_all_MS_assignments). So it stays hand-wired rather than joining
-// ACOL_DATA_SOURCES. Conditional on its assignments it is per-cell shaped, like the others: the
-// block update reads its per-cell factor, and its log-likelihood joins the data log-likelihood.
-// It is an ordinary member of this class, constructed, initialized and swept the same way the
-// DataSource-shaped sources are; only the sites that list generates are written out by hand for
-// it.
+// of its own, the assignments. So this class wires it by hand. TMSMSData's class comment says how
+// it still reaches the block update and the data log-likelihood. Its sites are written out below,
+// beside the ones ACOL_DATA_SOURCES generates.
 //
 // Three things per source stay hand-written rather than generated: the member declaration, the
 // constructor's forwarding of that source's parameters, and the params-vector push in the
@@ -161,8 +157,8 @@ public:
 	/// is the data factor of the ADR-0005 factorisation, and stattools' own accessor takes a
 	/// storage the field has nothing to hand it.
 	///
-	/// Every compiled-in source, mass spectrometry included. Mass spec enters at its current
-	/// assignments, so the joint density stays the whole of the model.
+	/// Every compiled-in source, mass spec included. Mass spec enters at its current assignments,
+	/// so the joint density stays the whole of the model.
 	[[nodiscard]] double data_log_likelihood() const;
 
 	void update_markov_field();

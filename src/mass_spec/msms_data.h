@@ -23,12 +23,14 @@ class TMarkovField;
 ///
 /// This class is not a stattools box: its parameters (the filter and contamination
 /// probabilities) hang off TDataModel, which owns this object and forwards the MCMC callbacks --
-/// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h). Conditional on its
-/// assignments, mass spec is per-cell shaped: the block update reads `per_cell_factor`, and the
-/// data log-likelihood reads `log_likelihood`. It still does not satisfy the DataSource concept
-/// (data_sources/data_source.h). It carries latent state of its own, the assignments, and they
-/// need their own Metropolis sweep every iteration (update_all_MS_assignments). So TDataModel
-/// wires it by hand rather than folding it into ACOL_DATA_SOURCES.
+/// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h).
+///
+/// Conditional on its assignments, mass spec is per-cell shaped. The block update reads
+/// `per_cell_factor`. The data log-likelihood reads `log_likelihood`. The class still does not
+/// satisfy the DataSource concept (data_sources/data_source.h). It carries latent state of its
+/// own, the assignments. They need their own Metropolis update every iteration
+/// (update_all_MS_assignments). So TDataModel wires the class by hand, and ACOL_DATA_SOURCES does
+/// not name it.
 class TMSMSData {
 public:
 	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, TDataModel>;
@@ -94,17 +96,18 @@ public:
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	/// `{P(runs | Y = 0), P(runs | Y = 1)}` for the field cell (species, molecule), given the
-	/// current assignments, filter probabilities and contamination
+	/// `{P(runs | Y = 0), P(runs | Y = 1)}` for the field cell (species leaf, molecule leaf), given
+	/// the current assignments, filter probabilities and contamination
 	/// (`mass_spec_math::per_cell_factor`). The feature terms do not read the field, so the factor
 	/// leaves them out. `{1, 1}` for a species without runs.
 	///
-	/// The block update calls this from many threads at once. It only reads: the assignments and
+	/// The block update calls this from many threads at once. It only reads. The assignments and
 	/// the parameters do not move during the block update.
-	[[nodiscard]] std::array<double, 2> per_cell_factor(size_t species, size_t molecule) const {
-		if (!_species_has_ms_data[species]) { return {1.0, 1.0}; }
+	[[nodiscard]] std::array<double, 2> per_cell_factor(size_t species_leaf,
+	                                                    size_t molecule_leaf) const {
+		if (!_species_has_ms_data[species_leaf]) { return {1.0, 1.0}; }
 		return mass_spec_math::per_cell_factor(
-		    _msms_data.at(species), static_cast<uint32_t>(molecule),
+		    _msms_data.at(species_leaf), static_cast<uint32_t>(molecule_leaf),
 		    [this](size_t filter, uint32_t m) { return _filter_probability(filter, m); },
 		    (double)_proba_contamination->value());
 	}

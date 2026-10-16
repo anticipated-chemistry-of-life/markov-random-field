@@ -315,7 +315,8 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 	_Y.add_to_counter(iteration);
 	_count_the_tree_fields(iteration);
 
-	// Last of all, because it is the density of the configuration this iteration leaves behind.
+	// Last of the field's turn: the density of the field and node states this iteration leaves
+	// behind. In an `m` build the assignments update after it (TDataModel::update_markov_field).
 	_trace_joint_density(iteration, data_model);
 }
 

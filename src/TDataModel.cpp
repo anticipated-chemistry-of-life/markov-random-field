@@ -114,8 +114,10 @@ double TDataModel::data_log_likelihood() const {
 void TDataModel::update_markov_field() {
 	_markov_field.update(*this, _mrf_update_iteration++);
 #ifdef USE_MS_DATA
-	// Sweeps the feature<->molecule assignments against the Y this iteration's block update just
-	// produced. The sweep does not change Y. The next block update reads the assignments it leaves.
+	// Updates the feature<->molecule assignments against the Y this iteration's block update just
+	// drew. This update does not change Y. The next block update reads the assignments it leaves.
+	// The joint density row of this iteration was written before it, so the row scores Y against
+	// the assignments its block update read.
 	_msms_data.update_all_MS_assignments();
 #endif
 }

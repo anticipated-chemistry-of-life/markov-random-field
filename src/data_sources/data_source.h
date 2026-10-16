@@ -1,10 +1,9 @@
 //
 // The seam every per-cell data source satisfies: an independent likelihood term over the field,
 // observing Y one cell at a time (ADR-0005's data factor, `log p(L, D | Y)`). LOTUS and the simple
-// error model are this shape. Mass spectrometry data is too, conditional on its assignments: the
-// block update reads its per-cell factor, and its log-likelihood joins the data log-likelihood.
-// It still does not satisfy DataSource below, and ACOL_DATA_SOURCES does not name it. It carries
-// latent state of its own, the assignments, with a sweep of their own (see mass_spec/msms_data.h).
+// error model are this shape. Conditional on its assignments, mass spectrometry data is too. It
+// still does not satisfy DataSource below, and ACOL_DATA_SOURCES does not name it, because it
+// carries latent state of its own (see mass_spec/msms_data.h).
 //
 // ACOL_DATA_SOURCES(X) lists whichever per-cell sources are compiled in, once, so that
 // TDataModel's six uniform per-source sites -- initialize, guess_initial_values, the likelihood
