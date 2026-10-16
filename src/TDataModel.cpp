@@ -25,7 +25,7 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
 #endif
 #ifdef USE_MS_DATA
       _msms_data(trees, _markov_field, NUMBER_OF_MS_FILTERS, sources.mass_spec_filters,
-                sources.contamination_proba),
+	             sources.contamination_proba),
       _mass_spec_filters(sources.mass_spec_filters),
       _contamination_proba(sources.contamination_proba),
 #endif
@@ -212,7 +212,7 @@ void TDataModel::_simulateUnderPrior(Storage *) {
 	// then derive each data source from that one simulated Y, and write it out
 	const auto &Y = _markov_field.get_Y_matrix();
 #define ACOL_SIMULATE_DATA_SOURCE(member, Type)                                                    \
-	_##member.simulate_from_Y(Y);                                                                     \
+	_##member.simulate_from_Y(Y);                                                                  \
 	_##member.write_simulated(_prefix);
 	ACOL_DATA_SOURCES(ACOL_SIMULATE_DATA_SOURCE)
 #undef ACOL_SIMULATE_DATA_SOURCE

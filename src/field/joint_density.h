@@ -31,9 +31,9 @@ struct TJointDensity {
 	std::array<double, NUMBER_OF_TREES> node_states{};
 	/// `log p(Y | Z_s, Z_m, omega)`, from the six link counters.
 	double link = 0.0;
-	/// `log p(L, D | Y)`: the LOTUS records, the simple error model and mass spec, whichever of them
-	/// is compiled in. Mass spec enters at its current assignments. Zero for a simulated chain,
-	/// which draws from the prior and has no data to score.
+	/// `log p(L, D | Y)`: the LOTUS records, the simple error model and mass spec, whichever of
+	/// them is compiled in. Mass spec enters at its current assignments. Zero for a simulated
+	/// chain, which draws from the prior and has no data to score.
 	double data = 0.0;
 
 	[[nodiscard]] double total() const {

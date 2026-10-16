@@ -59,9 +59,7 @@ public:
 	[[nodiscard]] size_t dimension() const { return _dimension; }
 
 	/// How many cliques the tree has: the product of every other tree's leaf count.
-	[[nodiscard]] size_t n_cliques() const {
-		return container_product(_dimension_cliques);
-	}
+	[[nodiscard]] size_t n_cliques() const { return container_product(_dimension_cliques); }
 
 	/// The cell subscript of clique `clique`: a leaf in every dimension but the owning tree's,
 	/// which carries a 0.

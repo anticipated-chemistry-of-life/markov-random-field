@@ -170,11 +170,10 @@ private:
 	/// branch lengths are proposed before the cliques are walked and `value` is already the
 	/// candidate by the time this runs.
 	template<TransitionGridLike Process>
-	void _add_node_to_clique_LL(size_t index_in_tree, bool state_of_node,
-	                            coretools::TSumLogProbability &LL,
-	                            const TNodeStateCliqueView &states,
-	                            std::optional<size_t> branch_len_bin,
-	                            const Process &process) const {
+	void
+	_add_node_to_clique_LL(size_t index_in_tree, bool state_of_node,
+	                       coretools::TSumLogProbability &LL, const TNodeStateCliqueView &states,
+	                       std::optional<size_t> branch_len_bin, const Process &process) const {
 		if (_topology().is_root(index_in_tree)) {
 			LL.add(process.stationary(state_of_node));
 		} else {
@@ -189,7 +188,7 @@ private:
 	/// thing to read: one pass reads it once and the compiler shares the load between both scores.
 	template<TransitionGridLike ProcessA, TransitionGridLike ProcessB>
 	[[nodiscard]] std::array<double, 2> _clique_LL(const TNodeStateCliqueView &states,
-	                                              const ProcessA &a, const ProcessB &b) const {
+	                                               const ProcessA &a, const ProcessB &b) const {
 		coretools::TSumLogProbability LL_a;
 		coretools::TSumLogProbability LL_b;
 		const auto &topology = _topology();
@@ -224,8 +223,8 @@ private:
 
 	/// The grid a proposed alpha or nu would give clique `c`. Built from the value the parameter
 	/// currently holds, so it has to be asked before `acceptOrReject` puts a rejected value back.
-	template<bool IsAlpha> [[nodiscard]] TTransitionGrid _candidate_grid(size_t c,
-	                                                                     double proposed) const {
+	template<bool IsAlpha>
+	[[nodiscard]] TTransitionGrid _candidate_grid(size_t c, double proposed) const {
 		if constexpr (IsAlpha) {
 			return TTransitionGrid(proposed, _nu_c[c], _grid());
 		} else {
@@ -376,7 +375,7 @@ public:
 		// is order-independent. Gathering it through the helper costs nothing the hand-written
 		// loop did not already pay.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
-		auto kernel = [this, &node_state_uniforms](size_t c, TNodeStateCliqueView &states) {
+		auto kernel       = [this, &node_state_uniforms](size_t c, TNodeStateCliqueView &states) {
 			// The view lives across the moves below. Those moves read the states the walk
 			// assigns. `FixZ` discards this branch entirely when set; without the `else` below
 			// the capture would go unused.
@@ -387,7 +386,7 @@ public:
 				(void)node_state_uniforms;
 			}
 			return _clique_LL(states, transition_grid(c),
-			                   _candidate_grid<true>(c, _alpha_c->value(c)));
+			                  _candidate_grid<true>(c, _alpha_c->value(c)));
 		};
 		auto [alpha_LL, indices_to_insert] = clique_traversal::run(n, view_factory, kernel);
 		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
@@ -398,7 +397,7 @@ public:
 		std::vector<double> LL_after_alpha(n);
 		for (size_t i = 0; i < n; ++i) {
 			const double proposed = _alpha_c->value(i);
-			const double logH     = alpha_LL[i][1] - alpha_LL[i][0] + _alpha_c->getLogDensityRatio(i);
+			const double logH = alpha_LL[i][1] - alpha_LL[i][0] + _alpha_c->getLogDensityRatio(i);
 			if (_alpha_c->acceptOrReject(logH, coretools::TRange(i))) {
 				_set_transition_grid(i, _candidate_grid<true>(i, proposed));
 				LL_after_alpha[i] = alpha_LL[i][1];
@@ -417,8 +416,9 @@ public:
 		// This region is read-only: it opens a clique view only to score the candidate grid, and
 		// writes nothing. Checked once here, against the whole collected result, rather than once
 		// per clique inside the loop.
-		DEBUG_ASSERT(std::all_of(nu_indices_to_insert.begin(), nu_indices_to_insert.end(),
-		                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
+		DEBUG_ASSERT(
+		    std::all_of(nu_indices_to_insert.begin(), nu_indices_to_insert.end(),
+			            [](const auto &clique_inserts) { return clique_inserts.empty(); }));
 
 		for (size_t i = 0; i < n; ++i) {
 			const double proposed = _log_nu_c->value(i);
@@ -487,7 +487,7 @@ public:
 		// cliques in whatever order the schedule handed them out, so the sum's rounding would
 		// move with the thread count and the trace would stop being reproducible from its seed.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
-		auto kernel = [this](size_t c, TNodeStateCliqueView &states) {
+		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
 			return node_state_density::log_density_of_clique(
 			    _topology(), transition_grid(c), states,
 			    [this](size_t node) { return get_binned_branch_length(node); });
@@ -496,8 +496,9 @@ public:
 
 		// This pass is read-only, so every view defers nothing. Checked once here, against the
 		// whole collected result, rather than once per clique inside the loop.
-		DEBUG_ASSERT(std::all_of(inserts.begin(), inserts.end(),
-		                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
+		DEBUG_ASSERT(std::all_of(inserts.begin(), inserts.end(), [](const auto &clique_inserts) {
+			return clique_inserts.empty();
+		}));
 
 		// In clique order, so the answer does not depend on how the cliques were shared out.
 		return coretools::containerSum(per_clique);
@@ -512,7 +513,7 @@ public:
 		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
 
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
-		auto kernel = [this](size_t c, TNodeStateCliqueView &states) {
+		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
 			_initialize_clique_from_children(c, states);
 		};
 		const auto indices_to_insert = clique_traversal::run(n_cliques(), view_factory, kernel);

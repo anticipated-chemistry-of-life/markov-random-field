@@ -93,7 +93,7 @@ TEST(TAssignmentStationary_Tests, update_samples_the_target_distribution) {
 	const TWeightScorer scorer;
 
 	constexpr size_t n_updates = 400000;
-	constexpr size_t n_burnin = 1000;
+	constexpr size_t n_burnin  = 1000;
 	std::map<State, size_t> counts;
 	for (size_t update = 0; update < n_updates + n_burnin; ++update) {
 		run.update_all_assignments(scorer, 0.3);

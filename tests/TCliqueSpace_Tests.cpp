@@ -26,8 +26,8 @@ constexpr size_t MOLECULES = 1;
 
 // The two trees, at the shape the fixtures run: a clique of the species tree is named by a molecule
 // leaf, and a clique of the molecule tree by a species leaf.
-constexpr size_t N_SPECIES_LEAVES   = 7;
-constexpr size_t N_MOLECULE_LEAVES  = 5;
+constexpr size_t N_SPECIES_LEAVES  = 7;
+constexpr size_t N_MOLECULE_LEAVES = 5;
 
 TCliqueSpace<> species_tree_space() {
 	return TCliqueSpace<>({N_SPECIES_LEAVES, N_MOLECULE_LEAVES}, SPECIES);

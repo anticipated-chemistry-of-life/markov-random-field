@@ -47,21 +47,20 @@ struct TNotifierStats {
 /// - draw its data from a simulated field and write it out (`simulate_from_Y`, `write_simulated`);
 /// - append whatever it has to report to a shared stats collector (`contribute_stats`).
 ///
-/// Not part of this concept: the per-cell hook the block update reads (TLotus::calculate_LL_update_Y,
-/// TSimpleErrorModel::probabilities_for_Y_update, TMSMSData::per_cell_factor) -- their shapes
-/// still differ source to source -- and the parameter-move dispatch, which stattools forces to be
-/// one overload per parameter type.
-template <typename T>
-concept DataSource =
-    requires(T &s, TDataModel *box, bool simulate, const TFieldStorage &Y,
-             const std::string &prefix, TNotifierStats &stats) {
-	    { s.initialize(box, simulate) } -> std::same_as<void>;
-	    { s.guess_initial_values(Y) } -> std::same_as<void>;
-	    { s.log_likelihood() } -> std::convertible_to<double>;
-	    { s.simulate_from_Y(Y) } -> std::same_as<void>;
-	    { s.write_simulated(prefix) } -> std::same_as<void>;
-	    { s.contribute_stats(stats) } -> std::same_as<void>;
-    };
+/// Not part of this concept: the per-cell hook the block update reads
+/// (TLotus::calculate_LL_update_Y, TSimpleErrorModel::probabilities_for_Y_update,
+/// TMSMSData::per_cell_factor) -- their shapes still differ source to source -- and the
+/// parameter-move dispatch, which stattools forces to be one overload per parameter type.
+template<typename T>
+concept DataSource = requires(T &s, TDataModel *box, bool simulate, const TFieldStorage &Y,
+                              const std::string &prefix, TNotifierStats &stats) {
+	{ s.initialize(box, simulate) } -> std::same_as<void>;
+	{ s.guess_initial_values(Y) } -> std::same_as<void>;
+	{ s.log_likelihood() } -> std::convertible_to<double>;
+	{ s.simulate_from_Y(Y) } -> std::same_as<void>;
+	{ s.write_simulated(prefix) } -> std::same_as<void>;
+	{ s.contribute_stats(stats) } -> std::same_as<void>;
+};
 
 // The list of compiled-in per-cell data sources, one X(member_name, Type) row per source. A
 // consumer that wants "for each compiled-in source, do X" defines its own X and expands

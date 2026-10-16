@@ -212,9 +212,8 @@ public:
 		};
 	}
 
-	[[nodiscard]] block_update::TLeafPairFactors factors(TRow &row, size_t molecule_leaf,
-	                                                     bool species_parent,
-	                                                     bool molecule_parent) const {
+	[[nodiscard]] block_update::TLeafPairFactors
+	factors(TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) const {
 		const IndexArray cell{row.species_leaf, molecule_leaf};
 		// What the row settled once has to be what this cell would have asked for.
 		DEBUG_ASSERT(_molecule_tree.clique_of_cell(cell) == row.molecule_clique);
@@ -237,8 +236,7 @@ public:
 #ifdef USE_LOTUS
 		const TLotus &lotus = _data_model.get_lotus();
 		std::array<double, 2> prob_lotus{1.0, 1.0};
-		lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(row.lotus_cursor, cell),
-		                            prob_lotus);
+		lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(row.lotus_cursor, cell), prob_lotus);
 		leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
 #endif
 #ifdef USE_SIMPLE_ERROR_MODEL

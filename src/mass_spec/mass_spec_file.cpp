@@ -23,8 +23,8 @@ const std::vector<std::string> HEADER = {"species", "extract", "feature", "molec
 
 /// A calibration score is a density, so it must be a positive finite number.
 [[nodiscard]] double parse_score(std::string_view text, const std::string &filename, size_t line) {
-	double score   = 0.0;
-	const auto end = text.data() + text.size();
+	double score         = 0.0;
+	const auto end       = text.data() + text.size();
 	const auto [ptr, ec] = std::from_chars(text.data(), end, score);
 	if (ec != std::errc{} || ptr != end || !std::isfinite(score) || score <= 0.0) {
 		throw coretools::TUserError("Line ", line, " of the mass-spec file '", filename,
@@ -123,7 +123,7 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 	for (; !file.empty(); file.popFront()) {
 		const std::string species_name(file.get(0));
 		const std::string molecule_name(file.get(3));
-		const double score = parse_score(file.get(4), filename, file.curLine());
+		const double score  = parse_score(file.get(4), filename, file.curLine());
 		std::string row_key = species_name;
 		for (const size_t column : {1, 2, 3}) {
 			row_key.push_back('\t');
@@ -152,7 +152,7 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		auto &feature = run.features[feature_it->second];
 
 		// a skipped molecule is no candidate, but its score still sets the reference
-		feature.reference = std::max(feature.reference, score);
+		feature.reference      = std::max(feature.reference, score);
 		const auto molecule_it = molecule_index.find(molecule_name);
 		if (molecule_it == molecule_index.end()) {
 			skipped_molecules.insert(molecule_name);

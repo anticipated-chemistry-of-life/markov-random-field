@@ -255,7 +255,7 @@ public:
 		size_t _position                 = 0;
 #ifndef NDEBUG
 		size_t _last_query = 0;
-		bool _queried       = false;
+		bool _queried      = false;
 #endif
 
 	public:

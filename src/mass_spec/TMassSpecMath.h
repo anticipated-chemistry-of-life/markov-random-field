@@ -54,10 +54,9 @@ namespace mass_spec_math {
 /// `runs`: the product over the runs of their detection terms. `{1, 1}` for a species without
 /// runs, so mass spec changes nothing where there is no data.
 template<typename FilterProbability>
-[[nodiscard]] std::array<double, 2> per_cell_factor(coretools::TConstView<TMassSpecRun> runs,
-                                                    uint32_t molecule,
-                                                    const FilterProbability &filter_probability,
-                                                    double contamination) {
+[[nodiscard]] std::array<double, 2>
+per_cell_factor(coretools::TConstView<TMassSpecRun> runs, uint32_t molecule,
+                const FilterProbability &filter_probability, double contamination) {
 	std::array<double, 2> factor{1.0, 1.0};
 	for (const auto &run : runs) {
 		if (run.empty()) { continue; }

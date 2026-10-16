@@ -1,11 +1,11 @@
 #include "./msms_data.h"
-#include "mass_spec/mass_spec_file.h"
 #include "TMarkovField.h"
 #include "Types.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TLog.h"
+#include "mass_spec/mass_spec_file.h"
 #include "storages/storage_backend.h"
 #include <array>
 #include <cstddef>
@@ -33,10 +33,10 @@ void TMSMSData::_load_runs() {
 		throw coretools::TUserError("--ms_data is required. This build carries the mass spec data "
 		                            "source, so it needs the mass-spec file.");
 	}
-	auto loaded = mass_spec_file::load(filename, leaf_names(*_species_tree),
-	                                   leaf_names(*_molecules_tree),
-	                                   ProgramOptions::MS_UNKNOWN_FRACTION);
-	_msms_data  = std::move(loaded.runs_per_species);
+	auto loaded =
+	    mass_spec_file::load(filename, leaf_names(*_species_tree), leaf_names(*_molecules_tree),
+		                     ProgramOptions::MS_UNKNOWN_FRACTION);
+	_msms_data = std::move(loaded.runs_per_species);
 
 	_species_has_ms_data.assign(_number_of_species, false);
 	size_t n_runs     = 0;
@@ -61,8 +61,7 @@ void TMSMSData::_load_runs() {
 	log.list("Skipped ", report.skipped_molecules,
 	         " distinct molecules that are not molecule leaves. Their scores still set their "
 	         "features' reference.");
-	log.list("Did not load ", report.features_not_loaded,
-	         " features that have no candidate left.");
+	log.list("Did not load ", report.features_not_loaded, " features that have no candidate left.");
 	log.list("Clamped ", report.clamped_candidates,
 	         " candidates whose relative calibration score is below the floor of the last bin.");
 	log.list("SIRIUS keeps at most 200 candidates per feature upstream, so a feature can lack "
@@ -154,7 +153,7 @@ double TMSMSData::ll_ratio_after_filter_move(size_t index) const {
 		// filter only enters the likelihood when the molecule is present
 		if (!y) { continue; }
 		for (const auto &run : get_ms_data_for_species(species_idx)) {
-			if (run.filter_index() != filter_index) { continue; }   // not this extraction
+			if (run.filter_index() != filter_index) { continue; } // not this extraction
 			const bool ms = run.is_detected(molecule_idx);
 			if (ms) {
 				log_lik[1] += new_p_pos;

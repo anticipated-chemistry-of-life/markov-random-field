@@ -48,8 +48,8 @@ template<typename F> void expect_user_error(F &&f, const std::string &context) {
 	try {
 		f();
 	} catch (coretools::err::TError &e) {
-		EXPECT_FALSE(e.isDevError()) << context << ": expected a user error, got a dev error: "
-		                             << e.what();
+		EXPECT_FALSE(e.isDevError())
+		    << context << ": expected a user error, got a dev error: " << e.what();
 		return;
 	}
 	ADD_FAILURE() << context << ": expected a user error, got none";
@@ -85,8 +85,8 @@ TEST(TMassSpecFile_Tests, a_ratio_below_the_floor_takes_bin_255_and_counts_as_cl
 }
 
 TEST(TMassSpecFile_Tests, every_feature_starts_at_the_unknown_molecule_with_the_unknown_bin) {
-	const std::string rows = row("Ilex", "e1", "f1", "caffeine", "1") +
-	                         row("Ilex", "e1", "f2", "quercetin", "1");
+	const std::string rows =
+	    row("Ilex", "e1", "f1", "caffeine", "1") + row("Ilex", "e1", "f2", "quercetin", "1");
 	for (const auto &[unknown_fraction, bin] : std::map<double, uint32_t>{{0.1, 37}, {1.0, 0}}) {
 		const auto loaded = load(rows, unknown_fraction);
 		const auto &run   = loaded.runs_per_species.at(0)[0];
@@ -100,16 +100,12 @@ TEST(TMassSpecFile_Tests, every_feature_starts_at_the_unknown_molecule_with_the_
 }
 
 TEST(TMassSpecFile_Tests, skipped_species_and_molecules_count_once_however_many_rows_name_them) {
-	const auto loaded = load(row("Pinus", "e1", "f1", "caffeine", "1") +
-	                         row("Pinus", "e2", "f1", "caffeine", "1") +
-	                         row("Abies", "e1", "f1", "caffeine", "1") +
-	                         row("Ilex", "e1", "f1", "caffeine", "1") +
-	                         row("Ilex", "e1", "f1", "aspirin", "0.5") +
-	                         row("Ilex", "e1", "f2", "aspirin", "0.5") +
-	                         row("Ilex", "e1", "f2", "quercetin", "1") +
-	                         row("Quercus", "e1", "f1", "aspirin", "0.5") +
-	                         row("Quercus", "e1", "f1", "morphine", "0.5") +
-	                         row("Quercus", "e1", "f1", "rutin", "1"));
+	const auto loaded = load(
+	    row("Pinus", "e1", "f1", "caffeine", "1") + row("Pinus", "e2", "f1", "caffeine", "1") +
+	    row("Abies", "e1", "f1", "caffeine", "1") + row("Ilex", "e1", "f1", "caffeine", "1") +
+	    row("Ilex", "e1", "f1", "aspirin", "0.5") + row("Ilex", "e1", "f2", "aspirin", "0.5") +
+	    row("Ilex", "e1", "f2", "quercetin", "1") + row("Quercus", "e1", "f1", "aspirin", "0.5") +
+	    row("Quercus", "e1", "f1", "morphine", "0.5") + row("Quercus", "e1", "f1", "rutin", "1"));
 
 	EXPECT_EQ(loaded.report.skipped_species, 2);
 	EXPECT_EQ(loaded.report.skipped_molecules, 2);
@@ -128,10 +124,9 @@ TEST(TMassSpecFile_Tests, a_skipped_molecule_sets_its_features_reference) {
 }
 
 TEST(TMassSpecFile_Tests, a_feature_with_only_skipped_candidates_is_not_loaded_and_is_counted) {
-	const auto loaded = load(row("Ilex", "e1", "f1", "aspirin", "1") +
-	                         row("Ilex", "e1", "f1", "morphine", "0.5") +
-	                         row("Ilex", "e1", "f2", "caffeine", "1") +
-	                         row("Quercus", "e1", "f1", "aspirin", "1"));
+	const auto loaded =
+	    load(row("Ilex", "e1", "f1", "aspirin", "1") + row("Ilex", "e1", "f1", "morphine", "0.5") +
+		     row("Ilex", "e1", "f2", "caffeine", "1") + row("Quercus", "e1", "f1", "aspirin", "1"));
 
 	EXPECT_EQ(loaded.report.features_not_loaded, 2);
 	const auto &ilex = loaded.runs_per_species.at(0);
@@ -141,10 +136,9 @@ TEST(TMassSpecFile_Tests, a_feature_with_only_skipped_candidates_is_not_loaded_a
 }
 
 TEST(TMassSpecFile_Tests, two_extracts_are_two_runs_and_a_feature_id_is_one_feature_per_run) {
-	const auto loaded = load(row("Ilex", "e1", "f1", "caffeine", "1") +
-	                         row("Quercus", "e1", "f1", "rutin", "1") +
-	                         row("Ilex", "e2", "f1", "theobromine", "1") +
-	                         row("Ilex", "e1", "f1", "quercetin", "1"));
+	const auto loaded = load(
+	    row("Ilex", "e1", "f1", "caffeine", "1") + row("Quercus", "e1", "f1", "rutin", "1") +
+	    row("Ilex", "e2", "f1", "theobromine", "1") + row("Ilex", "e1", "f1", "quercetin", "1"));
 
 	const auto &ilex = loaded.runs_per_species.at(0);
 	ASSERT_EQ(ilex.size(), 2);
@@ -167,16 +161,15 @@ TEST(TMassSpecFile_Tests, a_header_other_than_the_five_columns_in_order_is_an_er
 	      "species\textract\tfeature\tmolecule\n",
 	      "species\textract\tfeature\tmolecule\tcalibration_score\tx\n"}) {
 		const TTempFile file("ms.tsv", header + body);
-		expect_user_error(
-		    [&] { (void)mass_spec_file::load(file.path(), SPECIES, MOLECULES, 0.1); },
-		    "header " + header);
+		expect_user_error([&] { (void)mass_spec_file::load(file.path(), SPECIES, MOLECULES, 0.1); },
+		                  "header " + header);
 	}
 }
 
 TEST(TMassSpecFile_Tests, a_duplicate_row_is_an_error_even_where_it_would_be_skipped) {
-	for (const std::string &duplicated : {row("Ilex", "e1", "f1", "caffeine", "0.5"),
-	                                      row("Ilex", "e1", "f1", "aspirin", "0.5"),
-	                                      row("Pinus", "e1", "f1", "caffeine", "0.5")}) {
+	for (const std::string &duplicated :
+	     {row("Ilex", "e1", "f1", "caffeine", "0.5"), row("Ilex", "e1", "f1", "aspirin", "0.5"),
+	      row("Pinus", "e1", "f1", "caffeine", "0.5")}) {
 		expect_user_error(
 		    [&] { (void)load(duplicated + row("Ilex", "e1", "f1", "rutin", "1") + duplicated); },
 		    "row " + duplicated);
@@ -188,7 +181,7 @@ TEST(TMassSpecFile_Tests, a_score_that_is_not_a_positive_finite_number_is_an_err
 		expect_user_error(
 		    [&] {
 			    (void)load(row("Ilex", "e1", "f1", "caffeine", "1") +
-			               row("Ilex", "e1", "f1", "rutin", score));
+				           row("Ilex", "e1", "f1", "rutin", score));
 		    },
 		    "score '" + score + "'");
 	}

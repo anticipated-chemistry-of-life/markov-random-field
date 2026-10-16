@@ -32,11 +32,11 @@
 
 #pragma once
 
-#include "lotus/TLotus.h"
 #include "TMarkovField.h"
 #include "Types.h"
 #include "constants.h"
 #include "data_sources/data_source.h"
+#include "lotus/TLotus.h"
 #include "mass_spec/msms_data.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "simple_error_model/TSimpleErrorModel.h"
@@ -58,7 +58,7 @@ struct TDataSources {
 	TSimpleErrorModel::TypeParamEpsilon *epsilon_simple_model = nullptr;
 #endif
 #ifdef USE_MS_DATA
-	TMSMSData::TypeParamMassSpecFilter *mass_spec_filters   = nullptr;
+	TMSMSData::TypeParamMassSpecFilter *mass_spec_filters  = nullptr;
 	TMSMSData::TypeParamContamination *contamination_proba = nullptr;
 #endif
 };
@@ -102,7 +102,7 @@ private:
 	// Not a DataSource (see the file comment); still an ordinary member TDataModel constructs,
 	// initializes and sweeps by hand.
 	TMSMSData _msms_data;
-	TMSMSData::TypeParamMassSpecFilter *_mass_spec_filters   = nullptr;
+	TMSMSData::TypeParamMassSpecFilter *_mass_spec_filters  = nullptr;
 	TMSMSData::TypeParamContamination *_contamination_proba = nullptr;
 #endif
 
@@ -195,7 +195,7 @@ public:
 	[[nodiscard]] const TMarkovField &get_markov_field() const { return _markov_field; }
 	// Accessor pair generated for every source in ACOL_DATA_SOURCES.
 #define ACOL_DATA_SOURCE_ACCESSOR(member, Type)                                                    \
-	[[nodiscard]] const Type &get_##member() const { return _##member; }                             \
+	[[nodiscard]] const Type &get_##member() const { return _##member; }                           \
 	[[nodiscard]] Type &get_##member() { return _##member; }
 	ACOL_DATA_SOURCES(ACOL_DATA_SOURCE_ACCESSOR)
 #undef ACOL_DATA_SOURCE_ACCESSOR

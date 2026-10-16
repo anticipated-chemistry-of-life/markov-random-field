@@ -71,9 +71,9 @@ std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
 			for (const bool z_m : {false, true}) {
 				const double link = brute_force_prob_y_is_one(z_s, z_m, omega);
 				const double w    = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m) *
-				                 (y ? link : 1.0 - link) * lotus[static_cast<size_t>(y)] *
-				                 simple_error[static_cast<size_t>(y)] *
-				                 mass_spec[static_cast<size_t>(y)];
+				                    (y ? link : 1.0 - link) * lotus[static_cast<size_t>(y)] *
+				                    simple_error[static_cast<size_t>(y)] *
+				                    mass_spec[static_cast<size_t>(y)];
 				weight[state_index(y, z_s, z_m)] = w;
 				total += w;
 			}
@@ -94,8 +94,8 @@ std::array<coretools::Probability, 2> says_nothing() { return as_probabilities({
 
 /// The range of values across the open interval the error probability is constrained to.
 const std::vector<double> &omega_values() {
-	static const std::vector<double> values = {1e-6, 0.001, 0.01, 0.05, 0.1, 0.2,
-	                                          0.25, 0.3,   0.4,  0.45, 0.499};
+	static const std::vector<double> values = {1e-6, 0.001, 0.01, 0.05, 0.1,  0.2,
+	                                           0.25, 0.3,   0.4,  0.45, 0.499};
 	return values;
 }
 
@@ -346,7 +346,8 @@ TEST(FieldMath_Tests, six_counters_match_a_naive_per_cell_recomputation) {
 	// the comparison is only worth anything if every one of the six counters is live
 	for (size_t bucket = 0; bucket < TLinkCounters::n_buckets; ++bucket) {
 		for (const bool y : {false, true}) {
-			ASSERT_GT(counters.count(bucket, y), 0u) << "bucket " << bucket << ", field state " << y;
+			ASSERT_GT(counters.count(bucket, y), 0u)
+			    << "bucket " << bucket << ", field state " << y;
 		}
 	}
 
@@ -462,9 +463,9 @@ TEST(FieldMath_Tests, the_identity_has_a_blind_spot_that_the_shared_rate_constra
 	// The claim ADR-0005 makes, as a test. Corrupt the two trees at *different* rates -- omega_s =
 	// 0.05, omega_m = 0.2 -- so the four link probabilities are P_11 = 0.76, P_10 = 0.19,
 	// P_01 = 0.04, P_00 = 0.01. Bucketing pools the two mixed cells, and at the mix that lands the
-	// pooled rate on their geometric mean, sqrt(0.19 * 0.04) = 0.08718, the identity P_1^2 = P_0 P_2
-	// holds *exactly* on a model it should reject. Such a mix always exists, because the geometric
-	// mean of the two mixed rates always lies between them.
+	// pooled rate on their geometric mean, sqrt(0.19 * 0.04) = 0.08718, the identity P_1^2 = P_0
+	// P_2 holds *exactly* on a model it should reject. Such a mix always exists, because the
+	// geometric mean of the two mixed rates always lies between them.
 	const auto counters = counters_from({{{1000, 99000}, {8718, 91282}, {76000, 24000}}});
 	const double p_0    = empirical_prob(counters, 0);
 	const double p_1    = empirical_prob(counters, 1);
@@ -665,9 +666,8 @@ TEST(FieldMath_Tests, block_probabilities_match_brute_force_enumeration) {
 				    as_probabilities(mass_spec));
 				const auto want = brute_force_block(p_s, p_m, w, lotus, simple_error, mass_spec);
 				for (size_t i = 0; i < 8; ++i) {
-					EXPECT_NEAR(got[i], want[i], 1e-14)
-					    << "state " << i << ", omega = " << w << ", p_s = " << p_s
-					    << ", p_m = " << p_m;
+					EXPECT_NEAR(got[i], want[i], 1e-14) << "state " << i << ", omega = " << w
+					                                    << ", p_s = " << p_s << ", p_m = " << p_m;
 				}
 			}
 		}
@@ -682,7 +682,7 @@ TEST(FieldMath_Tests, block_probabilities_are_normalised) {
 		const auto block = block_probabilities<TLinkPolicy>(
 		    coretools::P(0.3), coretools::P(0.6), TErrorProbability(w), as_probabilities(lotus),
 		    as_probabilities(simple_error), as_probabilities(mass_spec));
-		double sum       = 0.0;
+		double sum = 0.0;
 		for (const double p : block) {
 			EXPECT_GE(p, 0.0) << "omega = " << w;
 			sum += p;
@@ -741,7 +741,7 @@ TEST(FieldMath_Tests, the_block_leaves_the_tree_priors_alone_when_the_data_says_
 					for (const bool z_m : {false, true}) {
 						const double want = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
 						const double got  = block[state_index(false, z_s, z_m)] +
-						                   block[state_index(true, z_s, z_m)];
+						                    block[state_index(true, z_s, z_m)];
 						EXPECT_NEAR(got, want, 1e-14)
 						    << "omega = " << w << ", p_s = " << p_s << ", p_m = " << p_m
 						    << ", Z_s = " << z_s << ", Z_m = " << z_m;
@@ -787,11 +787,11 @@ TEST(FieldMath_Tests, the_block_rejects_a_configuration_with_no_mass) {
 	// zero is a perfectly good probability, so the type lets this through and the block itself
 	// has to notice that nothing is left to normalise
 	const std::array<double, 2> nothing = {0.0, 0.0};
-	EXPECT_THROW(static_cast<void>(block_probabilities<TLinkPolicy>(
-	                 coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
-	                 as_probabilities(nothing), as_probabilities(nothing),
-	                 as_probabilities(nothing))),
-	             std::invalid_argument);
+	EXPECT_THROW(
+	    static_cast<void>(block_probabilities<TLinkPolicy>(
+	        coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1), as_probabilities(nothing),
+	        as_probabilities(nothing), as_probabilities(nothing))),
+	    std::invalid_argument);
 }
 
 //-----------------------------------

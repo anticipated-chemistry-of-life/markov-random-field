@@ -216,9 +216,10 @@ public:
 		             "(> 0). A rate of 20 puts the prior mean at 0.05\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
-		std::cout << "--ms_data                      Mass-spec file, tab-separated, with the header "
-		             "'species extract feature molecule calibration_score' (required in a build "
-		             "with mass spec, letter 'm')\n";
+		std::cout
+		    << "--ms_data                      Mass-spec file, tab-separated, with the header "
+		       "'species extract feature molecule calibration_score' (required in a build "
+		       "with mass spec, letter 'm')\n";
 		std::cout << "--ms_unknown_fraction          Relative calibration score of the unknown "
 		             "molecule, in (0,1]. Default 0.1\n";
 	}

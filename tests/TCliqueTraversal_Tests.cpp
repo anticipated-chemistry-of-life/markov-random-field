@@ -115,7 +115,7 @@ TEST(CliqueTraversal, a_void_kernel_gathers_no_result_only_inserts) {
 	for (size_t clique = 0; clique < n_cliques; ++clique) {
 		IndexArray cell = space.index_of(clique);
 		for (const size_t node : topology.internal_nodes()) {
-			cell[SPECIES]                                          = node;
+			cell[SPECIES]                                         = node;
 			expected[Z.get_linear_index_in_container_space(cell)] = 1;
 		}
 	}
@@ -174,7 +174,7 @@ TEST(CliqueTraversal, deferred_inserts_reproduce_what_writing_each_clique_direct
 /// finished.
 TEST(CliqueTraversal, gathers_the_same_result_whatever_the_thread_count) {
 	std::mt19937_64 rng(20260917);
-	const TPhylogeny topology = build_phylogeny(phylo::random_forest(rng, 9, 2));
+	const TPhylogeny topology  = build_phylogeny(phylo::random_forest(rng, 9, 2));
 	// A prime clique count, so a dynamic four-way split can never land evenly and a result at the
 	// wrong index is not masked by every thread happening to get the same share.
 	constexpr size_t N_CLIQUES = 37;

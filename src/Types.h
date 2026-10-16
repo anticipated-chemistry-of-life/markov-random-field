@@ -46,16 +46,16 @@ static_assert(UseLotus || UseSimpleErrorModel,
               "and/or 's' to `pixi run build`.");
 
 // Parameter types
-using TypeGamma                    = coretools::StrictlyPositive;
-using TypeErrorRate                = coretools::ZeroOneOpen;
-using TypeEpsilonSimpleModel       = coretools::ZeroOneOpen;
-using TypeAlpha                    = coretools::Probability;
-using TypeLogNu                    = coretools::Unbounded;
-using TypeNu                       = coretools::StrictlyPositive;
-using TypeMeanLogNu                = coretools::Unbounded;
-using TypeVarLogNu                 = coretools::StrictlyPositive;
-using TypeBinnedBranchLengths      = coretools::UnsignedInt8WithMax<0>;
-using TypeFilterProbability        = coretools::UnsignedInt8WithMax<coretools::toHash("filter_proba")>;
+using TypeGamma               = coretools::StrictlyPositive;
+using TypeErrorRate           = coretools::ZeroOneOpen;
+using TypeEpsilonSimpleModel  = coretools::ZeroOneOpen;
+using TypeAlpha               = coretools::Probability;
+using TypeLogNu               = coretools::Unbounded;
+using TypeNu                  = coretools::StrictlyPositive;
+using TypeMeanLogNu           = coretools::Unbounded;
+using TypeVarLogNu            = coretools::StrictlyPositive;
+using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
+using TypeFilterProbability   = coretools::UnsignedInt8WithMax<coretools::toHash("filter_proba")>;
 using TypeContaminationProbability = coretools::ZeroOneOpen;
 
 // Gamma
@@ -75,7 +75,7 @@ using PriorOnErrorRate =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeErrorRate, 1>;
 using SpecErrorRate =
     stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
-                         PriorOnErrorRate>;
+	                     PriorOnErrorRate>;
 
 // Epsilon of the simple error model
 // The rate at which the simple error model data D misreports the latent state Y. Default prior is
@@ -89,8 +89,8 @@ using PriorOnEpsilonSimpleModel =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeEpsilonSimpleModel, 1>;
 using SpecEpsilonSimpleModel =
     stattools::ParamSpec<TypeEpsilonSimpleModel,
-                         stattools::Hash<coretools::toHash("epsilon_simple_model")>,
-                         PriorOnEpsilonSimpleModel>;
+	                     stattools::Hash<coretools::toHash("epsilon_simple_model")>,
+	                     PriorOnEpsilonSimpleModel>;
 
 // Omega, the error probability
 // The rate at which one tree field cell is corrupted before the two are reconciled into the field
@@ -109,10 +109,10 @@ using SpecEpsilonSimpleModel =
 using TypeErrorProbability = coretools::MinMaxVariable<coretools::toHash("omega")>;
 using PriorOnErrorProbability =
     stattools::prior::TExponentialFixed<stattools::TParameterBase, TypeErrorProbability, 1,
-                                        /*TruncatedTop=*/true, /*TruncatedBottom=*/true>;
+	                                    /*TruncatedTop=*/true, /*TruncatedBottom=*/true>;
 using SpecErrorProbability =
     stattools::ParamSpec<TypeErrorProbability, stattools::Hash<coretools::toHash("omega")>,
-                         PriorOnErrorProbability>;
+	                     PriorOnErrorProbability>;
 
 // Alpha
 using PriorOnAlpha = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeAlpha, 1>;
@@ -124,13 +124,13 @@ using PriorOnMeanLogNu =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeMeanLogNu, 1>;
 using SpecMeanLogNu =
     stattools::ParamSpec<TypeMeanLogNu, stattools::Hash<coretools::toHash("mean_log_nu")>,
-                         PriorOnMeanLogNu>;
+	                     PriorOnMeanLogNu>;
 
 // Var Nu
 using PriorOnVarLogNu = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeVarLogNu, 1>;
 using SpecVarLogNu =
     stattools::ParamSpec<TypeVarLogNu, stattools::Hash<coretools::toHash("var_log_nu")>,
-                         PriorOnVarLogNu>;
+	                     PriorOnVarLogNu>;
 
 // Log Nu
 using PriorOnLogNu = stattools::prior::TNormalInferred<stattools::TParameterBase, TypeLogNu, 1,
@@ -143,7 +143,7 @@ using PriorOnBinnedBranches =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeBinnedBranchLengths, 1>;
 using SpecBinnedBranches =
     stattools::ParamSpec<TypeBinnedBranchLengths, stattools::Hash<coretools::toHash("bin_branch")>,
-                         PriorOnBinnedBranches>;
+	                     PriorOnBinnedBranches>;
 
 // Probability to pass mass spec filter.
 //
@@ -156,15 +156,15 @@ using PriorOnMassSpecFilter =
     stattools::prior::TUniformFixed<stattools::TParameterBase, TypeFilterProbability, 1>;
 using SpecMassSpecFilter =
     stattools::ParamSpec<TypeFilterProbability, stattools::Hash<coretools::toHash("filter_proba")>,
-                         PriorOnMassSpecFilter>;
+	                     PriorOnMassSpecFilter>;
 
 // Contamination probability in MassSpec : Y = 0 and MSData = 1
 using PriorOnContaminationProba =
     stattools::prior::TBetaFixed<stattools::TParameterBase, TypeContaminationProbability, 1>;
 using SpecContaminationProba =
     stattools::ParamSpec<TypeContaminationProbability,
-                         stattools::Hash<coretools::toHash("contamination_proba")>,
-                         PriorOnContaminationProba>;
+	                     stattools::Hash<coretools::toHash("contamination_proba")>,
+	                     PriorOnContaminationProba>;
 
 // The likelihood box that anchors the model in the stattools DAG. It owns the Markov field and
 // every compiled-in data source; see TDataModel.h.
@@ -177,7 +177,7 @@ constexpr static size_t NumDimMarkovField =
 using PriorOnMarkovField = TTree;
 using SpecMarkovField =
     stattools::ParamSpec<TypeMarkovField, stattools::Hash<coretools::toHash("MRF")>,
-                         PriorOnMarkovField>;
+	                     PriorOnMarkovField>;
 using ParamMarkovField  = stattools::TParameter<SpecMarkovField, TDataModel>;
 using MarkovFieldParams = std::vector<std::unique_ptr<ParamMarkovField>>;
 

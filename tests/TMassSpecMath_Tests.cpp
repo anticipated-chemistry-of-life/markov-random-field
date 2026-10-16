@@ -1,7 +1,7 @@
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Main/TRandomGenerator.h"
-#include "mass_spec/feature_likelihood.h"
 #include "mass_spec/TMassSpecMath.h"
+#include "mass_spec/feature_likelihood.h"
 #include "mass_spec/msms_run.h"
 #include "storages/storage_backend.h"
 #include "gtest/gtest.h"
@@ -82,8 +82,8 @@ coretools::TNestedVector<TMassSpecRun> make_runs_per_species() {
 	run_b.set_filter_index(1);
 	run_b.set_current_assignment(0, TFeatureLikelihood(3, 110));
 
-	auto run_c = make_run({{TFeatureLikelihood(0, 100), TFeatureLikelihood(1, 50)},
-	                       {TFeatureLikelihood(5, 30)}});
+	auto run_c = make_run(
+	    {{TFeatureLikelihood(0, 100), TFeatureLikelihood(1, 50)}, {TFeatureLikelihood(5, 30)}});
 	run_c.set_current_assignment(0, TFeatureLikelihood(0, 100));
 	run_c.set_current_assignment(1, TFeatureLikelihood(5, 30));
 
@@ -99,11 +99,10 @@ coretools::TNestedVector<TMassSpecRun> make_runs_per_species() {
 TEST(TMassSpecMath_Tests, detected_query_agrees_with_a_scan_after_accepted_moves) {
 	coretools::instances::randomGenerator().setSeed(7, true);
 	// overlapping candidates, so every move type, swaps included, is reachable
-	auto run = make_run({{TFeatureLikelihood(1, 100), TFeatureLikelihood(2, 120)},
-	                     {TFeatureLikelihood(1, 90), TFeatureLikelihood(2, 80),
-	                      TFeatureLikelihood(3, 70)},
-	                     {TFeatureLikelihood(2, 60), TFeatureLikelihood(3, 50),
-	                      TFeatureLikelihood(5, 40)}});
+	auto run = make_run(
+	    {{TFeatureLikelihood(1, 100), TFeatureLikelihood(2, 120)},
+		 {TFeatureLikelihood(1, 90), TFeatureLikelihood(2, 80), TFeatureLikelihood(3, 70)},
+		 {TFeatureLikelihood(2, 60), TFeatureLikelihood(3, 50), TFeatureLikelihood(5, 40)}});
 	run.set_current_assignment(0, TFeatureLikelihood(1, 100));
 
 	const TAcceptAll scorer;
@@ -136,7 +135,7 @@ TEST(TMassSpecMath_Tests, per_cell_factor_is_the_change_in_the_whole_log_likelih
 	const auto runs_per_species = make_runs_per_species();
 	// present cells both detected and not, in runs of both filters, and in the species without
 	// runs
-	const std::set<Cell> field = {{0, 1}, {0, 2}, {1, 5}, {1, 7}, {2, 3}};
+	const std::set<Cell> field  = {{0, 1}, {0, 2}, {1, 5}, {1, 7}, {2, 3}};
 
 	for (size_t species = 0; species < NUMBER_OF_SPECIES; ++species) {
 		for (uint32_t molecule = 0; molecule < NUMBER_OF_MOLECULES; ++molecule) {
@@ -146,9 +145,9 @@ TEST(TMassSpecMath_Tests, per_cell_factor_is_the_change_in_the_whole_log_likelih
 			present.insert({species, molecule});
 			const double change =
 			    mass_spec_math::log_likelihood(runs_per_species, make_field(present),
-			                                   filter_probability, CONTAMINATION) -
+				                               filter_probability, CONTAMINATION) -
 			    mass_spec_math::log_likelihood(runs_per_species, make_field(absent),
-			                                   filter_probability, CONTAMINATION);
+				                               filter_probability, CONTAMINATION);
 
 			const auto factor = mass_spec_math::per_cell_factor(
 			    runs_per_species.at(species), molecule, filter_probability, CONTAMINATION);

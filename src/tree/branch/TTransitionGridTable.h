@@ -77,8 +77,9 @@ concept TransitionGridLike = requires(const T &process, size_t bin, bool from, b
 /// the contiguous layout worth it (see the file comment).
 class TTransitionGridTable {
 private:
-	std::vector<std::array<double, 4>> _matrices; ///< clique `c`, bin `b` -> `_matrices[c*_n_bins+b]`
-	std::vector<double> _alpha;                    ///< one per clique; NaN marks "not set yet"
+	std::vector<std::array<double, 4>>
+	    _matrices;              ///< clique `c`, bin `b` -> `_matrices[c*_n_bins+b]`
+	std::vector<double> _alpha; ///< one per clique; NaN marks "not set yet"
 	size_t _n_bins = 0;
 
 public:

@@ -18,7 +18,7 @@ private:
 	static constexpr uint32_t _molecule_index_mask = MAX_NUMBER_OF_MOLECULES;
 	void _set_molecule_index(const uint32_t molecule_index) {
 		if (molecule_index > _molecule_index_mask - 1) { // _molecule_index_mask - 1 because we need
-			                                             // to keep a spot for the unknown molecule
+		                                                 // to keep a spot for the unknown molecule
 			throw coretools::TUserError(
 			    "Molecule index '", molecule_index,
 			    "' exceeds the maximum allowed number of molecules : ", _molecule_index_mask, ".");

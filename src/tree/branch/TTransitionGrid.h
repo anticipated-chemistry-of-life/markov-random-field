@@ -82,11 +82,11 @@ public:
 
 		const double delta = bins.delta();
 		// Step matrix is also called matrix alpha in the supplementary notes.
-		const auto step = transition(alpha, nu, delta);
+		const auto step    = transition(alpha, nu, delta);
 		// The first bin is half a step in, since bin k stands for the length at its centre. Only
 		// these two matrices are evaluated directly; the rest of the grid is walked by repeated
 		// multiplication. See docs/adr/0003 for why this is not a loop over `transition`.
-		auto matrix = transition(alpha, nu, delta / 2.0);
+		auto matrix        = transition(alpha, nu, delta / 2.0);
 
 		// The walk carries the previous bin's matrix instead of reading it back out of the vector.
 		// `_matrices[0]` after a `resize` leaves gcc unable to rule out a grid of no bins, which

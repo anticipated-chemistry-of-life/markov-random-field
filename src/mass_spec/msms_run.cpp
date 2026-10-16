@@ -48,7 +48,7 @@ void TMassSpecRun::add_likelihood_vector(std::vector<TFeatureLikelihood> &featur
 	// duplicates would skew c_f and let a single feature hold the same molecule twice
 	const auto duplicate =
 	    std::adjacent_find(feature_likelihoods.begin(), feature_likelihoods.end(),
-	                       [](const auto &left, const auto &right) {
+		                   [](const auto &left, const auto &right) {
 		                       return left.get_molecule_index() == right.get_molecule_index();
 	                       });
 	if (duplicate != feature_likelihoods.end()) {

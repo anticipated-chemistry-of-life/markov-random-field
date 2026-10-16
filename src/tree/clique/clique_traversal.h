@@ -33,9 +33,8 @@ namespace clique_traversal {
 /// only writes through the view. `View` is the view type the caller's view factory hands back, so
 /// this is checked against the same type `run` deduces it from.
 template<typename Kernel, typename View>
-concept CliqueKernel = requires(Kernel &kernel, size_t clique, View &view) {
-	kernel(clique, view);
-};
+concept CliqueKernel =
+    requires(Kernel &kernel, size_t clique, View &view) { kernel(clique, view); };
 
 /// Runs `kernel` over every one of `n_cliques` cliques, in parallel.
 ///
@@ -68,8 +67,8 @@ template<typename ViewFactory, typename Kernel>
 	std::vector<std::vector<size_t>> inserts(n_cliques);
 
 	if constexpr (std::is_void_v<Result>) {
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) schedule(dynamic)          \
-    default(none) shared(n_cliques, view_factory, kernel, inserts)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
+    schedule(dynamic) default(none) shared(n_cliques, view_factory, kernel, inserts)
 		for (size_t clique = 0; clique < n_cliques; ++clique) {
 			auto view = view_factory(clique);
 			kernel(clique, view);
@@ -78,15 +77,15 @@ template<typename ViewFactory, typename Kernel>
 		return inserts;
 	} else {
 		std::vector<Result> gathered(n_cliques);
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) schedule(dynamic)          \
-    default(none) shared(n_cliques, view_factory, kernel, inserts, gathered)
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
+    schedule(dynamic) default(none) shared(n_cliques, view_factory, kernel, inserts, gathered)
 		for (size_t clique = 0; clique < n_cliques; ++clique) {
 			auto view        = view_factory(clique);
 			gathered[clique] = kernel(clique, view);
 			inserts[clique]  = view.take_deferred_inserts();
 		}
 		return std::pair<std::vector<Result>, std::vector<std::vector<size_t>>>{std::move(gathered),
-		                                                                       std::move(inserts)};
+		                                                                        std::move(inserts)};
 	}
 }
 

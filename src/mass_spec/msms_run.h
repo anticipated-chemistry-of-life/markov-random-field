@@ -130,8 +130,8 @@ private:
 		    _holder_of_molecule.try_emplace(molecule_idx, static_cast<uint32_t>(feature_idx));
 		if (!inserted && it->second != feature_idx) {
 			throw coretools::TDevError("TMassSpecRun: molecule ", molecule_idx,
-			                           " is assigned to both feature ", it->second,
-			                           " and feature ", feature_idx, ".");
+			                           " is assigned to both feature ", it->second, " and feature ",
+			                           feature_idx, ".");
 		}
 	}
 
@@ -145,8 +145,8 @@ private:
 
 	/// Writes the two (or one) assignments of a move. Both features release before either claims,
 	/// so a molecule that changes hands (both swap types) is not mistaken for one held twice.
-	void _write_move(size_t feature_a, TFeatureLikelihood a, size_t feature_b,
-	                 TFeatureLikelihood b, bool two_features) {
+	void _write_move(size_t feature_a, TFeatureLikelihood a, size_t feature_b, TFeatureLikelihood b,
+	                 bool two_features) {
 		_release(_current_assignments.at(feature_a));
 		if (two_features) { _release(_current_assignments.at(feature_b)); }
 		_current_assignments[feature_a] = a;

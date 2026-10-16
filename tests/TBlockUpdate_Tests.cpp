@@ -407,7 +407,7 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 			                  merged(per_row), model.log_likelihood()};
 		};
 
-		const auto [one_Y, one_species, one_molecule, one_counters, one_LL]     = run_once(1);
+		const auto [one_Y, one_species, one_molecule, one_counters, one_LL]      = run_once(1);
 		const auto [many_Y, many_species, many_molecule, many_counters, many_LL] = run_once(4);
 
 		EXPECT_EQ(one_Y, many_Y);

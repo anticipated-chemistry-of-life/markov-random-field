@@ -53,7 +53,8 @@ inline double occurrence_count(size_t paper_count) {
 class TReportingModel {
 private:
 	/// `_factor[dimension][leaf]` caches `1 - exp(-gamma_i * occurrence_count(count))`, so the
-	/// per-cell path in the field update is a product of lookups with no exp() and no parameter access.
+	/// per-cell path in the field update is a product of lookups with no exp() and no parameter
+	/// access.
 	std::vector<std::vector<double>> _factor;
 	double _error_rate = 0.0;
 
