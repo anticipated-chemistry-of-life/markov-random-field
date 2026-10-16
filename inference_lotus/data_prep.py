@@ -9,6 +9,11 @@ and paper counts / species-molecule pairs are aggregated up to it. Aggregation f
 out of counting at the coarser column directly -- e.g. every row naming a species also
 names its genus, so counting rows per genus already sums the paper counts of every
 species sharing that genus.
+
+`--species-subtree` names one organism taxon, at any rank above the leaves. The script
+cuts the species tree down to that taxon's subtree, with the taxon as its only root.
+The species paper counts and the LOTUS records keep only the species leaves inside it.
+The molecule tree and the molecule paper counts do not change.
 """
 
 from enum import Enum
@@ -108,6 +113,35 @@ def edges_to_tree(edges: set[tuple[str, str]]) -> pl.DataFrame:
     return edge_df.unique(subset="child", keep="first")
 
 
+def subtree(tree: pl.DataFrame, root: str) -> pl.DataFrame:
+    """Return the branches of `tree` below `root`, so that `root` is the only root left.
+
+    `root` is a node name as the tree writes it, with underscores for spaces.
+    """
+    children: dict[str, list[str]] = {}
+    for child, parent in tree.select("child", "parent").iter_rows():
+        children.setdefault(parent, []).append(child)
+    if root not in children and root not in tree["child"]:
+        raise click.BadParameter(
+            f"unknown organism taxon '{root}'", param_hint="'--species-subtree'"
+        )
+    if root not in children:
+        raise click.BadParameter(
+            f"organism taxon '{root}' is a leaf of the species tree, "
+            "so its subtree has no branch",
+            param_hint="'--species-subtree'",
+        )
+    # A node name can stand for two taxa at two ranks, so the search guards against a cycle.
+    nodes: set[str] = set()
+    stack = [root]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            if child not in nodes:
+                nodes.add(child)
+                stack.append(child)
+    return tree.filter(pl.col("child").is_in(nodes))
+
+
 def paper_counts(
     frame: pl.DataFrame, level_column: str, valid_nodes: list[str]
 ) -> pl.DataFrame:
@@ -139,7 +173,14 @@ def paper_counts(
     show_default=True,
     help="Molecule taxonomy rank the tree, paper counts, and pairs are built at.",
 )
-def main(taxon_level: str, molecule_level: str) -> None:
+@click.option(
+    "--species-subtree",
+    default=None,
+    help="Organism taxon, above the leaf rank, whose subtree becomes the species tree "
+    "(e.g. Geranium). Restricts the species paper counts and LOTUS records to its "
+    "species leaves. Default: the whole organism taxonomy.",
+)
+def main(taxon_level: str, molecule_level: str, species_subtree: str | None) -> None:
     taxon = TaxonLevel[taxon_level.upper()]
     molecule = MoleculeLevel[molecule_level.upper()]
 
@@ -164,6 +205,8 @@ def main(taxon_level: str, molecule_level: str) -> None:
         df, taxon_columns, desc=f"Processing organism taxonomy up to {taxon.name.lower()}"
     )
     edge_df_species = edges_to_tree(edges)
+    if species_subtree is not None:
+        edge_df_species = subtree(edge_df_species, species_subtree.replace(" ", "_"))
     edge_df_species.write_csv("species.tsv", separator="\t")
 
     # Collect edges up to the chosen molecule rank; that rank becomes the tree's leaf level.
