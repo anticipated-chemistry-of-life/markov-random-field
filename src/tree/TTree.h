@@ -91,7 +91,6 @@ private:
 
 	// Nus
 	TypeParamLogNu *_log_nu_c = nullptr;
-	std::vector<double> _nu_c;
 
 	// Alphas
 	TypeParamAlpha *_alpha_c = nullptr;
@@ -218,10 +217,11 @@ private:
 
 	/// The grid a proposed alpha or nu would give clique `c`. Built from the value the parameter
 	/// currently holds, so it has to be asked before `acceptOrReject` puts a rejected value back.
+	/// The alpha grid takes the accepted log nu, because the nu move proposes after it.
 	template<bool IsAlpha>
 	[[nodiscard]] TTransitionGrid _candidate_grid(size_t c, double proposed) const {
 		if constexpr (IsAlpha) {
-			return TTransitionGrid(proposed, _nu_c[c], _grid());
+			return TTransitionGrid(proposed, std::exp(_log_nu_c->value(c)), _grid());
 		} else {
 			return TTransitionGrid(_alpha_c->value(c), std::exp(proposed), _grid());
 		}
@@ -415,7 +415,6 @@ public:
 			const double logH = nu_LL_new[i] - LL_after_alpha[i] + _log_nu_c->getLogDensityRatio(i);
 			if (_log_nu_c->acceptOrReject(logH, coretools::TRange(i))) {
 				_set_transition_grid(i, _candidate_grid<false>(i, proposed));
-				_nu_c[i] = std::exp(proposed);
 			}
 		}
 

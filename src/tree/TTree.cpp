@@ -72,8 +72,6 @@ void TTree::initialize() {
 	// now we initialize the mu_c_1
 	_log_nu_c->initStorage(this, {n_cliques()},
 	                       {std::make_shared<coretools::TNamesStrings>(_clique_names)});
-	_nu_c.resize(n_cliques());
-	for (size_t c = 0; c < n_cliques(); ++c) { _nu_c[c] = std::exp(_log_nu_c->value(c)); }
 
 	// number of branches = number of leaves + number of internal nodes without roots
 	std::vector<std::string> branch_names;
@@ -95,8 +93,8 @@ void TTree::guessInitialValues() {
 		    ProgramOptions::LOG_NU_C, ProgramOptions::LOG_NU_C_INIT_SD);
 		_log_nu_c->set(c, log_nu_init);
 		_alpha_c->set(c, coretools::Probability(ProgramOptions::ALPHA));
-		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_set_transition_grid(
+		    c, TTransitionGrid(_alpha_c->value(c), std::exp(_log_nu_c->value(c)), _grid()));
 	}
 
 	_set_initial_branch_lengths(false);
@@ -116,8 +114,8 @@ void TTree::_simulateUnderPrior(Storage *) {
 	using namespace coretools::instances;
 	_set_initial_branch_lengths(true);
 	for (size_t c = 0; c < n_cliques(); ++c) {
-		_nu_c[c] = std::exp(_log_nu_c->value(c));
-		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_set_transition_grid(
+		    c, TTransitionGrid(_alpha_c->value(c), std::exp(_log_nu_c->value(c)), _grid()));
 	}
 }
 
@@ -148,7 +146,8 @@ void TTree::simulate_Z() {
 	std::vector<std::vector<size_t>> indices_to_insert(n_cliques());
 
 	for (size_t c = 0; c < n_cliques(); ++c) {
-		_set_transition_grid(c, TTransitionGrid(_alpha_c->value(c), _nu_c[c], _grid()));
+		_set_transition_grid(
+		    c, TTransitionGrid(_alpha_c->value(c), std::exp(_log_nu_c->value(c)), _grid()));
 
 		// This clique's cells of the node state, every node of them. Every node reads the state
 		// its parent was given, which the view shows even where the node state could not take
