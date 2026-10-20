@@ -38,15 +38,15 @@ using threads::TThreadCount;
 /// The dimension the tree under test owns. The other dimension holds the cliques.
 constexpr size_t TREE = 0;
 
-/// The moves adapter a test scripts.
+/// One parameter of the scripted adapter: one value per clique, proposed and decided as the test
+/// writes.
 ///
-/// It returns the proposals and the decisions the test writes, and it records every log-likelihood
-/// ratio it is handed, in call order. It fails the running test if the tree update asks for an
-/// accepted value while that parameter has a proposal pending. So every test that drives the tree
-/// update through it also checks that rule of the seam.
-class TScriptedTreeMoves {
+/// It records every log-likelihood ratio it is handed, in call order. It fails the running test if
+/// the tree update asks for its accepted value while a proposal is pending, or reads or decides a
+/// proposal that is not pending.
+class TScriptedParameter {
 public:
-	/// One call to `decide_alpha`: the clique, and the ratio the tree update handed over.
+	/// One decision: the clique, and the ratio the tree update handed over.
 	struct TDecision {
 		size_t clique;
 		double log_ratio;
@@ -54,69 +54,93 @@ public:
 	};
 
 private:
-	std::vector<double> _accepted_alpha;
-	std::vector<double> _accepted_log_nu;
-	std::vector<double> _alpha_proposals;
-	std::vector<bool> _accept_alpha;
+	const char *_name;
+	std::vector<double> _accepted;
+	std::vector<double> _proposals;
+	std::vector<bool> _accept;
 
-	std::vector<bool> _alpha_pending;
-	size_t _n_alpha_pending = 0;
+	std::vector<bool> _pending;
+	size_t _n_pending = 0;
 
-	size_t _n_alpha_proposals = 0;
-	std::vector<TDecision> _alpha_decisions;
+	size_t _n_proposals = 0;
+	std::vector<TDecision> _decisions;
 
 public:
-	/// @param accepted_alpha   each clique's alpha before the update
-	/// @param accepted_log_nu  each clique's log nu before the update
-	/// @param alpha_proposals  the alpha `propose_alphas` puts up for each clique
-	/// @param accept_alpha     whether `decide_alpha` accepts each clique's proposal
-	TScriptedTreeMoves(std::vector<double> accepted_alpha, std::vector<double> accepted_log_nu,
-	                   std::vector<double> alpha_proposals, std::vector<bool> accept_alpha)
-	    : _accepted_alpha(std::move(accepted_alpha)), _accepted_log_nu(std::move(accepted_log_nu)),
-	      _alpha_proposals(std::move(alpha_proposals)), _accept_alpha(std::move(accept_alpha)),
-	      _alpha_pending(_accepted_alpha.size(), false) {}
+	/// @param name       the parameter's name in failure messages
+	/// @param accepted   each clique's value before the update
+	/// @param proposals  the value a proposal puts up for each clique
+	/// @param accept     whether a decision accepts each clique's proposal
+	TScriptedParameter(const char *name, std::vector<double> accepted,
+	                   std::vector<double> proposals, std::vector<bool> accept)
+	    : _name(name), _accepted(std::move(accepted)), _proposals(std::move(proposals)),
+	      _accept(std::move(accept)), _pending(_accepted.size(), false) {}
 
-	void propose_alphas() {
-		if (_n_alpha_pending != 0) { ADD_FAILURE() << "alpha proposed while a proposal is pending"; }
-		_alpha_pending.assign(_alpha_pending.size(), true);
-		_n_alpha_pending = _alpha_pending.size();
-		++_n_alpha_proposals;
+	void propose() {
+		if (_n_pending != 0) { ADD_FAILURE() << _name << " proposed while a proposal is pending"; }
+		_pending.assign(_pending.size(), true);
+		_n_pending = _pending.size();
+		++_n_proposals;
 	}
 
-	[[nodiscard]] double proposed_alpha(size_t clique) const {
-		if (!_alpha_pending.at(clique)) {
-			ADD_FAILURE() << "proposed alpha of clique " << clique << " read with no proposal";
+	[[nodiscard]] double proposed(size_t clique) const {
+		if (!_pending.at(clique)) {
+			ADD_FAILURE() << "proposed " << _name << " of clique " << clique
+			              << " read with no proposal";
 		}
-		return _alpha_proposals.at(clique);
+		return _proposals.at(clique);
 	}
 
-	[[nodiscard]] double accepted_alpha(size_t clique) const {
-		if (_n_alpha_pending != 0) {
-			ADD_FAILURE() << "accepted alpha read while an alpha proposal is pending";
+	[[nodiscard]] double accepted(size_t clique) const {
+		if (_n_pending != 0) {
+			ADD_FAILURE() << "accepted " << _name << " read while a proposal is pending";
 		}
-		return _accepted_alpha.at(clique);
+		return _accepted.at(clique);
 	}
 
-	bool decide_alpha(size_t clique, double log_ratio) {
-		if (!_alpha_pending.at(clique)) {
-			ADD_FAILURE() << "alpha of clique " << clique << " decided with no proposal";
+	bool decide(size_t clique, double log_ratio) {
+		if (!_pending.at(clique)) {
+			ADD_FAILURE() << _name << " of clique " << clique << " decided with no proposal";
 		}
-		_alpha_pending[clique] = false;
-		--_n_alpha_pending;
-		_alpha_decisions.push_back({clique, log_ratio});
-		const bool accepted = _accept_alpha.at(clique);
-		if (accepted) { _accepted_alpha[clique] = _alpha_proposals[clique]; }
+		_pending[clique] = false;
+		--_n_pending;
+		_decisions.push_back({clique, log_ratio});
+		const bool accepted = _accept.at(clique);
+		if (accepted) { _accepted[clique] = _proposals[clique]; }
 		return accepted;
 	}
 
-	[[nodiscard]] double accepted_log_nu(size_t clique) const {
-		return _accepted_log_nu.at(clique);
+	[[nodiscard]] size_t n_proposals() const { return _n_proposals; }
+	[[nodiscard]] const std::vector<TDecision> &decisions() const { return _decisions; }
+};
+
+/// The moves adapter a test scripts: alpha and log nu, each a `TScriptedParameter`. So every test
+/// that drives the tree update through it also checks the seam's ordering rule.
+class TScriptedTreeMoves {
+public:
+	using TDecision = TScriptedParameter::TDecision;
+
+private:
+	TScriptedParameter _alpha;
+	TScriptedParameter _log_nu;
+
+public:
+	TScriptedTreeMoves(TScriptedParameter alpha, TScriptedParameter log_nu)
+	    : _alpha(std::move(alpha)), _log_nu(std::move(log_nu)) {}
+
+	void propose_alphas() { _alpha.propose(); }
+	[[nodiscard]] double proposed_alpha(size_t clique) const { return _alpha.proposed(clique); }
+	[[nodiscard]] double accepted_alpha(size_t clique) const { return _alpha.accepted(clique); }
+	bool decide_alpha(size_t clique, double log_ratio) { return _alpha.decide(clique, log_ratio); }
+
+	void propose_log_nus() { _log_nu.propose(); }
+	[[nodiscard]] double proposed_log_nu(size_t clique) const { return _log_nu.proposed(clique); }
+	[[nodiscard]] double accepted_log_nu(size_t clique) const { return _log_nu.accepted(clique); }
+	bool decide_log_nu(size_t clique, double log_ratio) {
+		return _log_nu.decide(clique, log_ratio);
 	}
 
-	[[nodiscard]] size_t n_alpha_proposals() const { return _n_alpha_proposals; }
-	[[nodiscard]] const std::vector<TDecision> &alpha_decisions() const {
-		return _alpha_decisions;
-	}
+	[[nodiscard]] const TScriptedParameter &alpha() const { return _alpha; }
+	[[nodiscard]] const TScriptedParameter &log_nu() const { return _log_nu; }
 };
 static_assert(tree_update::TreeMoves<TScriptedTreeMoves>);
 
@@ -137,6 +161,7 @@ template<typename NodeState> struct TTreeFixture {
 	std::vector<double> alpha;
 	std::vector<double> log_nu;
 	std::vector<double> alpha_proposals;
+	std::vector<double> log_nu_proposals;
 	TCellUniforms uniforms{20261020, TCellStream::node_state, 3, TREE};
 
 	static TPhylogeny forest() {
@@ -162,6 +187,7 @@ template<typename NodeState> struct TTreeFixture {
 			alpha.push_back(unit(rng));
 			log_nu.push_back(log_rate(rng));
 			alpha_proposals.push_back(unit(rng));
+			log_nu_proposals.push_back(log_rate(rng));
 			grids.set(c, TTransitionGrid(alpha[c], std::exp(log_nu[c]), bin_grid));
 		}
 	}
@@ -170,22 +196,42 @@ template<typename NodeState> struct TTreeFixture {
 		return [this](size_t node) { return bin_of_node.at(node); };
 	}
 
-	[[nodiscard]] TScriptedTreeMoves moves(std::vector<bool> accept_alpha) const {
-		return {alpha, log_nu, alpha_proposals, std::move(accept_alpha)};
+	[[nodiscard]] TScriptedTreeMoves moves(std::vector<bool> accept_alpha,
+	                                       std::vector<bool> accept_log_nu) const {
+		return {TScriptedParameter("alpha", alpha, alpha_proposals, std::move(accept_alpha)),
+		        TScriptedParameter("log nu", log_nu, log_nu_proposals, std::move(accept_log_nu))};
 	}
 
-	template<bool FixZ> std::vector<double> run(TScriptedTreeMoves &moves) {
-		return tree_update::run<FixZ>(topology, cliques, Z, grids, bin_grid, bins(), uniforms,
-		                              moves);
+	template<bool FixZ> void run(TScriptedTreeMoves &moves) {
+		tree_update::run<FixZ>(topology, cliques, Z, grids, bin_grid, bins(), uniforms, moves);
+	}
+
+	/// Clique `c`'s alpha after the update, when the alpha decisions follow `alpha_accepted`.
+	[[nodiscard]] double alpha_after(size_t c) const {
+		return alpha_accepted(c) ? alpha_proposals[c] : alpha[c];
+	}
+
+	/// Clique `c`'s log nu after the update, when the nu decisions follow `log_nu_accepted`.
+	[[nodiscard]] double log_nu_after(size_t c) const {
+		return log_nu_accepted(c) ? log_nu_proposals[c] : log_nu[c];
+	}
+
+	/// The scripts the tests use: alpha accepted where `c % 3 == 0`, nu where `c % 2 == 0`. So the
+	/// cliques show every pairing of an accepted or rejected alpha with an accepted or rejected nu.
+	static bool alpha_accepted(size_t c) { return c % 3 == 0; }
+	static bool log_nu_accepted(size_t c) { return c % 2 == 0; }
+
+	[[nodiscard]] TScriptedTreeMoves scripted_moves() const {
+		const size_t n = cliques.n_cliques();
+		std::vector<bool> accept_alpha(n);
+		std::vector<bool> accept_log_nu(n);
+		for (size_t c = 0; c < n; ++c) {
+			accept_alpha[c]  = alpha_accepted(c);
+			accept_log_nu[c] = log_nu_accepted(c);
+		}
+		return moves(std::move(accept_alpha), std::move(accept_log_nu));
 	}
 };
-
-/// Every clique accepted where `c % 3 == 0`, and every other one rejected.
-std::vector<bool> every_third_accepted(size_t n_cliques) {
-	std::vector<bool> accept(n_cliques);
-	for (size_t c = 0; c < n_cliques; ++c) { accept[c] = c % 3 == 0; }
-	return accept;
-}
 
 /// The grid at clique `c` of `table` is `expected`, in every bin and in its stationary terms.
 void expect_installed(const TTransitionGridTable &table, size_t c, const TTransitionGrid &expected) {
@@ -207,6 +253,13 @@ template<typename NodeState> class TreeUpdate : public ::testing::Test {};
 using NodeStateBackends = ::testing::Types<TStorageZDense, TStorageZSparse>;
 TYPED_TEST_SUITE(TreeUpdate, NodeStateBackends);
 
+/// The density of clique `c`'s states under `grid`, from the pure module.
+template<typename NodeState>
+double density_of_clique(TTreeFixture<NodeState> &fx, size_t c, const TTransitionGrid &grid) {
+	TCliqueView<NodeState> states(fx.Z, fx.topology, fx.cliques.index_of(c), TREE);
+	return node_state_density::log_density_of_clique(fx.topology, grid, states, fx.bins());
+}
+
 // -------------------------------------------------------------------------
 // Grid installation
 // -------------------------------------------------------------------------
@@ -214,23 +267,63 @@ TYPED_TEST_SUITE(TreeUpdate, NodeStateBackends);
 TYPED_TEST(TreeUpdate, an_accepted_alpha_installs_its_grid_and_a_rejected_one_leaves_the_grid) {
 	TTreeFixture<TypeParam> fx(7);
 	const size_t n = fx.cliques.n_cliques();
-	auto moves     = fx.moves(every_third_accepted(n));
+	// Every nu rejected, so the grid each clique holds after the update is the one alpha left.
+	std::vector<bool> accept_alpha(n);
+	for (size_t c = 0; c < n; ++c) { accept_alpha[c] = fx.alpha_accepted(c); }
+	auto moves = fx.moves(std::move(accept_alpha), std::vector<bool>(n, false));
 
-	const std::vector<double> LL_after_alpha = fx.template run<false>(moves);
+	fx.template run<false>(moves);
 
 	for (size_t c = 0; c < n; ++c) {
-		const bool accepted = c % 3 == 0;
-		const double alpha  = accepted ? fx.alpha_proposals[c] : fx.alpha[c];
-		const TTransitionGrid expected(alpha, std::exp(fx.log_nu[c]), fx.bin_grid);
-		expect_installed(fx.grids, c, expected);
+		const double alpha = fx.alpha_after(c);
+		expect_installed(fx.grids, c, TTransitionGrid(alpha, std::exp(fx.log_nu[c]), fx.bin_grid));
 		EXPECT_EQ(moves.accepted_alpha(c), alpha);
+	}
+}
 
-		// The likelihood the clique ends alpha on is the density of its new states under the grid
-		// alpha left installed.
-		TCliqueView<TypeParam> states(fx.Z, fx.topology, fx.cliques.index_of(c), TREE);
-		const double density = node_state_density::log_density_of_clique(fx.topology, expected,
-		                                                                  states, fx.bins());
-		EXPECT_NEAR(LL_after_alpha.at(c), density, 1e-9 * std::abs(density)) << "clique " << c;
+TYPED_TEST(TreeUpdate, an_accepted_nu_installs_its_grid_and_a_rejected_one_leaves_the_grid) {
+	TTreeFixture<TypeParam> fx(7);
+	const size_t n = fx.cliques.n_cliques();
+	auto moves     = fx.scripted_moves();
+
+	fx.template run<false>(moves);
+
+	// An accepted nu installs the grid of the accepted alpha and the accepted nu. A rejected one
+	// leaves the grid alpha left: the same two values.
+	for (size_t c = 0; c < n; ++c) {
+		const double log_nu = fx.log_nu_after(c);
+		expect_installed(fx.grids, c,
+		                 TTransitionGrid(fx.alpha_after(c), std::exp(log_nu), fx.bin_grid));
+		EXPECT_EQ(moves.accepted_log_nu(c), log_nu);
+	}
+}
+
+// -------------------------------------------------------------------------
+// The alpha-to-nu handoff
+// -------------------------------------------------------------------------
+
+TYPED_TEST(TreeUpdate, the_nu_ratio_is_measured_against_the_grid_alpha_left) {
+	TTreeFixture<TypeParam> fx(7);
+	const size_t n = fx.cliques.n_cliques();
+	auto moves     = fx.scripted_moves();
+
+	fx.template run<false>(moves);
+
+	// The walk does not run again after the alpha pass, so the states now are the states nu
+	// scored. An accepted alpha leaves its candidate grid; a rejected one leaves the grid alpha
+	// started from.
+	const auto &decisions = moves.log_nu().decisions();
+	ASSERT_EQ(decisions.size(), n);
+	for (size_t c = 0; c < n; ++c) {
+		EXPECT_EQ(decisions[c].clique, c);
+		const double alpha       = fx.alpha_after(c);
+		const double after_alpha = density_of_clique(
+		    fx, c, TTransitionGrid(alpha, std::exp(fx.log_nu[c]), fx.bin_grid));
+		const double candidate = density_of_clique(
+		    fx, c, TTransitionGrid(alpha, std::exp(fx.log_nu_proposals[c]), fx.bin_grid));
+		const double tolerance = 1e-9 * (std::abs(candidate) + std::abs(after_alpha));
+		EXPECT_NEAR(decisions[c].log_ratio, candidate - after_alpha, tolerance)
+		    << "clique " << c << (fx.alpha_accepted(c) ? ", alpha accepted" : ", alpha rejected");
 	}
 }
 
@@ -238,51 +331,57 @@ TYPED_TEST(TreeUpdate, an_accepted_alpha_installs_its_grid_and_a_rejected_one_le
 // Thread count
 // -------------------------------------------------------------------------
 
-TYPED_TEST(TreeUpdate, one_thread_and_four_threads_give_the_same_node_states_and_alpha_ratios) {
+TYPED_TEST(TreeUpdate, one_thread_and_four_threads_give_the_same_node_states_and_ratios) {
 	// A prime clique count, so a four-way split never lands evenly.
 	constexpr size_t N_CLIQUES = 37;
 
 	TTreeFixture<TypeParam> one(N_CLIQUES);
 	const std::vector<size_t> before = one.Z.get_full_Z_binary_vector();
-	auto moves_one                   = one.moves(every_third_accepted(N_CLIQUES));
+	auto moves_one                   = one.scripted_moves();
 	{
 		TThreadCount guard(1);
-		(void)one.template run<false>(moves_one);
+		one.template run<false>(moves_one);
 	}
 
 	TTreeFixture<TypeParam> four(N_CLIQUES);
-	auto moves_four = four.moves(every_third_accepted(N_CLIQUES));
+	auto moves_four = four.scripted_moves();
 	{
 		TThreadCount guard(4);
-		(void)four.template run<false>(moves_four);
+		four.template run<false>(moves_four);
 	}
 
 	// The walk moved some state, so equal node states are not two untouched copies.
 	EXPECT_NE(one.Z.get_full_Z_binary_vector(), before);
 	EXPECT_EQ(four.Z.get_full_Z_binary_vector(), one.Z.get_full_Z_binary_vector());
-	ASSERT_EQ(moves_one.alpha_decisions().size(), N_CLIQUES);
-	EXPECT_EQ(moves_four.alpha_decisions(), moves_one.alpha_decisions());
+	ASSERT_EQ(moves_one.alpha().decisions().size(), N_CLIQUES);
+	EXPECT_EQ(moves_four.alpha().decisions(), moves_one.alpha().decisions());
+	ASSERT_EQ(moves_one.log_nu().decisions().size(), N_CLIQUES);
+	EXPECT_EQ(moves_four.log_nu().decisions(), moves_one.log_nu().decisions());
 }
 
 // -------------------------------------------------------------------------
 // FixZ
 // -------------------------------------------------------------------------
 
-TYPED_TEST(TreeUpdate, with_fixed_node_state_the_state_is_unchanged_and_alpha_still_moves) {
+TYPED_TEST(TreeUpdate, with_fixed_node_state_the_state_is_unchanged_and_alpha_and_nu_still_move) {
 	TTreeFixture<TypeParam> fx(7);
 	const size_t n                   = fx.cliques.n_cliques();
 	const std::vector<size_t> before = fx.Z.get_full_Z_binary_vector();
-	auto moves                       = fx.moves(every_third_accepted(n));
+	auto moves                       = fx.scripted_moves();
 
-	(void)fx.template run<true>(moves);
+	fx.template run<true>(moves);
 
 	EXPECT_EQ(fx.Z.get_full_Z_binary_vector(), before);
-	EXPECT_EQ(moves.n_alpha_proposals(), 1u);
-	ASSERT_EQ(moves.alpha_decisions().size(), n);
+	EXPECT_EQ(moves.alpha().n_proposals(), 1u);
+	EXPECT_EQ(moves.log_nu().n_proposals(), 1u);
+	ASSERT_EQ(moves.alpha().decisions().size(), n);
+	ASSERT_EQ(moves.log_nu().decisions().size(), n);
 	for (size_t c = 0; c < n; ++c) {
-		EXPECT_EQ(moves.alpha_decisions()[c].clique, c);
-		const double alpha = c % 3 == 0 ? fx.alpha_proposals[c] : fx.alpha[c];
-		expect_installed(fx.grids, c, TTransitionGrid(alpha, std::exp(fx.log_nu[c]), fx.bin_grid));
+		EXPECT_EQ(moves.alpha().decisions()[c].clique, c);
+		EXPECT_EQ(moves.log_nu().decisions()[c].clique, c);
+		expect_installed(fx.grids, c,
+		                 TTransitionGrid(fx.alpha_after(c), std::exp(fx.log_nu_after(c)),
+		                                 fx.bin_grid));
 	}
 }
 
@@ -290,8 +389,9 @@ TYPED_TEST(TreeUpdate, with_fixed_node_state_the_state_is_unchanged_and_alpha_st
 // The scripted adapter enforces the seam's ordering rule
 // -------------------------------------------------------------------------
 
-TEST(ScriptedTreeMoves, fails_the_test_on_an_accepted_alpha_read_while_a_proposal_is_pending) {
-	TScriptedTreeMoves moves({0.3, 0.4}, {0.0, 0.1}, {0.5, 0.6}, {true, false});
+TEST(ScriptedTreeMoves, fails_the_test_on_an_accepted_value_read_while_a_proposal_is_pending) {
+	TScriptedTreeMoves moves(TScriptedParameter("alpha", {0.3, 0.4}, {0.5, 0.6}, {true, false}),
+	                         TScriptedParameter("log nu", {0.0, 0.1}, {0.2, 0.3}, {false, true}));
 	EXPECT_EQ(moves.accepted_alpha(0), 0.3);
 
 	moves.propose_alphas();
@@ -303,6 +403,14 @@ TEST(ScriptedTreeMoves, fails_the_test_on_an_accepted_alpha_read_while_a_proposa
 
 	EXPECT_EQ(moves.accepted_alpha(0), 0.5);
 	EXPECT_EQ(moves.accepted_alpha(1), 0.4);
+
+	moves.propose_log_nus();
+	EXPECT_NONFATAL_FAILURE((void)moves.accepted_log_nu(1), "pending");
+	EXPECT_FALSE(moves.decide_log_nu(0, 0.0));
+	EXPECT_TRUE(moves.decide_log_nu(1, 0.0));
+
+	EXPECT_EQ(moves.accepted_log_nu(0), 0.0);
+	EXPECT_EQ(moves.accepted_log_nu(1), 0.3);
 }
 
 } // namespace

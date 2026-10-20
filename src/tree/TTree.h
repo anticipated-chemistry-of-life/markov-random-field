@@ -128,8 +128,8 @@ private:
 	/// which carries a 0. Clique space owns the convention (ADR-0011).
 	[[nodiscard]] IndexArray _clique_index(size_t c) const;
 
-	/// Installs the process of clique `c`. Called once the parameters exist, and again whenever a
-	/// proposal on alpha or nu is accepted. Nothing outside the tree installs a grid.
+	/// Installs the process of clique `c`. Called once the parameters exist. During the tree update
+	/// `tree_update::run` installs the grids an accepted alpha or nu gives.
 	void _set_transition_grid(size_t c, const TTransitionGrid &grid) {
 		_transition_grids.set(c, grid);
 	}
@@ -160,43 +160,6 @@ private:
 	}
 
 	void _simulateUnderPrior(Storage *) override;
-
-	/// One node's contribution to a clique's log-likelihood under `process`: scored against its
-	/// parent, or against the stationary distribution if it is a root.
-	template<TransitionGridLike Process>
-	void
-	_add_node_to_clique_LL(size_t index_in_tree, bool state_of_node,
-	                       coretools::TSumLogProbability &LL, const TNodeStateCliqueView &states,
-	                       std::optional<size_t> branch_len_bin, const Process &process) const {
-		if (_topology().is_root(index_in_tree)) {
-			LL.add(process.stationary(state_of_node));
-		} else {
-			LL.add(_prob_to_parent(index_in_tree, branch_len_bin.value(), states, process));
-		}
-	}
-
-	/// One clique's log-likelihood under one process. The nu move needs only this. Its ratio divides
-	/// by the likelihood `tree_update::run` returns for the clique. That sum is over the same nodes
-	/// in the same order, so it is the same double and not a near one.
-	template<TransitionGridLike Process>
-	[[nodiscard]] double _clique_LL(const TNodeStateCliqueView &states,
-	                                const Process &process) const {
-		coretools::TSumLogProbability LL;
-		const auto &topology = _topology();
-		for (size_t i = 0; i < topology.n_nodes(); ++i) {
-			const bool state_of_node = states.is_one(i);
-			std::optional<size_t> branch_len_bin;
-			if (!topology.is_root(i)) { branch_len_bin = get_binned_branch_length(i); }
-			_add_node_to_clique_LL(i, state_of_node, LL, states, branch_len_bin, process);
-		}
-		return LL.getSum();
-	}
-
-	/// The grid a proposed nu would give clique `c`, with the accepted alpha. Ask for it before
-	/// `acceptOrReject` puts a rejected value back.
-	[[nodiscard]] TTransitionGrid _nu_candidate_grid(size_t c, double proposed) const {
-		return TTransitionGrid(_alpha_c->value(c), std::exp(proposed), _grid());
-	}
 
 	/// The cells of clique `c`, addressed by node index. One place holds the three things a view
 	/// is built from, so the loops below cannot drift apart.
@@ -299,8 +262,8 @@ public:
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
 	/// The tree update (GLOSSARY.md): the node-state update, then the moves on alpha, nu and the
-	/// branch lengths. `tree_update::run` runs the node-state walk and the alpha move. The nu move
-	/// and the branch-length move follow here.
+	/// branch lengths. `tree_update::run` runs the node-state walk, the alpha move and the nu move.
+	/// The branch-length move follows here.
 	///
 	/// The field is not named here at all. Each tree owns a leaf-level view of it: its tree field,
 	/// the leaf block of this tree's node state. So the walk and the moves read one tree and
@@ -320,35 +283,10 @@ public:
 		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
 		                                        _dimension);
 
-		// --- the node-state walk and the alpha move ---
+		// --- the node-state walk, the alpha move and the nu move ---
 		TStattoolsTreeMoves moves(*_alpha_c, *_log_nu_c, n);
-		const std::vector<double> LL_after_alpha =
-		    tree_update::run<FixZ>(_topology(), _cliques(), _Z, _transition_grids, _grid(), _bins(),
-		                           node_state_uniforms, moves);
-
-		// --- the nu move: the candidate likelihood ---
-		// The ratio divides by the likelihood each clique ended alpha on, so this scores one grid.
-		auto view_factory = [this](size_t c) { return _clique_view(c); };
-		_log_nu_c->propose(coretools::TRange(0, n, 1));
-		auto nu_kernel = [this](size_t c, TNodeStateCliqueView &states) {
-			return _clique_LL(states, _nu_candidate_grid(c, _log_nu_c->value(c)));
-		};
-		auto [nu_LL_new, nu_indices_to_insert] = clique_traversal::run(n, view_factory, nu_kernel);
-
-		// This region is read-only: it opens a clique view only to score the candidate grid, and
-		// writes nothing. Checked once here, against the whole collected result, rather than once
-		// per clique inside the loop.
-		DEBUG_ASSERT(
-		    std::all_of(nu_indices_to_insert.begin(), nu_indices_to_insert.end(),
-			            [](const auto &clique_inserts) { return clique_inserts.empty(); }));
-
-		for (size_t i = 0; i < n; ++i) {
-			const double proposed = _log_nu_c->value(i);
-			const double logH = nu_LL_new[i] - LL_after_alpha[i] + _log_nu_c->getLogDensityRatio(i);
-			if (_log_nu_c->acceptOrReject(logH, coretools::TRange(i))) {
-				_set_transition_grid(i, _nu_candidate_grid(i, proposed));
-			}
-		}
+		tree_update::run<FixZ>(_topology(), _cliques(), _Z, _transition_grids, _grid(), _bins(),
+		                       node_state_uniforms, moves);
 
 		// --- the branch-length move: proposed only now ---
 		// Every move above reads the bin each branch holds now. A proposal sets `value` to the

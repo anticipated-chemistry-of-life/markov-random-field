@@ -44,4 +44,8 @@ public:
 	bool decide_alpha(size_t clique, double log_ratio);
 
 	[[nodiscard]] double accepted_log_nu(size_t clique) const;
+	void propose_log_nus();
+	[[nodiscard]] double proposed_log_nu(size_t clique) const;
+	/// The ratio comes first and the prior ratio is added to it: `(ratio) + prior ratio`.
+	bool decide_log_nu(size_t clique, double log_ratio);
 };
