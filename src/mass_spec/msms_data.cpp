@@ -39,13 +39,13 @@ void TMSMSData::_load_runs() {
 	_msms_data = std::move(loaded.runs_per_species);
 
 	_species_has_ms_data.assign(_number_of_species, false);
+	_species_with_ms_data.clear();
 	size_t n_runs     = 0;
 	size_t n_features = 0;
-	size_t n_species  = 0;
 	for (size_t s = 0; s < _number_of_species; ++s) {
 		const auto runs         = _msms_data.at(s);
 		_species_has_ms_data[s] = !runs.empty();
-		n_species += !runs.empty();
+		if (!runs.empty()) { _species_with_ms_data.push_back(s); }
 		n_runs += runs.size();
 		for (const auto &run : runs) { n_features += run.number_of_features(); }
 	}
@@ -53,8 +53,8 @@ void TMSMSData::_load_runs() {
 	const auto &report = loaded.report;
 	auto &log          = coretools::instances::logfile();
 	log.startIndent("Read the mass-spec file '", filename, "' (argument 'ms_data'):");
-	log.list("Loaded ", n_runs, " runs of ", n_species, " species leaves, with ", n_features,
-	         " features. Every assignment starts at the unknown molecule.");
+	log.list("Loaded ", n_runs, " runs of ", _species_with_ms_data.size(), " species leaves, with ",
+	         n_features, " features. Every assignment starts at the unknown molecule.");
 	log.list("The unknown fraction is ", ProgramOptions::MS_UNKNOWN_FRACTION,
 	         " (argument 'ms_unknown_fraction').");
 	log.list("Skipped ", report.skipped_species, " distinct species that are not species leaves.");
@@ -141,11 +141,7 @@ double TMSMSData::ll_ratio_after_filter_move(size_t index) const {
 	// avoid heap allocation by using a local index array
 	IndexArray index_in_Y_space    = {0, molecule_idx};
 	const TFieldStorage &y_storage = _markov_field.get_Y_matrix();
-	for (size_t species_idx = 0; species_idx < _number_of_species; ++species_idx) {
-		// if the species has no MS data, skip it
-		if (!_species_has_ms_data.at(species_idx)) { continue; }
-
-		// allocate the species index
+	for (const size_t species_idx : _species_with_ms_data) {
 		index_in_Y_space[0] = species_idx;
 
 		// a missing cell reads as 0, so a direct point lookup covers both cases

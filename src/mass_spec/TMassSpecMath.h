@@ -74,8 +74,10 @@ per_cell_factor(coretools::TConstView<TMassSpecRun> runs, uint32_t molecule,
 ///
 /// The detection term spans the whole molecule space, but almost every molecule is absent and not
 /// detected, so that case, `log(1 - contamination)`, is added in bulk; only the present and the
-/// detected molecules are scored one by one. That makes the cost O(ones(Y) + features) rather than
-/// O(runs x molecule leaves).
+/// detected molecules are scored one by one. The present molecules are read off the field row of
+/// each species that carries runs, and no other row is read: few species carry runs, and a walk
+/// over every one of the field would visit all the rows that have none. That makes the cost
+/// O(species with runs x molecule leaves + features) rather than O(the whole field).
 template<BinaryStorage Field, typename FilterProbability>
 [[nodiscard]] double log_likelihood(const coretools::TNestedVector<TMassSpecRun> &runs_per_species,
                                     const Field &Y, const FilterProbability &filter_probability,
@@ -87,19 +89,21 @@ template<BinaryStorage Field, typename FilterProbability>
 		                           n_species, " species carry mass-spec runs.");
 	}
 
-	// the present molecules of each species, walked through the ones cursor in O(ones(Y))
-	std::vector<std::vector<uint32_t>> present_per_species(n_species);
-	for (auto cursor = Y.ones_cursor(); cursor.valid(); cursor.advance()) {
-		const auto cell = Y.get_multi_dimensional_index(cursor.linear_index());
-		present_per_species[cell[0]].push_back(static_cast<uint32_t>(cell[1]));
-	}
-
 	const double log_absent_not_detected = std::log(1.0 - contamination);
 	coretools::TSumLogProbability sum_log{};
 	double bulk_log = 0.0;
+	// The present molecules of the species at hand, in ascending order. One buffer serves them all.
+	std::vector<uint32_t> present;
 	for (size_t species = 0; species < n_species; ++species) {
-		const auto &present = present_per_species[species];
-		for (const auto &run : runs_per_species.at(species)) {
+		const auto runs = runs_per_species.at(species);
+		if (runs.empty()) { continue; }
+		present.clear();
+		for (size_t m = 0; m < n_molecules; ++m) {
+			if (Y.is_one(Y.get_linear_index_in_container_space({species, m}))) {
+				present.push_back(static_cast<uint32_t>(m));
+			}
+		}
+		for (const auto &run : runs) {
 			if (run.empty()) { continue; }
 			const size_t filter = run.filter_index();
 

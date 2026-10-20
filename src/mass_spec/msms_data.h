@@ -49,6 +49,9 @@ private:
 	TypeParamMassSpecFilter *_proba_to_pass_filter = nullptr;
 
 	std::vector<uint8_t> _species_has_ms_data;
+	/// The species leaves that carry runs, in ascending order. Few species leaves carry runs. Code
+	/// that reads only those species walks this list instead of every species leaf.
+	std::vector<size_t> _species_with_ms_data;
 
 	/// Private functions
 private:
