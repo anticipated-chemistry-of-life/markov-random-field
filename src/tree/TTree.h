@@ -153,22 +153,17 @@ private:
 	void _initialize_node_from_children(size_t node_index, const Process &process,
 	                                    TNodeStateCliqueView &states) const;
 
-	/// The bin every branch of this tree sat in before the current round of proposals. Branch
-	/// lengths are proposed before the loop over cliques starts, so `value` inside that loop is
-	/// already the candidate. The node-state walk and the bottom-up start are handed this, so
-	/// neither reads a parameter.
-	[[nodiscard]] auto _previous_bins() const {
-		return [this](size_t node) { return get_previous_binned_branch_length(node); };
+	/// The bin every branch of this tree holds now. The node-state walk, the alpha and nu moves,
+	/// the chain start and the node-state density are handed this, so none of them reads a
+	/// parameter.
+	[[nodiscard]] auto _bins() const {
+		return [this](size_t node) { return get_binned_branch_length(node); };
 	}
 
 	void _simulateUnderPrior(Storage *) override;
 
 	/// One node's contribution to a clique's log-likelihood under `process`: scored against its
 	/// parent, or against the stationary distribution if it is a root.
-	///
-	/// `branch_len_bin` is the bin the branch sat in *before* this iteration's proposals, because
-	/// branch lengths are proposed before the cliques are walked and `value` is already the
-	/// candidate by the time this runs.
 	template<TransitionGridLike Process>
 	void
 	_add_node_to_clique_LL(size_t index_in_tree, bool state_of_node,
@@ -195,7 +190,7 @@ private:
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
 			const bool state_of_node = states.is_one(i);
 			std::optional<size_t> branch_len_bin;
-			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
+			if (!topology.is_root(i)) { branch_len_bin = get_binned_branch_length(i); }
 			_add_node_to_clique_LL(i, state_of_node, LL_a, states, branch_len_bin, a);
 			_add_node_to_clique_LL(i, state_of_node, LL_b, states, branch_len_bin, b);
 		}
@@ -215,7 +210,7 @@ private:
 		for (size_t i = 0; i < topology.n_nodes(); ++i) {
 			const bool state_of_node = states.is_one(i);
 			std::optional<size_t> branch_len_bin;
-			if (!topology.is_root(i)) { branch_len_bin = get_previous_binned_branch_length(i); }
+			if (!topology.is_root(i)) { branch_len_bin = get_binned_branch_length(i); }
 			_add_node_to_clique_LL(i, state_of_node, LL, states, branch_len_bin, process);
 		}
 		return LL.getSum();
@@ -362,11 +357,6 @@ public:
 		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
 		                                        _dimension);
 
-		// build pairs of branch lengths to update, and propose them: both draw, both serial
-		auto pairs         = _build_pairs_branch_lengths();
-		const auto n_pairs = pairs.length();
-		_propose_new_branch_lengths(pairs);
-
 		// Every clique's alpha, proposed here rather than inside the region.
 		_alpha_c->propose(coretools::TRange(0, n, 1));
 
@@ -380,7 +370,7 @@ public:
 			// assigns. `FixZ` discards this branch entirely when set; without the `else` below
 			// the capture would go unused.
 			if constexpr (!FixZ) {
-				node_state_walk::update_clique(_topology(), transition_grid(c), _previous_bins(),
+				node_state_walk::update_clique(_topology(), transition_grid(c), _bins(),
 				                               node_state_uniforms, states);
 			} else {
 				(void)node_state_uniforms;
@@ -429,6 +419,14 @@ public:
 			}
 		}
 
+		// --- the branch-length move: proposed only now ---
+		// Every move above reads the bin each branch holds now. A proposal sets `value` to the
+		// candidate, so the branch lengths are proposed after those moves and not before. Only the
+		// ratio below reads `oldValue`, and only for the branches it pairs.
+		auto pairs         = _build_pairs_branch_lengths();
+		const auto n_pairs = pairs.length();
+		_propose_new_branch_lengths(pairs);
+
 		// --- region 3: the branch-length likelihood, summed in fixed slots ---
 		// A clique belongs to slot `i / cliques_per_slot`, and `schedule(static, cliques_per_slot)`
 		// hands each of those blocks to one thread, so a slot has one writer and its contents do
@@ -450,15 +448,6 @@ public:
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {
 		return _binned_branch_lengths->value(_topology().branch_index(index_in_tree));
-	}
-
-	/// The bin this branch had before the current round of proposals. The clique update needs it
-	/// because branch lengths are proposed before the loop over cliques starts, so `value` inside
-	/// the loop is already the candidate. Exposed here so that a clique can ask the tree rather
-	/// than be handed a pointer to the parameter itself.
-	[[nodiscard]] TypeBinnedBranchLengths
-	get_previous_binned_branch_length(size_t index_in_tree) const {
-		return _binned_branch_lengths->oldValue(_topology().branch_index(index_in_tree));
 	}
 
 	[[nodiscard]] const std::string &get_tree_name() const { return _tree_name; }
@@ -488,9 +477,8 @@ public:
 		// move with the thread count and the trace would stop being reproducible from its seed.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
-			return node_state_density::log_density_of_clique(
-			    _topology(), transition_grid(c), states,
-			    [this](size_t node) { return get_binned_branch_length(node); });
+			return node_state_density::log_density_of_clique(_topology(), transition_grid(c),
+			                                                 states, _bins());
 		};
 		auto [per_clique, inserts] = clique_traversal::run(n_cliques(), view_factory, kernel);
 

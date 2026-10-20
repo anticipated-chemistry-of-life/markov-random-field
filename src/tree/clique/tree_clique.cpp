@@ -68,7 +68,7 @@ void TTree::_initialize_node_from_children(size_t node_index, const Process &pro
 
 	// The same child terms the node-state walk adds, and from the same place. The start reads them
 	// alone: it has no parent term, because it takes the state the children make most likely.
-	node_state_walk::add_log_prob_of_children(_topology(), process, _previous_bins(), states,
+	node_state_walk::add_log_prob_of_children(_topology(), process, _bins(), states,
 	                                          node_index, sum_log);
 
 	const double log_prob_0 = sum_log[0].getSum();

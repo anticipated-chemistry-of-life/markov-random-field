@@ -89,7 +89,7 @@ _Avoid_: partition function, Z (that is the node state), evidence
 ## The chain
 
 **Update**:
-One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every node above the leaf block of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: the block, the species tree's node state, the molecule tree's node state, then the parameters.
+One full pass over a set of variables. The block update visits every leaf pair; a tree's node-state update visits every node above the leaf block of every clique of that tree. An *iteration* is one turn of the whole chain, and holds several updates in a fixed order: the error probability and the data sources' parameters, then the block, then the species tree's tree update, then the molecule tree's tree update, then the assignments when mass spectrometry data is compiled in.
 _Avoid_: sweep, pass, scan
 
 **Chain start**:
@@ -103,6 +103,10 @@ _Avoid_: Y update, Y sweep, leaf pair update
 **Block update**:
 The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The pass is a parallel loop over the field's rows -- one row is one species leaf, and a thread takes a contiguous block of them -- and each row walks its columns in ascending order, tallying the six link counters as it goes. The row is the unit because a clique of one tree is named by the leaves of every other tree, so the molecule tree's whole transition grid is constant down a row and is asked for once instead of once per cell. The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `block_update::update_row` and `block_update::update_cell`, `src/field/`. See ADR-0005 and ADR-0010.
 _Avoid_: joint draw, eight-state sweep
+
+**Tree update**:
+One tree's part of an iteration: its node-state update, then the Metropolis moves on its alphas, its nus and its branch lengths, in that order. Every one of them scores a branch at the bin it holds when the tree update begins; only the branch-length move scores a proposed bin, and only against that one.
+_Avoid_: tree sweep, tree pass, tree step
 
 **Joint density**:
 The log density of the whole model at one configuration: `log p(Z_s | theta_s) + log p(Z_m | theta_m) + log p(Y | Z_s, Z_m, omega) + log p(L, D | Y)`. Every factor is a proper conditional density, so the sum is one too — which the sum of the two trees' likelihoods it replaces was not (ADR-0002). It is the no-drift instrument: one number an iteration, and a chain that drifts moves it. A tree's own factor scores each node once, against its parent or against the stationary distribution, so each branch is counted once. Each factor takes a column of `<prefix>_joint_density.txt`. `--write_joint_log_prob_density` decides whether the file is written at all, because the two tree factors cost a pass over every node. See ADR-0005.

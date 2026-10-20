@@ -142,9 +142,6 @@ void TTree::simulate_Z() {
 	// A stream of its own, so this draw and the chain's first update are two draws (ADR-0007).
 	const TCellUniforms uniforms(run_seed(), TCellStream::node_state_at_start, 0, _dimension);
 
-	// The bin each branch sits in. Never asked of a root, which has no branch.
-	const auto bin_of = [this](size_t node) { return get_binned_branch_length(node); };
-
 	// One list per clique, committed in one batch below. Not per clique: a sparse node state
 	// re-sorts every row and every column of the whole matrix on commit, which is the right cost
 	// to pay once over every list at once and the wrong one to pay once per clique (ADR-0006).
@@ -159,7 +156,7 @@ void TTree::simulate_Z() {
 		//
 		// The leaves are drawn with the rest. Their block is this tree's tree field (ADR-0005).
 		TNodeStateSimulationView nodes(_Z, _topology(), _clique_index(c), _dimension);
-		node_state_draw::draw_clique(_topology(), transition_grid(c), bin_of, uniforms, nodes);
+		node_state_draw::draw_clique(_topology(), transition_grid(c), _bins(), uniforms, nodes);
 		indices_to_insert[c] = nodes.take_deferred_inserts();
 	}
 
