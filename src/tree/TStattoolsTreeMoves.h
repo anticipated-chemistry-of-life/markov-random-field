@@ -3,8 +3,8 @@
 //
 // TTree builds one of these once per iteration and hands it to `tree_update::run`. It fills the
 // `TreeMoves` concept (tree/tree_update.h). It adds the prior and Hastings terms that stattools
-// owns, with the same association the update used before the extraction, so the chain stays
-// byte-identical.
+// owns, in a fixed association: `(ratio) + prior ratio` per clique, and
+// `ratio + (prior ratio + prior ratio)` per pair. The chain's output depends on that association.
 //
 // The parameters' box type is TTree, so TTree is only declared here. The members are defined in
 // TStattoolsTreeMoves.cpp, where TTree is complete.
@@ -45,6 +45,8 @@ public:
 	    : _alpha(&alpha), _log_nu(&log_nu), _branch_lengths(&branch_lengths),
 	      _n_cliques(n_cliques), _pairs(n_branches) {}
 
+	// stattools holds the proposal in `value()` while it is pending, and the accepted value
+	// otherwise. So `proposed_*` and `accepted_*` read the same accessor, at different times.
 	void propose_alphas();
 	[[nodiscard]] double proposed_alpha(size_t clique) const;
 	[[nodiscard]] double accepted_alpha(size_t clique) const;
@@ -60,7 +62,7 @@ public:
 	void sample_branch_pairs();
 	[[nodiscard]] size_t n_branch_pairs() const;
 	[[nodiscard]] std::pair<size_t, size_t> branch_pair(size_t pair) const;
-	bool branch_coin();
+	static bool branch_coin();
 	[[nodiscard]] size_t current_bin(size_t branch) const;
 	/// Sets both proposed bins, then decides the pair. The prior ratios are added together, and
 	/// their sum is added to the ratio: `ratio + (prior ratio + prior ratio)`.

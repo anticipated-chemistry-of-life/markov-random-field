@@ -1,24 +1,25 @@
 //
 // The tree update: the part of an iteration that belongs to one tree (GLOSSARY.md, "Tree update").
 //
-// It runs the node-state walk, the Metropolis move on alpha, the Metropolis move on nu and the
+// It runs the node-state update, the Metropolis move on alpha, the Metropolis move on nu and the
 // Metropolis move on the branch lengths, in this order:
 //   1. Read every branch's current bin, and propose every clique's alpha.
-//   2. Parallel pass: the node-state walk (unless `FixZ`), then alpha's two scores per clique. One
-//      score is under the installed grid. The other is under the candidate grid, built from the
-//      proposed alpha and the accepted nu.
-//   3. Serial alpha decisions in clique order. Each accepted candidate grid is installed.
+//   2. Parallel region: the node-state update (unless `FixZ`), then alpha's two scores per clique.
+//      One score is under the installed grid. The other is under the candidate grid, built from
+//      the proposed alpha and the accepted nu.
+//   3. Serial alpha decisions in clique order. The tree update installs each accepted candidate
+//      grid.
 //   4. Propose every clique's log nu.
-//   5. Parallel pass: nu's candidate score per clique, under the grid built from the accepted alpha
-//      and the proposed nu. The installed score is the one the clique ended alpha on.
-//   6. Serial nu decisions in clique order. Each accepted candidate grid is installed.
+//   5. Parallel region: nu's candidate score per clique, under the grid built from the accepted
+//      alpha and the proposed nu. The installed score is the one the clique ended alpha on.
+//   6. Serial nu decisions in clique order. The tree update installs each accepted candidate grid.
 //   7. Draw this iteration's branch pairs, then each pair's coin in pair order, only where the bin
 //      grid leaves the direction free. Each pair's proposed bins follow the bin grid's step rule.
-//   8. Parallel pass: each pair's log-likelihood ratio, summed over every clique in fixed slots
+//   8. Parallel region: each pair's log-likelihood ratio, summed over every clique in fixed slots
 //      and reduced in slot order.
 //   9. Serial pair decisions in pair order.
-// Every move reads the bins the branches hold at the start. The proposed bins stay in this module
-// until their pair's decision, so no pass reads a proposed bin as a current one.
+// Every move reads the bins the branches hold at the start. This module keeps the proposed bins
+// until their pair's decision, so no parallel region reads a proposed bin as a current one.
 //
 // It reads plain data and reaches the parameters only through a `TreeMoves` adapter. So a test
 // builds it from a phylogeny, a clique space, a node state, a transition-grid table, a bin grid and
@@ -85,8 +86,8 @@ using node_state_density::CliqueStates;
 ///   It answers true on accept. The adapter adds the prior and Hastings terms.
 ///
 /// Two rules hold for every adapter:
-/// - The tree update calls the adapter only from serial code, never from inside a parallel pass. An
-///   adapter therefore needs no locks, and the generator's call order stays fixed (ADR-0007).
+/// - The tree update calls the adapter only from serial code, never from inside a parallel region.
+///   An adapter therefore needs no locks, and the generator's call order stays fixed (ADR-0007).
 /// - The tree update asks for the accepted value of a parameter only while that parameter has no
 ///   proposal pending. Alpha's candidate grids read the accepted nu. Nu's candidate grids read the
 ///   accepted alpha, after every alpha decision. A branch has a proposal only inside its pair's
@@ -96,29 +97,31 @@ using node_state_density::CliqueStates;
 /// fixed with `--<name>.update false` makes its proposal a no-op and its decision a rejection, so
 /// every move always runs.
 template<typename T>
-concept TreeMoves = requires(T &moves, const T &held, size_t clique, double log_ratio) {
+concept TreeMoves = requires(T &moves, const T &read_only_moves, size_t clique, size_t pair,
+                             size_t branch, size_t bin, double log_ratio) {
 	{ moves.propose_alphas() } -> std::same_as<void>;
-	{ held.proposed_alpha(clique) } -> std::convertible_to<double>;
-	{ held.accepted_alpha(clique) } -> std::convertible_to<double>;
+	{ read_only_moves.proposed_alpha(clique) } -> std::convertible_to<double>;
+	{ read_only_moves.accepted_alpha(clique) } -> std::convertible_to<double>;
 	{ moves.decide_alpha(clique, log_ratio) } -> std::same_as<bool>;
-	{ held.accepted_log_nu(clique) } -> std::convertible_to<double>;
+	{ read_only_moves.accepted_log_nu(clique) } -> std::convertible_to<double>;
 	{ moves.propose_log_nus() } -> std::same_as<void>;
-	{ held.proposed_log_nu(clique) } -> std::convertible_to<double>;
+	{ read_only_moves.proposed_log_nu(clique) } -> std::convertible_to<double>;
 	{ moves.decide_log_nu(clique, log_ratio) } -> std::same_as<bool>;
 	{ moves.sample_branch_pairs() } -> std::same_as<void>;
-	{ held.n_branch_pairs() } -> std::convertible_to<size_t>;
-	{ held.branch_pair(clique) } -> std::convertible_to<std::pair<size_t, size_t>>;
+	{ read_only_moves.n_branch_pairs() } -> std::convertible_to<size_t>;
+	{ read_only_moves.branch_pair(pair) } -> std::convertible_to<std::pair<size_t, size_t>>;
 	{ moves.branch_coin() } -> std::same_as<bool>;
-	{ held.current_bin(clique) } -> std::convertible_to<size_t>;
-	{ moves.decide_branch_pair(clique, clique, clique, log_ratio) } -> std::same_as<bool>;
+	{ read_only_moves.current_bin(branch) } -> std::convertible_to<size_t>;
+	{ moves.decide_branch_pair(pair, bin, bin, log_ratio) } -> std::same_as<bool>;
 };
 
 namespace detail {
 
-/// One clique's log-likelihood under each of two processes, in one pass over its nodes.
+/// One clique's log-likelihood under each of two transition grids, in one pass over its nodes.
 ///
 /// A root is scored against the stationary distribution, and every other node against its parent.
-/// The terms are added per node in node order. One pass reads each state once for both scores.
+/// The function adds the terms per node in node order. One pass reads each state once for both
+/// scores.
 template<CliqueStates States, BranchBins Bins, TransitionGridLike ProcessA,
          TransitionGridLike ProcessB>
 [[nodiscard]] std::array<double, 2> clique_LL(const TPhylogeny &topology, const Bins &bin_of,
@@ -141,8 +144,8 @@ template<CliqueStates States, BranchBins Bins, TransitionGridLike ProcessA,
 	return {LL_a.getSum(), LL_b.getSum()};
 }
 
-/// One clique's log-likelihood under one process. The terms are added in the order `clique_LL`
-/// above adds them, so a score of the same grid is the same double.
+/// One clique's log-likelihood under one transition grid. This function adds the terms in the
+/// order `clique_LL` above adds them, so a score of the same grid is the same double.
 template<CliqueStates States, BranchBins Bins, TransitionGridLike Process>
 [[nodiscard]] double clique_LL(const TPhylogeny &topology, const Bins &bin_of,
                                const States &states, const Process &process) {
@@ -161,19 +164,16 @@ template<CliqueStates States, BranchBins Bins, TransitionGridLike Process>
 
 /// How many slots the branch-length ratio is summed in before it is reduced.
 ///
-/// A fixed number, and not one per thread. The sum runs over every clique, and a thread-indexed
-/// slot holds whichever cliques the schedule handed that thread. So the last bits of the total,
-/// and with them the branch-length decision, moved with the thread count. A clique belongs to slot
-/// `c / cliques_per_slot` whatever thread runs it, and the slots are reduced in slot order, so the
-/// total is a function of the seed. Large enough to keep a big team busy, small enough that the
-/// slots are a few tens of MB.
+/// A clique belongs to slot `c / cliques_per_slot` whatever thread runs it, and the slots are
+/// reduced in slot order, so the total does not depend on the thread count (ADR-0007).
 inline constexpr size_t N_BRANCH_LL_SLOTS = 64;
 
 /// One pair of the branch-length move: its two branches, their current bins and their proposed
-/// bins. The first branch moves by the step and the second by its negation.
+/// bins. The first branch moves by the step and the second by its negation. A branch is named by
+/// its child node, the index space the clique views use.
 struct TBranchPair {
-	size_t first_node;
-	size_t second_node;
+	size_t first_child_node;
+	size_t second_child_node;
 	size_t first_bin;
 	size_t second_bin;
 	size_t proposed_first_bin;
@@ -197,38 +197,26 @@ void add_branch_ratios(const TPhylogeny &topology, const Process &process, const
 	};
 	for (size_t p = 0; p < pairs.size(); ++p) {
 		const TBranchPair &pair = pairs[p];
-		log_sum[p].add(ratio(pair.first_node, pair.first_bin, pair.proposed_first_bin));
-		log_sum[p].add(ratio(pair.second_node, pair.second_bin, pair.proposed_second_bin));
+		log_sum[p].add(ratio(pair.first_child_node, pair.first_bin, pair.proposed_first_bin));
+		log_sum[p].add(ratio(pair.second_child_node, pair.second_bin, pair.proposed_second_bin));
 	}
 }
 
-} // namespace detail
+/// True when no clique view deferred an insert. A parallel region that only reads defers none.
+template<typename Inserts> [[nodiscard]] bool no_deferred_inserts(const Inserts &inserts) {
+	return std::all_of(inserts.begin(), inserts.end(),
+	                   [](const auto &clique_inserts) { return clique_inserts.empty(); });
+}
 
-/// Runs the node-state walk, the alpha move, the nu move and the branch-length move of one tree.
-///
-/// @param topology  the tree's phylogeny
-/// @param cliques   the tree's clique space. Its dimension is the tree's own.
-/// @param Z         the tree's node state, of either backend. Unchanged when `FixZ` is set.
-/// @param grids     one installed transition grid per clique. An accepted alpha or nu installs its
-///                  grid.
-/// @param bin_grid  the bin grid every candidate grid is built on, and whose step rule proposes
-///                  the branch-length pairs
-/// @param uniforms  this iteration's cell uniforms for the node-state walk
-/// @param moves     the adapter to the parameters
-///
-/// The first parallel pass writes through clique views. Their deferred inserts go into `Z` after
-/// the pass ends (ADR-0009). The other passes only read.
-template<bool FixZ, typename NodeState, CellUniforms Uniforms, TreeMoves Moves>
-void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z,
-         TTransitionGridTable &grids, const TBinGrid &bin_grid, const Uniforms &uniforms,
-         Moves &moves) {
-	const size_t n = cliques.n_cliques();
-
-	// The adapter is asked here, in serial code, and the passes below read these copies.
-	std::vector<size_t> current_bin(topology.n_branches());
-	for (size_t b = 0; b < current_bin.size(); ++b) { current_bin[b] = moves.current_bin(b); }
-	auto bin_of = [&](size_t node) { return current_bin[topology.branch_index(node)]; };
-
+/// The node-state update and the alpha move. Returns the log-likelihood each clique ends alpha
+/// on: the candidate grid's on accept, the installed grid's on reject.
+template<bool FixZ, typename NodeState, CellUniforms Uniforms, TreeMoves Moves, typename BinOf,
+         typename ViewFactory>
+[[nodiscard]] std::vector<double>
+node_states_and_alpha(const TPhylogeny &topology, size_t n, NodeState &Z,
+                      TTransitionGridTable &grids, const TBinGrid &bin_grid,
+                      const Uniforms &uniforms, Moves &moves, const BinOf &bin_of,
+                      const ViewFactory &view_factory) {
 	moves.propose_alphas();
 	std::vector<double> proposed_alpha(n);
 	std::vector<double> accepted_nu(n);
@@ -237,26 +225,22 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 		accepted_nu[c]    = std::exp(moves.accepted_log_nu(c));
 	}
 
-	// --- the node-state walk, and alpha's two likelihoods ---
-	auto view_factory = [&](size_t c) {
-		return TCliqueView<NodeState>(Z, topology, cliques.index_of(c), cliques.dimension());
-	};
+	// --- the node-state update, and alpha's two likelihoods ---
 	auto kernel = [&](size_t c, TCliqueView<NodeState> &states) {
 		// The view lives across the scores below, so they read the states the walk assigns.
 		const auto installed = grids.at(c);
 		if constexpr (!FixZ) {
 			node_state_walk::update_clique(topology, installed, bin_of, uniforms, states);
 		}
-		return detail::clique_LL(topology, bin_of, states, installed,
-		                         TTransitionGrid(proposed_alpha[c], accepted_nu[c], bin_grid));
+		return clique_LL(topology, bin_of, states, installed,
+		                 TTransitionGrid(proposed_alpha[c], accepted_nu[c], bin_grid));
 	};
 	auto [alpha_LL, inserts] = clique_traversal::run(n, view_factory, kernel);
 	if constexpr (!FixZ) {
 		Z.insert_in_Z(inserts);
 	} else {
-		// With `FixZ` the pass writes nothing, so no view defers an insert.
-		DEBUG_ASSERT(std::all_of(inserts.begin(), inserts.end(),
-		                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
+		// With `FixZ` the parallel region writes nothing.
+		DEBUG_ASSERT(no_deferred_inserts(inserts));
 	}
 
 	// --- alpha's decisions, and the likelihood each clique ends alpha on ---
@@ -269,7 +253,14 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 			LL_after_alpha[c] = alpha_LL[c][0];
 		}
 	}
+	return LL_after_alpha;
+}
 
+/// The nu move. `LL_after_alpha` is each clique's log-likelihood under its installed grid.
+template<typename NodeState, TreeMoves Moves, typename BinOf, typename ViewFactory>
+void nu(const TPhylogeny &topology, size_t n, TTransitionGridTable &grids,
+        const TBinGrid &bin_grid, Moves &moves, const BinOf &bin_of,
+        const ViewFactory &view_factory, const std::vector<double> &LL_after_alpha) {
 	// --- nu's proposals, read in serial code after every alpha decision ---
 	moves.propose_log_nus();
 	std::vector<double> accepted_alpha(n);
@@ -280,15 +271,13 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 	}
 
 	// --- nu's candidate likelihood ---
-	// The installed score is the one each clique ended alpha on, so this pass scores one grid.
-	auto nu_kernel = [&](size_t c, TCliqueView<NodeState> &states) {
-		return detail::clique_LL(topology, bin_of, states,
-		                         TTransitionGrid(accepted_alpha[c], proposed_nu[c], bin_grid));
+	// The installed score is the one each clique ended alpha on, so this region scores one grid.
+	auto kernel = [&](size_t c, TCliqueView<NodeState> &states) {
+		return clique_LL(topology, bin_of, states,
+		                 TTransitionGrid(accepted_alpha[c], proposed_nu[c], bin_grid));
 	};
-	auto [nu_LL, nu_inserts] = clique_traversal::run(n, view_factory, nu_kernel);
-	// This pass only reads, so no view defers an insert.
-	DEBUG_ASSERT(std::all_of(nu_inserts.begin(), nu_inserts.end(),
-	                         [](const auto &clique_inserts) { return clique_inserts.empty(); }));
+	auto [nu_LL, inserts] = clique_traversal::run(n, view_factory, kernel);
+	DEBUG_ASSERT(no_deferred_inserts(inserts));
 
 	// --- nu's decisions ---
 	for (size_t c = 0; c < n; ++c) {
@@ -296,14 +285,20 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 			grids.set(c, TTransitionGrid(accepted_alpha[c], proposed_nu[c], bin_grid));
 		}
 	}
+}
 
+/// The branch-length move, from the bins every branch holds at the start of the tree update.
+template<TreeMoves Moves, typename ViewFactory>
+void branch_lengths(const TPhylogeny &topology, size_t n, const TTransitionGridTable &grids,
+                    const TBinGrid &bin_grid, Moves &moves,
+                    const std::vector<size_t> &current_bin, const ViewFactory &view_factory) {
 	// --- the branch-length pairs and their proposed bins, in serial code ---
-	// The pairs are drawn first, then the coins in pair order. A coin is drawn only where the bin
-	// grid leaves the direction free: at a boundary the direction is forced, and a coin drawn
-	// anyway would shift the generator's stream.
+	// The adapter draws the pairs first, then the coins in pair order. This function asks for a
+	// coin only where the bin grid leaves the direction free: at a boundary the direction is
+	// forced, and a coin drawn anyway would shift the generator's stream.
 	moves.sample_branch_pairs();
 	const size_t n_pairs = moves.n_branch_pairs();
-	std::vector<detail::TBranchPair> pairs(n_pairs);
+	std::vector<TBranchPair> pairs(n_pairs);
 	for (size_t p = 0; p < n_pairs; ++p) {
 		const auto [first, second] = static_cast<std::pair<size_t, size_t>>(moves.branch_pair(p));
 		const size_t first_bin     = current_bin[first];
@@ -322,17 +317,15 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 	// A clique belongs to slot `c / cliques_per_slot`, and `schedule(static, cliques_per_slot)`
 	// hands each of those blocks to one thread. So a slot has one writer and its contents do not
 	// depend on the team size.
-	const size_t cliques_per_slot =
-	    (n + detail::N_BRANCH_LL_SLOTS - 1) / detail::N_BRANCH_LL_SLOTS;
+	const size_t cliques_per_slot = (n + N_BRANCH_LL_SLOTS - 1) / N_BRANCH_LL_SLOTS;
 	std::vector<std::vector<coretools::TSumLogProbability>> slots(
-	    detail::N_BRANCH_LL_SLOTS, std::vector<coretools::TSumLogProbability>(n_pairs));
+	    N_BRANCH_LL_SLOTS, std::vector<coretools::TSumLogProbability>(n_pairs));
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
     schedule(static, cliques_per_slot)                                                             \
     shared(n, cliques_per_slot, view_factory, topology, grids, pairs, slots)
 	for (size_t c = 0; c < n; ++c) {
 		auto states = view_factory(c);
-		detail::add_branch_ratios(topology, grids.at(c), states, pairs,
-		                          slots[c / cliques_per_slot]);
+		add_branch_ratios(topology, grids.at(c), states, pairs, slots[c / cliques_per_slot]);
 		DEBUG_ASSERT(states.take_deferred_inserts().empty());
 	}
 	std::vector<coretools::TSumLogProbability> log_ratio = slots[0];
@@ -342,10 +335,47 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 
 	// --- the branch-length decisions, in pair order ---
 	for (size_t p = 0; p < n_pairs; ++p) {
-		const detail::TBranchPair &pair = pairs[p];
-		(void)moves.decide_branch_pair(p, pair.proposed_first_bin, pair.proposed_second_bin,
-		                               log_ratio[p].getSum());
+		const TBranchPair &pair = pairs[p];
+		moves.decide_branch_pair(p, pair.proposed_first_bin, pair.proposed_second_bin,
+		                         log_ratio[p].getSum());
 	}
+}
+
+} // namespace detail
+
+/// Runs the node-state update, the alpha move, the nu move and the branch-length move of one tree.
+///
+/// @param topology  the tree's phylogeny
+/// @param cliques   the tree's clique space. Its dimension is the tree's own.
+/// @param Z         the tree's node state, of either backend. Unchanged when `FixZ` is set.
+/// @param grids     one installed transition grid per clique. An accepted alpha or nu installs its
+///                  grid.
+/// @param bin_grid  the bin grid every candidate grid is built on, and whose step rule proposes
+///                  the branch-length pairs
+/// @param uniforms  this iteration's cell uniforms for the node-state update
+/// @param moves     the adapter to the parameters
+///
+/// The first parallel region writes through clique views. Their deferred inserts go into `Z` after
+/// the region ends (ADR-0009). The other parallel regions only read.
+template<bool FixZ, typename NodeState, CellUniforms Uniforms, TreeMoves Moves>
+void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z,
+         TTransitionGridTable &grids, const TBinGrid &bin_grid, const Uniforms &uniforms,
+         Moves &moves) {
+	const size_t n = cliques.n_cliques();
+
+	// The adapter is asked here, in serial code, and the parallel regions read these copies.
+	std::vector<size_t> current_bin(topology.n_branches());
+	for (size_t b = 0; b < current_bin.size(); ++b) { current_bin[b] = moves.current_bin(b); }
+	auto bin_of       = [&](size_t node) { return current_bin[topology.branch_index(node)]; };
+	auto view_factory = [&](size_t c) {
+		return TCliqueView<NodeState>(Z, topology, cliques.index_of(c), cliques.dimension());
+	};
+
+	const std::vector<double> LL_after_alpha = detail::node_states_and_alpha<FixZ>(
+	    topology, n, Z, grids, bin_grid, uniforms, moves, bin_of, view_factory);
+	detail::nu<NodeState>(topology, n, grids, bin_grid, moves, bin_of, view_factory,
+	                      LL_after_alpha);
+	detail::branch_lengths(topology, n, grids, bin_grid, moves, current_bin, view_factory);
 }
 
 } // namespace tree_update

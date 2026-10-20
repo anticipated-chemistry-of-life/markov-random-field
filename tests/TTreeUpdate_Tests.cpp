@@ -255,7 +255,7 @@ static_assert(tree_update::TreeMoves<TScriptedTreeMoves>);
 
 /// One tree, with everything a tree update reads, and a scripted adapter over it.
 ///
-/// The forest has several roots and an odd branch count. The other tree has a leaf count unlike
+/// The tree has several roots and an odd branch count. The other tree has a leaf count unlike
 /// this tree's node count, so the node state is not square.
 template<typename NodeState> struct TTreeFixture {
 	static constexpr size_t N_BINS = 5;
@@ -273,13 +273,13 @@ template<typename NodeState> struct TTreeFixture {
 	std::vector<double> log_nu_proposals;
 	TCellUniforms uniforms{20261020, TCellStream::node_state, 3, TREE};
 
-	static TPhylogeny forest() {
+	static TPhylogeny tree() {
 		std::mt19937_64 rng(20261020);
 		return build_phylogeny(phylo::random_forest(rng, 14, 3));
 	}
 
 	explicit TTreeFixture(size_t n_cliques)
-	    : topology(forest()), leaf_counts{topology.n_leaves(), n_cliques},
+	    : topology(tree()), leaf_counts{topology.n_leaves(), n_cliques},
 	      cliques(leaf_counts, TREE), Z(node_state_dimensions(leaf_counts, TREE, topology)) {
 		backends::seed_ones(Z, 7);
 
@@ -373,7 +373,8 @@ template<typename NodeState> struct TTreeFixture {
 };
 
 /// The grid at clique `c` of `table` is `expected`, in every bin and in its stationary terms.
-void expect_installed(const TTransitionGridTable &table, size_t c, const TTransitionGrid &expected) {
+void expect_installed(const TTransitionGridTable &table, size_t c,
+                      const TTransitionGrid &expected) {
 	const TTransitionGridView installed = table.at(c);
 	ASSERT_EQ(installed.n_bins(), expected.n_bins());
 	for (size_t bin = 0; bin < expected.n_bins(); ++bin) {
@@ -464,7 +465,8 @@ void expect_branch_pairs(TTreeFixture<NodeState> &fx, const TScriptedBranchLengt
 			expected_bins[first]  = proposed_first;
 			expected_bins[second] = proposed_second;
 			if (step != 0) {
-				const int moved = static_cast<int>(proposed_first) - static_cast<int>(before[first]);
+				const int moved =
+				    static_cast<int>(proposed_first) - static_cast<int>(before[first]);
 				EXPECT_EQ(std::abs(moved), 1) << "pair " << p;
 				EXPECT_EQ(proposed_first + proposed_second, before[first] + before[second]);
 			}

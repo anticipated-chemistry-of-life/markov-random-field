@@ -49,8 +49,8 @@ size_t TStattoolsTreeMoves::current_bin(size_t branch) const {
 bool TStattoolsTreeMoves::decide_branch_pair(size_t pair, size_t first_bin, size_t second_bin,
                                              double log_ratio) {
 	const auto [p1, p2] = _pairs.getIndexPair(pair);
-	_branch_lengths->set(p1, (int)first_bin);
-	_branch_lengths->set(p2, (int)second_bin);
+	_branch_lengths->set(p1, static_cast<int>(first_bin));
+	_branch_lengths->set(p2, static_cast<int>(second_bin));
 	const double log_prior_ratio =
 	    _branch_lengths->getLogDensityRatio(p1) + _branch_lengths->getLogDensityRatio(p2);
 	const double log_H = log_ratio + log_prior_ratio;

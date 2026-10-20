@@ -134,8 +134,9 @@ private:
 
 	void _simulateUnderPrior(Storage *) override;
 
-	/// The cells of clique `c`, addressed by node index. One place holds the three things a view
-	/// is built from, so the loops below cannot drift apart.
+	/// The cells of clique `c`, addressed by node index. The loops below build every view here,
+	/// so they cannot drift apart. `tree_update::run` builds the same view from the same three
+	/// things: the node state, the topology and the clique space.
 	[[nodiscard]] TNodeStateCliqueView _clique_view(size_t c) {
 		return {_Z, _topology(), _clique_index(c), _dimension};
 	}
