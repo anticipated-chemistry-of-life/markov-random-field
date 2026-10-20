@@ -12,7 +12,6 @@
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
-#include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "omp.h"
 #include "random/TCellUniforms.h"
@@ -111,19 +110,6 @@ private:
 	/// @brief Load tree from file
 	void _load_from_file(const std::string &filename, const std::string &tree_name);
 
-	// updating branch lengths
-	[[nodiscard]] stattools::TPairIndexSampler _build_pairs_branch_lengths() const;
-	void _propose_new_branch_lengths(const stattools::TPairIndexSampler &pairs);
-	void _propose_new_branch_lengths(size_t p1, size_t p2, int val);
-	void _add_to_LL_branch_lengths(size_t c, const TNodeStateCliqueView &states,
-	                               std::vector<coretools::TSumLogProbability> &log_sum,
-	                               const stattools::TPairIndexSampler &pairs) const;
-	template<TransitionGridLike Process>
-	[[nodiscard]] double
-	_calculate_likelihood_ratio_branch_length(size_t index_in_binned_branch_length,
-	                                          const Process &process,
-	                                          const TNodeStateCliqueView &states) const;
-
 	/// The multidimensional index of clique `c`: a leaf in every dimension but this tree's own,
 	/// which carries a 0. Clique space owns the convention (ADR-0011).
 	[[nodiscard]] IndexArray _clique_index(size_t c) const;
@@ -134,27 +120,14 @@ private:
 		_transition_grids.set(c, grid);
 	}
 
-	/// P(node | parent) under an explicitly given process, so a Metropolis proposal can ask the
-	/// same question of the clique's current grid and of its candidate.
-	template<TransitionGridLike Process>
-	[[nodiscard]] double
-	_prob_to_parent(size_t index_in_tree, TypeBinnedBranchLengths binned_branch_length,
-	                const TNodeStateCliqueView &states, const Process &process) const {
-		const size_t parent_index = _topology().parent_of(index_in_tree);
-		const bool parent_state   = states.is_one(parent_index);
-		const bool child_state    = states.is_one(index_in_tree);
-		return process.probability(binned_branch_length, parent_state, child_state);
-	}
-
 	/// The bottom-up start of one clique. It shares its child terms with the node-state walk.
 	void _initialize_clique_from_children(size_t c, TNodeStateCliqueView &states) const;
 	template<TransitionGridLike Process>
 	void _initialize_node_from_children(size_t node_index, const Process &process,
 	                                    TNodeStateCliqueView &states) const;
 
-	/// The bin every branch of this tree holds now. The node-state walk, the alpha and nu moves,
-	/// the chain start and the node-state density are handed this, so none of them reads a
-	/// parameter.
+	/// The bin every branch of this tree holds now. The chain start, the simulation and the
+	/// node-state density are handed this, so none of them reads a parameter.
 	[[nodiscard]] auto _bins() const {
 		return [this](size_t node) { return get_binned_branch_length(node); };
 	}
@@ -165,31 +138,6 @@ private:
 	/// is built from, so the loops below cannot drift apart.
 	[[nodiscard]] TNodeStateCliqueView _clique_view(size_t c) {
 		return {_Z, _topology(), _clique_index(c), _dimension};
-	}
-
-	void _evalute_update_branch_length(std::vector<coretools::TSumLogProbability> &log_sum,
-	                                   const stattools::TPairIndexSampler &pairs);
-
-	/// How many slots the branch-length likelihood is summed in before it is reduced.
-	///
-	/// A fixed number, and not one per thread. The sum runs over every clique, and a
-	/// thread-indexed slot holds whichever cliques the schedule handed that thread -- so the last
-	/// bits of the total, and with them the branch-length move's accept or reject, moved with the
-	/// thread count and with `schedule(dynamic)`'s run-to-run assignment. A clique belongs to slot
-	/// `c * N / n_cliques` whatever runs it, and the slots are reduced in slot order, so the total
-	/// is a function of the seed. Large enough to keep a big team busy, small enough that the
-	/// slots are a few tens of MB.
-	static constexpr size_t N_BRANCH_LL_SLOTS = 64;
-
-	/// The slots above, reduced in slot order.
-	[[nodiscard]] static std::vector<coretools::TSumLogProbability>
-	_reduce_branch_LL_slots(std::vector<std::vector<coretools::TSumLogProbability>> &slots,
-	                        size_t n_pairs) {
-		auto reduced = slots[0];
-		for (size_t slot = 1; slot < slots.size(); ++slot) {
-			for (size_t p = 0; p < n_pairs; ++p) { reduced[p] = reduced[p] + slots[slot][p]; }
-		}
-		return reduced;
 	}
 
 public:
@@ -262,8 +210,7 @@ public:
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
 	/// The tree update (GLOSSARY.md): the node-state update, then the moves on alpha, nu and the
-	/// branch lengths. `tree_update::run` runs the node-state walk, the alpha move and the nu move.
-	/// The branch-length move follows here.
+	/// branch lengths. `tree_update::run` runs all of it.
 	///
 	/// The field is not named here at all. Each tree owns a leaf-level view of it: its tree field,
 	/// the leaf block of this tree's node state. So the walk and the moves read one tree and
@@ -276,43 +223,15 @@ public:
 	/// region would make the chain depend on the schedule and not on the seed. The node-state walk
 	/// draws from cell uniforms instead (ADR-0007).
 	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
-		const size_t n = n_cliques();
-
 		// The stream this tree's node state draws from this iteration. Each tree names its own
 		// dimension, so the two trees never share a uniform.
 		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
 		                                        _dimension);
 
-		// --- the node-state walk, the alpha move and the nu move ---
-		TStattoolsTreeMoves moves(*_alpha_c, *_log_nu_c, n);
-		tree_update::run<FixZ>(_topology(), _cliques(), _Z, _transition_grids, _grid(), _bins(),
+		TStattoolsTreeMoves moves(*_alpha_c, *_log_nu_c, *_binned_branch_lengths, n_cliques(),
+		                          _topology().n_branches());
+		tree_update::run<FixZ>(_topology(), _cliques(), _Z, _transition_grids, _grid(),
 		                       node_state_uniforms, moves);
-
-		// --- the branch-length move: proposed only now ---
-		// Every move above reads the bin each branch holds now. A proposal sets `value` to the
-		// candidate, so the branch lengths are proposed after those moves and not before. Only the
-		// ratio below reads `oldValue`, and only for the branches it pairs.
-		auto pairs         = _build_pairs_branch_lengths();
-		const auto n_pairs = pairs.length();
-		_propose_new_branch_lengths(pairs);
-
-		// --- region 3: the branch-length likelihood, summed in fixed slots ---
-		// A clique belongs to slot `i / cliques_per_slot`, and `schedule(static, cliques_per_slot)`
-		// hands each of those blocks to one thread, so a slot has one writer and its contents do
-		// not depend on the team size.
-		const size_t cliques_per_slot = (n + N_BRANCH_LL_SLOTS - 1) / N_BRANCH_LL_SLOTS;
-		std::vector<std::vector<coretools::TSumLogProbability>> branch_LL(
-		    N_BRANCH_LL_SLOTS, std::vector<coretools::TSumLogProbability>(n_pairs));
-#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
-    schedule(static, cliques_per_slot) shared(pairs, branch_LL, n, cliques_per_slot)
-		for (size_t i = 0; i < n; ++i) {
-			auto states = _clique_view(i);
-			_add_to_LL_branch_lengths(i, states, branch_LL[i / cliques_per_slot], pairs);
-			DEBUG_ASSERT(states.take_deferred_inserts().empty());
-		}
-
-		auto log_sum = TTree::_reduce_branch_LL_slots(branch_LL, n_pairs);
-		_evalute_update_branch_length(log_sum, pairs);
 	}
 
 	[[nodiscard]] TypeBinnedBranchLengths get_binned_branch_length(size_t index_in_tree) const {

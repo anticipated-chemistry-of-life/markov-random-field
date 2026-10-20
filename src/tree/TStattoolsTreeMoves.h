@@ -14,28 +14,36 @@
 
 #include "Types.h"
 #include "stattools/ParametersObservations/TParameter.h"
+#include "stattools/Updates/TPairIndexSampler.h"
 
 #include <cstddef>
+#include <utility>
 
 class TTree;
 
-/// A `TreeMoves` adapter over the alpha and log nu parameters of one tree.
+/// A `TreeMoves` adapter over the alpha, log nu and binned branch-length parameters of one tree.
+/// It owns this iteration's branch pairs, and draws them and the coins from the generator.
 ///
 /// A parameter fixed with `--<name>.update false` needs no special case. stattools makes its
 /// proposal a no-op and its decision a rejection.
 class TStattoolsTreeMoves {
 public:
-	using TypeParamAlpha = stattools::TParameter<SpecAlpha, TTree>;
-	using TypeParamLogNu = stattools::TParameter<SpecLogNu, TTree>;
+	using TypeParamAlpha       = stattools::TParameter<SpecAlpha, TTree>;
+	using TypeParamLogNu       = stattools::TParameter<SpecLogNu, TTree>;
+	using TypeParamBinBranches = stattools::TParameter<SpecBinnedBranches, TTree>;
 
 private:
-	TypeParamAlpha *_alpha  = nullptr;
-	TypeParamLogNu *_log_nu = nullptr;
-	size_t _n_cliques       = 0;
+	TypeParamAlpha *_alpha                = nullptr;
+	TypeParamLogNu *_log_nu               = nullptr;
+	TypeParamBinBranches *_branch_lengths = nullptr;
+	size_t _n_cliques                     = 0;
+	stattools::TPairIndexSampler _pairs;
 
 public:
-	TStattoolsTreeMoves(TypeParamAlpha &alpha, TypeParamLogNu &log_nu, size_t n_cliques)
-	    : _alpha(&alpha), _log_nu(&log_nu), _n_cliques(n_cliques) {}
+	TStattoolsTreeMoves(TypeParamAlpha &alpha, TypeParamLogNu &log_nu,
+	                    TypeParamBinBranches &branch_lengths, size_t n_cliques, size_t n_branches)
+	    : _alpha(&alpha), _log_nu(&log_nu), _branch_lengths(&branch_lengths),
+	      _n_cliques(n_cliques), _pairs(n_branches) {}
 
 	void propose_alphas();
 	[[nodiscard]] double proposed_alpha(size_t clique) const;
@@ -48,4 +56,13 @@ public:
 	[[nodiscard]] double proposed_log_nu(size_t clique) const;
 	/// The ratio comes first and the prior ratio is added to it: `(ratio) + prior ratio`.
 	bool decide_log_nu(size_t clique, double log_ratio);
+
+	void sample_branch_pairs();
+	[[nodiscard]] size_t n_branch_pairs() const;
+	[[nodiscard]] std::pair<size_t, size_t> branch_pair(size_t pair) const;
+	bool branch_coin();
+	[[nodiscard]] size_t current_bin(size_t branch) const;
+	/// Sets both proposed bins, then decides the pair. The prior ratios are added together, and
+	/// their sum is added to the ratio: `ratio + (prior ratio + prior ratio)`.
+	bool decide_branch_pair(size_t pair, size_t first_bin, size_t second_bin, double log_ratio);
 };
