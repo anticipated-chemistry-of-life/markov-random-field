@@ -64,6 +64,8 @@ Two serial draws did move: the field and the node state a simulated chain starts
 
 Fixing the parameter moves is a change to the shape of the clique loop, not to this stream. The proposals would move to a serial pass before the loop, the parallel pass would score every combination the two moves can reach, and the accept-or-reject calls would run serially after it — with the branch-length term, which reads the grid those moves install, moving with them. That is a separate piece of work, and the loop it rewrites is the one #54 rewrites anyway.
 
+**Note, 2026-10-20.** The alpha, nu and branch-length moves now propose and decide in serial code, before and after the parallel regions of the tree update (`src/tree/tree_update.h`). The tree update's `TreeMoves` seam states this as a rule: the tree update calls the adapter only from serial code. What the paragraphs above say about these three moves describes the code before that change.
+
 ## Considered options
 
 **Seed each thread's generator deterministically.** Rejected. `schedule(dynamic)` decides which thread takes which clique, so even identically seeded threads consume their draws in an order that changes between runs. It also does not survive ADR-0006: two traversals still visit cells in different orders within one thread.
