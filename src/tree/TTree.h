@@ -19,6 +19,7 @@
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/storage_backend.h"
 #include "tree/TPhylogeny.h"
+#include "tree/TStattoolsTreeMoves.h"
 #include "tree/branch/TBinGrid.h"
 #include "tree/branch/TTransitionGrid.h"
 #include "tree/branch/TTransitionGridTable.h"
@@ -26,9 +27,8 @@
 #include "tree/clique/TCliqueView.h"
 #include "tree/clique/clique_traversal.h"
 #include "tree/node_state_density.h"
-#include "tree/node_state_walk.h"
+#include "tree/tree_update.h"
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <optional>
 #include <span>
@@ -175,32 +175,9 @@ private:
 		}
 	}
 
-	/// One clique's log-likelihood under each of two processes, in one pass over its nodes.
-	///
-	/// Two processes rather than one because a Metropolis move on alpha or nu needs the current
-	/// grid and the candidate scored over the same states, and a node's state is the expensive
-	/// thing to read: one pass reads it once and the compiler shares the load between both scores.
-	template<TransitionGridLike ProcessA, TransitionGridLike ProcessB>
-	[[nodiscard]] std::array<double, 2> _clique_LL(const TNodeStateCliqueView &states,
-	                                               const ProcessA &a, const ProcessB &b) const {
-		coretools::TSumLogProbability LL_a;
-		coretools::TSumLogProbability LL_b;
-		const auto &topology = _topology();
-		for (size_t i = 0; i < topology.n_nodes(); ++i) {
-			const bool state_of_node = states.is_one(i);
-			std::optional<size_t> branch_len_bin;
-			if (!topology.is_root(i)) { branch_len_bin = get_binned_branch_length(i); }
-			_add_node_to_clique_LL(i, state_of_node, LL_a, states, branch_len_bin, a);
-			_add_node_to_clique_LL(i, state_of_node, LL_b, states, branch_len_bin, b);
-		}
-		return {LL_a.getSum(), LL_b.getSum()};
-	}
-
-	/// One clique's log-likelihood under one process. The nu move needs only this: the likelihood
-	/// its ratio divides by is the one the alpha move already computed -- after the alpha move a
-	/// clique's grid is either the one alpha started from or the candidate it accepted, and both
-	/// of those sums were summed over these same nodes in this same order, so reading them back is
-	/// the same double rather than a near one.
+	/// One clique's log-likelihood under one process. The nu move needs only this. Its ratio divides
+	/// by the likelihood `tree_update::run` returns for the clique. That sum is over the same nodes
+	/// in the same order, so it is the same double and not a near one.
 	template<TransitionGridLike Process>
 	[[nodiscard]] double _clique_LL(const TNodeStateCliqueView &states,
 	                                const Process &process) const {
@@ -215,16 +192,10 @@ private:
 		return LL.getSum();
 	}
 
-	/// The grid a proposed alpha or nu would give clique `c`. Built from the value the parameter
-	/// currently holds, so it has to be asked before `acceptOrReject` puts a rejected value back.
-	/// The alpha grid takes the accepted log nu, because the nu move proposes after it.
-	template<bool IsAlpha>
-	[[nodiscard]] TTransitionGrid _candidate_grid(size_t c, double proposed) const {
-		if constexpr (IsAlpha) {
-			return TTransitionGrid(proposed, std::exp(_log_nu_c->value(c)), _grid());
-		} else {
-			return TTransitionGrid(_alpha_c->value(c), std::exp(proposed), _grid());
-		}
+	/// The grid a proposed nu would give clique `c`, with the accepted alpha. Ask for it before
+	/// `acceptOrReject` puts a rejected value back.
+	[[nodiscard]] TTransitionGrid _nu_candidate_grid(size_t c, double proposed) const {
+		return TTransitionGrid(_alpha_c->value(c), std::exp(proposed), _grid());
 	}
 
 	/// The cells of clique `c`, addressed by node index. One place holds the three things a view
@@ -327,79 +298,40 @@ public:
 
 	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
 
+	/// The tree update (GLOSSARY.md): the node-state update, then the moves on alpha, nu and the
+	/// branch lengths. `tree_update::run` runs the node-state walk and the alpha move. The nu move
+	/// and the branch-length move follow here.
+	///
 	/// The field is not named here at all. Each tree owns a leaf-level view of it: its tree field,
-	/// the leaf block of this tree's node state. So the walk below, and the alpha and nu moves
-	/// after it, read one tree and nothing else. See ADR-0005. The leaves themselves are drawn
-	/// with the field, as one eight-state block, before this runs.
+	/// the leaf block of this tree's node state. So the walk and the moves read one tree and
+	/// nothing else. See ADR-0005. The leaves themselves are drawn with the field, as one
+	/// eight-state block, before this runs.
 	///
-	/// Every read and write of a cell goes through the clique's view, which is the one place a
-	/// node index becomes a cell of the node state.
-	///
-	/// Not one random number is drawn inside a parallel region. Every proposal and every accept
-	/// or reject is taken here, single-threaded, walking the cliques in order; the regions only
-	/// read states and add up likelihoods. That is what makes the chain a function of the seed:
-	/// `coretools::instances::randomGenerator()` is `thread_local`, and a worker thread's copy is
-	/// constructed inside the region, where `setSeed` seeds it from the wall clock -- so
-	/// `--fixedSeed` never reached the alpha and nu moves at all, and which clique got which draw
-	/// depended on how `schedule(dynamic)` happened to hand the cliques out that run. ADR-0007
-	/// bought the node state this property by hashing a cell's uniform from its position; these
-	/// moves get it by drawing where there is only one thread to draw on.
-	///
-	/// The cost is three regions where there was one, and two serial passes over the cliques that
-	/// do no likelihood work. A proposal and an accept are a few tens of nanoseconds against the
-	/// tens of milliseconds a clique's likelihood costs.
+	/// No random number is drawn inside a parallel region. Every proposal and every decision is
+	/// taken in serial code, in clique order. `coretools::instances::randomGenerator()` is
+	/// `thread_local`, and a worker thread seeds its copy from the wall clock. So a draw inside a
+	/// region would make the chain depend on the schedule and not on the seed. The node-state walk
+	/// draws from cell uniforms instead (ADR-0007).
 	template<bool FixZ> void update_Z_and_nus_and_alphas_and_branch_lengths(size_t iteration) {
 		const size_t n = n_cliques();
 
-		// The stream this tree's node state draws from this iteration, built before the parallel
-		// region (see run_seed). Each tree names its own dimension, so the two never share a
-		// uniform.
+		// The stream this tree's node state draws from this iteration. Each tree names its own
+		// dimension, so the two trees never share a uniform.
 		const TCellUniforms node_state_uniforms(run_seed(), TCellStream::node_state, iteration,
 		                                        _dimension);
 
-		// Every clique's alpha, proposed here rather than inside the region.
-		_alpha_c->propose(coretools::TRange(0, n, 1));
+		// --- the node-state walk and the alpha move ---
+		TStattoolsTreeMoves moves(*_alpha_c, *_log_nu_c, n);
+		const std::vector<double> LL_after_alpha =
+		    tree_update::run<FixZ>(_topology(), _cliques(), _Z, _transition_grids, _grid(), _bins(),
+		                           node_state_uniforms, moves);
 
-		// --- region 1: the node-state walk, and alpha's two likelihoods ---
-		// The kernel's result lands in `alpha_LL[clique]`. Nothing sums it across cliques, so it
-		// is order-independent. Gathering it through the helper costs nothing the hand-written
-		// loop did not already pay.
+		// --- the nu move: the candidate likelihood ---
+		// The ratio divides by the likelihood each clique ended alpha on, so this scores one grid.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
-		auto kernel       = [this, &node_state_uniforms](size_t c, TNodeStateCliqueView &states) {
-			// The view lives across the moves below. Those moves read the states the walk
-			// assigns. `FixZ` discards this branch entirely when set; without the `else` below
-			// the capture would go unused.
-			if constexpr (!FixZ) {
-				node_state_walk::update_clique(_topology(), transition_grid(c), _bins(),
-				                               node_state_uniforms, states);
-			} else {
-				(void)node_state_uniforms;
-			}
-			return _clique_LL(states, transition_grid(c),
-			                  _candidate_grid<true>(c, _alpha_c->value(c)));
-		};
-		auto [alpha_LL, indices_to_insert] = clique_traversal::run(n, view_factory, kernel);
-		if constexpr (!FixZ) { _Z.insert_in_Z(indices_to_insert); }
-
-		// --- alpha's decision, and the likelihood the nu move inherits ---
-		// Whichever of the two alpha ends on is the likelihood of the clique as nu finds it, so
-		// the nu move below scores one grid instead of two.
-		std::vector<double> LL_after_alpha(n);
-		for (size_t i = 0; i < n; ++i) {
-			const double proposed = _alpha_c->value(i);
-			const double logH = alpha_LL[i][1] - alpha_LL[i][0] + _alpha_c->getLogDensityRatio(i);
-			if (_alpha_c->acceptOrReject(logH, coretools::TRange(i))) {
-				_set_transition_grid(i, _candidate_grid<true>(i, proposed));
-				LL_after_alpha[i] = alpha_LL[i][1];
-			} else {
-				LL_after_alpha[i] = alpha_LL[i][0];
-			}
-		}
-
-		// --- region 2: nu's candidate likelihood ---
 		_log_nu_c->propose(coretools::TRange(0, n, 1));
 		auto nu_kernel = [this](size_t c, TNodeStateCliqueView &states) {
-			return _clique_LL(states, _candidate_grid<false>(c, _log_nu_c->value(c)));
+			return _clique_LL(states, _nu_candidate_grid(c, _log_nu_c->value(c)));
 		};
 		auto [nu_LL_new, nu_indices_to_insert] = clique_traversal::run(n, view_factory, nu_kernel);
 
@@ -414,7 +346,7 @@ public:
 			const double proposed = _log_nu_c->value(i);
 			const double logH = nu_LL_new[i] - LL_after_alpha[i] + _log_nu_c->getLogDensityRatio(i);
 			if (_log_nu_c->acceptOrReject(logH, coretools::TRange(i))) {
-				_set_transition_grid(i, _candidate_grid<false>(i, proposed));
+				_set_transition_grid(i, _nu_candidate_grid(i, proposed));
 			}
 		}
 
