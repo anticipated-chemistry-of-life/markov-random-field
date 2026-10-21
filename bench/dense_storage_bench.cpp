@@ -227,14 +227,24 @@ public:
 		return {_in->species_process.bins[species_leaf]};
 	}
 
-	[[nodiscard]] block_update::TLeafPairFactors factors(const TRowState &row, size_t molecule_leaf,
+	struct TColumnState {
+		size_t molecule_bin = 0;
+	};
+
+	[[nodiscard]] TColumnState begin_column(size_t molecule_leaf) const {
+		return {_in->molecule_process.bins[molecule_leaf]};
+	}
+
+	[[nodiscard]] block_update::TLeafPairFactors factors(const TRowState &row,
+	                                                     const TColumnState &column,
+	                                                     size_t /*molecule_leaf*/,
 	                                                     bool species_parent,
 	                                                     bool molecule_parent) const {
 		const coretools::Probability one = coretools::P(1.0);
 		return {.prob_z_s_is_one = coretools::P(_in->species_process.grid.probability(
 		            row.species_bin, species_parent, true)),
 		        .prob_z_m_is_one = coretools::P(_in->molecule_process.grid.probability(
-		            _in->molecule_process.bins[molecule_leaf], molecule_parent, true)),
+		            column.molecule_bin, molecule_parent, true)),
 		        .lotus           = {one, one},
 		        .simple_error    = {one, one},
 		        .mass_spec       = {one, one}};
@@ -575,7 +585,8 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 			for (size_t m = 0; m < n_m; ++m) {
 				const bool parent_s = Z_s.at(species_parent, m) != 0;
 				const bool parent_m = Z_m.at(s, molecule.parent_of(m)) != 0;
-				const auto factors  = model.factors(row, m, parent_s, parent_m);
+				const auto factors =
+				    model.factors(row, model.begin_column(m), m, parent_s, parent_m);
 
 				uint16_t &y  = Y.at(s, m);
 				uint8_t &z_s = Z_s.at(s, m);
