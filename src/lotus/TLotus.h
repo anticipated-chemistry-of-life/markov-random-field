@@ -28,6 +28,7 @@
 #include "tree/TTree.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -49,11 +50,17 @@ private:
 	/// Raw publication counts per (tree, leaf). Constant data; the log transform and the
 	/// detection rates are applied by the reporting model.
 	std::vector<std::vector<size_t>> _paper_counts;
+	/// The same counts, as the class of each leaf: what the present-cell counts are indexed by.
+	lotus_math::TPaperCountClasses _classes;
 
 	/// The per-cell emission, memoized against the current gamma and error rate. Rebuilt as a whole
 	/// value whenever either parameter moves, so there is nothing to refresh in place and nothing
 	/// to revert.
 	std::optional<lotus_math::TReportingModel> _reporting_model;
+
+	/// The field, as much of it as the likelihood of L reads: its present cells by kind. Counted
+	/// from the field when the chain starts, and by every block update after (ADR-0015).
+	lotus_math::TPresentCells _present_cells;
 
 	// parameters gamma
 	TypeParamGamma *_gamma = nullptr;
@@ -74,6 +81,9 @@ private:
 	[[nodiscard]] const lotus_math::TReportingModel &_reporting() const {
 		return _reporting_model.value();
 	}
+	[[nodiscard]] std::vector<double> _gammas() const;
+	/// The likelihood of L at the current present cells, gamma and error rate.
+	[[nodiscard]] double _log_likelihood_of_present_cells() const;
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
@@ -87,9 +97,12 @@ public:
 	void load_from_file(const std::string &filename);
 	void guess_initial_values(const TFieldStorage &Y);
 
-	[[nodiscard]] double calculate_log_likelihood_of_L(const TFieldStorage &Y) const;
 	/// Satisfies DataSource.
 	[[nodiscard]] double log_likelihood() const { return _curLL; }
+
+	/// Counts a field's present cells from scratch: one pass over its ones. The block update counts
+	/// them as it draws, so this is for a field that arrived some other way.
+	[[nodiscard]] lotus_math::TPresentCells count_present_cells(const TFieldStorage &Y) const;
 
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
@@ -129,15 +142,29 @@ public:
 	/// LOTUS holds a record for it, which the caller reads through the accessor above.
 	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
 	                           std::array<double, 2> &prob) const;
-	/// The field update accumulates the new likelihood as it goes and installs it here at the end.
-	void update_cur_LL(double cur_LL) { _curLL = cur_LL; }
+
+	/// The paper-count class of a species leaf, and of a molecule leaf: where a present cell is
+	/// counted.
+	[[nodiscard]] uint32_t species_class(size_t species_leaf) const {
+		return _classes.class_of(0, species_leaf);
+	}
+	[[nodiscard]] uint32_t molecule_class(size_t molecule_leaf) const {
+		return _classes.class_of(1, molecule_leaf);
+	}
+	[[nodiscard]] size_t n_molecule_classes() const { return _classes.n_classes(1); }
+	/// The counts of a field with no present cell, for the block update to count its own into.
+	[[nodiscard]] lotus_math::TPresentCells no_present_cells() const;
+	/// The field's present cells after a block update, which counted them as it drew. Replaces the
+	/// counts and the likelihood read from them.
+	void install_present_cells(lotus_math::TPresentCells cells);
+	[[nodiscard]] const lotus_math::TPresentCells &present_cells() const { return _present_cells; }
 
 	// --- MCMC moves on gamma / epsilon ---
-	// Both recompute the full LOTUS likelihood: gamma and epsilon enter every cell. Each builds a
-	// candidate reporting model and installs it; on rejection the candidate is simply dropped, so
-	// the only thing to restore is the cached likelihood.
+	// Both enter every present cell, and neither moves the field: each builds a candidate reporting
+	// model and reads the likelihood off the present cells the field left. On rejection the
+	// candidate is simply dropped, so the only thing to restore is the cached likelihood.
 
-	[[nodiscard]] double ll_ratio_after_parameter_move(const TFieldStorage &Y);
+	[[nodiscard]] double ll_ratio_after_parameter_move();
 	void revert_parameter_move();
 
 	// --- simulation ---

@@ -9,6 +9,11 @@
 #include "gtest/gtest.h"
 
 #include <cmath>
+#include <cstdint>
+#include <limits>
+#include <random>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -174,4 +179,102 @@ TEST(LotusMath, an_unstudied_present_pair_looks_absent_but_is_not_evidence) {
 
 	EXPECT_DOUBLE_EQ(model.probability(true, false, cell(0, 0)), 1.0);
 	EXPECT_LT(model.probability(true, false, cell(2, 2)), 0.6);
+}
+
+// --------------------------------------------------------------------------
+// The likelihood of the whole of L, read off the field's present cells
+// --------------------------------------------------------------------------
+
+namespace {
+
+/// A small field and LOTUS on it, every cell drawn at random, with paper counts that repeat within
+/// each tree -- so that several leaves share a class and the counts have to add them up. A leaf with
+/// no papers is never reported when present, because the model gives that no probability.
+struct TSmallField {
+	std::vector<std::vector<size_t>> paper_counts{{0, 3, 3, 7, 0, 12, 3}, {5, 0, 5, 1, 40, 1}};
+	std::vector<std::vector<bool>> present;
+	std::vector<std::vector<bool>> reported;
+
+	explicit TSmallField(uint64_t seed) {
+		std::mt19937_64 rng(seed);
+		std::bernoulli_distribution coin(0.4);
+		for (size_t s = 0; s < paper_counts[0].size(); ++s) {
+			present.emplace_back();
+			reported.emplace_back();
+			for (size_t m = 0; m < paper_counts[1].size(); ++m) {
+				const bool x           = coin(rng);
+				const bool unstudied   = paper_counts[0][s] == 0 || paper_counts[1][m] == 0;
+				const bool reported_if = coin(rng);
+				present.back().push_back(x);
+				reported.back().push_back(reported_if && !(x && unstudied));
+			}
+		}
+	}
+
+	/// The counts, written out from what they are: the present cells by kind.
+	[[nodiscard]] lotus_math::TPresentCells
+	present_cells(const lotus_math::TPaperCountClasses &classes) const {
+		size_t n_records = 0;
+		for (const auto &row : reported) {
+			for (const bool r : row) { n_records += static_cast<size_t>(r); }
+		}
+		lotus_math::TPresentCells cells(present.size() * present[0].size(), n_records, classes);
+		for (size_t s = 0; s < present.size(); ++s) {
+			for (size_t m = 0; m < present[s].size(); ++m) {
+				if (!present[s][m]) { continue; }
+				++cells.ones[static_cast<size_t>(reported[s][m])]
+				            [cells.slot(classes.class_of(0, s), classes.class_of(1, m))];
+			}
+		}
+		return cells;
+	}
+
+	/// The likelihood the counts stand in for: cell by cell, under the reporting model.
+	[[nodiscard]] double cell_by_cell(const std::vector<double> &gammas, double error_rate) const {
+		const TReportingModel model(gammas, error_rate, paper_counts);
+		double sum = 0.0;
+		for (size_t s = 0; s < present.size(); ++s) {
+			for (size_t m = 0; m < present[s].size(); ++m) {
+				sum += std::log(model.probability(present[s][m], reported[s][m], cell(s, m)));
+			}
+		}
+		return sum;
+	}
+};
+
+} // namespace
+
+TEST(LotusMath, the_present_cells_give_the_likelihood_of_every_cell) {
+	for (const uint64_t seed : {1U, 2U, 3U}) {
+		const TSmallField field(seed);
+		const lotus_math::TPaperCountClasses classes(field.paper_counts);
+		const auto cells = field.present_cells(classes);
+		for (const auto &[gammas, error_rate] :
+		     std::vector<std::pair<std::vector<double>, double>>{
+		         {{0.3, 1.2}, 0.01}, {{2.0, 0.05}, 0.2}, {{0.9, 0.9}, 0.5}}) {
+			const double expected = field.cell_by_cell(gammas, error_rate);
+			ASSERT_TRUE(std::isfinite(expected));
+			EXPECT_NEAR(lotus_math::log_likelihood_of_L(cells, classes, gammas, error_rate),
+			            expected, 1e-9 * std::abs(expected))
+			    << "seed " << seed << ", gamma " << gammas[0] << " " << gammas[1];
+		}
+	}
+}
+
+TEST(LotusMath, a_reported_present_cell_nobody_studied_has_no_probability) {
+	// Research effort is 0 for a leaf with no papers, so the field that puts a reported cell there
+	// is impossible, and says so rather than reading the empty kind as no evidence.
+	const lotus_math::TPaperCountClasses classes({{0, 4}, {2}});
+	lotus_math::TPresentCells cells(2, 1, classes);
+	++cells.ones[1][cells.slot(classes.class_of(0, 0), classes.class_of(1, 0))];
+	EXPECT_EQ(lotus_math::log_likelihood_of_L(cells, classes, {1.0, 1.0}, 0.1),
+	          -std::numeric_limits<double>::infinity());
+}
+
+TEST(LotusMath, counts_of_more_cells_than_the_field_holds_are_refused) {
+	const lotus_math::TPaperCountClasses classes({{1, 4}, {2}});
+	lotus_math::TPresentCells cells(2, 1, classes);
+	cells.ones[0][0] = 2;
+	EXPECT_THROW((void)lotus_math::log_likelihood_of_L(cells, classes, {1.0, 1.0}, 0.1),
+	             std::invalid_argument);
 }

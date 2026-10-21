@@ -268,11 +268,10 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	// One slot per field row, merged in row order below. Not one per thread: the model sums a
-	// likelihood in these same slots, and a thread-indexed slot makes that sum's rounding a
-	// function of how the schedule shared the rows out (TBlockUpdate.h).
+	// One slot per field row, merged in row order below. Not one per thread: a slot per row keeps
+	// what the rows add up from depending on how the schedule shared them out (TBlockModel.h).
 	const size_t n_rows = _Y.dimensions()[0];
-	TDataUpdateAccumulator accumulator(n_rows);
+	TDataUpdateAccumulator accumulator(n_rows, data_model);
 	TBlockModel model(_trees, data_model, accumulator);
 	std::vector<field_math::TLinkCounters> per_row_counters(n_rows);
 
@@ -290,6 +289,13 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// at the very end: sum the per-row accumulators, in row order, and store them in the data
 	// sources
 	accumulator.commit(data_model);
+#ifdef USE_LOTUS
+	// The present cells the rows counted have to be the field's, or every gamma and error-rate move
+	// after this reads the likelihood of another field. A pass over the field, so a debug build's
+	// alone.
+	DEBUG_ASSERT(data_model.get_lotus().present_cells() ==
+	             data_model.get_lotus().count_present_cells(_Y));
+#endif
 	using namespace coretools::instances;
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _coretools_thinning == 0) && !_fix_Y) {
 		_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());
