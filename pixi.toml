@@ -188,6 +188,13 @@ depends-on = [{ task = "_check", args = [
 cmd = "echo build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}"
 description = "Print the build directory for a given MODE/FLAGS."
 
+# Always a release build: a debug benchmark measures the assertions. The data-source letters do not
+# reach it, so it takes the default directory's.
+[tasks.bench]
+depends-on = [{ task = "_configure", args = ["release", "ls"] }]
+cmd = "cmake --build build/release-ls --target acol_dense_bench && ./build/release-ls/acol_dense_bench"
+description = "Benchmark the dense storages against armadillo (arguments after `--`; `-- --help`)."
+
 [tasks.parity]
 cmd = "bash tests/backend_parity/run.sh"
 description = "Build both storage backends and check they produce byte-identical output."
