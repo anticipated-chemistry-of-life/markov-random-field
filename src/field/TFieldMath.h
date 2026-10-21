@@ -91,12 +91,17 @@ public:
 	[[nodiscard]] static constexpr bool is_shared() noexcept { return true; }
 };
 
+/// Throws for a bucket past the last. Cold and out of line, so that `TLinkCounters::add` -- once
+/// per leaf pair -- keeps a predicted branch and no string building in the block update's loop.
+[[noreturn, gnu::cold, gnu::noinline]] inline void throw_no_bucket(size_t bucket,
+                                                                   size_t n_buckets) {
+	throw std::invalid_argument("There is no bucket " + std::to_string(bucket) + "; there are " +
+	                            std::to_string(n_buckets) + ".");
+}
+
 /// Bounds check shared by everything that takes a bucket index.
 inline void check_bucket(size_t bucket, size_t n_buckets) {
-	if (bucket >= n_buckets) {
-		throw std::invalid_argument("There is no bucket " + std::to_string(bucket) +
-		                            "; there are " + std::to_string(n_buckets) + ".");
-	}
+	if (bucket >= n_buckets) [[unlikely]] { throw_no_bucket(bucket, n_buckets); }
 }
 
 /// Index of one of the eight states a leaf pair can be in, over (field, species tree field,
@@ -120,12 +125,17 @@ struct TBlockStates {
 	bool z_m = false; ///< the molecule tree field
 };
 
+/// Throws for a state index past the last. Out of line and marked cold, so that the check costs
+/// the functions below a predicted branch and nothing else: a throw built inline would keep them
+/// from being inlined into the block update's inner loop.
+[[noreturn, gnu::cold, gnu::noinline]] inline void throw_no_block_state(size_t index) {
+	throw std::invalid_argument("There is no block state " + std::to_string(index) +
+	                            "; there are " + std::to_string(n_block_states) + ".");
+}
+
 /// The inverse of `state_index`.
 [[nodiscard]] constexpr TBlockStates states_of_index(size_t index) {
-	if (index >= n_block_states) {
-		throw std::invalid_argument("There is no block state " + std::to_string(index) +
-		                            "; there are " + std::to_string(n_block_states) + ".");
-	}
+	if (index >= n_block_states) [[unlikely]] { throw_no_block_state(index); }
 	return {.y   = ((index >> 2U) & 1U) != 0U,
 	        .z_s = ((index >> 1U) & 1U) != 0U,
 	        .z_m = (index & 1U) != 0U};
@@ -398,8 +408,10 @@ prob_field_cell_is_one(bool z_s, bool z_m, const TErrorProbability &omega,
 /// at one the field stays at one with probability near one. That triple mixes arbitrarily slowly
 /// under single-site Gibbs, and it would present as a convergence problem rather than as a bug.
 ///
-/// Returns the normalised probability of each of the eight states, addressed by `state_index`.
-/// Drawing from them is the caller's business; nothing here touches a random generator.
+/// Returns the unnormalised weight of each of the eight states, addressed by `state_index`:
+/// `P(z_s | parent) P(z_m | parent) P(y | z_s, z_m) P(data | y)`. The data sources enter only
+/// through the field state, so their product is taken once per field state rather than once per
+/// weight.
 ///
 /// @param prob_z_s_is_one  P(Z_s = 1 | the species parent's state), from that tree's transition
 /// grid.
@@ -411,11 +423,10 @@ prob_field_cell_is_one(bool z_s, bool z_m, const TErrorProbability &omega,
 ///                         assignments.
 template<LinkPolicy Policy>
 [[nodiscard]] std::array<double, n_block_states>
-block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
-                    const TErrorProbability &omega,
-                    const std::array<coretools::Probability, 2> &lotus,
-                    const std::array<coretools::Probability, 2> &simple_error,
-                    const std::array<coretools::Probability, 2> &mass_spec) {
+block_weights(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
+              const TErrorProbability &omega, const std::array<coretools::Probability, 2> &lotus,
+              const std::array<coretools::Probability, 2> &simple_error,
+              const std::array<coretools::Probability, 2> &mass_spec) {
 	// These are probabilities by type, so the range check happens where the caller builds the
 	// value, the way TSimpleErrorModelMath.h already does it. Note the bargain: coretools checks
 	// its intervals only under CHECK_INTERVALS, which CMakeLists.txt defines for the unit tests and
@@ -424,31 +435,45 @@ block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probabili
 	// codebase makes the same trade.
 	const double p_s = prob_z_s_is_one.get();
 	const double p_m = prob_z_m_is_one.get();
+	const std::array<double, 2> data{lotus[0].get() * simple_error[0].get() * mass_spec[0].get(),
+	                                 lotus[1].get() * simple_error[1].get() * mass_spec[1].get()};
 
-	std::array<double, n_block_states> probability{};
-	double total = 0.0;
-
+	std::array<double, n_block_states> weight{};
 	for (const bool z_s : {false, true}) {
 		for (const bool z_m : {false, true}) {
 			const double tree_factor = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
 			const double link        = Policy::prob_y_is_one(z_s, z_m, omega);
-			for (const bool y : {false, true}) {
-				const auto data     = static_cast<size_t>(y);
-				const double weight = tree_factor * (y ? link : 1.0 - link) * lotus[data].get() *
-				                      simple_error[data].get() * mass_spec[data].get();
-				probability[state_index(y, z_s, z_m)] = weight;
-				total += weight;
-			}
+			weight[state_index(false, z_s, z_m)] = tree_factor * (1.0 - link) * data[0];
+			weight[state_index(true, z_s, z_m)]  = tree_factor * link * data[1];
 		}
 	}
+	return weight;
+}
 
-	if (!(total > 0.0)) {
-		throw std::invalid_argument(
-		    "The eight-state block has no probability mass: the eight weights sum to " +
-		    std::to_string(total) +
-		    ". Either a data likelihood is zero for both field states, or the weights "
-		    "underflowed.");
-	}
+/// Throws for a block whose weights have no mass. Cold and out of line, for the reason
+/// `throw_no_block_state` gives.
+[[noreturn, gnu::cold, gnu::noinline]] inline void throw_no_block_mass(double total) {
+	throw std::invalid_argument(
+	    "The eight-state block has no probability mass: the eight weights sum to " +
+	    std::to_string(total) +
+	    ". Either a data likelihood is zero for both field states, or the weights underflowed.");
+}
+
+/// `block_weights`, normalised: the probability of each of the eight states. Drawing does not need
+/// them -- `draw_block` scales the uniform instead -- so this is what a caller that wants the
+/// distribution itself reads.
+template<LinkPolicy Policy>
+[[nodiscard]] std::array<double, n_block_states>
+block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
+                    const TErrorProbability &omega,
+                    const std::array<coretools::Probability, 2> &lotus,
+                    const std::array<coretools::Probability, 2> &simple_error,
+                    const std::array<coretools::Probability, 2> &mass_spec) {
+	auto probability = block_weights<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, lotus,
+	                                         simple_error, mass_spec);
+	double total = 0.0;
+	for (const double w : probability) { total += w; }
+	if (!(total > 0.0)) { throw_no_block_mass(total); }
 	for (double &p : probability) { p /= total; }
 	return probability;
 }
@@ -461,11 +486,24 @@ struct TBlockDraw {
 	TCounterCell to;    ///< the counter cell it counts in now
 };
 
+/// Throws for a uniform outside [0, 1). Cold and out of line, for the reason `throw_no_block_state`
+/// gives.
+[[noreturn, gnu::cold, gnu::noinline]] inline void throw_uniform_outside(double uniform) {
+	throw std::invalid_argument("The uniform must lie in [0, 1), but it is " +
+	                            std::to_string(uniform) + ".");
+}
+
 /// Draw the eight-state block at one leaf pair, and report the counter cell the leaf pair moved
 /// between.
 ///
-/// The draw is inverse transform sampling over `block_probabilities`, in `state_index` order. The
-/// same uniform therefore gives the same state whatever order a traversal reaches the cell in.
+/// The draw is inverse transform sampling over the eight states, in `state_index` order. The same
+/// uniform therefore gives the same state whatever order a traversal reaches the cell in.
+///
+/// It never normalises. The running sum of the weights is the cumulative distribution scaled by
+/// their total, so the uniform is scaled by the total instead -- one multiplication where
+/// normalising took eight divisions, which were most of the draw's cost. The state is then the
+/// number of running sums at or below the scaled uniform: the sums never fall, so that count is the
+/// first state whose sum exceeds it, found without a branch on the uniform.
 ///
 /// The counter move comes back with the states, so that no traversal computes the delta itself.
 /// ADR-0006 says why that arithmetic must not be written twice.
@@ -492,29 +530,29 @@ draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z
            const std::array<coretools::Probability, 2> &mass_spec, const TBlockStates &current,
            double uniform) {
 	// Written as two negations, so that a NaN uniform is rejected rather than drawn on.
-	if (!(uniform >= 0.0) || !(uniform < 1.0)) {
-		throw std::invalid_argument("The uniform must lie in [0, 1), but it is " +
-		                            std::to_string(uniform) + ".");
-	}
+	if (!(uniform >= 0.0) || !(uniform < 1.0)) [[unlikely]] { throw_uniform_outside(uniform); }
 
-	const auto probability = block_probabilities<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega,
-	                                                     lotus, simple_error, mass_spec);
-
-	size_t index      = n_block_states;
-	double cumulative = 0.0;
+	const auto weight = block_weights<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, lotus,
+	                                          simple_error, mass_spec);
+	std::array<double, n_block_states> running{};
+	double total = 0.0;
 	for (size_t i = 0; i < n_block_states; ++i) {
-		cumulative += probability[i];
-		if (uniform < cumulative) {
-			index = i;
-			break;
-		}
+		total += weight[i];
+		running[i] = total;
 	}
-	if (index == n_block_states) {
-		// The running sum stopped below the uniform. Only rounding can do that, because the
-		// weights are normalised. So the last state that has mass takes the draw. A state with no
-		// mass stays out of reach: a datum that rules one out must keep ruling it out.
+	if (!(total > 0.0)) [[unlikely]] { throw_no_block_mass(total); }
+
+	const double target = uniform * total;
+	size_t index        = 0;
+	for (size_t i = 0; i < n_block_states; ++i) { index += static_cast<size_t>(running[i] <= target); }
+	if (index == n_block_states) [[unlikely]] {
+		// Every running sum is at or below the scaled uniform. A uniform below 1 scaled by the
+		// total is below the total, so only rounding gets here. The last state that has mass takes
+		// the draw. A state with no mass stays out of reach -- its running sum equals the one
+		// before it, so the count steps past it -- and a datum that rules one out must keep ruling
+		// it out.
 		for (size_t i = n_block_states; i-- > 0;) {
-			if (probability[i] > 0.0) {
+			if (weight[i] > 0.0) {
 				index = i;
 				break;
 			}
