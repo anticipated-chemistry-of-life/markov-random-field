@@ -133,14 +133,27 @@ protected:
 
 public:
 	TSparseStorage() = default;
-	explicit TSparseStorage(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
+	explicit TSparseStorage(const IndexArray &dimensions,
+	                        size_t contiguous_dimension = NUMBER_OF_TREES - 1) {
+		initialize_dimensions(dimensions, contiguous_dimension);
+	}
 
 	/// Sizes the container space and drops every stored cell, so every cell reads as state 0.
 	///
 	/// It clears the handle flag too. Dropping every cell is what invalidates every handle, so an
 	/// array that comes out of here has none, and it starts again as an array whose ones cursor
 	/// can trust its cache.
-	void initialize_dimensions(const IndexArray &dimensions) {
+	///
+	/// A hash map has no layout, so `contiguous_dimension` is checked and nothing else: it is
+	/// taken so that a node state is sized alike under either backend, and a cell's position here
+	/// is its linear index whatever it says.
+	void initialize_dimensions(const IndexArray &dimensions,
+	                           size_t contiguous_dimension = NUMBER_OF_TREES - 1) {
+		if (contiguous_dimension >= NUMBER_OF_TREES) {
+			throw coretools::TDevError("There is no dimension ", contiguous_dimension,
+			                           " to lay a container of ", NUMBER_OF_TREES,
+			                           " dimensions out along.");
+		}
 		_dimensions = dimensions;
 		_total_size = container_product(dimensions);
 		_states.clear();
@@ -158,6 +171,13 @@ public:
 	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
 		return is_one(get_linear_index_in_container_space(multidim_index));
 	}
+
+	/// Where a cell sits, which for a map keyed by linear index is that index.
+	[[nodiscard]] size_t position_of(const IndexArray &multidim_index) const {
+		return get_linear_index_in_container_space(multidim_index);
+	}
+
+	[[nodiscard]] bool is_one_at(size_t position) const { return is_one(position); }
 
 	/// What a handle from this array points at: the whole stored cell, state and all.
 	using TCell = Cell;
@@ -180,6 +200,13 @@ public:
 
 	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
 		return locate(get_linear_index_in_container_space(multidim_index));
+	}
+
+	/// `locate`, for a caller that walks positions. A position here is the linear index.
+	[[nodiscard]] IsOneResult<TCell> locate_at(size_t position,
+	                                           [[maybe_unused]] size_t linear_index) {
+		DEBUG_ASSERT(position == linear_index);
+		return locate(position);
 	}
 
 	/// Writes the state of a cell, and stores the cell if the map does not hold it yet. A cell the

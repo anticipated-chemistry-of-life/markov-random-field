@@ -124,7 +124,12 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 	// The node state spans every node of this tree, leaves included. The rule lives in
 	// node_state_dimensions so that the storage tests can assert over the shapes production
 	// actually builds rather than over a restatement of them.
-	_Z.initialize_dimensions(node_state_dimensions(num_leaves_per_tree, _dimension, _topology()));
+	//
+	// This tree's own dimension is laid out contiguous, so each of its cliques is one run of
+	// adjacent cells: every walk over a clique reads it a cache line at a time instead of a cache
+	// line per node (ADR-0013).
+	_Z.initialize_dimensions(node_state_dimensions(num_leaves_per_tree, _dimension, _topology()),
+	                         _dimension);
 
 	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
 	if (coretools::instances::parameters().exists(set_Z_cli_command)) {

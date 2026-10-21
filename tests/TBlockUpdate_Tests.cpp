@@ -48,6 +48,7 @@ constexpr double OMEGA = 0.125;
 using backends::AllBackends;
 using backends::field_shape;
 using backends::make_storage;
+using backends::make_node_state;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;
@@ -256,16 +257,25 @@ public:
 
 TYPED_TEST_SUITE(BlockUpdate, AllBackends);
 
-/// Every leaf pair is asked about once and told what it was given once, and no leaf pair is missed.
+/// Every leaf pair is asked about once and told what it was given once, and no leaf pair is missed
+/// -- across the seams between bands of rows and between tiles of columns too, which only a pairing
+/// wider than one band and one tile has.
 TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 	using Field     = typename TestFixture::Field;
 	using NodeState = typename TestFixture::NodeState;
 
+	const bool a_pairing_has_seams =
+	    std::any_of(tree_pairs().begin(), tree_pairs().end(), [](const auto &pair) {
+		    return pair.species.n_leaves() > block_update::BAND_ROWS &&
+		           pair.molecule.n_leaves() > block_update::TILE_COLUMNS;
+	    });
+	ASSERT_TRUE(a_pairing_has_seams) << "no pairing crosses a band or a tile, so no seam is tested";
+
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Y, 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
@@ -297,8 +307,8 @@ TYPED_TEST(BlockUpdate, writes_the_drawn_states_back) {
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Y, 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
@@ -338,8 +348,8 @@ TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Y, 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
@@ -391,8 +401,8 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 		const auto run_once = [&pair](size_t n_threads) {
 			const TThreadCount threads(n_threads);
 			auto Y          = make_storage<Field>(field_shape(pair));
-			auto Z_species  = make_storage<NodeState>(species_shape(pair));
-			auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 			seed_ones(Y, 1);
 			seed_ones(Z_species, 2);
 			seed_ones(Z_molecule, 3);
@@ -433,8 +443,8 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 		SCOPED_TRACE(pair.name);
 		const TThreadCount threads(3);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Y, 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
@@ -472,8 +482,8 @@ TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 
 		const auto run_once = [&pair]<typename Field, typename NodeState>() {
 			auto Y          = make_storage<Field>(field_shape(pair));
-			auto Z_species  = make_storage<NodeState>(species_shape(pair));
-			auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 			seed_ones(Y, 1);
 			seed_ones(Z_species, 2);
 			seed_ones(Z_molecule, 3);

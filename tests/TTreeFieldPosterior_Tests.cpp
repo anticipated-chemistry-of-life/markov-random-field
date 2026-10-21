@@ -29,6 +29,7 @@ namespace {
 
 using backends::AllBackends;
 using backends::make_storage;
+using backends::make_node_state;
 using phylo::edge;
 
 constexpr size_t SPECIES   = 0;
@@ -66,7 +67,7 @@ TYPED_TEST_SUITE(TreeFieldPosterior, AllBackends);
 TYPED_TEST(TreeFieldPosterior, counts_a_cell_the_tree_field_holds_a_one_at) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("frog", "acid")));
 
 	TTreeFieldPosterior posterior;
@@ -89,7 +90,7 @@ TYPED_TEST(TreeFieldPosterior, counts_a_cell_the_tree_field_holds_a_one_at) {
 TYPED_TEST(TreeFieldPosterior, counts_no_cell_above_the_leaves) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 	for (const auto &molecule_leaf : {"acid", "base"}) {
 		Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("s_root", molecule_leaf)));
 	}
@@ -107,7 +108,7 @@ TYPED_TEST(TreeFieldPosterior, counts_no_cell_above_the_leaves) {
 TYPED_TEST(TreeFieldPosterior, counts_one_iteration_in_the_thinning_factor) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("frog", "acid")));
 
 	TTreeFieldPosterior posterior;
@@ -138,7 +139,7 @@ TYPED_TEST(TreeFieldPosterior, reports_no_posterior_before_it_has_counted_anythi
 TYPED_TEST(TreeFieldPosterior, forgets_everything_it_counted_when_the_counts_are_reset) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("frog", "acid")));
 
 	TTreeFieldPosterior posterior;
@@ -157,7 +158,8 @@ TYPED_TEST(TreeFieldPosterior, every_fraction_is_a_probability) {
 	for (const auto &pair : backends::tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y = make_storage<typename TypeParam::field>(backends::field_shape(pair));
-		auto Z = make_storage<typename TypeParam::node_state>(backends::species_shape(pair));
+		auto Z = backends::make_node_state<typename TypeParam::node_state>(
+		    backends::species_shape(pair), 0);
 		backends::seed_ones(Z, 7);
 
 		TTreeFieldPosterior posterior;
@@ -181,7 +183,7 @@ TYPED_TEST(TreeFieldPosterior, every_fraction_is_a_probability) {
 TYPED_TEST(TreeFieldPosterior, writes_a_row_per_counted_leaf_pair_naming_both_leaves) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("newt", "base")));
 
 	TTreeFieldPosterior posterior;
@@ -203,7 +205,7 @@ TYPED_TEST(TreeFieldPosterior, writes_a_row_per_counted_leaf_pair_naming_both_le
 TYPED_TEST(TreeFieldPosterior, leaves_out_a_leaf_pair_that_was_never_a_one) {
 	const TTwoTrees trees;
 	auto Y = make_storage<typename TypeParam::field>(trees.field_shape());
-	auto Z = make_storage<typename TypeParam::node_state>(trees.species_shape());
+	auto Z = make_node_state<typename TypeParam::node_state>(trees.species_shape(), SPECIES);
 
 	TTreeFieldPosterior posterior;
 	posterior.initialize(Y.total_size_of_container_space(), 1);

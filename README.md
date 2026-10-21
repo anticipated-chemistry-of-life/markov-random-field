@@ -138,11 +138,13 @@ pixi run bench                                     # synthetic LOTUS-shaped tree
 pixi run bench -- --species inference_lotus/species.tsv --molecules inference_lotus/molecules.tsv --threads 32
 ```
 
-`bench/dense_storage_bench.cpp` runs one chain three times: on `TStorageYDense`/`TStorageZDense`
-through the production block update and node-state walks, on `arma::Mat` addressed at the same
-(row, column), and on `arma::Mat` with every node state stored clique-contiguous. It prints the
-time of each pass, the memory each backing takes, and fails if the three did not end in the same
-state. A full-size run allocates about 19 GiB per backing, one backing at a time.
+`bench/dense_storage_bench.cpp` runs one chain four times: on `TStorageYDense`/`TStorageZDense`
+through the production block update and node-state walks, once with both node states row-major
+(`own`) and once laid out as `TTree` lays them out, each tree's cliques contiguous (`own_clique`,
+ADR-0013); on `arma::Mat` addressed at the same (row, column); and on `arma::Mat` with every node
+state stored clique-contiguous. It prints the time of each pass, the memory each backing takes, and
+fails if they did not all end in the same state. `--variants` picks and repeats them. A full-size
+run allocates about 19 GiB per backing, one backing at a time.
 
 ### Using cmake directly
 

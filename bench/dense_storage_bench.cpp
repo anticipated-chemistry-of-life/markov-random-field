@@ -1,12 +1,15 @@
 //
 // Memory and pass time of the dense storages against armadillo matrices holding the same cells.
 //
-// Three backings of the field and the two node states run the same chain:
+// Four backings of the field and the two node states run the same chain:
 //
 //   own          TStorageYDense / TStorageZDense, driven through the production code paths:
 //                block_update::run, clique_traversal::run over TCliqueView, node_state_walk and
 //                node_state_density. Row-major: a field row (one species leaf) is contiguous, a
 //                species clique (one molecule leaf) is a column a whole row width apart per node.
+//   own_clique   the same storages and code paths, with each node state laid out as TTree lays
+//                out its own: the tree's own dimension contiguous, so every clique is one run of
+//                adjacent cells (ADR-0013).
 //   arma         arma::Mat<u16> / arma::Mat<u8> addressed at the same (row, column) as `own`.
 //                Armadillo is column-major, so this flips which runs are contiguous: a species
 //                clique becomes contiguous, a molecule clique and a field row become strided.
@@ -16,7 +19,7 @@
 //                contiguous; the block update reads the species tree field across a stride.
 //
 // Every cell draws the uniform hashed from its row-major (row, column) position (ADR-0007), so all
-// three run one chain: the final states, the link counters and the clique densities are compared
+// four run one chain: the final states, the link counters and the clique densities are compared
 // and the run fails if they differ. What differs is only where the cells sit in memory, which is
 // what the timings measure.
 //
@@ -94,14 +97,14 @@ struct TOptions {
 	size_t warmup       = 1;
 	size_t threads      = 0;
 	size_t n_bins       = 10;
-	std::vector<std::string> variants = {"own", "arma", "arma_clique"};
+	std::vector<std::string> variants = {"own", "own_clique", "arma", "arma_clique"};
 };
 
 [[noreturn]] void usage(const std::string &problem) {
 	std::cerr << problem << "\n\n"
 	          << "acol_dense_bench [--species FILE --molecules FILE | --scale X] [--iterations N]\n"
 	          << "                 [--warmup N] [--threads N] [--n_bins N]\n"
-	          << "                 [--variants own,arma,arma_clique]\n\n"
+	          << "                 [--variants own,own_clique,arma,arma_clique]\n\n"
 	          << "  --species/--molecules  real tree files (child, parent, branch_length), as acol\n"
 	          << "                         infer reads them; both or neither\n"
 	          << "  --scale                synthetic trees shaped like inference_lotus/, leaf and\n"
@@ -137,7 +140,8 @@ TOptions parse(int argc, char **argv) {
 			options.variants.clear();
 			std::stringstream list(value);
 			for (std::string name; std::getline(list, name, ',');) {
-				if (name != "own" && name != "arma" && name != "arma_clique") {
+				if (name != "own" && name != "own_clique" && name != "arma" &&
+				    name != "arma_clique") {
 					usage("Unknown variant " + name);
 				}
 				options.variants.push_back(name);
@@ -367,15 +371,18 @@ double sum_in_order(const std::vector<double> &per_clique) {
 // own: the project's dense storages through the production code paths
 // -------------------------------------------------------------------------------------------------
 
-TResult run_own(const TOptions &options, const TModelInputs &in) {
-	TResult result{.name = "own"};
+/// `own` sizes both node states row-major. `own_clique` sizes each the way TTree sizes its own,
+/// with the tree's own dimension contiguous (ADR-0013).
+TResult run_own(const std::string &name, const TOptions &options, const TModelInputs &in,
+                bool clique_contiguous) {
+	TResult result{.name = name};
 	const size_t n_s = in.species.n_leaves();
 	const size_t n_m = in.molecule.n_leaves();
 
 	const double before = resident_mib();
 	TStorageYDense Y(options.warmup + options.iterations, IndexArray{n_s, n_m});
-	TStorageZDense Z_s(IndexArray{in.species.n_nodes(), n_m});
-	TStorageZDense Z_m(IndexArray{n_s, in.molecule.n_nodes()});
+	TStorageZDense Z_s(IndexArray{in.species.n_nodes(), n_m}, clique_contiguous ? SPECIES : 1);
+	TStorageZDense Z_m(IndexArray{n_s, in.molecule.n_nodes()}, MOLECULE);
 	result.nominal_mib = static_cast<double>(Y.total_size_of_container_space() * sizeof(TStorageY) +
 	                                         Z_s.total_size_of_container_space() +
 	                                         Z_m.total_size_of_container_space()) /
@@ -434,7 +441,7 @@ TResult run_own(const TOptions &options, const TModelInputs &in) {
 	run_chain(options, n_s, passes, result);
 	result.resident_mib = resident_mib() - before;
 
-	// The fingerprints, by row-major linear index -- which is where these storages hold a cell.
+	// The fingerprints, by row-major linear index -- which names a cell under every layout.
 	auto fingerprint_z = [](const TStorageZDense &Z) {
 		TFingerprint f;
 		uint64_t n = 0, h = 0;
@@ -759,8 +766,8 @@ int main(int argc, char **argv) {
 	for (const auto &variant : options.variants) {
 		std::printf("%s\n", variant.c_str());
 		std::fflush(stdout);
-		if (variant == "own") {
-			results.push_back(run_own(options, inputs));
+		if (variant == "own" || variant == "own_clique") {
+			results.push_back(run_own(variant, options, inputs, variant == "own_clique"));
 		} else if (variant == "arma") {
 			results.push_back(run_arma<false, false, false>(variant, options, inputs));
 		} else {

@@ -30,21 +30,27 @@
 	return cell;
 }
 
-/// The distance in linear index between two consecutive nodes of a clique.
+/// How far apart two consecutive nodes of a clique are, under one way of numbering the cells.
 ///
 /// A clique's cells are a strided run of the node state -- the tree's dimension moves and every
-/// other one stays -- so one subtraction names the run, whichever dimension the tree owns and
-/// whatever the container's shape. A clique of a single node has no second cell, and any stride
-/// describes a run of one.
-template<BinaryStorage Storage>
-[[nodiscard]] size_t clique_stride(const Storage &Z, const IndexArray &clique_index,
+/// other one stays -- so one subtraction names the run, whichever dimension the tree owns, whatever
+/// the container's shape, and whichever numbering `number_of` is: the linear index a cell is named
+/// by, or the position the storage keeps it at. A clique of a single node has no second cell, and
+/// any stride describes a run of one.
+template<typename NumberOf>
+[[nodiscard]] size_t clique_stride(const NumberOf &number_of, const IndexArray &clique_index,
                                    size_t dimension, size_t n_nodes) {
 	if (n_nodes < 2) { return 1; }
-	return Z.get_linear_index_in_container_space(clique_cell(clique_index, dimension, 1)) -
-	       Z.get_linear_index_in_container_space(clique_cell(clique_index, dimension, 0));
+	return number_of(clique_cell(clique_index, dimension, 1)) -
+	       number_of(clique_cell(clique_index, dimension, 0));
 }
 
 /// The cells of one clique, as the run of cells a node state holds them in.
+///
+/// The run is described twice. Its linear indices are what a cell is named by -- the stream of
+/// uniforms hashes them, and a deferred insert carries them. Its positions are where the node
+/// state keeps the cells, and are what a read and a write step through, so a storage laid out
+/// with the clique contiguous is walked one adjacent cell after another (ADR-0013).
 ///
 /// There is one way in. A read is a point lookup; a write is the one branch in
 /// storages/cell_write.h -- the node state takes it in place, or the cell waits in the deferred
@@ -60,10 +66,12 @@ template<BinaryStorage Storage>
 /// the same rule `write_or_defer` states for the list it appends to.
 template<typename Storage> class TCliqueCells {
 private:
-	Storage *_Z          = nullptr;
-	size_t _start_linear = 0;
-	size_t _n_cells      = 0;
-	size_t _stride       = 1;
+	Storage *_Z            = nullptr;
+	size_t _n_cells        = 0;
+	size_t _start_linear   = 0;
+	size_t _stride         = 1;
+	size_t _start_position = 0;
+	size_t _position_step  = 1;
 
 	/// The cells the node state does not hold and a write turned into ones. The caller commits
 	/// them once the parallel region ends. See ADR-0006.
@@ -77,14 +85,30 @@ private:
 	/// does not hold already reads as zero.
 	std::vector<uint8_t> _kept_ones;
 
+	[[nodiscard]] size_t _position(size_t k) const {
+		DEBUG_ASSERT(k < _n_cells);
+		return _start_position + k * _position_step;
+	}
+
 public:
-	TCliqueCells(Storage &Z, const IndexArray &first_cell, size_t n_cells, size_t stride)
-	    : _Z(&Z), _start_linear(Z.get_linear_index_in_container_space(first_cell)),
-	      _n_cells(n_cells), _stride(stride) {
+	/// The run of `n_cells` cells of clique `clique_index` along `dimension`.
+	TCliqueCells(Storage &Z, const IndexArray &clique_index, size_t dimension, size_t n_cells)
+	    : _Z(&Z), _n_cells(n_cells) {
+		const auto linear_index_of = [&Z](const IndexArray &cell) {
+			return Z.get_linear_index_in_container_space(cell);
+		};
+		const auto position_of = [&Z](const IndexArray &cell) { return Z.position_of(cell); };
+		const IndexArray first_cell = clique_cell(clique_index, dimension, 0);
+		_start_linear   = linear_index_of(first_cell);
+		_stride         = clique_stride(linear_index_of, clique_index, dimension, n_cells);
+		_start_position = position_of(first_cell);
+		_position_step  = clique_stride(position_of, clique_index, dimension, n_cells);
 		// The run is described here and read one cell at a time below, so a wrong start or stride
 		// would otherwise be caught by the storage, a layer down from where it was made.
 		DEBUG_ASSERT(n_cells == 0 ||
-		             _start_linear + (n_cells - 1) * stride < Z.total_size_of_container_space());
+		             _start_linear + (n_cells - 1) * _stride < Z.total_size_of_container_space());
+		DEBUG_ASSERT(n_cells == 0 || _start_position + (n_cells - 1) * _position_step <
+		                                 Z.total_size_of_container_space());
 	}
 
 	[[nodiscard]] size_t size() const { return _n_cells; }
@@ -97,11 +121,14 @@ public:
 	[[nodiscard]] bool is_one(size_t k) const {
 		DEBUG_ASSERT(k < _n_cells);
 		if (!_kept_ones.empty() && _kept_ones[k] != 0) { return true; }
-		return _Z->is_one(linear_index(k));
+		return _Z->is_one_at(_position(k));
 	}
 
 	void set_state(size_t k, bool state) {
-		if (write_or_defer(*_Z, linear_index(k), state, _deferred_inserts)) { return; }
+		if (write_or_defer(_Z->locate_at(_position(k), linear_index(k)), state,
+		                   _deferred_inserts)) {
+			return;
+		}
 		// The node state could not take this write, so the run keeps it. Undoing a kept write
 		// would have to undo the deferred entry beside it, which nothing here can do without a
 		// search -- so the once-per-cell rule above is asserted rather than defended. The window
@@ -157,8 +184,7 @@ public:
 	TCliqueView(Storage &Z, const TPhylogeny &topology, const IndexArray &clique_index,
 	            size_t dimension)
 	    : _topology(&topology), _clique_index(clique_index), _dimension(dimension),
-	      _cells(Z, clique_cell(clique_index, dimension, 0), topology.n_nodes(),
-		         clique_stride(Z, clique_index, dimension, topology.n_nodes())) {}
+	      _cells(Z, clique_index, dimension, topology.n_nodes()) {}
 
 	// A view may own writes that are not in the node state yet, so it is neither copied nor moved.
 	// That is true of one backend only, and both are held to it, so that code written against

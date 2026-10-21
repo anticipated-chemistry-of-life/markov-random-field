@@ -21,6 +21,9 @@
 /// `locate` comes with the array too, so the node state points an updater at one of its cells
 /// without a member of its own.
 ///
+/// The array is laid out by whoever sizes it. A tree sizes its node state with its own dimension
+/// contiguous, so each of its cliques is one run of adjacent cells (ADR-0013).
+///
 /// Every cell of the container space is stored here, so "the stored entries" is "every cell". That
 /// is the one difference from the sparse implementation that is visible in output:
 /// `write_Z_to_file` asked for only the stored cells writes the whole container space under this
@@ -28,7 +31,9 @@
 class TStorageZDense : public TDenseBinary {
 public:
 	TStorageZDense() = default;
-	explicit TStorageZDense(const IndexArray &dimensions) : TDenseBinary(dimensions) {}
+	explicit TStorageZDense(const IndexArray &dimensions,
+	                        size_t contiguous_dimension = NUMBER_OF_TREES - 1)
+	    : TDenseBinary(dimensions, contiguous_dimension) {}
 
 	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZSparse::insert_in_Z.
 	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {

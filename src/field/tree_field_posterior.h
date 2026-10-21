@@ -70,10 +70,9 @@ public:
 	void add_to_counter(size_t iteration, const Field &Y, const NodeState &Z) {
 		if (iteration % _thinning_factor != 0) { return; }
 		for (size_t cell = 0; cell < _counts.size(); ++cell) {
-			if (!Z.is_one(
-			        Z.get_linear_index_in_container_space(Y.get_multi_dimensional_index(cell)))) {
-				continue;
-			}
+			// By subscript, which a node state laid out clique-contiguous turns into a position
+			// directly; its linear index would cost it a second conversion (ADR-0013).
+			if (!Z.is_one(Y.get_multi_dimensional_index(cell))) { continue; }
 			if (_counts[cell] == MAX_COUNTER) {
 				throw coretools::TDevError("A tree field counter exceeds the 16-bit maximum (",
 				                           MAX_COUNTER, ")");

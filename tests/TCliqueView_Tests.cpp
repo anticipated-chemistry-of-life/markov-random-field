@@ -92,18 +92,25 @@ IndexArray expected_cell(const IndexArray &clique, size_t dimension, size_t node
 	return cell;
 }
 
+/// The two layouts a node state may be sized with: the tree's own dimension contiguous, which is
+/// how TTree sizes its own (ADR-0013), and row-major, where a clique of every tree but the last is
+/// a strided run. A view has to address the same cells under both.
+std::array<size_t, 2> layouts_for(size_t dimension) { return {dimension, NUMBER_OF_TREES - 1}; }
+
 /// Runs `body(node_state, topology, clique, dimension)` for every clique of every tree of every
-/// pairing. Each clique gets a node state of its own, so a property about what a view leaves
-/// behind is asserted against an empty container.
+/// pairing, under both layouts. Each clique gets a node state of its own, so a property about what
+/// a view leaves behind is asserted against an empty container.
 template<typename Storage, typename Body> void for_every_clique(Body body) {
 	for (const auto &first : trees()) {
 		for (const auto &second : trees()) {
 			const IndexArray leaf_counts{first.n_leaves(), second.n_leaves()};
 			for (size_t dimension = 0; dimension < NUMBER_OF_TREES; ++dimension) {
 				const TPhylogeny &owner = (dimension == 0) ? first : second;
-				for (const auto &clique : cliques_of(leaf_counts, dimension)) {
-					Storage Z(node_state_dimensions(leaf_counts, dimension, owner));
-					body(Z, owner, clique, dimension);
+				for (const size_t contiguous : layouts_for(dimension)) {
+					for (const auto &clique : cliques_of(leaf_counts, dimension)) {
+						Storage Z(node_state_dimensions(leaf_counts, dimension, owner), contiguous);
+						body(Z, owner, clique, dimension);
+					}
 				}
 			}
 		}
@@ -170,16 +177,19 @@ TYPED_TEST(CliqueView, a_view_addresses_a_strided_run_of_the_node_state) {
 			for (size_t dimension = 0; dimension < NUMBER_OF_TREES; ++dimension) {
 				const TPhylogeny &owner = (dimension == 0) ? first : second;
 				for (const auto &clique : cliques_of(leaf_counts, dimension)) {
-					TypeParam Z(node_state_dimensions(leaf_counts, dimension, owner));
-					const TCliqueView<TypeParam> view(Z, owner, clique, dimension);
+					for (const size_t contiguous : layouts_for(dimension)) {
+						TypeParam Z(node_state_dimensions(leaf_counts, dimension, owner),
+						            contiguous);
+						const TCliqueView<TypeParam> view(Z, owner, clique, dimension);
 
-					const size_t start =
-					    Z.get_linear_index_in_container_space(expected_cell(clique, dimension, 0));
-					const size_t stride = increment_of(leaf_counts, dimension);
-					ASSERT_EQ(view.size(), owner.n_nodes());
-					for (size_t node = 0; node < owner.n_nodes(); ++node) {
-						EXPECT_EQ(view.linear_index(node), start + node * stride)
-						    << "node " << node;
+						const size_t start = Z.get_linear_index_in_container_space(
+						    expected_cell(clique, dimension, 0));
+						const size_t stride = increment_of(leaf_counts, dimension);
+						ASSERT_EQ(view.size(), owner.n_nodes());
+						for (size_t node = 0; node < owner.n_nodes(); ++node) {
+							EXPECT_EQ(view.linear_index(node), start + node * stride)
+							    << "node " << node;
+						}
 					}
 				}
 			}

@@ -45,7 +45,7 @@ struct TTreePair {
 	TPhylogeny molecule;
 };
 
-/// Built once: a phylogeny is immutable, and every suite asserts over the same three pairings.
+/// Built once: a phylogeny is immutable, and every suite asserts over the same four pairings.
 inline const std::vector<TTreePair> &tree_pairs() {
 	static const std::vector<TTreePair> pairs = [] {
 		std::mt19937_64 rng(20260902);
@@ -57,6 +57,10 @@ inline const std::vector<TTreePair> &tree_pairs() {
 		    {"star_x_chain", build_phylogeny(phylo::star(9)), build_phylogeny(phylo::chain(6))});
 		built.push_back(
 		    {"chain_x_star", build_phylogeny(phylo::chain(6)), build_phylogeny(phylo::star(9))});
+		// Wide enough in both directions that the block update draws it in more than one band of
+		// rows and more than one tile of columns, which no pairing above is.
+		built.push_back({"wide_forest_x_forest", build_phylogeny(phylo::random_forest(rng, 240, 3)),
+		                 build_phylogeny(phylo::random_forest(rng, 420, 2))});
 		return built;
 	}();
 	return pairs;
@@ -83,6 +87,13 @@ template<typename Storage> Storage make_storage(const IndexArray &dimensions) {
 	} else {
 		return Storage(dimensions);
 	}
+}
+
+/// A tree's node state, sized and laid out the way TTree sizes and lays out its own: over
+/// `shape`, with the tree's own `dimension` contiguous (ADR-0013).
+template<typename NodeState>
+NodeState make_node_state(const IndexArray &shape, size_t dimension) {
+	return NodeState(shape, dimension);
 }
 
 /// A scattering of ones over a container space. The sparse backends hold only what is put in them,

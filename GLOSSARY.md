@@ -35,7 +35,7 @@ The latent binary matrix recording, for every (species leaf, molecule leaf) pair
 _Avoid_: presence matrix, occurrence matrix, Y-space, shared field (except when naming the model ADR-0005 retired)
 
 **Node state**:
-The latent binary state of a node of one tree, replicated across every clique of that tree. Written `Z`. Every node carries one, leaves included: the species tree's node state is `n_nodes(species) x n_leaves(molecules)` and the molecule tree's is `n_leaves(species) x n_nodes(molecules)`.
+The latent binary state of a node of one tree, replicated across every clique of that tree. Written `Z`. Every node carries one, leaves included: the species tree's node state is `n_nodes(species) x n_leaves(molecules)` and the molecule tree's is `n_leaves(species) x n_nodes(molecules)`. A cell is named by its row-major linear index, as everywhere, but the dense node state keeps its own tree's dimension contiguous in memory, so each clique is one run of adjacent cells. See ADR-0013.
 _Avoid_: internal state, ancestral state, hidden state
 
 **Tree field**:
@@ -101,7 +101,7 @@ The field's own pass over its cells, drawing each cell from the two tree field c
 _Avoid_: Y update, Y sweep, leaf pair update
 
 **Block update**:
-The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The pass is a parallel loop over the field's rows -- one row is one species leaf, and a thread takes a contiguous block of them -- and each row walks its columns in ascending order, tallying the six link counters as it goes. The row is the unit because a clique of one tree is named by the leaves of every other tree, so the molecule tree's whole transition grid is constant down a row and is asked for once instead of once per cell. The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `block_update::update_row` and `block_update::update_cell`, `src/field/`. See ADR-0005 and ADR-0010.
+The joint draw over the field and both tree fields at one leaf pair, taken from all eight combinations at once rather than one variable at a time. The pass is a parallel loop over bands of the field's rows -- a band is a few dozen species leaves, drawn a tile of columns at a time -- and each row walks its columns in ascending order, tallying the six link counters as it goes. The row is the unit of what is settled and added up because a clique of one tree is named by the leaves of every other tree, so the molecule tree's whole transition grid is constant down a row and is asked for once instead of once per cell. The band and the tile are only an order of visits, which lets the rows of a band share the cache lines of the species node state (ADR-0013). The block escapes the state the AND makes metastable: with a small error probability a field cell at one pins both tree fields to one, and single-variable draws can only escape through the field. ADR-0008 retired the block and ADR-0010 reinstated it, on a measurement of what the single-variable walk costs the field. `block_update::run`, `block_update::update_band` and `block_update::update_cell`, `src/field/`. See ADR-0005 and ADR-0010.
 _Avoid_: joint draw, eight-state sweep
 
 **Tree update**:

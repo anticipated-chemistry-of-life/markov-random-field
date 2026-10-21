@@ -101,7 +101,7 @@ public:
 		DEBUG_ASSERT(linear_index < total_size_of_container_space());
 		// Nothing counted yet: no posterior to report, and nothing to divide by.
 		if (_total_counts == 0) { return 0.0; }
-		return static_cast<double>(cells()[linear_index].get_counter()) /
+		return static_cast<double>(cell(linear_index).get_counter()) /
 		       static_cast<double>(_total_counts);
 	}
 
@@ -109,7 +109,7 @@ public:
 	/// test can assert on exactly.
 	[[nodiscard]] uint16_t get_counter(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < total_size_of_container_space());
-		return cells()[linear_index].get_counter();
+		return cell(linear_index).get_counter();
 	}
 
 	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
@@ -140,7 +140,7 @@ public:
 		const size_t total = total_size_of_container_space();
 		std::vector<std::pair<size_t, TStorageY>> entries;
 		entries.reserve(total);
-		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, cells()[i]); }
+		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, cell(i)); }
 		return entries;
 	}
 
@@ -148,7 +148,7 @@ public:
 	/// reads a counter reads either field through it.
 	[[nodiscard]] TStorageY operator[](size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < total_size_of_container_space());
-		return cells()[linear_index];
+		return cell(linear_index);
 	}
 };
 
