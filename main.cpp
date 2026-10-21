@@ -9,6 +9,7 @@
 //---------------------------------------------------------------------------
 
 #include "TCore.h"
+#include "profiling.h"
 
 //---------------------------------------------------------------------------
 // Existing Tasks
@@ -39,6 +40,9 @@ void addTests(coretools::TMain &) {
 //---------------------------------------------------------------------------
 
 int main(int argc, char *argv[]) {
+	// First, so the profile covers the whole run (a no-op unless built with ACOL_PROFILING).
+	const profiling::TProgramProfile profile(argc, argv);
+
 	// Create main by providing a program name, a version, an
 	// affiliation, link to repo and contact email
 	coretools::TMain main("acol", "0.1", "University of Fribourg",

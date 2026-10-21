@@ -53,6 +53,32 @@ message(
   STATUS
     "acol data sources: LOTUS=${LOTUS} SIMPLE_DATA=${SIMPLE_DATA} USE_MS_DATA=${USE_MS_DATA}"
 )
+
+# A build that profiles the whole run with gperftools' CPU profiler, into
+# <out>_profile.prof (src/profiling.h). The `profile` preset turns it on.
+#
+# It adds -g and frame pointers to every target, coretools and stattools
+# included, which is why it has to come before FetchContent_MakeAvailable
+# below. -g changes no generated code. Frame pointers are what gperftools'
+# default unwinder walks; they cost a register, so expect a percent or two
+# against the plain release build.
+#
+# stattools has a PROFILING option of its own. It profiles only its MCMC, into
+# profile.prof in the working directory, and links tcmalloc when it finds it,
+# which swaps the allocator under the profile. The two would also start the one
+# profiler twice, so they are kept apart.
+option(ACOL_PROFILING "Profile the whole run with gperftools into <out>_profile.prof" OFF)
+if(ACOL_PROFILING)
+  if(PROFILING)
+    message(FATAL_ERROR "ACOL_PROFILING and stattools' PROFILING both start gperftools' "
+                        "profiler; configure with -DPROFILING=OFF.")
+  endif()
+  find_path(ACOL_GPERFTOOLS_INCLUDE_DIR gperftools/profiler.h REQUIRED)
+  find_library(ACOL_GPERFTOOLS_PROFILER profiler REQUIRED)
+  add_compile_options(-g -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer)
+  message(STATUS "acol profiling the whole run with ${ACOL_GPERFTOOLS_PROFILER}")
+endif()
+
 # =============================================================================
 # Dependencies
 # =============================================================================
@@ -236,6 +262,11 @@ add_executable(${PROJECT_NAME} main.cpp)
 acol_add_common_sources(${PROJECT_NAME})
 target_compile_definitions(${PROJECT_NAME} PRIVATE DEVTOOLS DEV_LOCATION)
 target_compile_options(${PROJECT_NAME} PRIVATE ${ACOL_WARNINGS})
+if(ACOL_PROFILING)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE ACOL_PROFILING)
+  target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE "${ACOL_GPERFTOOLS_INCLUDE_DIR}")
+  target_link_libraries(${PROJECT_NAME} PRIVATE "${ACOL_GPERFTOOLS_PROFILER}")
+endif()
 
 # =============================================================================
 # Storage benchmark

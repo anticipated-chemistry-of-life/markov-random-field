@@ -8,7 +8,9 @@
 #   pixi run test     [MODE] [FLAGS] -- ARGS build, then run ./acol_unitTests ARGS
 #                                             (FLAGS defaults to `lsm` here)
 #
-# MODE  is `debug` (the default) or `release`.
+# MODE  is `debug` (the default), `release`, or `profile`: a release build that
+#       writes a CPU profile of the whole run to <out>_profile.prof
+#       (src/profiling.h).
 # FLAGS is one of the letter sets below; it defaults to `ls`, except for `test`,
 # which defaults to `lsm` so the mass spec code is tested too. A set is spelled
 # in l, s, m order: l, m, s, ls, lm, sm, lsm.
@@ -63,6 +65,8 @@ armadillo = "*"
 openssl = "*"
 nlohmann_json = "*"
 libopenblas = { version = "*", build = "*openmp*" }
+# gperftools' CPU profiler, which the `profile` mode links (ACOL_PROFILING).
+gperftools = "*"
 
 # On Linux the conda gcc brings its own libgomp; forcing llvm-openmp there would
 # flip _openmp_mutex to the llvm variant and break it.
@@ -78,11 +82,12 @@ llvm-openmp = "*"
 # The ones you call take the two in either order, and either may be left out:
 # `pixi run build`, `pixi run build lsm`, `pixi run build release` and
 # `pixi run build release lsm` all work. Two expressions sort one from the
-# other: the mode is `release` when either word is `release`, and the letter
-# set is whichever argument is not a mode, or `ls` when there is none.
+# other: the mode is whichever word is `release` or `profile`, `debug` when
+# neither is, and the letter set is whichever argument is not a mode, or `ls`
+# when there is none.
 [tasks._configure]
 args = [
-  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "mode", choices = ["debug", "release", "profile"] },
   { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 env = { ACOL_FLAG_SUFFIX = "-{{ flags }}" }
@@ -94,7 +99,7 @@ outputs = ["build/{{ mode }}-{{ flags }}/CMakeCache.txt"]
 # asked for.
 [tasks._compile_commands]
 args = [
-  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "mode", choices = ["debug", "release", "profile"] },
   { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "_configure", args = ["{{ mode }}", "{{ flags }}"] }]
@@ -102,7 +107,7 @@ cmd = "ln -sfn {{ mode }}-{{ flags }}/compile_commands.json build/compile_comman
 
 [tasks._build]
 args = [
-  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "mode", choices = ["debug", "release", "profile"] },
   { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 depends-on = [{ task = "_compile_commands", args = ["{{ mode }}", "{{ flags }}"] }]
@@ -113,7 +118,7 @@ cmd = "cmake --build build/{{ mode }}-{{ flags }} --target acol"
 # path.
 [tasks._check]
 args = [
-  { arg = "mode", choices = ["debug", "release"] },
+  { arg = "mode", choices = ["debug", "release", "profile"] },
   { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 cmd = "exit 0"
@@ -121,26 +126,26 @@ cmd = "exit 0"
 [tasks.configure]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_configure", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
 description = "Configure the build directory without compiling anything."
 
 [tasks.build]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_build", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
 description = "Compile ./acol."
 
 [tasks.run]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_build", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol"
+cmd = "./build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}/acol"
 description = "Compile ./acol and run it with the arguments after `--`."
 
 # The two things acol does. `pixi run run` is the same binary without a task
@@ -148,46 +153,46 @@ description = "Compile ./acol and run it with the arguments after `--`."
 [tasks.simulate]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_build", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol simulate"
+cmd = "./build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}/acol simulate"
 description = "Compile ./acol and draw a data set with it (arguments after `--`)."
 
 [tasks.infer]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_build", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol infer"
+cmd = "./build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}/acol infer"
 description = "Compile ./acol and run a chain with it (arguments after `--`)."
 
 [tasks.test]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_compile_commands", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'lsm') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "cmake --build build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }} --target acol_unitTests && ./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }}/acol_unitTests"
+cmd = "cmake --build build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'lsm') if mode in ['debug', 'release', 'profile', ''] else mode }} --target acol_unitTests && ./build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'lsm') if mode in ['debug', 'release', 'profile', ''] else mode }}/acol_unitTests"
 description = "Compile and run the unit tests (arguments after `--` go to gtest)."
 
 [tasks.bin]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_check", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "echo build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol"
+cmd = "echo build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}/acol"
 description = "Print the path of the acol binary for a given MODE/FLAGS."
 
 [tasks.dir]
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_check", args = [
-  "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}",
+  "{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}",
 ] }]
-cmd = "echo build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}"
+cmd = "echo build/{{ mode if mode in ['release', 'profile'] else (flags if flags in ['release', 'profile'] else 'debug') }}-{{ (flags or 'ls') if mode in ['debug', 'release', 'profile', ''] else mode }}"
 description = "Print the build directory for a given MODE/FLAGS."
 
 # Always a release build: a debug benchmark measures the assertions. The data-source letters do not

@@ -40,6 +40,17 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "profile",
+      "displayName": "Release, profiling the whole run with gperftools (ACOL_PROFILING)",
+      "inherits": "release",
+      "cacheVariables": {
+        "ACOL_PROFILING": {
+          "type": "BOOL",
+          "value": "ON"
+        }
+      }
     }
   ],
   "buildPresets": [
@@ -50,6 +61,10 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile"
     }
   ],
   "testPresets": [

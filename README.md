@@ -153,6 +153,25 @@ state stored clique-contiguous. It prints the time of each pass, the memory each
 fails if they did not all end in the same state. `--variants` picks and repeats them. A full-size
 run allocates about 19 GiB per backing, one backing at a time.
 
+### Profiling
+
+```bash
+pixi run infer profile lm -- --out run/acol --tree_species ... # writes run/acol_profile.prof
+pprof -top    build/profile-lm/acol run/acol_profile.prof
+pprof -http=: build/profile-lm/acol run/acol_profile.prof
+```
+
+`profile` is a third build mode beside `debug` and `release`: a release build configured with
+`ACOL_PROFILING` (the `profile` preset), in `build/profile-<flags>`. It links gperftools' CPU
+profiler, which the environment ships, and compiles every target with `-g` and frame pointers. The
+binary profiles the whole run, from the start of `main` to its end, into `<out>_profile.prof` -- or
+`acol_profile.prof` when the command line names no `--out`. gperftools samples on `SIGPROF`, so it
+needs no root and works whatever `perf_event_paranoid` says. `CPUPROFILE_FREQUENCY` sets the samples
+per CPU-second (default 100), and `CPUPROFILE_REALTIME=1` samples wall-clock time instead. Leave
+`CPUPROFILE` unset. See `src/profiling.h`.
+
+pprof ([github.com/google/pprof](https://github.com/google/pprof)) is not in the environment.
+
 ### Using cmake directly
 
 The pixi tasks are a convenience wrapper; the presets in `CMakePresets.json` work on their own.
