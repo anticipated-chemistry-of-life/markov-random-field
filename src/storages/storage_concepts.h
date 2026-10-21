@@ -32,6 +32,13 @@
 /// bulk insert and no zero removal may run while one is live. That was a lifetime rule while a
 /// window held the cells; it is a convention now, and the conformance suite states it.
 ///
+/// A cell is named by its linear index, which is row-major and the same under every storage. Where
+/// it sits is the storage's business: `position_of` says, `is_one_at` reads it there and
+/// `locate_at` hands out its handle from there. A caller that walks a run of cells -- a clique, in
+/// the tree's walks -- converts once and steps positions, so a storage laid out with another
+/// dimension contiguous pays no conversion per cell. A sparse storage keys its map by the linear
+/// index, so the two are the same number there (ADR-0013).
+///
 /// Three things stay deliberately outside the concept. The bulk-insert and whole-space dump paths
 /// still spell `Y` and `Z` in their names. The ones cursor is offered by the field and the
 /// observed data alone. The reporting accessors belong to the field. An implementation still has
@@ -59,6 +66,13 @@ concept BinaryStorage = requires(T &storage, const T &const_storage, size_t line
 	typename T::TCell;
 	{ storage.locate(linear_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
 	{ storage.locate(multidim_index) } -> std::same_as<IsOneResult<typename T::TCell>>;
+
+	// Where a cell sits.
+	{ const_storage.position_of(multidim_index) } -> std::same_as<size_t>;
+	{ const_storage.is_one_at(linear_index) } -> std::same_as<bool>;
+	{
+		storage.locate_at(linear_index, linear_index)
+	} -> std::same_as<IsOneResult<typename T::TCell>>;
 };
 
 /// The field on top of that: every cell also carries how often it was a one, which is what the

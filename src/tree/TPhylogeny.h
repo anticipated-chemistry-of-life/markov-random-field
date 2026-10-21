@@ -40,9 +40,10 @@ struct TPhylogenyBuilder;
 /// the parameters and the MCMC moves over them.
 ///
 /// Nodes are addressed by index, and stored in canonical order: all leaves, then all internal
-/// non-root nodes in post-order, then all roots, with file order preserved inside the leaf block
-/// and the root block. So a node's index alone says what kind of node it is, and a child's index
-/// is always below its parent's. See ADR-0004.
+/// non-root nodes in post-order, then all roots. So a node's index alone says what kind of node it
+/// is, and a child's index is always below its parent's. See ADR-0004. The leaves are in
+/// depth-first order, a node's leaf children next to each other, so the leaves of one clade are a
+/// run of indices (ADR-0014); the roots are in file order.
 ///
 /// That is why every question about which category a node belongs to, and about its index within
 /// that category, is arithmetic here rather than a lookup: the whole of it derives from three

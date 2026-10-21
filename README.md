@@ -131,6 +131,21 @@ Every task is a cmake invocation in `pixi.toml`; there is no wrapper script. Whi
 build uses is decided in `cmake/toolchain.cmake`, which the presets name, so a plain
 `cmake --preset` picks the same one.
 
+### Benchmarking the dense storage
+
+```bash
+pixi run bench                                     # synthetic LOTUS-shaped trees at 1/10 scale
+pixi run bench -- --species inference_lotus/species.tsv --molecules inference_lotus/molecules.tsv --threads 32
+```
+
+`bench/dense_storage_bench.cpp` runs one chain four times: on `TStorageYDense`/`TStorageZDense`
+through the production block update and node-state walks, once with both node states row-major
+(`own`) and once laid out as `TTree` lays them out, each tree's cliques contiguous (`own_clique`,
+ADR-0013); on `arma::Mat` addressed at the same (row, column); and on `arma::Mat` with every node
+state stored clique-contiguous. It prints the time of each pass, the memory each backing takes, and
+fails if they did not all end in the same state. `--variants` picks and repeats them. A full-size
+run allocates about 19 GiB per backing, one backing at a time.
+
 ### Using cmake directly
 
 The pixi tasks are a convenience wrapper; the presets in `CMakePresets.json` work on their own.

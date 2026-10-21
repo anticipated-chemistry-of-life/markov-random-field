@@ -4,10 +4,11 @@ The C++ stores nodes in a **canonical order** — all leaves, then all internal
 non-root nodes in post-order, then all roots — rather than in the order the tree
 file lists them. See `docs/adr/0004-nodes-are-stored-in-canonical-order.md`; the
 permutation itself is `TPhylogenyBuilder::_canonical_order` in
-`src/tree/TPhylogeny.cpp`. Within the leaf block and the root block the nodes
-keep their relative *file* order, which is what this module has to reproduce
-first: reading each `child<TAB>parent` row, the loader appends the parent if
-unseen and then the child (`TPhylogenyBuilder::add_edge`).
+`src/tree/TPhylogeny.cpp`. The leaves are in depth-first order with siblings
+adjacent (ADR-0014) and the roots keep their relative *file* order. Both are
+derived from the order the loader creates nodes in, which is what this module has
+to reproduce first: reading each `child<TAB>parent` row, the loader appends the
+parent if unseen and then the child (`TPhylogenyBuilder::add_edge`).
 
 This is not documentation of the C++ ordering, it is a second implementation of
 it. Every positional file the harness writes or reads is addressed in one of the
@@ -110,9 +111,11 @@ def _file_order(edges: list[tuple[str, str]]) -> tuple[list[str], dict[int, int]
 def _canonical_order(parent: np.ndarray, children: list[list[int]]) -> np.ndarray:
     """`new_of_old[i]`: where node `i` of the file order lands in canonical order.
 
-    Leaves keep their relative file order and come first; then the internal
-    non-root nodes in post-order from each root, visiting children in file order;
-    then the roots, again in their relative file order.
+    One depth-first walk, roots in file order and children in file order. A
+    node's leaf children are numbered together when the walk first reaches the
+    node, so the leaves come first in depth-first order with siblings adjacent
+    (ADR-0014); internal non-root nodes follow in post-order; the roots come last,
+    in their relative file order.
     """
     n = len(parent)
     is_leaf = [len(kids) == 0 for kids in children]
@@ -120,26 +123,30 @@ def _canonical_order(parent: np.ndarray, children: list[list[int]]) -> np.ndarra
 
     new_of_old = np.full(n, -1, dtype=np.int64)
     next_leaf = 0
-    for node in range(n):
-        if is_leaf[node]:
-            new_of_old[node] = next_leaf
-            next_leaf += 1
-
-    next_internal = next_leaf
+    next_internal = sum(is_leaf)
     next_root = n - int(is_root.sum())
+
+    def number_leaf_children(node: int) -> None:
+        nonlocal next_leaf
+        for child in children[node]:
+            if is_leaf[child]:
+                new_of_old[child] = next_leaf
+                next_leaf += 1
 
     for root in range(n):
         if not is_root[root]:
             continue
-        # Iterative post-order: `(node, how many of its children have been pushed)`.
+        number_leaf_children(root)
+        # Iterative post-order: `(node, how many of its children have been looked at)`.
         stack: list[list[int]] = [[root, 0]]
         while stack:
             node, seen = stack[-1]
             if seen < len(children[node]):
                 stack[-1][1] += 1
                 child = children[node][seen]
-                # A leaf is already numbered and has no descendants.
+                # A leaf was numbered with its siblings and has no descendants.
                 if not is_leaf[child]:
+                    number_leaf_children(child)
                     stack.append([child, 0])
                 continue
             if is_root[node]:

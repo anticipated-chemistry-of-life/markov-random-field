@@ -14,8 +14,17 @@
 #include <cstdint>
 #include <vector>
 
-/// A cell for every position of the container space, laid out in the order the linear index
-/// already denotes (row-major), so a cell's linear index *is* its position in the array.
+/// A cell for every position of the container space.
+///
+/// A cell is *named* by its linear index, which is row-major over the container space and is the
+/// same under every storage: it is what a uniform is hashed from (ADR-0007), what a file lists and
+/// what a deferred insert carries. Where the cell *sits* in the array is the storage's own
+/// business, and is called its position here. Both agree by default -- row-major, so the last
+/// dimension is contiguous -- and a storage sized with another `contiguous_dimension` keeps that
+/// dimension contiguous instead. A node state is sized with its own tree's dimension contiguous,
+/// so each of that tree's cliques is one run of adjacent cells, which is what the tree's walks read
+/// it as (ADR-0013). Every member taking a linear index converts it; `position_of` and the two `_at`
+/// members below are the way in for a caller that walks positions itself.
 ///
 /// The cell is the template argument, because the two dense storages carry different amounts in
 /// one: a node state carries a bare state, and the field carries a state and the counter beside it
@@ -35,6 +44,11 @@
 template<typename Cell> class TDenseStorage {
 private:
 	IndexArray _dimensions{};
+	/// How far apart two cells sit whose subscripts differ by one in a dimension. The contiguous
+	/// dimension has stride 1, and the others follow it in row-major order among themselves.
+	IndexArray _strides{};
+	/// The dimension whose stride is 1. The last one makes positions and linear indices the same.
+	size_t _contiguous_dimension = NUMBER_OF_TREES - 1;
 	std::vector<Cell> _states;
 
 	void _throw_if_outside_container_space(size_t linear_index) const {
@@ -46,30 +60,80 @@ private:
 		}
 	}
 
+	/// The position of the cell a linear index names. Free when the layout is row-major; a
+	/// division otherwise, so a hot path that knows the layout walks positions instead.
+	[[nodiscard]] size_t _position_of_linear_index(size_t linear_index) const {
+		if (_contiguous_dimension == NUMBER_OF_TREES - 1) { return linear_index; }
+		return position_of(get_multi_dimensional_index(linear_index));
+	}
+
 protected:
 	/// The cells themselves, for a storage built on this one that carries more than a state in
 	/// them: the dense field counts every cell that is a one, which is a pass this array has no
-	/// reason to know about.
+	/// reason to know about. They are in position order, so a pass that needs to know which cell
+	/// it is holding asks `cell` instead.
 	[[nodiscard]] std::vector<Cell> &cells() { return _states; }
 	[[nodiscard]] const std::vector<Cell> &cells() const { return _states; }
 
+	/// The cell a linear index names.
+	[[nodiscard]] const Cell &cell(size_t linear_index) const {
+		DEBUG_ASSERT(linear_index < _states.size());
+		return _states[_position_of_linear_index(linear_index)];
+	}
+
 public:
 	TDenseStorage() = default;
-	explicit TDenseStorage(const IndexArray &dimensions) { initialize_dimensions(dimensions); }
+	explicit TDenseStorage(const IndexArray &dimensions,
+	                       size_t contiguous_dimension = NUMBER_OF_TREES - 1) {
+		initialize_dimensions(dimensions, contiguous_dimension);
+	}
 
-	/// Sizes the array to the container space and puts every cell in state 0.
-	void initialize_dimensions(const IndexArray &dimensions) {
-		_dimensions = dimensions;
+	/// Sizes the array to the container space, lays it out with `contiguous_dimension` contiguous,
+	/// and puts every cell in state 0.
+	void initialize_dimensions(const IndexArray &dimensions,
+	                           size_t contiguous_dimension = NUMBER_OF_TREES - 1) {
+		if (contiguous_dimension >= NUMBER_OF_TREES) {
+			throw coretools::TDevError("There is no dimension ", contiguous_dimension,
+			                           " to lay a container of ", NUMBER_OF_TREES,
+			                           " dimensions out along.");
+		}
+		_dimensions           = dimensions;
+		_contiguous_dimension = contiguous_dimension;
+		_strides[contiguous_dimension] = 1;
+		size_t stride                  = dimensions[contiguous_dimension];
+		for (size_t d = NUMBER_OF_TREES; d-- > 0;) {
+			if (d == contiguous_dimension) { continue; }
+			_strides[d] = stride;
+			stride *= dimensions[d];
+		}
 		_states.assign(container_product(dimensions), Cell());
+	}
+
+	/// The dimension adjacent cells of the array differ in.
+	[[nodiscard]] size_t contiguous_dimension() const { return _contiguous_dimension; }
+
+	/// Where the cell at `multidim_index` sits in the array.
+	[[nodiscard]] size_t position_of(const IndexArray &multidim_index) const {
+		size_t position = 0;
+		for (size_t d = 0; d < NUMBER_OF_TREES; ++d) {
+			position += multidim_index[d] * _strides[d];
+		}
+		return position;
+	}
+
+	/// The state of the cell at a position.
+	[[nodiscard]] bool is_one_at(size_t position) const {
+		DEBUG_ASSERT(position < _states.size());
+		return cell_is_one(_states[position]);
 	}
 
 	[[nodiscard]] bool is_one(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < _states.size());
-		return cell_is_one(_states[linear_index]);
+		return is_one_at(_position_of_linear_index(linear_index));
 	}
 
 	[[nodiscard]] bool is_one(const IndexArray &multidim_index) const {
-		return is_one(get_linear_index_in_container_space(multidim_index));
+		return is_one_at(position_of(multidim_index));
 	}
 
 	/// What a handle from this array points at: the whole cell, state and all.
@@ -78,20 +142,31 @@ public:
 	/// Where a cell is, for a caller that is about to write it. A dense array holds every cell of
 	/// its container space from the moment it is sized, so the handle is always in the container
 	/// and its pointer is never null.
-	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
-		DEBUG_ASSERT(linear_index < _states.size());
-		TCell *cell = &_states[linear_index];
+	///
+	/// The caller names the cell twice -- by position, which is where it is, and by linear index,
+	/// which is what the handle reports -- because a caller walking positions already has both,
+	/// and deriving the second from the first would cost a division per cell.
+	[[nodiscard]] IsOneResult<TCell> locate_at(size_t position, size_t linear_index) {
+		DEBUG_ASSERT(position < _states.size());
+		DEBUG_ASSERT(position == _position_of_linear_index(linear_index));
+		TCell *cell = &_states[position];
 		return {cell_is_one(*cell), true, linear_index, cell};
 	}
 
+	[[nodiscard]] IsOneResult<TCell> locate(size_t linear_index) {
+		DEBUG_ASSERT(linear_index < _states.size());
+		return locate_at(_position_of_linear_index(linear_index), linear_index);
+	}
+
 	[[nodiscard]] IsOneResult<TCell> locate(const IndexArray &multidim_index) {
-		return locate(get_linear_index_in_container_space(multidim_index));
+		return locate_at(position_of(multidim_index),
+		                 get_linear_index_in_container_space(multidim_index));
 	}
 
 	/// Writes the state of a cell and leaves whatever else it carries as it was.
 	void set_state(size_t linear_index, bool state) {
 		DEBUG_ASSERT(linear_index < _states.size());
-		write_state(_states[linear_index], state);
+		write_state(_states[_position_of_linear_index(linear_index)], state);
 	}
 
 	/// Writes the cell anew, so a counted cell starts its counter over. That is what an insert
@@ -99,7 +174,7 @@ public:
 	/// have to agree on what a cell holds afterwards.
 	void insert_one(size_t linear_index) {
 		_throw_if_outside_container_space(linear_index);
-		_states[linear_index] = Cell(true);
+		_states[_position_of_linear_index(linear_index)] = Cell(true);
 	}
 
 	void insert_one(const IndexArray &multidim_index) {
@@ -108,7 +183,7 @@ public:
 
 	void insert_zero(size_t linear_index) {
 		_throw_if_outside_container_space(linear_index);
-		_states[linear_index] = Cell(false);
+		_states[_position_of_linear_index(linear_index)] = Cell(false);
 	}
 
 	/// Drops what a cell that is not a one carries, and keeps the cell. Sparse erases such a cell

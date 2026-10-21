@@ -107,12 +107,14 @@ TEST(PhylogenyGolden, counts) {
 TEST(PhylogenyGolden, nodes_are_in_canonical_order) {
 	// Leaves, then internal non-root nodes in post-order, then roots (ADR-0004). The file lists
 	// the nodes as mammal, human, chimp, insect, mosquito, animal, denisovan, fly, fish, crab,
-	// baby_shark; within the leaf block and the root block that relative order survives.
+	// baby_shark. The roots keep that relative order. The leaves are numbered depth-first from the
+	// roots in that order, each node's leaf children together (ADR-0014): insect's two, then
+	// mammal's chimp before human's denisovan, then fish's two.
 	const auto tree                         = golden();
-	const std::vector<std::string> expected = {"chimp",  "mosquito", "denisovan",
-	                                           "fly",    "crab",     "baby_shark", // leaves
-	                                           "human",  "mammal", // internal, post-order
-	                                           "insect", "animal",   "fish"}; // roots
+	const std::vector<std::string> expected = {"mosquito", "fly",        "chimp",
+	                                           "denisovan", "crab",      "baby_shark", // leaves
+	                                           "human",     "mammal", // internal, post-order
+	                                           "insect",    "animal",    "fish"}; // roots
 	ASSERT_EQ(tree.n_nodes(), expected.size());
 	for (size_t i = 0; i < expected.size(); ++i) {
 		EXPECT_EQ(tree.id_of(i), expected[i]) << "at " << i;
@@ -142,10 +144,10 @@ TEST(PhylogenyGolden, relationships) {
 
 TEST(PhylogenyGolden, branch_lengths_follow_branch_order) {
 	// Branch order is node order over the non-root nodes, so it is the leaf block followed by the
-	// internal non-root block: chimp, mosquito, denisovan, fly, crab, baby_shark, human, mammal.
+	// internal non-root block: mosquito, fly, chimp, denisovan, crab, baby_shark, human, mammal.
 	// mammal's length arrives on the fourth line, long after mammal was created as a root.
 	const auto tree                    = golden();
-	const std::vector<double> expected = {0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.1, 0.8};
+	const std::vector<double> expected = {0.3, 0.5, 0.2, 0.4, 0.6, 0.7, 0.1, 0.8};
 	ASSERT_EQ(tree.branch_lengths().size(), expected.size());
 	for (size_t i = 0; i < expected.size(); ++i) {
 		EXPECT_DOUBLE_EQ(tree.branch_lengths()[i], expected[i]) << "at branch " << i;
@@ -156,7 +158,8 @@ TEST(PhylogenyGolden, branch_lengths_follow_branch_order) {
 
 TEST(PhylogenyGolden, index_spaces) {
 	const auto tree = golden();
-	EXPECT_EQ(tree.leaf_index(tree.index_of("chimp")), 0u);
+	EXPECT_EQ(tree.leaf_index(tree.index_of("mosquito")), 0u);
+	EXPECT_EQ(tree.leaf_index(tree.index_of("chimp")), 2u);
 	EXPECT_EQ(tree.leaf_index(tree.index_of("baby_shark")), 5u);
 	EXPECT_EQ(tree.internal_index(tree.index_of("human")), 0u);
 	EXPECT_EQ(tree.internal_index(tree.index_of("fish")), 4u);
@@ -206,21 +209,55 @@ std::vector<std::string> file_insertion_order(const std::vector<TEdge> &edges) {
 	return order;
 }
 
-void check_file_order_within_blocks(const TPhylogeny &tree, const std::vector<TEdge> &edges) {
+/// The order inside the leaf and root blocks, which the arithmetic of ADR-0004 does not care about
+/// and the cache does (ADR-0014):
+///   - the leaves of every clade are a run of consecutive leaf indices, so a walk over leaves stays
+///     inside one clade at a time;
+///   - a node's leaf children are next to each other, in the order the file lists them, so the
+///     parent of a run of leaves changes as rarely as the tree allows;
+///   - the roots keep their file order.
+void check_order_within_blocks(const TPhylogeny &tree, const std::vector<TEdge> &edges) {
 	const auto order = file_insertion_order(edges);
 	std::unordered_map<std::string, size_t> rank;
 	for (size_t i = 0; i < order.size(); ++i) { rank[order[i]] = i; }
 	ASSERT_EQ(rank.size(), tree.n_nodes());
 
-	auto ascending_in_file = [&](size_t from, size_t to, const char *block) {
-		for (size_t i = from + 1; i < to; ++i) {
-			EXPECT_LT(rank.at(tree.id_of(i - 1)), rank.at(tree.id_of(i)))
-			    << block << " block: '" << tree.id_of(i - 1) << "' and '" << tree.id_of(i)
-			    << "' are out of file order";
+	for (size_t i = tree.n_nodes() - tree.n_roots() + 1; i < tree.n_nodes(); ++i) {
+		EXPECT_LT(rank.at(tree.id_of(i - 1)), rank.at(tree.id_of(i)))
+		    << "root block: '" << tree.id_of(i - 1) << "' and '" << tree.id_of(i)
+		    << "' are out of file order";
+	}
+
+	// Children precede parents, so one forward pass gathers every clade's lowest and highest leaf.
+	const size_t n = tree.n_nodes();
+	std::vector<size_t> lowest(n, n), highest(n, 0), n_leaves_below(n, 0);
+	for (size_t i = 0; i < n; ++i) {
+		if (tree.is_leaf(i)) {
+			lowest[i] = highest[i] = i;
+			n_leaves_below[i]      = 1;
 		}
-	};
-	ascending_in_file(0, tree.n_leaves(), "leaf");
-	ascending_in_file(tree.n_nodes() - tree.n_roots(), tree.n_nodes(), "root");
+		if (tree.is_root(i)) { continue; }
+		const size_t parent = tree.parent_of(i);
+		lowest[parent]      = std::min(lowest[parent], lowest[i]);
+		highest[parent]     = std::max(highest[parent], highest[i]);
+		n_leaves_below[parent] += n_leaves_below[i];
+	}
+	for (size_t node = tree.n_leaves(); node < n; ++node) {
+		EXPECT_EQ(highest[node] - lowest[node] + 1, n_leaves_below[node])
+		    << "the leaves below '" << tree.id_of(node) << "' are not a run";
+
+		std::vector<size_t> leaf_children;
+		for (const size_t child : tree.children_of(node)) {
+			if (tree.is_leaf(child)) { leaf_children.push_back(child); }
+		}
+		for (size_t k = 1; k < leaf_children.size(); ++k) {
+			EXPECT_EQ(leaf_children[k], leaf_children[k - 1] + 1)
+			    << "the leaf children of '" << tree.id_of(node) << "' are not adjacent";
+			EXPECT_LT(rank.at(tree.id_of(leaf_children[k - 1])),
+			          rank.at(tree.id_of(leaf_children[k])))
+			    << "the leaf children of '" << tree.id_of(node) << "' are out of file order";
+		}
+	}
 }
 
 void check_invariants(const TPhylogeny &tree) {
@@ -331,7 +368,7 @@ TEST(PhylogenyInvariants, hold_for_arbitrary_forests) {
 		ASSERT_EQ(tree.n_nodes(), n_nodes) << "trial " << trial;
 		EXPECT_EQ(tree.n_roots(), n_roots) << "trial " << trial;
 		check_invariants(tree);
-		check_file_order_within_blocks(tree, edges);
+		check_order_within_blocks(tree, edges);
 		if (::testing::Test::HasFailure()) { FAIL() << "invariants broke on trial " << trial; }
 	}
 }
@@ -343,7 +380,7 @@ TEST(PhylogenyInvariants, hold_for_a_deep_unbalanced_chain) {
 	EXPECT_EQ(tree.n_roots(), 1u);
 	EXPECT_EQ(tree.n_leaves(), 1u);
 	check_invariants(tree);
-	check_file_order_within_blocks(tree, edges);
+	check_order_within_blocks(tree, edges);
 }
 
 TEST(PhylogenyInvariants, hold_for_a_wide_shallow_star) {
@@ -352,7 +389,19 @@ TEST(PhylogenyInvariants, hold_for_a_wide_shallow_star) {
 	EXPECT_EQ(tree.n_roots(), 1u);
 	EXPECT_EQ(tree.n_leaves(), 199u);
 	check_invariants(tree);
-	check_file_order_within_blocks(tree, edges);
+	check_order_within_blocks(tree, edges);
+}
+
+/// The exact order on a tree where it differs from file order: the root's leaf children `a` and
+/// `c` come together, before the clade below `x`. model_validation's
+/// `test_leaves_are_numbered_depth_first_with_siblings_adjacent` pins the same tree, because
+/// `indexing.py` reimplements this order and every positional file depends on the two agreeing.
+TEST(PhylogenyOrder, leaves_are_depth_first_with_siblings_adjacent) {
+	const auto tree = build_phylogeny(
+	    {{"a", "r", 1.0}, {"x", "r", 1.0}, {"b", "x", 1.0}, {"c", "r", 1.0}, {"d", "x", 1.0}});
+	std::vector<std::string> ids;
+	for (size_t i = 0; i < tree.n_nodes(); ++i) { ids.push_back(tree.id_of(i)); }
+	EXPECT_EQ(ids, (std::vector<std::string>{"a", "c", "b", "d", "x", "r"}));
 }
 
 } // namespace

@@ -12,19 +12,23 @@
 // leaf pair visited once, the right neighbours read, the writes landing, and one chain at any
 // thread count.
 //
-// A thread takes a row: every leaf pair of one species leaf. A leaf pair's Markov blanket holds no
-// cell of another leaf pair -- it holds the two tree parents and the two data terms -- so the leaf
-// pairs are conditionally independent and the split between threads is free. The pass is a
-// parallel loop over the field's rows, and a row walks its own columns in ascending order. A
-// cell's uniform is hashed from its position (ADR-0007), so neither the thread that reaches a cell
-// nor the order it is reached in decides what it gets: the chain is the same at any thread count,
-// and the same as the flat per-cell loop this replaced.
+// A thread takes a band of rows: every leaf pair of a few dozen species leaves. A leaf pair's Markov
+// blanket holds no cell of another leaf pair -- it holds the two tree parents and the two data
+// terms -- so the leaf pairs are conditionally independent and the split between threads is free.
+// The pass is a parallel loop over bands; a band is drawn a tile of columns at a time, row after
+// row, and each row walks its own columns in ascending order. A cell's uniform is hashed from its
+// position (ADR-0007), so neither the thread that reaches a cell nor the order it is reached in
+// decides what it gets: the chain is the same at any thread count, and the same as the flat
+// per-cell loop this replaced.
 //
-// The row is the unit because that is the granularity at which the model can answer once instead
-// of per cell. A clique of one tree is named by the leaves of every other tree (ADR-0011), so the
-// molecule tree's clique -- and with it its whole transition grid -- is the species leaf, constant
-// down a row, while the species tree's clique is the molecule leaf and varies along it. The row
-// asks the model for what it can be told once (`begin_row`), and the cell asks for the rest.
+// The row is the unit of what is settled and added up because that is the granularity at which the
+// model can answer once instead of per cell. A clique of one tree is named by the leaves of every
+// other tree (ADR-0011), so the molecule tree's clique -- and with it its whole transition grid --
+// is the species leaf, constant down a row, while the species tree's clique is the molecule leaf
+// and varies along it. The row asks the model for what it can be told once (`begin_row`), and the
+// cell asks for the rest. The band and the tile are only an order of visits: the species node
+// state keeps its cliques contiguous (ADR-0013), so a field row reads it across a stride, and the
+// tile is what lets the rows of a band share the cache lines that stride lands on.
 //
 
 #pragma once
@@ -39,6 +43,7 @@
 #include "random/TCellUniforms.h"
 #include "storages/cell_write.h"
 #include "tree/TPhylogeny.h"
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstddef>
@@ -202,40 +207,70 @@ void update_cell(TRow<ModelRow> &row, size_t molecule_leaf, Field &Y, NodeState 
 	model.record(row.model_row, molecule_leaf, factors, draw.drawn);
 }
 
-/// Draws one row: every leaf pair of one species leaf, in ascending molecule-leaf order.
+/// How many species leaves a band of the update holds, and how many molecule leaves one tile of a
+/// band spans.
 ///
+/// A tile is drawn row after row, and every row of it reads the same columns of the species node
+/// state. That node state keeps its own cliques contiguous (ADR-0013), so a column is a molecule
+/// leaf and the band's leaves at one column sit side by side, a cache line or two for the whole
+/// band. Drawn one whole row at a time, the next row would come back to a line long gone; drawn a
+/// tile at a time, it finds the line the row above it just used. The tile is sized so that those
+/// lines, and the lines holding the band's parents, stay in a core's L2 between rows.
+inline constexpr size_t BAND_ROWS    = 64;
+inline constexpr size_t TILE_COLUMNS = 128;
+
+/// Draws one band: every leaf pair of the species leaves `[first_row, end_row)`, a tile at a time.
+///
+/// Every row still walks its own columns in ascending order, and still settles what it can once
+/// and accumulates what it adds up in a row of its own -- the band only interleaves the rows.
 /// What the row settles once is what a per-cell loop was asking for over and over: the species
 /// leaf's parent node and its branch, the molecule tree's clique -- which *is* the species leaf,
 /// so its transition grid is constant down the row -- and the row's first linear index. The
 /// ascending order is not cosmetic: it is what lets a data source answer a point query from a
 /// forward cursor (`TLotus::holds_a_record`) rather than by hashing every cell.
 ///
-/// The row is also the unit the tally and the model's bookkeeping are accumulated in. Both live
-/// here, on the calling thread's stack, for as long as the row lasts, and are handed over once
-/// when it ends -- `row_counters` into this row's slot, the model's into the model's own.
+/// No leaf pair reads a cell another one writes, so the interleaving draws what the rows drawn one
+/// after another would: each row's tally and bookkeeping see the same cells in the same order, and
+/// each is handed over once when the band ends -- the tally into the row's slot, the model's into
+/// the model's own.
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
-void update_row(size_t species_leaf, size_t n_molecule_leaves, Field &Y, NodeState &Z_species,
-                NodeState &Z_molecule, const TPhylogeny &species, const TPhylogeny &molecule,
-                const field_math::TErrorProbability &omega, Model &model,
-                const TCellUniforms &uniforms, field_math::TLinkCounters &row_counters,
-                std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
-                std::vector<size_t> &molecule_inserts) {
-	const size_t first_field_cell = species_leaf * n_molecule_leaves;
-	TRow<BlockModelRow<Model>> row{.species_leaf        = species_leaf,
-	                               .species_parent_node = species.parent_of(species_leaf),
-	                               .first_field_cell    = first_field_cell,
-	                               .model_row = model.begin_row(species_leaf, first_field_cell)};
-
-	field_math::TLinkCounters counters;
-	for (size_t molecule_leaf = 0; molecule_leaf < n_molecule_leaves; ++molecule_leaf) {
-		update_cell<Policy>(row, molecule_leaf, Y, Z_species, Z_molecule, molecule, omega, model,
-		                    uniforms, counters, field_inserts, species_inserts, molecule_inserts);
+void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Field &Y,
+                 NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
+                 const TPhylogeny &molecule, const field_math::TErrorProbability &omega,
+                 Model &model, const TCellUniforms &uniforms,
+                 std::vector<field_math::TLinkCounters> &per_row_counters,
+                 std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
+                 std::vector<size_t> &molecule_inserts) {
+	std::vector<TRow<BlockModelRow<Model>>> rows;
+	rows.reserve(end_row - first_row);
+	for (size_t species_leaf = first_row; species_leaf < end_row; ++species_leaf) {
+		const size_t first_field_cell = species_leaf * n_molecule_leaves;
+		rows.push_back({.species_leaf        = species_leaf,
+		                .species_parent_node = species.parent_of(species_leaf),
+		                .first_field_cell    = first_field_cell,
+		                .model_row           = model.begin_row(species_leaf, first_field_cell)});
 	}
-	row_counters.merge(counters);
-	model.end_row(row.model_row);
+	std::vector<field_math::TLinkCounters> counters(rows.size());
+
+	for (size_t first_column = 0; first_column < n_molecule_leaves; first_column += TILE_COLUMNS) {
+		const size_t end_column = std::min(first_column + TILE_COLUMNS, n_molecule_leaves);
+		for (size_t r = 0; r < rows.size(); ++r) {
+			for (size_t molecule_leaf = first_column; molecule_leaf < end_column; ++molecule_leaf) {
+				update_cell<Policy>(rows[r], molecule_leaf, Y, Z_species, Z_molecule, molecule,
+				                    omega, model, uniforms, counters[r], field_inserts,
+				                    species_inserts, molecule_inserts);
+			}
+		}
+	}
+
+	for (size_t r = 0; r < rows.size(); ++r) {
+		per_row_counters[rows[r].species_leaf].merge(counters[r]);
+		model.end_row(rows[r].model_row);
+	}
 }
 
-/// One block update: every leaf pair of the field's container space, one row to a thread.
+/// One block update: every leaf pair of the field's container space, one band of rows to a thread
+/// at a time.
 ///
 /// `per_row_counters` is one entry per field row, and the caller merges them in row order. It is
 /// not cleared here: a caller that hands over used counters gets their counts added to, which is
@@ -248,11 +283,9 @@ void update_row(size_t species_leaf, size_t n_molecule_leaves, Field &Y, NodeSta
 /// for the reason `TTree::log_node_state_density` gives.
 ///
 /// Because nothing here is indexed by thread and nothing the model sums depends on the schedule,
-/// the schedule is this file's own business again. It is a bare `schedule(static)`: every row
-/// costs the same, so an even split is a balanced one, whatever size team the runtime gives us.
-/// The chunked schedule this replaces had to be computed from `ProgramOptions::NUMBER_OF_THREADS`
-/// because LOTUS seeded one cursor per thread from it -- and a runtime that handed back fewer
-/// threads than were asked for then ran the loop in two rounds, leaving the second half idle.
+/// the schedule is this file's own business. It is `schedule(dynamic)` over bands: there are a
+/// few hundred of them, too few for a static split to come out even, and a band holding a species
+/// with mass-spec runs costs more than one without.
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
 void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
          const TPhylogeny &molecule, const field_math::TErrorProbability &omega, Model &model,
@@ -286,16 +319,18 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	std::vector<TCacheLineSlot<std::vector<size_t>>> molecule_inserts(
 	    ProgramOptions::NUMBER_OF_THREADS);
 
+	size_t n_bands = (n_rows + BAND_ROWS - 1) / BAND_ROWS;
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
-    schedule(static) default(none)                                                                 \
+    schedule(dynamic) default(none)                                                                \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, per_row_counters,  \
-	           field_inserts, species_inserts, molecule_inserts, n_rows, n_columns)
-	for (size_t species_leaf = 0; species_leaf < n_rows; ++species_leaf) {
-		const auto thread = static_cast<size_t>(omp_get_thread_num());
-		update_row<Policy>(species_leaf, n_columns, Y, Z_species, Z_molecule, species, molecule,
-		                   omega, model, uniforms, per_row_counters[species_leaf],
-		                   field_inserts[thread].value, species_inserts[thread].value,
-		                   molecule_inserts[thread].value);
+	           field_inserts, species_inserts, molecule_inserts, n_rows, n_columns, n_bands)
+	for (size_t band = 0; band < n_bands; ++band) {
+		const auto thread    = static_cast<size_t>(omp_get_thread_num());
+		const size_t first_row = band * BAND_ROWS;
+		update_band<Policy>(first_row, std::min(first_row + BAND_ROWS, n_rows), n_columns, Y,
+		                    Z_species, Z_molecule, species, molecule, omega, model, uniforms,
+		                    per_row_counters, field_inserts[thread].value,
+		                    species_inserts[thread].value, molecule_inserts[thread].value);
 	}
 
 	// The inserts every thread deferred, in one batch per container. A dense container is handed

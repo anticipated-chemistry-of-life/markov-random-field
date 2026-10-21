@@ -168,38 +168,53 @@ void TPhylogenyBuilder::_reject_a_non_forest() const {
 /// Where each node ends up: `new_of_old[old_index]` is the node's index in the canonical order --
 /// leaves, then internal non-root nodes in post-order, then roots. See ADR-0004 for why.
 ///
-/// File order survives inside the leaf and root blocks because both are filled by an ascending
-/// walk over the nodes as built, and inside the middle block because each node's children are
-/// visited in the order the file introduced them.
+/// One depth-first walk numbers all three blocks. It visits the roots in file order and each
+/// node's children in the order the file introduced them. A node's leaf children are numbered
+/// together when the walk first reaches the node, so siblings that are leaves sit next to each
+/// other and next to their cousins (ADR-0014). An internal node is numbered on the way back up,
+/// which is post-order. Roots keep their relative file order because the walk takes them in it.
 std::vector<size_t> TPhylogenyBuilder::_canonical_order() const {
 	const size_t n = tree._ids.size();
 	std::vector<size_t> new_of_old(n, UNASSIGNED);
 
-	size_t n_roots   = 0;
-	size_t next_leaf = 0;
+	size_t n_roots  = 0;
+	size_t n_leaves = 0;
 	for (size_t i = 0; i < n; ++i) {
 		if (is_leaf(i)) {
-			new_of_old[i] = next_leaf++;
+			++n_leaves;
 		} else if (is_root(i)) {
 			++n_roots;
 		}
 	}
-	size_t next_internal = next_leaf;
+	size_t next_leaf     = 0;
+	size_t next_internal = n_leaves;
 	size_t next_root     = n - n_roots;
 
-	// Post-order, iteratively: a taxonomy is deep enough that a recursive walk is a stack overflow
-	// waiting to happen. The second element is how many of the node's children have been pushed.
+	// The pre-visit: every leaf child of `node`, in file order. A leaf has no descendants, so
+	// this is the only place the walk meets it.
+	auto number_leaf_children = [&](size_t node) {
+		for (const size_t child : children_of[node]) {
+			if (is_leaf(child)) { new_of_old[child] = next_leaf++; }
+		}
+	};
+
+	// Iteratively: a taxonomy is deep enough that a recursive walk is a stack overflow waiting
+	// to happen. The second element is how many of the node's children have been looked at.
 	std::vector<std::pair<size_t, size_t>> stack;
 	for (size_t root = 0; root < n; ++root) {
 		if (!is_root(root)) { continue; }
+		number_leaf_children(root);
 		stack.emplace_back(root, 0);
 		while (!stack.empty()) {
 			auto &[node, next_child] = stack.back();
 			if (next_child < children_of[node].size()) {
 				const size_t child = children_of[node][next_child];
 				++next_child;
-				// A leaf already has its index and no descendants, so it never goes on the stack.
-				if (!is_leaf(child)) { stack.emplace_back(child, 0); }
+				// A leaf was numbered with its siblings, so it never goes on the stack.
+				if (!is_leaf(child)) {
+					number_leaf_children(child);
+					stack.emplace_back(child, 0);
+				}
 				continue; // emplace_back may have moved the vector: re-take the reference.
 			}
 			// Every child is done, so this is the post-visit.

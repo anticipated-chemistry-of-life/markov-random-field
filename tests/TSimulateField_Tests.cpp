@@ -29,6 +29,7 @@ namespace {
 using backends::AllBackends;
 using backends::field_shape;
 using backends::make_storage;
+using backends::make_node_state;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;
@@ -83,8 +84,8 @@ TYPED_TEST(SimulateField, draws_each_cell_from_the_link_and_from_nothing_else) {
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Z_species, 1);
 		seed_ones(Z_molecule, 2);
 
@@ -116,8 +117,8 @@ TYPED_TEST(SimulateField, hands_back_the_counters_of_the_field_it_drew) {
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Z_species, 3);
 		seed_ones(Z_molecule, 4);
 
@@ -153,8 +154,8 @@ TYPED_TEST(SimulateField, is_the_and_of_the_tree_fields_when_the_error_probabili
 	for (const auto &pair : tree_pairs()) {
 		SCOPED_TRACE(pair.name);
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Z_species, 5);
 		seed_ones(Z_molecule, 6);
 
@@ -184,8 +185,8 @@ TYPED_TEST(SimulateField, refuses_a_field_that_already_holds_states) {
 
 	const auto &pair = tree_pairs().front();
 	auto Y           = make_storage<Field>(field_shape(pair));
-	auto Z_species   = make_storage<NodeState>(species_shape(pair));
-	auto Z_molecule  = make_storage<NodeState>(molecule_shape(pair));
+	auto Z_species   = make_node_state<NodeState>(species_shape(pair), 0);
+	auto Z_molecule  = make_node_state<NodeState>(molecule_shape(pair), 1);
 	Y.insert_one(0);
 
 	const uniforms::TWrittenUniforms uniforms(Y.total_size_of_container_space(), 0.5);

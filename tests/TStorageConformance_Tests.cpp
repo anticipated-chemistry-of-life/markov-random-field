@@ -351,8 +351,7 @@ std::vector<size_t> write_run(Storage &storage, const TRunShape &request,
 /// storage that holds every cell never defers.
 template<typename Storage>
 constexpr bool holds_every_cell =
-    std::is_same_v<Storage, TStorageYDense> || std::is_same_v<Storage, TStorageZDense> ||
-    std::is_same_v<Storage, TDenseBinary>;
+    std::is_same_v<Storage, TStorageYDense> || std::is_base_of_v<TDenseBinary, Storage>;
 
 /// A state per cell of a run, drawn so that both states are asked for.
 std::vector<uint8_t> random_states(std::mt19937_64 &rng, size_t n_cells) {
@@ -366,6 +365,16 @@ std::vector<uint8_t> random_states(std::mt19937_64 &rng, size_t n_cells) {
 // One body per storage, instantiated for both backends
 // -------------------------------------------------------------------------
 
+/// The dense node state as the species tree sizes its own: the first dimension contiguous, so where
+/// a cell sits is not its linear index (ADR-0013). Every property a storage owes is asserted of it
+/// as well, because that is the layout a chain actually runs on.
+class TStorageZDenseFirstDimensionContiguous : public TStorageZDense {
+public:
+	TStorageZDenseFirstDimensionContiguous() = default;
+	explicit TStorageZDenseFirstDimensionContiguous(const IndexArray &dimensions)
+	    : TStorageZDense(dimensions, 0) {}
+};
+
 class StorageNames {
 public:
 	template<typename Storage> static std::string GetName(int /*index*/) {
@@ -373,6 +382,8 @@ public:
 			return "sparse_node_state";
 		} else if constexpr (std::is_same_v<Storage, TStorageZDense>) {
 			return "dense_node_state";
+		} else if constexpr (std::is_same_v<Storage, TStorageZDenseFirstDimensionContiguous>) {
+			return "dense_node_state_first_dimension_contiguous";
 		} else if constexpr (std::is_same_v<Storage, TStorageYSparse>) {
 			return "sparse_field";
 		} else if constexpr (std::is_same_v<Storage, TSparseBinary>) {
@@ -430,8 +441,9 @@ void check_the_leaf_block_needs_no_conversion(const TPhylogeny &first, const TPh
 template<typename Storage> class StorageConformance : public ::testing::Test {};
 /// Every storage the sampler holds: the two node states, the two fields, and the two arrays the
 /// observed data is held in.
-using Storages = ::testing::Types<TStorageZSparse, TStorageZDense, TStorageYSparse, TStorageYDense,
-                                  TSparseBinary, TDenseBinary>;
+using Storages =
+    ::testing::Types<TStorageZSparse, TStorageZDense, TStorageZDenseFirstDimensionContiguous,
+                     TStorageYSparse, TStorageYDense, TSparseBinary, TDenseBinary>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
 
 template<typename Storage> class HandleConformance : public ::testing::Test {};

@@ -21,6 +21,7 @@ namespace {
 using backends::AllBackends;
 using backends::field_shape;
 using backends::make_storage;
+using backends::make_node_state;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;
@@ -74,8 +75,8 @@ TYPED_TEST(LeafLayerStart, starts_all_three_at_the_records) {
 		SCOPED_TRACE(pair.name);
 		auto records    = TSparseBinary(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_records(records);
 		// States the start has to overwrite: a tree field that read one where no record does is
 		// the case a start that only ever inserts ones would leave behind.
@@ -114,8 +115,8 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 		SCOPED_TRACE(pair.name);
 		const auto records = TSparseBinary(field_shape(pair));
 		auto Y             = make_storage<Field>(field_shape(pair));
-		auto Z_species     = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule    = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species     = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule    = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_ones(Z_species, 2);
 		seed_ones(Z_molecule, 3);
 
@@ -152,8 +153,8 @@ TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 		SCOPED_TRACE(pair.name);
 		auto records    = TSparseBinary(field_shape(pair));
 		auto Y          = make_storage<Field>(field_shape(pair));
-		auto Z_species  = make_storage<NodeState>(species_shape(pair));
-		auto Z_molecule = make_storage<NodeState>(molecule_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
 		seed_records(records);
 
 		leaf_layer_start::start_the_field_at(records, Y);

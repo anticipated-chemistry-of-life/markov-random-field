@@ -40,6 +40,7 @@ namespace {
 
 using backends::AllBackends;
 using backends::make_storage;
+using backends::make_node_state;
 using phylo::edge;
 
 /// Which column belongs to which tree. The species tree is dimension 0 and the molecule tree
@@ -174,7 +175,7 @@ TYPED_TEST(NodeStateFile, resolves_a_row_by_node_name_and_not_by_the_written_ind
 	const TTempFile file("stale_index_Z.txt", "species\tmolecules\tposition\tZ_state\n"
 	                                          "s_root\tbase\t99\t1\n");
 
-	auto Z = make_storage<NodeState>(trees.species_shape());
+	auto Z = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	read_Z_from_file(file.path(), Z, trees.columns(), SPECIES);
 
 	EXPECT_TRUE(holds(Z, trees.cell("s_root", "base")));
@@ -190,7 +191,7 @@ TYPED_TEST(NodeStateFile, accepts_a_leaf_in_the_column_of_its_own_tree) {
 	const TTempFile file("leaf_row_Z.txt", "species\tmolecules\tposition\tZ_state\n"
 	                                       "frog\tacid\t0\t1\n");
 
-	auto Z = make_storage<NodeState>(trees.species_shape());
+	auto Z = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	read_Z_from_file(file.path(), Z, trees.columns(), SPECIES);
 
 	EXPECT_TRUE(holds(Z, trees.cell("frog", "acid")));
@@ -206,13 +207,13 @@ TYPED_TEST(NodeStateFile, loads_a_file_written_before_the_model_change) {
 	const TTempFile species_file("old_species_Z.txt", OLD_SPECIES_FILE);
 	const TTempFile molecule_file("old_molecule_Z.txt", OLD_MOLECULE_FILE);
 
-	auto Z_species = make_storage<NodeState>(trees.species_shape());
+	auto Z_species = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	read_Z_from_file(species_file.path(), Z_species, trees.columns(), SPECIES);
 	EXPECT_TRUE(holds(Z_species, trees.cell("s_root", "acid")));
 	EXPECT_FALSE(holds(Z_species, trees.cell("s_root", "base")));
 	EXPECT_EQ(number_of_ones(Z_species), 1u); // no leaf row, so no other cell moved
 
-	auto Z_molecule = make_storage<NodeState>(trees.molecule_shape());
+	auto Z_molecule = make_node_state<NodeState>(trees.molecule_shape(), MOLECULES);
 	read_Z_from_file(molecule_file.path(), Z_molecule, trees.columns(), MOLECULES);
 	EXPECT_TRUE(holds(Z_molecule, trees.cell("frog", "m_inner")));
 	EXPECT_TRUE(holds(Z_molecule, trees.cell("newt", "m_root")));
@@ -229,7 +230,7 @@ TYPED_TEST(NodeStateFile, rejects_a_name_that_is_not_in_that_columns_tree) {
 	const TTempFile file("foreign_name_Z.txt", "species\tmolecules\tposition\tZ_state\n"
 	                                           "acid\tacid\t0\t1\n");
 
-	auto Z = make_storage<NodeState>(trees.species_shape());
+	auto Z = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	expect_user_error([&] { read_Z_from_file(file.path(), Z, trees.columns(), SPECIES); });
 }
 
@@ -243,11 +244,11 @@ TYPED_TEST(NodeStateFile, rejects_an_internal_node_in_a_foreign_column) {
 	                                               "frog\tm_inner\t0\t1\n");
 
 	// Read as the species node state, the molecule column is foreign, and m_inner is not a leaf.
-	auto Z_species = make_storage<NodeState>(trees.species_shape());
+	auto Z_species = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	expect_user_error([&] { read_Z_from_file(file.path(), Z_species, trees.columns(), SPECIES); });
 
 	// The same row read as the molecule node state is fine: m_inner is then in its own column.
-	auto Z_molecule = make_storage<NodeState>(trees.molecule_shape());
+	auto Z_molecule = make_node_state<NodeState>(trees.molecule_shape(), MOLECULES);
 	read_Z_from_file(file.path(), Z_molecule, trees.columns(), MOLECULES);
 	EXPECT_TRUE(holds(Z_molecule, trees.cell("frog", "m_inner")));
 }
@@ -259,7 +260,7 @@ TYPED_TEST(NodeStateFile, rejects_a_file_with_the_wrong_number_of_columns) {
 	const TTempFile file("three_columns_Z.txt", "species\tmolecules\tZ_state\n"
 	                                            "frog\tacid\t1\n");
 
-	auto Z = make_storage<NodeState>(trees.species_shape());
+	auto Z = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	expect_user_error([&] { read_Z_from_file(file.path(), Z, trees.columns(), SPECIES); });
 }
 
@@ -269,7 +270,7 @@ TYPED_TEST(NodeStateFile, a_written_file_carries_the_leaf_rows_and_reads_back_as
 	using NodeState = typename TestFixture::NodeState;
 
 	const TTwoTrees trees;
-	auto Z = make_storage<NodeState>(trees.species_shape());
+	auto Z = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("frog", "acid")));   // a leaf
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("s_root", "base"))); // a root
 
@@ -283,7 +284,7 @@ TYPED_TEST(NodeStateFile, a_written_file_carries_the_leaf_rows_and_reads_back_as
 	EXPECT_FALSE(states.at({"newt", "acid"}));
 	EXPECT_FALSE(states.at({"frog", "base"}));
 
-	auto read_back = make_storage<NodeState>(trees.species_shape());
+	auto read_back = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	read_Z_from_file(file.path(), read_back, trees.columns(), SPECIES);
 	for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) {
 		EXPECT_EQ(read_back.is_one(i), Z.is_one(i)) << "at cell " << i;
@@ -301,9 +302,9 @@ TYPED_TEST(NodeStateFile, the_chain_start_fills_the_leaf_rows_an_old_file_does_n
 	const TTempFile species_file("old_species_Z.txt", OLD_SPECIES_FILE);
 	const TTempFile molecule_file("old_molecule_Z.txt", OLD_MOLECULE_FILE);
 
-	auto Z_species = make_storage<NodeState>(trees.species_shape());
+	auto Z_species = make_node_state<NodeState>(trees.species_shape(), SPECIES);
 	read_Z_from_file(species_file.path(), Z_species, trees.columns(), SPECIES);
-	auto Z_molecule = make_storage<NodeState>(trees.molecule_shape());
+	auto Z_molecule = make_node_state<NodeState>(trees.molecule_shape(), MOLECULES);
 	read_Z_from_file(molecule_file.path(), Z_molecule, trees.columns(), MOLECULES);
 
 	// One record, so the start has both a leaf pair to write a one at and one to leave at zero.

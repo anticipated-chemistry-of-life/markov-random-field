@@ -36,7 +36,9 @@
 class TStorageZSparse : public TSparseBinary {
 public:
 	TStorageZSparse() = default;
-	explicit TStorageZSparse(const IndexArray &dimensions) : TSparseBinary(dimensions) {}
+	explicit TStorageZSparse(const IndexArray &dimensions,
+	                         size_t contiguous_dimension = NUMBER_OF_TREES - 1)
+	    : TSparseBinary(dimensions, contiguous_dimension) {}
 
 	/// Bulk-insert deferred 0 -> 1 transitions. Mirror of TStorageZDense::insert_in_Z.
 	void insert_in_Z(const std::vector<std::vector<size_t>> &linear_indices_to_insert) {

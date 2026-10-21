@@ -33,6 +33,9 @@ struct AlmostAStorage {
 	[[nodiscard]] IndexArray get_multi_dimensional_index(size_t) const { return {}; }
 	IsOneResult<TCell> locate(size_t) { return {}; }
 	IsOneResult<TCell> locate(const IndexArray &) { return {}; }
+	[[nodiscard]] size_t position_of(const IndexArray &) const { return 0; }
+	[[nodiscard]] bool is_one_at(size_t) const { return false; }
+	IsOneResult<TCell> locate_at(size_t, size_t) { return {}; }
 };
 static_assert(!BinaryStorage<AlmostAStorage>, "a missing member must not conform");
 
@@ -73,6 +76,15 @@ struct WrongReturnType : FullStorage {
 	[[nodiscard]] int is_one(size_t) const { return 0; }
 };
 static_assert(!BinaryStorage<WrongReturnType>, "the return types are part of the interface");
+
+/// A storage addressed by name alone. A walk over a run of cells would have to convert every name
+/// to where the cell sits, which is a division per cell under any layout but row-major.
+struct WithoutPositions : WithoutAHandle {
+	using TCell = uint8_t;
+	IsOneResult<TCell> locate(size_t) { return {}; }
+	IsOneResult<TCell> locate(const IndexArray &) { return {}; }
+};
+static_assert(!BinaryStorage<WithoutPositions>, "where a cell sits is part of the interface");
 
 } // namespace
 // NOLINTEND(readability-convert-member-functions-to-static)

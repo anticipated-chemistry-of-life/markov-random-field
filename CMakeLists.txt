@@ -234,6 +234,24 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE DEVTOOLS DEV_LOCATION)
 target_compile_options(${PROJECT_NAME} PRIVATE ${ACOL_WARNINGS})
 
 # =============================================================================
+# Storage benchmark
+#
+# The project's dense storages against armadillo matrices holding the same
+# cells; see bench/dense_storage_bench.cpp. EXCLUDE_FROM_ALL: `pixi run bench`
+# asks for it. It needs the phylogeny and the headers, not the data sources.
+# =============================================================================
+
+add_executable(${PROJECT_NAME}_dense_bench EXCLUDE_FROM_ALL
+               bench/dense_storage_bench.cpp src/tree/TPhylogeny.cpp)
+target_include_directories(${PROJECT_NAME}_dense_bench
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(${PROJECT_NAME}_dense_bench PRIVATE coretools)
+target_compile_options(${PROJECT_NAME}_dense_bench PRIVATE ${ACOL_WARNINGS})
+foreach(dir IN LISTS ACOL_ENV_RPATH_DIRS)
+  target_link_options(${PROJECT_NAME}_dense_bench PRIVATE "-Wl,-rpath,${dir}")
+endforeach()
+
+# =============================================================================
 # Unit tests
 #
 # EXCLUDE_FROM_ALL: `pixi run build` only builds acol, `pixi run test` asks for this
