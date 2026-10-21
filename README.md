@@ -24,10 +24,10 @@ that environment, so there is nothing to activate by hand; `pixi shell` opens a 
 `coretools` and `stattools` are no longer git submodules: cmake checks them out via `FetchContent`
 on the first configure.
 
-Armadillo comes from the pixi environment. The tasks configure with `-DFETCHARMA=OFF`, coretools'
-own switch, so coretools finds the installed armadillo instead of downloading and building its
-own copy into `coretools/arma`. A plain `cmake` configure outside pixi keeps coretools' default and
-downloads it, unless given `-DFETCHARMA=OFF` and an armadillo it can find.
+Armadillo comes from the pixi environment. The cmake presets (`CMakePresets.json`) set
+`FETCHARMA=OFF`, coretools' own switch, so coretools finds the installed armadillo instead of
+downloading and building its own copy into `coretools/arma`. Every task configures through the
+presets; a configure that does not use them keeps coretools' default and downloads it.
 
 ### Building and running
 

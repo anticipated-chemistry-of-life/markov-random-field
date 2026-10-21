@@ -146,9 +146,9 @@ ACOL_FLAG_SUFFIX="-$FLAGS" bash -eu -c '
     fi
     cd "$2"
     # BUILD_TESTING is off because only the binary is wanted here. The test suite of the
-    # reference revision is already recorded in its own history. FETCHARMA is coretools'
-    # own switch, so it reaches any revision: it uses the environment's armadillo, as the
-    # current binary's pixi build does.
+    # reference revision is already recorded in its own history. FETCHARMA=OFF is in the
+    # current presets, but this configure reads the presets of the reference revision, which
+    # may predate it. The flag belongs to coretools, so it reaches any revision.
     cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DBUILD_TESTING=OFF \
           -DFETCHARMA=OFF \
           -DFETCHCONTENT_SOURCE_DIR_CORETOOLS="$3/coretools" \

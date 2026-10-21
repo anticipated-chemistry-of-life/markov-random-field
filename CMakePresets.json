@@ -14,7 +14,11 @@
       "toolchainFile": "${sourceDir}/cmake/toolchain.cmake",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "BUILD_TESTING": "ON"
+        "BUILD_TESTING": "ON",
+        "FETCHARMA": {
+          "type": "BOOL",
+          "value": "OFF"
+        }
       }
     },
     {
