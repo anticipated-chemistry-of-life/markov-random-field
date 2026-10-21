@@ -104,15 +104,17 @@ fi
 # regenerates armadillo's headers, which invalidates every object that includes them. Ninja
 # re-runs cmake by itself when CMakeLists.txt or the presets change, so skipping it is safe.
 #
-# The presets set FETCHARMA=OFF, so coretools uses the environment's armadillo rather than download
-# its own. A cache from before that still says ON, and is configured again so the preset reaches it.
+# The presets set FETCHARMA=OFF and CONDA=ON, so coretools uses the environment's armadillo and fmt
+# rather than download its own. A cache from before that still says otherwise, and is configured
+# again so the presets reach it.
 build_binary() {
     local suffix="$1" field="$2" node_state="$3"
     local build_dir="build/${MODE}${suffix}"
     local flags="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
 
     if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$build_dir/CMakeCache.txt" 2>/dev/null ||
-       ! grep -qxF "FETCHARMA:BOOL=OFF" "$build_dir/CMakeCache.txt"; then
+       ! grep -qxF "FETCHARMA:BOOL=OFF" "$build_dir/CMakeCache.txt" ||
+       ! grep -qxF "CONDA:BOOL=ON" "$build_dir/CMakeCache.txt"; then
         ACOL_FLAG_SUFFIX="$suffix" cmake --preset "$MODE" \
             -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DCMAKE_CXX_FLAGS="$flags"
     fi

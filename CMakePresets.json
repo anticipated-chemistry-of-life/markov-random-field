@@ -18,6 +18,10 @@
         "FETCHARMA": {
           "type": "BOOL",
           "value": "OFF"
+        },
+        "CONDA": {
+          "type": "BOOL",
+          "value": "ON"
         }
       }
     },

@@ -146,11 +146,11 @@ ACOL_FLAG_SUFFIX="-$FLAGS" bash -eu -c '
     fi
     cd "$2"
     # BUILD_TESTING is off because only the binary is wanted here. The test suite of the
-    # reference revision is already recorded in its own history. FETCHARMA=OFF is in the
-    # current presets, but this configure reads the presets of the reference revision, which
-    # may predate it. The flag belongs to coretools, so it reaches any revision.
+    # reference revision is already recorded in its own history. FETCHARMA=OFF and CONDA=ON
+    # are in the current presets, but this configure reads the presets of the reference
+    # revision, which may predate them. Both belong to coretools, so they reach any revision.
     cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DBUILD_TESTING=OFF \
-          -DFETCHARMA=OFF \
+          -DFETCHARMA=OFF -DCONDA=ON \
           -DFETCHCONTENT_SOURCE_DIR_CORETOOLS="$3/coretools" \
           -DFETCHCONTENT_SOURCE_DIR_STATTOOLS="$3/stattools" >/dev/null
     exec cmake --build "$4" --target acol
