@@ -103,14 +103,18 @@ fi
 # Configure only when the cache does not already hold exactly these flags. Re-running cmake
 # regenerates armadillo's headers, which invalidates every object that includes them. Ninja
 # re-runs cmake by itself when CMakeLists.txt or the presets change, so skipping it is safe.
+#
+# FETCHARMA=OFF has coretools use the environment's armadillo rather than download its own, as
+# every pixi build does (pixi.toml).
 build_binary() {
     local suffix="$1" field="$2" node_state="$3"
     local build_dir="build/${MODE}${suffix}"
     local flags="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
 
-    if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$build_dir/CMakeCache.txt" 2>/dev/null; then
+    if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$build_dir/CMakeCache.txt" 2>/dev/null ||
+       ! grep -qxF "FETCHARMA:BOOL=OFF" "$build_dir/CMakeCache.txt"; then
         ACOL_FLAG_SUFFIX="$suffix" cmake --preset "$MODE" \
-            -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DCMAKE_CXX_FLAGS="$flags"
+            -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DFETCHARMA=OFF -DCMAKE_CXX_FLAGS="$flags"
     fi
     cmake --build "$build_dir" --target acol
 }

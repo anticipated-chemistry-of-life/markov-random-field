@@ -80,13 +80,17 @@ llvm-openmp = "*"
 # `pixi run build release lsm` all work. Two expressions sort one from the
 # other: the mode is `release` when either word is `release`, and the letter
 # set is whichever argument is not a mode, or `ls` when there is none.
+#
+# -DFETCHARMA=OFF is coretools' own switch: it makes coretools
+# find_package(Armadillo) -- the one in this environment -- instead of
+# downloading and building its own copy into coretools/arma.
 [tasks._configure]
 args = [
   { arg = "mode", choices = ["debug", "release"] },
   { arg = "flags", choices = ["l", "m", "s", "ls", "lm", "sm", "lsm"] },
 ]
 env = { ACOL_FLAG_SUFFIX = "-{{ flags }}" }
-cmd = "cmake --preset {{ mode }} -DLOTUS={{ 'ON' if 'l' in flags else 'OFF' }} -DSIMPLE_DATA={{ 'ON' if 's' in flags else 'OFF' }} -DUSE_MS_DATA={{ 'ON' if 'm' in flags else 'OFF' }}"
+cmd = "cmake --preset {{ mode }} -DLOTUS={{ 'ON' if 'l' in flags else 'OFF' }} -DSIMPLE_DATA={{ 'ON' if 's' in flags else 'OFF' }} -DUSE_MS_DATA={{ 'ON' if 'm' in flags else 'OFF' }} -DFETCHARMA=OFF"
 inputs = ["CMakeLists.txt", "CMakePresets.json", "cmake/*.cmake"]
 outputs = ["build/{{ mode }}-{{ flags }}/CMakeCache.txt"]
 

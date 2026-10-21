@@ -110,10 +110,12 @@ endif()
 # armadillo, fast_float, fmt, zlib and OpenMP are deliberately not searched for
 # here: coretools links them PUBLIC, so they reach us through the coretools
 # target, exactly as they did through xmake's `{public = true}` packages.
-# Looking armadillo up again is not merely redundant -- coretools builds its own
-# vendored copy from coretools/arma, so find_package would put a second,
-# unrelated armadillo on the link line while the headers come from the vendored
-# one.
+# Where armadillo comes from is coretools' business, and its option FETCHARMA
+# decides it. ON (coretools' default) downloads armadillo and builds it from
+# coretools/arma; OFF finds an installed one and links it by name. The pixi
+# tasks configure with -DFETCHARMA=OFF, so a pixi build uses the environment's
+# armadillo. Either way, looking it up again here would put a second armadillo
+# on the link line next to the one coretools chose.
 
 # src/ntfy/TNtfyNotifier.h builds httplib with CPPHTTPLIB_OPENSSL_SUPPORT.
 find_package(OpenSSL REQUIRED)
