@@ -118,8 +118,8 @@ fi
 cd "$ROOT"
 
 echo "==> building the current binary"
-pixi run build "$MODE" "$FLAGS" >/dev/null
-CURRENT_BIN="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
+pixi run build "$MODE-$FLAGS" >/dev/null
+CURRENT_BIN="$ROOT/build/$MODE-$FLAGS/acol"
 CURRENT_REV="$(git rev-parse --short HEAD)"
 
 REFERENCE_REV="$(git rev-parse --short "$REFERENCE_REV")"
@@ -137,7 +137,13 @@ else
     git worktree add --detach "$WORKTREE" "$REFERENCE_REV" >/dev/null
 fi
 
-ACOL_FLAG_SUFFIX="-$FLAGS" bash -eu -c '
+case "$MODE" in
+    debug)   BUILD_TYPE=Debug ;;
+    release) BUILD_TYPE=Release ;;
+    *) echo "error: ACOL_MODE must be debug or release, but is '$MODE'" >&2; exit 1 ;;
+esac
+
+bash -eu -c '
     if [[ -z "${CXX:-}" ]]; then
         case "$(uname -s)" in
             Darwin) export CC="$CONDA_PREFIX/bin/clang" CXX="$CONDA_PREFIX/bin/clang++" ;;
@@ -145,16 +151,18 @@ ACOL_FLAG_SUFFIX="-$FLAGS" bash -eu -c '
         esac
     fi
     cd "$2"
-    # BUILD_TESTING is off because only the binary is wanted here. The test suite of the
-    # reference revision is already recorded in its own history. FETCHARMA=OFF and CONDA=ON
-    # are in the current presets, but this configure reads the presets of the reference
-    # revision, which may predate them. Both belong to coretools, so they reach any revision.
-    cmake --preset "$1" -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DBUILD_TESTING=OFF \
+    # Not through a preset: the presets are those of the reference revision, and their names
+    # changed with the move to one preset per mode and data sources, so no one name reaches every
+    # revision. Everything a preset would set is spelled out instead. BUILD_TESTING is off because
+    # only the binary is wanted here; the test suite of the reference revision is already recorded
+    # in its own history. FETCHARMA and CONDA belong to coretools, so they reach any revision.
+    cmake -S . -B "$4" -G Ninja -DCMAKE_BUILD_TYPE="$1" \
+          -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DBUILD_TESTING=OFF \
           -DFETCHARMA=OFF -DCONDA=ON \
           -DFETCHCONTENT_SOURCE_DIR_CORETOOLS="$3/coretools" \
           -DFETCHCONTENT_SOURCE_DIR_STATTOOLS="$3/stattools" >/dev/null
     exec cmake --build "$4" --target acol
-' _ "$MODE" "$WORKTREE" "$ROOT" "build/$MODE-$FLAGS" | tail -1
+' _ "$BUILD_TYPE" "$WORKTREE" "$ROOT" "build/$MODE-$FLAGS" | tail -1
 REFERENCE_BIN="$WORKTREE/build/$MODE-$FLAGS/acol"
 
 for binary in "$CURRENT_BIN" "$REFERENCE_BIN"; do

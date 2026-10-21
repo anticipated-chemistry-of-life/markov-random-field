@@ -94,29 +94,29 @@ if [[ -z "${CONDA_PREFIX:-}" ]]; then
     exit 1
 fi
 
-# One directory per pair, beside the ordinary ones, so a rerun rebuilds only what changed.
+# One directory per pair, beside the ordinary ones, so a rerun rebuilds only what changed. Each is
+# configured from the preset of the same mode and data sources, build/<preset>-parity-<pair>, and
+# differs from it only in the two defines.
 #
 # The defines are appended to CXXFLAGS rather than replacing it, so anything the environment put
 # there survives. Which compiler the build uses is decided by cmake/toolchain.cmake, which the
 # preset names.
 #
-# Configure only when the cache does not already hold exactly these flags. Re-running cmake
-# regenerates armadillo's headers, which invalidates every object that includes them. Ninja
-# re-runs cmake by itself when CMakeLists.txt or the presets change, so skipping it is safe.
+# Configure only when the cache does not already hold exactly these flags. Re-running cmake makes
+# FetchContent check coretools and stattools again, and ninja re-runs it by itself when
+# CMakeLists.txt changes, so skipping it is safe.
 #
 # The presets set FETCHARMA=OFF and CONDA=ON, so coretools uses the environment's armadillo and fmt
 # rather than download its own. A cache from before that still says otherwise, and is configured
 # again so the presets reach it.
 build_binary() {
-    local suffix="$1" field="$2" node_state="$3"
-    local build_dir="build/${MODE}${suffix}"
+    local build_dir="$1" field="$2" node_state="$3"
     local flags="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=${field} -DACOL_NODE_STATE_STORAGE=${node_state}"
 
     if ! grep -qxF "CMAKE_CXX_FLAGS:STRING=$flags" "$build_dir/CMakeCache.txt" 2>/dev/null ||
        ! grep -qxF "FETCHARMA:BOOL=OFF" "$build_dir/CMakeCache.txt" ||
        ! grep -qxF "CONDA:BOOL=ON" "$build_dir/CMakeCache.txt"; then
-        ACOL_FLAG_SUFFIX="$suffix" cmake --preset "$MODE" \
-            -DLOTUS=ON -DSIMPLE_DATA=ON -DUSE_MS_DATA=OFF -DCMAKE_CXX_FLAGS="$flags"
+        cmake --preset "$MODE-$FLAGS" -B "$build_dir" -DCMAKE_CXX_FLAGS="$flags"
     fi
     cmake --build "$build_dir" --target acol
 }
@@ -124,10 +124,10 @@ build_binary() {
 cd "$ROOT"
 for index in "${!BACKENDS[@]}"; do
     backend="${BACKENDS[$index]}"
-    suffix="-${FLAGS}-parity-${backend}"
+    build_dir="build/$MODE-$FLAGS-parity-$backend"
     echo "==> building the $backend-backed binary"
-    build_binary "$suffix" "${FIELD_STORAGES[$index]}" "${NODE_STATE_STORAGES[$index]}"
-    BINARIES+=("$ROOT/build/${MODE}${suffix}/acol")
+    build_binary "$build_dir" "${FIELD_STORAGES[$index]}" "${NODE_STATE_STORAGES[$index]}"
+    BINARIES+=("$ROOT/$build_dir/acol")
 done
 
 # ---------------------------------------------------------------------------

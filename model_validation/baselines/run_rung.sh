@@ -46,8 +46,8 @@ case "$RUNG" in
 esac
 
 cd "$ROOT"
-pixi run build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
+pixi run build "$MODE-$FLAGS"
+ACOL="$ROOT/build/$MODE-$FLAGS/acol"
 
 cd "$SCENARIO"
 rm -rf "${RUNG}_gate" && mkdir -p "${RUNG}_gate"

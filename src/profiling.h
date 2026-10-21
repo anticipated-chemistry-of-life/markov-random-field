@@ -1,7 +1,7 @@
 #pragma once
 //
-// The CPU profile of a whole run, in a build configured with ACOL_PROFILING (the `profile` preset,
-// `pixi run infer profile ...`). Anywhere else `TProgramProfile` does nothing.
+// The CPU profile of a whole run, in a build configured with ACOL_PROFILING (the `profile-*`
+// presets, `pixi run infer profile-lm ...`). Anywhere else `TProgramProfile` does nothing.
 //
 // `main` holds one for the whole run, so the profile covers all of it: reading the data, the
 // burn-in, the chain start, the chain, and writing the posteriors. It is written to

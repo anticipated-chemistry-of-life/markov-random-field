@@ -7,8 +7,8 @@ MODE="${ACOL_MODE:-release}"
 FLAGS="${ACOL_DATA_FLAGS:-l}"
 
 cd "$ROOT"
-pixi run build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
+pixi run build "$MODE-$FLAGS"
+ACOL="$ROOT/build/$MODE-$FLAGS/acol"
 
 cd "$SCRIPT_DIR"
 # The binary is linked against the environment's libstdc++ and carries no rpath, so it has to be

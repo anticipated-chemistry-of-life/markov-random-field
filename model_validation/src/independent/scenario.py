@@ -296,8 +296,8 @@ MODE="${{ACOL_MODE:-release}}"
 FLAGS="{flags}"
 
 cd "$ROOT"
-pixi run build "$MODE" "$FLAGS"
-ACOL="$ROOT/$(pixi run bin "$MODE" "$FLAGS")"
+pixi run build "$MODE-$FLAGS"
+ACOL="$ROOT/build/$MODE-$FLAGS/acol"
 
 cd "$SCRIPT_DIR"
 """

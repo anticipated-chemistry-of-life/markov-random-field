@@ -1,7 +1,7 @@
 # Pick the compiler the machine can build with, and the prefix it looks for libraries in.
 #
 # The presets name this file, so every configure goes through it: the pixi tasks, `pixi run
-# parity`, and a bare `cmake --preset debug`.
+# parity`, and a bare `cmake --preset debug-ls`.
 #
 # The environment's compiler is the first choice, because the binary links the environment's
 # libraries. CC and CXX win over it when they are set.

@@ -1,86 +1,205 @@
 {
-  "version": 6,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 30,
-    "patch": 0
-  },
-  "configurePresets": [
-    {
-      "name": "base",
-      "hidden": true,
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}$penv{ACOL_FLAG_SUFFIX}",
-      "toolchainFile": "${sourceDir}/cmake/toolchain.cmake",
-      "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "BUILD_TESTING": "ON",
-        "FETCHARMA": {
-          "type": "BOOL",
-          "value": "OFF"
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 30,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "${sourceDir}/cmake/toolchain.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "BUILD_TESTING": "ON",
+                "FETCHARMA": { "type": "BOOL", "value": "OFF" },
+                "CONDA": { "type": "BOOL", "value": "ON" }
+            }
         },
-        "CONDA": {
-          "type": "BOOL",
-          "value": "ON"
+
+        {
+            "name": "debug",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "release",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "profile",
+            "hidden": true,
+            "inherits": "release",
+            "cacheVariables": {
+                "ACOL_PROFILING": { "type": "BOOL", "value": "ON" }
+            }
+        },
+
+        {
+            "name": "l",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "ON",
+                "SIMPLE_DATA": "OFF",
+                "USE_MS_DATA": "OFF"
+            }
+        },
+        {
+            "name": "s",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "OFF",
+                "SIMPLE_DATA": "ON",
+                "USE_MS_DATA": "OFF"
+            }
+        },
+        {
+            "name": "ls",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "ON",
+                "SIMPLE_DATA": "ON",
+                "USE_MS_DATA": "OFF"
+            }
+        },
+        {
+            "name": "lm",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "ON",
+                "SIMPLE_DATA": "OFF",
+                "USE_MS_DATA": "ON"
+            }
+        },
+        {
+            "name": "sm",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "OFF",
+                "SIMPLE_DATA": "ON",
+                "USE_MS_DATA": "ON"
+            }
+        },
+        {
+            "name": "lsm",
+            "hidden": true,
+            "cacheVariables": {
+                "LOTUS": "ON",
+                "SIMPLE_DATA": "ON",
+                "USE_MS_DATA": "ON"
+            }
+        },
+
+        { "name": "debug-l", "inherits": ["debug", "l"] },
+        { "name": "debug-s", "inherits": ["debug", "s"] },
+        { "name": "debug-ls", "inherits": ["debug", "ls"] },
+        { "name": "debug-lm", "inherits": ["debug", "lm"] },
+        { "name": "debug-sm", "inherits": ["debug", "sm"] },
+        { "name": "debug-lsm", "inherits": ["debug", "lsm"] },
+
+        { "name": "release-l", "inherits": ["release", "l"] },
+        { "name": "release-s", "inherits": ["release", "s"] },
+        { "name": "release-ls", "inherits": ["release", "ls"] },
+        { "name": "release-lm", "inherits": ["release", "lm"] },
+        { "name": "release-sm", "inherits": ["release", "sm"] },
+        { "name": "release-lsm", "inherits": ["release", "lsm"] },
+
+        { "name": "profile-l", "inherits": ["profile", "l"] },
+        { "name": "profile-s", "inherits": ["profile", "s"] },
+        { "name": "profile-ls", "inherits": ["profile", "ls"] },
+        { "name": "profile-lm", "inherits": ["profile", "lm"] },
+        { "name": "profile-sm", "inherits": ["profile", "sm"] },
+        { "name": "profile-lsm", "inherits": ["profile", "lsm"] }
+    ],
+
+    "buildPresets": [
+        { "name": "debug-l", "configurePreset": "debug-l" },
+        { "name": "debug-s", "configurePreset": "debug-s" },
+        { "name": "debug-ls", "configurePreset": "debug-ls" },
+        { "name": "debug-lm", "configurePreset": "debug-lm" },
+        { "name": "debug-sm", "configurePreset": "debug-sm" },
+        { "name": "debug-lsm", "configurePreset": "debug-lsm" },
+
+        { "name": "release-l", "configurePreset": "release-l" },
+        { "name": "release-s", "configurePreset": "release-s" },
+        { "name": "release-ls", "configurePreset": "release-ls" },
+        { "name": "release-lm", "configurePreset": "release-lm" },
+        { "name": "release-sm", "configurePreset": "release-sm" },
+        { "name": "release-lsm", "configurePreset": "release-lsm" },
+
+        { "name": "profile-l", "configurePreset": "profile-l" },
+        { "name": "profile-s", "configurePreset": "profile-s" },
+        { "name": "profile-ls", "configurePreset": "profile-ls" },
+        { "name": "profile-lm", "configurePreset": "profile-lm" },
+        { "name": "profile-sm", "configurePreset": "profile-sm" },
+        { "name": "profile-lsm", "configurePreset": "profile-lsm" }
+    ],
+
+    "testPresets": [
+        {
+            "name": "test",
+            "hidden": true,
+            "output": { "outputOnFailure": true }
+        },
+
+        { "name": "debug-l", "inherits": "test", "configurePreset": "debug-l" },
+        { "name": "debug-s", "inherits": "test", "configurePreset": "debug-s" },
+        {
+            "name": "debug-ls",
+            "inherits": "test",
+            "configurePreset": "debug-ls"
+        },
+        {
+            "name": "debug-lm",
+            "inherits": "test",
+            "configurePreset": "debug-lm"
+        },
+        {
+            "name": "debug-sm",
+            "inherits": "test",
+            "configurePreset": "debug-sm"
+        },
+        {
+            "name": "debug-lsm",
+            "inherits": "test",
+            "configurePreset": "debug-lsm"
+        },
+
+        {
+            "name": "release-l",
+            "inherits": "test",
+            "configurePreset": "release-l"
+        },
+        {
+            "name": "release-s",
+            "inherits": "test",
+            "configurePreset": "release-s"
+        },
+        {
+            "name": "release-ls",
+            "inherits": "test",
+            "configurePreset": "release-ls"
+        },
+        {
+            "name": "release-lm",
+            "inherits": "test",
+            "configurePreset": "release-lm"
+        },
+        {
+            "name": "release-sm",
+            "inherits": "test",
+            "configurePreset": "release-sm"
+        },
+        {
+            "name": "release-lsm",
+            "inherits": "test",
+            "configurePreset": "release-lsm"
         }
-      }
-    },
-    {
-      "name": "debug",
-      "displayName": "Debug (no optimisation, assertions on)",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "release",
-      "displayName": "Release (-O3 -DNDEBUG, symbols kept for profiling)",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "profile",
-      "displayName": "Release, profiling the whole run with gperftools (ACOL_PROFILING)",
-      "inherits": "release",
-      "cacheVariables": {
-        "ACOL_PROFILING": {
-          "type": "BOOL",
-          "value": "ON"
-        }
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug"
-    },
-    {
-      "name": "release",
-      "configurePreset": "release"
-    },
-    {
-      "name": "profile",
-      "configurePreset": "profile"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "debug",
-      "configurePreset": "debug",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "release",
-      "configurePreset": "release",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
-  ]
+    ]
 }

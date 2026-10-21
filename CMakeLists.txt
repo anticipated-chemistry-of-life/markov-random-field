@@ -44,8 +44,8 @@ option(BUILD_TESTING "Configure the acol_unitTests target" ON)
 if(NOT LOTUS AND NOT SIMPLE_DATA)
   message(
     FATAL_ERROR
-      "No source of data was compiled in: Y could not be informed by anything. "
-      "Configure with at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON (or 'pixi run build l')."
+      "No source of data was compiled in: Y could not be informed by anything. Configure with "
+      "at least one of -DLOTUS=ON or -DSIMPLE_DATA=ON (or a preset such as 'debug-ls')."
   )
 endif()
 
@@ -55,7 +55,7 @@ message(
 )
 
 # A build that profiles the whole run with gperftools' CPU profiler, into
-# <out>_profile.prof (src/profiling.h). The `profile` preset turns it on.
+# <out>_profile.prof (src/profiling.h). The `profile-*` presets turn it on.
 #
 # It adds -g and frame pointers to every target, coretools and stattools
 # included, which is why it has to come before FetchContent_MakeAvailable

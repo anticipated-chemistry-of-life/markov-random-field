@@ -33,29 +33,30 @@ both.
 ### Building and running
 
 ```bash
-pixi run build             # debug build of ./acol
-pixi run build release     # release build
-pixi run simulate          # build, then ./acol simulate
-pixi run infer             # build, then ./acol infer
-pixi run run               # build and run ./acol with no task name
-pixi run test              # build and run the unit tests, all three data sources
-pixi run test release      # ... in release mode
+pixi run build                # debug build of acol (preset debug-ls)
+pixi run build release-ls     # release build
+pixi run simulate             # build, then acol simulate
+pixi run infer                # build, then acol infer
+pixi run run                  # build and run acol with no task name
+pixi run test                 # build and run the unit tests (preset debug-lsm)
+pixi run test release-lsm     # ... in release mode
 ```
 
-The build mode and the data-source letters may be given in either order, and either may be left
-out. They are typed task arguments, so everything meant for the executable goes after `--`:
+Every task takes one argument, the name of a preset in `CMakePresets.json`, and the preset decides
+the build. It is a typed task argument, so everything meant for the executable goes after `--`:
 
 ```bash
-pixi run infer release -- --out results/acol --numThreads all
+pixi run infer release-ls -- --out results/acol --numThreads all
 ```
 
-is the same as running `./acol infer --out results/acol --numThreads all` from a release build.
+is the same as running `acol infer --out results/acol --numThreads all` from a release build.
 `pixi run run` is the same binary with no task name in front, for the runs that name neither.
 
-### Choosing the data sources
+### Choosing the preset
 
-Which sources of information get compiled in is a compile-time decision. Pass one of the letter
-sets, before or after the build mode:
+A preset is named `<mode>-<sources>`. The mode is `debug` (no optimisation, assertions on),
+`release` (-O3), or `profile` (see [Profiling](#profiling)). The sources are which data sources get
+compiled in, a compile-time decision, spelled in l, s, m order:
 
 | letter | cmake option       | data source             |
 | ------ | ------------------ | ----------------------- |
@@ -63,20 +64,19 @@ sets, before or after the build mode:
 | `s`    | `-DSIMPLE_DATA=ON` | simple error model data |
 | `m`    | `-DUSE_MS_DATA=ON` | mass spec data          |
 
-The default is `ls`, except for `pixi run test`, whose default is `lsm` so the mass spec code is
-tested too. The task takes the seven sets `l`, `m`, `s`, `ls`, `lm`, `sm` and `lsm`, and
-names the rest — a set is spelled in l, s, m order, so `ls` is a set and `sl` is a typo. At least
-one of `l` and `s` is required: with neither, nothing informs `Y`, and cmake stops before it
-compiles anything.
+The sets are `l`, `s`, `ls`, `lm`, `sm` and `lsm`. At least one of `l` and `s` is needed: with
+neither, nothing informs `Y`, so there is no preset for `m` alone. The default is `debug-ls`, except
+for `pixi run test`, whose default is `debug-lsm` so the mass spec code is tested too.
+`cmake --list-presets` lists them all.
 
 ```bash
-pixi run build l           # debug, LOTUS only
-pixi run build lsm         # debug, all three
-pixi run run release lsm -- --out results/acol --numThreads all
+pixi run build debug-l          # debug, LOTUS only
+pixi run build debug-lsm        # debug, all three
+pixi run run release-lsm -- --out results/acol --numThreads all
 ```
 
-Each combination gets its own build directory (`build/<mode>-<letters>`, e.g. `build/release-ls`),
-so switching back and forth does not trigger a rebuild.
+Each preset gets its own build directory, `build/<preset>` (e.g. `build/release-ls`), so switching
+back and forth does not trigger a rebuild, and the binary is `build/<preset>/acol`.
 
 ### Choosing the storage
 
@@ -122,7 +122,8 @@ header records which pairings CI gates.
 An external define overrides either alias:
 
 ```bash
-cmake --preset debug -DCMAKE_CXX_FLAGS="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=TStorageYDense"
+cmake --preset debug-ls -B build/debug-ls-yfield \
+      -DCMAKE_CXX_FLAGS="${CXXFLAGS:-} -DACOL_FIELD_STORAGE=TStorageYDense"
 ```
 
 That is how `pixi run parity` builds two binaries from one source tree. It gates two of the four
@@ -130,9 +131,8 @@ pairings, sparse against sparse and dense against dense. It runs the same simula
 chain under each from a fixed seed, then compares every file they write byte for byte. It runs in
 CI on every push. See `tests/backend_parity/`.
 
-Other tasks: `pixi run configure` (configure only), `pixi run bin` / `pixi run dir` (print the
-binary or the build directory path), `pixi run clean`, `pixi run distclean`. `pixi task list` lists
-them all, and `pixi shell` opens a shell inside the environment.
+Other tasks: `pixi run configure` (configure only), `pixi run clean`, `pixi run distclean`.
+`pixi task list` lists them all, and `pixi shell` opens a shell inside the environment.
 
 Every task is a cmake invocation in `pixi.toml`; there is no wrapper script. Which compiler a
 build uses is decided in `cmake/toolchain.cmake`, which the presets name, so a plain
@@ -156,13 +156,13 @@ run allocates about 19 GiB per backing, one backing at a time.
 ### Profiling
 
 ```bash
-pixi run infer profile lm -- --out run/acol --tree_species ... # writes run/acol_profile.prof
+pixi run infer profile-lm -- --out run/acol --tree_species ... # writes run/acol_profile.prof
 pprof -top    build/profile-lm/acol run/acol_profile.prof
 pprof -http=: build/profile-lm/acol run/acol_profile.prof
 ```
 
 `profile` is a third build mode beside `debug` and `release`: a release build configured with
-`ACOL_PROFILING` (the `profile` preset), in `build/profile-<flags>`. It links gperftools' CPU
+`ACOL_PROFILING` (the `profile-*` presets), in `build/profile-<sources>`. It links gperftools' CPU
 profiler, which the environment ships, and compiles every target with `-g` and frame pointers. The
 binary profiles the whole run, from the start of `main` to its end, into `<out>_profile.prof` -- or
 `acol_profile.prof` when the command line names no `--out`. gperftools samples on `SIGPROF`, so it
@@ -179,10 +179,9 @@ Enter the environment first, since the presets do not do it for you:
 
 ```bash
 pixi shell
-cmake --preset debug -DLOTUS=ON -DSIMPLE_DATA=ON
-cmake --build build/debug
+cmake --preset debug-ls
+cmake --build --preset debug-ls
 ```
 
-The presets put their output in `build/<preset>$ACOL_FLAG_SUFFIX`; the tasks set
-`ACOL_FLAG_SUFFIX` to the data-source letters, and it is empty when you invoke cmake yourself.
+A preset puts its output in `build/<preset>`; `-B` puts it somewhere else.
 `cmake/toolchain.cmake` still chooses the compiler, because `CMakePresets.json` names it.
