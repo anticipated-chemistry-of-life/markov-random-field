@@ -84,15 +84,14 @@ void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool
 	}
 }
 
-double TLotus::ll_ratio_after_parameter_move(const TFieldStorage &Y) {
+double TLotus::ll_ratio_after_parameter_move() {
 	// One function for both gamma and the error rate: the reporting model is built from both, so a
-	// move on either replaces it wholesale. Rebuilding the factor table on an error-rate move is
-	// strictly redundant -- the factors depend only on gamma -- but it is one exp() per leaf
-	// against a likelihood sum over the whole container space, and it buys a single code path
-	// with no parameter-specific state.
+	// move on either replaces it wholesale. Neither moves the field, so the present cells the last
+	// block update counted are the field's, and the likelihood is a sum over their kinds rather
+	// than a pass over the cells (ADR-0015).
 	_oldLL           = _curLL;
 	_reporting_model = _build_reporting_model();
-	_curLL           = calculate_log_likelihood_of_L(Y);
+	_curLL           = _log_likelihood_of_present_cells();
 	return _curLL - _oldLL;
 }
 
@@ -109,8 +108,7 @@ void TLotus::guess_initial_values(const TFieldStorage &Y) {
 
 	_reporting_model = _build_reporting_model(); // parameters just set -> build before the LL
 
-	// initialize _curLL
-	_curLL = calculate_log_likelihood_of_L(Y);
+	install_present_cells(count_present_cells(Y));
 	_oldLL = _curLL;
 }
 
@@ -120,61 +118,50 @@ void TLotus::_gather_paper_counts() {
 		const auto &tree = *_trees[i];
 		_paper_counts[i] = read_paper_counts(tree.get_tree_name(), tree.phylogeny());
 	}
+	_classes = lotus_math::TPaperCountClasses(_paper_counts);
 }
 
 lotus_math::TReportingModel TLotus::_build_reporting_model() const {
-	std::vector<double> gammas(_trees.size());
-	for (size_t i = 0; i < gammas.size(); ++i) { gammas[i] = (double)_gamma->value(i); }
-	return {gammas, (double)_error_rate->value(), _paper_counts};
+	return {_gammas(), (double)_error_rate->value(), _paper_counts};
 }
 
-double TLotus::calculate_log_likelihood_of_L(const TFieldStorage &Y) const {
-	const size_t total = Y.total_size_of_container_space();
+std::vector<double> TLotus::_gammas() const {
+	std::vector<double> gammas(_trees.size());
+	for (size_t i = 0; i < gammas.size(); ++i) { gammas[i] = (double)_gamma->value(i); }
+	return gammas;
+}
 
-	// Merge-join the two fields in ascending linear-index order without materializing their
-	// entries. We only need to evaluate cells that are one in Y and/or L: for every other cell
-	// both states are false, and _calculate_probability_of_L_given_x(false, false, i) is
-	// position-independent, so those collapse into a single bulk term below.
-	//
-	// The ones and not the stored cells, because how the sum splits between the accumulator and
-	// that bulk term has to be a property of the field's contents rather than of which backend is
-	// holding them -- otherwise the same chain reaches answers that differ in the last bits under
-	// the two, which a Metropolis ratio is quite capable of turning into two different chains.
-	coretools::TSumLogProbability sum_log;
-	auto y_cur = Y.ones_cursor();
-	auto l_cur = _L.ones_cursor();
+double TLotus::_log_likelihood_of_present_cells() const {
+	return lotus_math::log_likelihood_of_L(_present_cells, _classes, _gammas(),
+	                                       (double)_error_rate->value());
+}
 
-	size_t n_visited = 0; // distinct linear indices that are one in Y and/or L
-	while (y_cur.valid() || l_cur.valid()) {
-		const size_t yi = y_cur.valid() ? y_cur.linear_index() : total;
-		const size_t li = l_cur.valid() ? l_cur.linear_index() : total;
-		const size_t i  = std::min(yi, li);
+lotus_math::TPresentCells TLotus::no_present_cells() const {
+	return {_L.total_size_of_container_space(), _L.number_of_ones(), _classes};
+}
 
-		bool state_of_Y = false;
-		bool state_of_L = false;
-		if (yi == i) {
-			state_of_Y = true; // the cursor yields only ones
-			y_cur.advance();
-		}
-		if (li == i) {
-			state_of_L = true;
-			l_cur.advance();
-		}
+void TLotus::install_present_cells(lotus_math::TPresentCells cells) {
+	_present_cells = std::move(cells);
+	_curLL         = _log_likelihood_of_present_cells();
+}
 
-		// Only a present cell needs its position; for an absent one the answer is the same
-		// everywhere, so the linear-to-multidimensional conversion is skipped entirely.
-		if (state_of_Y) {
-			sum_log.add(
-			    _reporting().probability(true, state_of_L, _L.get_multi_dimensional_index(i)));
-		} else {
-			sum_log.add(_reporting().probability_absent(state_of_L));
-		}
-		++n_visited;
+lotus_math::TPresentCells TLotus::count_present_cells(const TFieldStorage &Y) const {
+	static_assert(NUMBER_OF_TREES == 2, "a cell is a species leaf by a molecule leaf");
+	lotus_math::TPresentCells cells = no_present_cells();
+	const size_t n_columns          = Y.dimensions()[1];
+
+	// Only the present cells are counted, so the walk is over the field's ones. Whether LOTUS
+	// reports one is a forward cursor over its records, which are in the same order.
+	auto record = _L.ones_cursor();
+	for (auto present = Y.ones_cursor(); present.valid(); present.advance()) {
+		const size_t cell = present.linear_index();
+		while (record.valid() && record.linear_index() < cell) { record.advance(); }
+		const bool reported = record.valid() && record.linear_index() == cell;
+		const size_t slot   = cells.slot(species_class(cell / n_columns),
+		                                 molecule_class(cell % n_columns));
+		++cells.ones[static_cast<size_t>(reported)][slot];
 	}
-
-	// Every remaining cell is (Y = 0, L = 0): a single constant, position-independent term.
-	const double p_absent = _reporting().probability_absent(false);
-	return sum_log.getSum() + static_cast<double>(total - n_visited) * std::log(p_absent);
+	return cells;
 }
 
 void TLotus::prepare_for_simulation() {

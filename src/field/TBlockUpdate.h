@@ -80,16 +80,23 @@ template<typename T>
 using BlockModelRow =
     std::remove_cvref_t<decltype(std::declval<T &>().begin_row(size_t{}, size_t{}))>;
 
+/// The type a model's `begin_column` hands back. A column is only read once it is made.
+template<typename T>
+using BlockModelColumn = std::remove_cvref_t<decltype(std::declval<T &>().begin_column(size_t{}))>;
+
 /// Everything the traversal reads that is not a state in one of its three storages.
 ///
-/// The model is asked at two granularities. `begin_row` is asked once per species leaf, and
+/// The model is asked at three granularities. `begin_row` is asked once per species leaf, and
 /// answers with whatever that row lets it settle once -- the molecule tree's clique is the species
 /// leaf, so its whole transition grid is one of those things -- and with whatever that row will
 /// accumulate. It is told the row's first linear index as well as the species leaf, because a
-/// source whose point query walks a cursor forward seeds that cursor there. `factors` is asked per
-/// leaf pair, is handed the row it belongs to and the two parent states the traversal read from the
-/// node states, and answers what is left. The row's type is the model's own: the traversal only
-/// carries it from one call to the next.
+/// source whose point query walks a cursor forward seeds that cursor there. `begin_column` is the
+/// same for a molecule leaf: the species tree's clique is the molecule leaf, so its transition grid
+/// is the column's, and so is the molecule leaf's branch. It is asked once per column of a tile,
+/// and the column it answers is read by every row of the band. `factors` is asked per leaf pair,
+/// is handed the row and the column it belongs to and the two parent states the traversal read
+/// from the node states, and answers what is left. The row's and the column's types are the
+/// model's own: the traversal only carries them from one call to the next.
 ///
 /// `record` is told what the leaf pair was given, so each data source can carry its own
 /// bookkeeping forward, and it writes that bookkeeping into the row. The factors come back with
@@ -99,7 +106,7 @@ using BlockModelRow =
 ///
 /// A thread takes whole rows, and everything a row accumulates is in the row. So no two threads
 /// touch one object, whatever the schedule, and nothing the model sums depends on how the rows
-/// were shared out.
+/// were shared out. A column accumulates nothing, which is what lets the rows of a band share it.
 ///
 /// `prepare_for_traversal` is asked once, single-threaded, before the parallel region starts
 /// (`run`, below): a source readies there whatever cannot be readied concurrently -- LOTUS sorts
@@ -108,12 +115,14 @@ using BlockModelRow =
 /// does, in a build without LOTUS.
 template<typename T>
 concept BlockModel =
-    requires(T &model, BlockModelRow<T> &row, size_t species_leaf, size_t first_field_cell,
-	         size_t molecule_leaf, bool species_parent, bool molecule_parent,
-	         const TLeafPairFactors &factors, const field_math::TBlockStates &drawn) {
+    requires(T &model, BlockModelRow<T> &row, const BlockModelColumn<T> &column,
+	         size_t species_leaf, size_t first_field_cell, size_t molecule_leaf,
+	         bool species_parent, bool molecule_parent, const TLeafPairFactors &factors,
+	         const field_math::TBlockStates &drawn) {
 	    { model.begin_row(species_leaf, first_field_cell) } -> std::same_as<BlockModelRow<T>>;
+	    { model.begin_column(molecule_leaf) } -> std::same_as<BlockModelColumn<T>>;
 	    {
-		    model.factors(row, molecule_leaf, species_parent, molecule_parent)
+		    model.factors(row, column, molecule_leaf, species_parent, molecule_parent)
 	    } -> std::same_as<TLeafPairFactors>;
 	    { model.record(row, molecule_leaf, factors, drawn) } -> std::same_as<void>;
 	    { model.end_row(row) } -> std::same_as<void>;
@@ -125,17 +134,43 @@ concept BlockModel =
 /// The traversal's own half is here; the model's half is `model_row`, whose type is the model's
 /// business and not this file's. Between them they are what a cell no longer has to work out for
 /// itself.
+///
+/// Where a cell of a node state sits is a sum of one term per subscript -- the subscript times
+/// that dimension's stride, under any layout (ADR-0013) -- so the row keeps its own terms and a
+/// cell adds the column's to them. The row's term of a node state is where its cell at molecule
+/// leaf (or node) 0 sits.
 template<typename ModelRow> struct TRow {
 	/// The species leaf this row is, which is the first coordinate of every leaf pair in it.
-	size_t species_leaf        = 0;
-	/// The species node whose state is the species parent of every leaf pair in this row. A leaf
-	/// is never a root, so it has one.
-	size_t species_parent_node = 0;
+	size_t species_leaf             = 0;
 	/// The field's linear index of this row's first cell. The field is row-major over
 	/// (species leaf, molecule leaf), so a cell's index is this plus its molecule leaf.
-	size_t first_field_cell    = 0;
+	size_t first_field_cell         = 0;
+	/// The row's term of a position in the species node state: the species leaf's.
+	size_t species_position         = 0;
+	/// The same for the species leaf's parent node, whose state is the species parent of every
+	/// leaf pair in this row. A leaf is never a root, so it has one.
+	size_t species_parent_position  = 0;
+	/// The row's term of a position in the molecule node state.
+	size_t molecule_position        = 0;
 	/// What the model settled for this row.
 	ModelRow model_row;
+};
+
+/// What every leaf pair of one molecule leaf shares, settled once per tile and read by every row of
+/// the band. The traversal's own half is here, and is `TRow`'s turned around; the model's half is
+/// `model_column`.
+template<typename ModelColumn> struct TColumn {
+	/// The molecule leaf this column is, which is the second coordinate of every leaf pair in it.
+	size_t molecule_leaf            = 0;
+	/// The column's term of a position in the species node state.
+	size_t species_position         = 0;
+	/// The column's term of a position in the molecule node state: the molecule leaf's.
+	size_t molecule_position        = 0;
+	/// The same for the molecule leaf's parent node, whose state is the molecule parent of every
+	/// leaf pair in this column.
+	size_t molecule_parent_position = 0;
+	/// What the model settled for this column.
+	ModelColumn model_column;
 };
 
 /// Draws one leaf pair: the field cell and both tree field cells at it.
@@ -145,43 +180,50 @@ template<typename ModelRow> struct TRow {
 /// containers (ADR-0005), so one subscript names its cell in each; the linear indices differ,
 /// because the container shapes do.
 ///
-/// The leaf pair is named by its row and its molecule leaf, and the field's linear index follows
-/// from the row rather than from a division: a linear index is `row * n_columns + column`. It
-/// names no cell of either node state -- the molecule node state has one column per molecule
-/// *node* where the field has one per leaf -- so the two node states are addressed by the leaf
-/// pair's subscript instead, and each linearises it against its own dimensions.
+/// The leaf pair is named by its row and its column. The field's linear index follows from the row
+/// rather than from a division: a linear index is `row * n_columns + column`. It names no cell of
+/// either node state -- the molecule node state has one column per molecule *node* where the field
+/// has one per leaf -- so the four node-state cells read here are found by adding the row's term of
+/// their position to the column's.
 ///
 /// A write reaches the storage in place, or comes back as a deferred insert. That is the only exit
 /// a write inside a parallel region may take (ADR-0006).
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model,
-         typename ModelRow>
-void update_cell(TRow<ModelRow> &row, size_t molecule_leaf, Field &Y, NodeState &Z_species,
-                 NodeState &Z_molecule, const TPhylogeny &molecule,
+         typename ModelRow, typename ModelColumn>
+void update_cell(TRow<ModelRow> &row, const TColumn<ModelColumn> &column, Field &Y,
+                 NodeState &Z_species, NodeState &Z_molecule,
                  const field_math::TErrorProbability &omega, Model &model,
                  const TCellUniforms &uniforms, field_math::TLinkCounters &counters,
                  std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
                  std::vector<size_t> &molecule_inserts) {
+	const size_t molecule_leaf = column.molecule_leaf;
 	const IndexArray leaf_pair{row.species_leaf, molecule_leaf};
 	const size_t field_cell = row.first_field_cell + molecule_leaf;
 	// The row's arithmetic is the field's own linearisation, or the cell drawn here is not the
-	// cell the uniform was hashed for.
+	// cell the uniform was hashed for. The same goes for the node states' positions.
 	DEBUG_ASSERT(field_cell == Y.get_linear_index_in_container_space(leaf_pair));
+	DEBUG_ASSERT(row.species_position + column.species_position ==
+	             Z_species.position_of(leaf_pair));
+	DEBUG_ASSERT(row.molecule_position + column.molecule_position ==
+	             Z_molecule.position_of(leaf_pair));
 
 	// The species parent is the cell above this one in the species node state -- its node is the
 	// row's, and only the column moves. The molecule parent is the cell beside it in the molecule
-	// node state. A leaf is never a root, so a parent is an internal node, and an internal node is
-	// never a leaf -- so no leaf pair of this update writes what this one reads there.
+	// node state -- its node is the column's, and only the row moves. A leaf is never a root, so a
+	// parent is an internal node, and an internal node is never a leaf -- so no leaf pair of this
+	// update writes what this one reads there.
 	const bool species_parent =
-	    Z_species.is_one(IndexArray{row.species_parent_node, molecule_leaf});
+	    Z_species.is_one_at(row.species_parent_position + column.species_position);
 	const bool molecule_parent =
-	    Z_molecule.is_one(IndexArray{row.species_leaf, molecule.parent_of(molecule_leaf)});
+	    Z_molecule.is_one_at(row.molecule_position + column.molecule_parent_position);
 
-	const TLeafPairFactors factors =
-	    model.factors(row.model_row, molecule_leaf, species_parent, molecule_parent);
+	const TLeafPairFactors factors = model.factors(row.model_row, column.model_column,
+	                                               molecule_leaf, species_parent, molecule_parent);
 
-	const field_math::TBlockStates current{.y   = Y.is_one(field_cell),
-	                                       .z_s = Z_species.is_one(leaf_pair),
-	                                       .z_m = Z_molecule.is_one(leaf_pair)};
+	const field_math::TBlockStates current{
+	    .y   = Y.is_one(field_cell),
+	    .z_s = Z_species.is_one_at(row.species_position + column.species_position),
+	    .z_m = Z_molecule.is_one_at(row.molecule_position + column.molecule_position)};
 
 	// The cell names the uniform it draws, so the thread that happens to reach this cell does not
 	// decide what it gets.
@@ -225,7 +267,9 @@ inline constexpr size_t TILE_COLUMNS = 128;
 /// and accumulates what it adds up in a row of its own -- the band only interleaves the rows.
 /// What the row settles once is what a per-cell loop was asking for over and over: the species
 /// leaf's parent node and its branch, the molecule tree's clique -- which *is* the species leaf,
-/// so its transition grid is constant down the row -- and the row's first linear index. The
+/// so its transition grid is constant down the row -- and the row's first linear index. A tile's
+/// columns are settled the same way, once per tile rather than once per row: the molecule leaf's
+/// parent node and its branch, and the species tree's clique -- which *is* the molecule leaf. The
 /// ascending order is not cosmetic: it is what lets a data source answer a point query from a
 /// forward cursor (`TLotus::holds_a_record`) rather than by hashing every cell.
 ///
@@ -241,24 +285,48 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
                  std::vector<field_math::TLinkCounters> &per_row_counters,
                  std::vector<size_t> &field_inserts, std::vector<size_t> &species_inserts,
                  std::vector<size_t> &molecule_inserts) {
+	// A row's and a column's term of a position: where the cell at subscript 0 in the other
+	// dimension sits.
+	const auto row_term = [](const NodeState &Z, size_t row) {
+		return Z.position_of(IndexArray{row, 0});
+	};
+	const auto column_term = [](const NodeState &Z, size_t column) {
+		return Z.position_of(IndexArray{0, column});
+	};
+
 	std::vector<TRow<BlockModelRow<Model>>> rows;
 	rows.reserve(end_row - first_row);
 	for (size_t species_leaf = first_row; species_leaf < end_row; ++species_leaf) {
 		const size_t first_field_cell = species_leaf * n_molecule_leaves;
-		rows.push_back({.species_leaf        = species_leaf,
-		                .species_parent_node = species.parent_of(species_leaf),
-		                .first_field_cell    = first_field_cell,
-		                .model_row           = model.begin_row(species_leaf, first_field_cell)});
+		rows.push_back(
+		    {.species_leaf            = species_leaf,
+		     .first_field_cell        = first_field_cell,
+		     .species_position        = row_term(Z_species, species_leaf),
+		     .species_parent_position = row_term(Z_species, species.parent_of(species_leaf)),
+		     .molecule_position       = row_term(Z_molecule, species_leaf),
+		     .model_row               = model.begin_row(species_leaf, first_field_cell)});
 	}
 	std::vector<field_math::TLinkCounters> counters(rows.size());
+	std::vector<TColumn<BlockModelColumn<Model>>> columns;
+	columns.reserve(TILE_COLUMNS);
 
 	for (size_t first_column = 0; first_column < n_molecule_leaves; first_column += TILE_COLUMNS) {
 		const size_t end_column = std::min(first_column + TILE_COLUMNS, n_molecule_leaves);
+		columns.clear();
+		for (size_t molecule_leaf = first_column; molecule_leaf < end_column; ++molecule_leaf) {
+			columns.push_back(
+			    {.molecule_leaf     = molecule_leaf,
+			     .species_position  = column_term(Z_species, molecule_leaf),
+			     .molecule_position = column_term(Z_molecule, molecule_leaf),
+			     .molecule_parent_position =
+			         column_term(Z_molecule, molecule.parent_of(molecule_leaf)),
+			     .model_column = model.begin_column(molecule_leaf)});
+		}
 		for (size_t r = 0; r < rows.size(); ++r) {
-			for (size_t molecule_leaf = first_column; molecule_leaf < end_column; ++molecule_leaf) {
-				update_cell<Policy>(rows[r], molecule_leaf, Y, Z_species, Z_molecule, molecule,
-				                    omega, model, uniforms, counters[r], field_inserts,
-				                    species_inserts, molecule_inserts);
+			for (const auto &column : columns) {
+				update_cell<Policy>(rows[r], column, Y, Z_species, Z_molecule, omega, model,
+				                    uniforms, counters[r], field_inserts, species_inserts,
+				                    molecule_inserts);
 			}
 		}
 	}

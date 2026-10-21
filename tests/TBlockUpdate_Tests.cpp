@@ -94,6 +94,7 @@ public:
 		bool species_parent  = false;
 		bool molecule_parent = false;
 		field_math::TBlockStates drawn;
+		bool column_was_its_own = false; ///< whether the column it was handed was its molecule leaf's
 	};
 
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
@@ -109,12 +110,24 @@ public:
 		return TRow{species_leaf};
 	}
 
-	[[nodiscard]] block_update::TLeafPairFactors
-	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+	/// The column the loop is walking down: the molecule leaf it was settled for, so `factors` can
+	/// tell a leaf pair handed another leaf's column.
+	struct TColumn {
+		size_t molecule_leaf = 0;
+	};
+
+	[[nodiscard]] static TColumn begin_column(size_t molecule_leaf) {
+		return TColumn{molecule_leaf};
+	}
+
+	[[nodiscard]] block_update::TLeafPairFactors factors(const TRow &row, const TColumn &column,
+	                                                     size_t molecule_leaf, bool species_parent,
+	                                                     bool molecule_parent) {
 		TVisit &recorded = visit(row.species_leaf, molecule_leaf);
 		++recorded.n_asked;
 		recorded.species_parent  = species_parent;
 		recorded.molecule_parent = molecule_parent;
+		recorded.column_was_its_own = column.molecule_leaf == molecule_leaf;
 
 		const auto target = target_at(row.species_leaf, molecule_leaf);
 		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
@@ -176,8 +189,15 @@ public:
 		return TRow{.species_leaf = species_leaf, .log_likelihood = {}};
 	}
 
-	[[nodiscard]] static block_update::TLeafPairFactors
-	factors(const TRow &row, size_t molecule_leaf, bool species_parent, bool molecule_parent) {
+	/// Nothing to settle per column: everything below is computed from the leaf pair.
+	struct TColumn {};
+
+	[[nodiscard]] static TColumn begin_column(size_t /*molecule_leaf*/) { return {}; }
+
+	[[nodiscard]] static block_update::TLeafPairFactors factors(const TRow &row, const TColumn &,
+	                                                            size_t molecule_leaf,
+	                                                            bool species_parent,
+	                                                            bool molecule_parent) {
 		// Values that depend on both the leaf pair and the parents, so that a read of the wrong
 		// parent, or of the wrong cell, moves the chain.
 		const double drift = 0.1 * static_cast<double>((row.species_leaf + molecule_leaf) % 4U);
@@ -292,6 +312,7 @@ TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
 				EXPECT_EQ(model.visit(s, m).n_asked, 1U);
 				EXPECT_EQ(model.visit(s, m).n_recorded, 1U);
+				EXPECT_TRUE(model.visit(s, m).column_was_its_own);
 			}
 		}
 	}
