@@ -6,9 +6,11 @@
 #   pixi run infer    [MODE] [FLAGS] -- ARGS build, then run ./acol infer ARGS
 #   pixi run run      [MODE] [FLAGS] -- ARGS build, then run ./acol ARGS
 #   pixi run test     [MODE] [FLAGS] -- ARGS build, then run ./acol_unitTests ARGS
+#                                             (FLAGS defaults to `lsm` here)
 #
 # MODE  is `debug` (the default) or `release`.
-# FLAGS is one of the letter sets below; it defaults to `ls`. A set is spelled
+# FLAGS is one of the letter sets below; it defaults to `ls`, except for `test`,
+# which defaults to `lsm` so the mass spec code is tested too. A set is spelled
 # in l, s, m order: l, m, s, ls, lm, sm, lsm.
 #
 # Either may be left out, and they may be given in either order, so
@@ -165,9 +167,9 @@ description = "Compile ./acol and run a chain with it (arguments after `--`)."
 args = [{ arg = "mode", default = "" }, { arg = "flags", default = "" }]
 depends-on = [{ task = "_compile_commands", args = [
   "{{ 'release' if 'release' in [mode, flags] else 'debug' }}",
-  "{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}",
+  "{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }}",
 ] }]
-cmd = "cmake --build build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }} --target acol_unitTests && ./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'ls') if mode in ['debug', 'release', ''] else mode }}/acol_unitTests"
+cmd = "cmake --build build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }} --target acol_unitTests && ./build/{{ 'release' if 'release' in [mode, flags] else 'debug' }}-{{ (flags or 'lsm') if mode in ['debug', 'release', ''] else mode }}/acol_unitTests"
 description = "Compile and run the unit tests (arguments after `--` go to gtest)."
 
 [tasks.bin]

@@ -32,7 +32,7 @@ pixi run build release     # release build
 pixi run simulate          # build, then ./acol simulate
 pixi run infer             # build, then ./acol infer
 pixi run run               # build and run ./acol with no task name
-pixi run test              # build and run the unit tests
+pixi run test              # build and run the unit tests, all three data sources
 pixi run test release      # ... in release mode
 ```
 
@@ -57,7 +57,8 @@ sets, before or after the build mode:
 | `s`    | `-DSIMPLE_DATA=ON` | simple error model data |
 | `m`    | `-DUSE_MS_DATA=ON` | mass spec data          |
 
-The default is `ls`. The task takes the seven sets `l`, `m`, `s`, `ls`, `lm`, `sm` and `lsm`, and
+The default is `ls`, except for `pixi run test`, whose default is `lsm` so the mass spec code is
+tested too. The task takes the seven sets `l`, `m`, `s`, `ls`, `lm`, `sm` and `lsm`, and
 names the rest — a set is spelled in l, s, m order, so `ls` is a set and `sl` is a typo. At least
 one of `l` and `s` is required: with neither, nothing informs `Y`, and cmake stops before it
 compiles anything.
