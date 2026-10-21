@@ -2,6 +2,8 @@
 
 `TPhylogeny` stores its nodes as three contiguous blocks: **all leaves, then all internal non-root nodes in post-order, then all roots.** Within the leaf block and the root block the nodes keep the relative order the tree file put them in; within the middle block the order is post-order from each root, visiting children in file order. The construction code is unaware of this — it builds in file order and one permutation is applied at the end.
 
+*Superseded in part by ADR-0014: the leaf block is in depth-first order, a node's leaf children adjacent, rather than in file order. The three blocks and everything derived from them are unchanged.*
+
 The point is that the layout answers, by arithmetic alone, the three questions the update asks most often. A node is a leaf exactly when its index is below the leaf count. A node is a root exactly when its index is at or above the node count minus the root count. A leaf's index in leaf space *is* its node index; a branch's index *is* its child node's index; an internal node's index in internal-node space is its node index minus the leaf count. All of it derives from three integers — node count, leaf count, root count.
 
 That is a structural claim standing in for a structural test, and it is the reason this record exists: a reader who finds `node < _n_leaves` where they expected "does this node have children" needs to know why the comparison is legal.

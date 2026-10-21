@@ -179,22 +179,16 @@ def test_index_spaces_are_arithmetic(n_nodes):
     assert index.branch_of_node.tolist() == list(range(n_branches)) + [-1] * n_roots
 
 
-def test_the_leaf_block_keeps_file_order():
-    """A reordered tree file must give a correspondingly reordered output, not an
-    unrelated one -- so within a block, first-appearance order survives."""
-    tree = Tree(255, TreeType.balanced, "species")
-    edges = edges_of(tree)
+def test_leaves_are_numbered_depth_first_with_siblings_adjacent():
+    """The leaf order the C++ uses (ADR-0014), on a tree where it differs from file
+    order: the root's leaf children `a` and `c` come together, before the clade
+    below `x`. `PhylogenyOrder.leaves_are_depth_first_with_siblings_adjacent` in
+    tests/TPhylogeny_Tests.cpp pins the same tree, so the two implementations
+    cannot drift apart unnoticed."""
+    edges = [("a", "r"), ("x", "r"), ("b", "x"), ("c", "r"), ("d", "x")]
     index = build_tree_index(edges)
-
-    appearance: list[str] = []
-    for child, parent in edges:
-        for name in (parent, child):
-            if name not in appearance:
-                appearance.append(name)
-    rank = {name: i for i, name in enumerate(appearance)}
-
-    leaf_ranks = [rank[name] for name in index.leaf_names()]
-    assert leaf_ranks == sorted(leaf_ranks)
+    assert index.leaf_names() == ["a", "c", "b", "d"]
+    assert index.internal_names() == ["x", "r"]
 
 
 def test_internal_nodes_include_the_root():

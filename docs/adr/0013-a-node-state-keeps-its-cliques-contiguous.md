@@ -34,8 +34,10 @@ Same chain: with 5 iterations, every output file of the two binaries is byte-ide
 
 ## Consequences
 
-The dense node state's memory is no longer in linear-index order. Code that walks a node state's memory directly — `cells()` — walks positions, and must ask the storage which cell it is holding. Code that reads by linear index pays a division per read under the transposed layout; a hot path reads by subscript or by position instead (`tree_field_posterior` reads by subscript for this reason).
+The dense node state's memory is no longer in linear-index order. Code that walks a node state's memory directly — `cells()` — walks positions, and must ask the storage which cell it is holding. Code that reads by linear index pays a division per read under the transposed layout; a hot path reads by subscript or by position instead (`tree_field_posterior` reads by subscript for this reason). A pass that sweeps the whole field in row order also reads the species node state a cache line per cell. `leaf_layer_start::hold_tree_fields_at_the_field` did both, and went from 17 to 48–115 CPU s at the chain start until it was given the block update's band order (ADR-0014 records the measurement).
 
 `BAND_ROWS` and `TILE_COLUMNS` are tuned to a cache line and a core's L2, not to the model. They change the order in which leaf pairs are drawn and nothing else.
 
 The species leaf order is what keeps the block update from gaining. Ordering the species leaves so that siblings are adjacent and their parents follow them would make a band's parents a few cache lines instead of fifty. That moves the leaf order away from file order (ADR-0004) and with it every linear index and every uniform, so it is a different chain, and it is not part of this decision.
+
+ADR-0014 makes that change: the leaves are numbered depth-first, siblings adjacent.

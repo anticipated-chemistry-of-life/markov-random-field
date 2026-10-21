@@ -163,10 +163,9 @@ TOptions parse(int argc, char **argv) {
 
 /// A forest shaped like the LOTUS trees: `n_internal` internal nodes of which the first `n_roots`
 /// are roots, each other internal node hung below an earlier one, and the leaves hung below the
-/// internal nodes. Every internal node gets one leaf first, so none is childless. The leaves are
-/// sorted by parent, because the LOTUS tree files list siblings next to each other and canonical
-/// order keeps the leaves in file order -- which is what decides how far apart a node's children
-/// sit in a clique.
+/// internal nodes. Every internal node gets one leaf first, so none is childless. The order the
+/// leaves are listed in does not reach the benchmark: canonical order numbers them depth-first,
+/// siblings adjacent, whatever the file says (ADR-0014).
 TPhylogeny synthetic_tree(size_t n_leaves, size_t n_internal, size_t n_roots, uint64_t seed) {
 	n_roots    = std::max<size_t>(1, n_roots);
 	n_internal = std::max(n_internal, n_roots);
@@ -181,14 +180,10 @@ TPhylogeny synthetic_tree(size_t n_leaves, size_t n_internal, size_t n_roots, ui
 		std::uniform_int_distribution<size_t> pick(0, i - 1);
 		edges.push_back({internal(i), internal(pick(rng)), 1.0});
 	}
-	std::vector<size_t> leaf_parent(n_leaves);
 	std::uniform_int_distribution<size_t> any_internal(0, n_internal - 1);
 	for (size_t leaf = 0; leaf < n_leaves; ++leaf) {
-		leaf_parent[leaf] = leaf < n_internal ? leaf : any_internal(rng);
-	}
-	std::sort(leaf_parent.begin(), leaf_parent.end());
-	for (size_t leaf = 0; leaf < n_leaves; ++leaf) {
-		edges.push_back({"l" + std::to_string(leaf), internal(leaf_parent[leaf]), 1.0});
+		const size_t parent = leaf < n_internal ? leaf : any_internal(rng);
+		edges.push_back({"l" + std::to_string(leaf), internal(parent), 1.0});
 	}
 	return build_phylogeny(edges);
 }
