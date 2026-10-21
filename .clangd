@@ -1,5 +1,10 @@
 CompileFlags:
   CompilationDatabase: build
+  # The headers of the pixi environment (fmt, armadillo, gperftools, ...). The conda g++ searches
+  # this directory by itself, so cmake leaves it out of compile_commands.json, and clangd -- which
+  # does not ask g++ for its built-in paths -- would not find them. Relative to the directory a
+  # compile command runs in, which is build/<preset> for every preset.
+  Add: [-isystem, ../../.pixi/envs/default/include]
 
 Diagnostics:
   UnusedIncludes: Strict
