@@ -36,6 +36,7 @@
 #include "Types.h"
 #include "constants.h"
 #include "data_sources/data_source.h"
+#include "field/TBlockData.h"
 #include "lotus/TLotus.h"
 #include "mass_spec/msms_data.h"
 #include "ntfy/TNtfyNotifier.h"
@@ -106,6 +107,14 @@ private:
 	TMSMSData::TypeParamContamination *_contamination_proba = nullptr;
 #endif
 
+	// Which data source hands out each pass of TCompiledBlockData. One overload per source that
+	// brings a pass of its own to the block update (ADR-0017).
+#ifdef USE_SIMPLE_ERROR_MODEL
+	[[nodiscard]] TSimpleErrorModel &_source_of(std::type_identity<TSimpleErrorModel::TBlockPass>) {
+		return _simple_error_model;
+	}
+#endif
+
 	// output file
 	std::string _prefix;
 
@@ -162,6 +171,15 @@ public:
 	[[nodiscard]] double data_log_likelihood() const;
 
 	void update_markov_field();
+
+	/// Every compiled-in data source's pass through one block update, folded into one
+	/// (field/TBlockData.h). The sources' data and parameters must not move until the fold is
+	/// handed back.
+	[[nodiscard]] TCompiledBlockData begin_block_update();
+
+	/// Hands each pass back to its data source, which installs what the pass tallied. The fold's
+	/// `end_pass` has to have run.
+	void end_block_update(TCompiledBlockData &&data);
 
 	// --- MCMC moves, dispatched by stattools on the parameter pointer type ---
 	// Each move only recomputes the likelihood of the source that parameter belongs to: the other

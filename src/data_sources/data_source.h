@@ -47,10 +47,10 @@ struct TNotifierStats {
 /// - draw its data from a simulated field and write it out (`simulate_from_Y`, `write_simulated`);
 /// - append whatever it has to report to a shared stats collector (`contribute_stats`).
 ///
-/// Not part of this concept: the per-cell hook the block update reads
-/// (TLotus::calculate_LL_update_Y, TSimpleErrorModel::probabilities_for_Y_update,
-/// TMSMSData::per_cell_factor) -- their shapes still differ source to source -- and the
-/// parameter-move dispatch, which stattools forces to be one overload per parameter type.
+/// Not part of this concept: a source's part in the block update, which is its pass
+/// (data_sources/data_source_pass.h, ADR-0017) -- LOTUS and mass spec still take part through
+/// per-cell hooks of their own (TLotus::calculate_LL_update_Y, TMSMSData::per_cell_factor) -- and
+/// the parameter-move dispatch, which stattools forces to be one overload per parameter type.
 template<typename T>
 concept DataSource = requires(T &s, TDataModel *box, bool simulate, const TFieldStorage &Y,
                               const std::string &prefix, TNotifierStats &stats) {

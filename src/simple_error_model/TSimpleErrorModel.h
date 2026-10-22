@@ -15,6 +15,7 @@
 #pragma once
 
 #include "simple_error_model/TSimpleErrorModelMath.h"
+#include "simple_error_model/block_pass.h"
 
 #ifdef USE_SIMPLE_ERROR_MODEL
 
@@ -71,22 +72,17 @@ public:
 	/// and after anything that changes Y outside of an update.
 	void guess_initial_values(const TFieldStorage &Y);
 
-	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
+	// --- the block update ---
 
-	/// The state D holds for one cell of the field. D has the field's dimensions, so the field's
-	/// index is already D's. The update asks this one cell at a time. Nothing writes D.
-	[[nodiscard]] bool observed_state_of(const IndexArray &index_in_leaves_space) const {
-		return _D.is_one(_D.get_linear_index_in_container_space(index_in_leaves_space));
-	}
+	/// This source's part in one block update (simple_error_model/block_pass.h).
+	using TBlockPass = simple_error_model::TBlockPass;
 
-	/// prob[0] = P(D_cell | Y = 0), prob[1] = P(D_cell | Y = 1). `observed_state` is the state D
-	/// holds for the cell, which the caller reads through the accessor above.
-	void probabilities_for_Y_update(bool observed_state, std::array<double, 2> &prob) const {
-		simple_error_model::probabilities_for_both_Y_states(observed_state, _eps(), prob);
-	}
+	/// A pass over D at the current error rate. D and the error rate do not move until the pass
+	/// is handed back.
+	[[nodiscard]] TBlockPass begin_block_update() const { return TBlockPass(_D, _eps()); }
 
-	/// Installs the disagreement count accumulated over a full field update.
-	void set_n_disagree(size_t n_disagree) { _n_disagree = n_disagree; }
+	/// Installs the disagreement count the pass tallied over the whole field.
+	void end_block_update(const TBlockPass &pass) { _n_disagree = pass.n_disagree(); }
 
 	// --- likelihood ---
 

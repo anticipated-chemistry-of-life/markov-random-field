@@ -245,9 +245,7 @@ public:
 		            row.species_bin, species_parent, true)),
 		        .prob_z_m_is_one = coretools::P(_in->molecule_process.grid.probability(
 		            column.molecule_bin, molecule_parent, true)),
-		        .lotus           = {one, one},
-		        .simple_error    = {one, one},
-		        .mass_spec       = {one, one}};
+		        .cell_data       = {one, one}};
 	}
 
 	void record(TRowState & /*row*/, size_t /*molecule_leaf*/,
@@ -592,8 +590,8 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 				const field_math::TBlockStates current{
 				    .y = (y & Y_STATE) != 0, .z_s = z_s != 0, .z_m = z_m != 0};
 				const auto draw = field_math::draw_block<Policy>(
-				    factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega, factors.lotus,
-				    factors.simple_error, factors.mass_spec, current, uniforms.at(Y.name(s, m)));
+				    factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega, factors.cell_data,
+				    current, uniforms.at(Y.name(s, m)));
 				if (current.y != draw.drawn.y) {
 					y = draw.drawn.y ? static_cast<uint16_t>(y | Y_STATE)
 					                 : static_cast<uint16_t>(y & Y_COUNTER);

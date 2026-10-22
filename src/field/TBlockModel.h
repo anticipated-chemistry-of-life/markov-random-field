@@ -1,18 +1,19 @@
 //
-// What the block update asks about a leaf pair: the two trees' processes, and the data.
+// What the block update asks about a leaf pair: the two trees' processes, and the data sources.
 //
 // The traversal in field/TBlockUpdate.h reads three states and two tree parents from its storages.
 // It asks this for the rest. Each tree says what its own tree field cell should be, given that
-// tree's parent. Each compiled-in data source says what it makes of the field cell. Mass spec is
-// one of them, because it is per-cell shaped conditional on its assignments
-// (mass_spec/msms_data.h). Every answer is about one leaf pair, because that is the unit the
-// traversal works in.
+// tree's parent. The data says what it makes of the field cell, as one cell data factor
+// (GLOSSARY.md). Every answer is about one leaf pair, because that is the unit the traversal works
+// in.
 //
 // This is the whole of what the traversal must not know about. So the traversal keeps no tree, no
 // clique and no data source, and a test can run its loop against a model of its own.
 //
-// The per-source likelihood bookkeeping lives here too. It is the data's business, and the
-// traversal only hands each leaf pair back once.
+// The data sources that bring their own pass through the block update are folded by
+// field/TBlockData.h, which this holds (ADR-0017). LOTUS and mass spectrometry do not bring one
+// yet: their factors are multiplied in here, each at its own position in the fixed order (LOTUS,
+// the passes, mass spectrometry), and LOTUS's present-cell bookkeeping is kept here too.
 //
 
 #pragma once
@@ -23,6 +24,7 @@
 #include "coretools/Types/probability.h"
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
+#include "field/TBlockData.h"
 #include "omp.h"
 #include "tree/TTree.h"
 #include "tree/branch/TTransitionGrid.h"
@@ -36,76 +38,30 @@
 #include <vector>
 
 //-----------------------------------
-// Data-source bookkeeping
+// LOTUS's bookkeeping
 //-----------------------------------
 
-/// Per-cell outcome of one block update. Each data source keeps its own likelihood bookkeeping
-/// (they are independent terms), so the results are handed back separately instead of merged.
-/// Mass spec keeps none. `TMSMSData::log_likelihood` computes its log-likelihood from the field on
-/// demand. LOTUS counts the field's present cells, which the row adds to directly
-/// (`TBlockModel::record`).
-struct TCellOutcome {
-#ifdef USE_SIMPLE_ERROR_MODEL
-	/// Whether the observed D cell contradicts the state the field was just given.
-	bool simple_model_disagrees = false;
-#endif
-};
-
-/// What one row of a block update owes each data source: the running bookkeeping of one species
-/// leaf, kept on the row's own stack and handed over once when the row ends.
+/// What the rows of a block update hand LOTUS, committed to it when the update ends.
 ///
-/// The accumulators are bundled into a single object on purpose: `#ifdef` cannot appear inside a
-/// `#pragma omp` line, and a `default(none) shared(...)` clause has to name every variable it
-/// touches. One object keeps that clause identical in every build configuration.
-struct TRowOutcome {
-#ifdef USE_SIMPLE_ERROR_MODEL
-	/// How many of the row's leaf pairs the observed D cell contradicts.
-	size_t n_disagree = 0;
-#endif
-
-	/// Hot path: called once per updated leaf pair, on the calling row's own object.
-	void add([[maybe_unused]] const TCellOutcome &outcome) {
-#ifdef USE_SIMPLE_ERROR_MODEL
-		n_disagree += static_cast<size_t>(outcome.simple_model_disagrees);
-#endif
-	}
-};
-
-/// What the rows of a block update hand over, committed to the data sources when the update ends.
+/// What a row owes LOTUS is not a number but a row of the field's present-cell counts: a slot per
+/// row would be a copy of the counts per species leaf. Rows add into the one set of counts instead,
+/// entry by entry and atomically. Its entries are integers, so the counts the update ends with are
+/// the same whichever rows got there first (ADR-0015).
 ///
-/// One slot per row, and not one per thread. A thread-indexed accumulator adds the rows the
-/// schedule handed it, in that order -- which for a sum of doubles makes its last bits move with
-/// the thread count. Every source counts integers today, which add up the same in any order, but a
-/// slot per row keeps that from being a property the next source has to remember.
-/// `TTree::log_node_state_density` keeps one slot per clique for the same reason.
-///
-/// A row writes its slot once, when it ends, so two rows sharing a cache line costs one write per
-/// 141,619 leaf pairs rather than one per leaf pair.
-///
-/// LOTUS is the exception, because what a row owes it is not a number but a row of the field's
-/// present-cell counts: a slot per row would be a copy of the counts per species leaf. Rows add
-/// into the one set of counts instead, entry by entry and atomically. Its entries are integers, so
-/// the counts the update ends with are the same whichever rows got there first (ADR-0015).
+/// A build without LOTUS holds nothing here, so that the caller is the same in every build.
 class TDataUpdateAccumulator {
 private:
-	std::vector<TRowOutcome> _per_row;
 #ifdef USE_LOTUS
 	lotus_math::TPresentCells _lotus_present_cells;
 #endif
 
 public:
-	TDataUpdateAccumulator(size_t n_rows, [[maybe_unused]] const TDataModel &data_model)
-	    : _per_row(n_rows)
+	explicit TDataUpdateAccumulator([[maybe_unused]] const TDataModel &data_model)
 #ifdef USE_LOTUS
-	      ,
-	      _lotus_present_cells(data_model.get_lotus().no_present_cells())
+	    : _lotus_present_cells(data_model.get_lotus().no_present_cells())
 #endif
 	{
 	}
-
-	/// Takes what one row added up to. Called once per row, at the end of the row, from inside
-	/// the parallel region. Only ever touches that row's slot.
-	void flush_row(size_t species_leaf, const TRowOutcome &row) { _per_row[species_leaf] = row; }
 
 #ifdef USE_LOTUS
 	/// Adds one row's present cells to the field's: `present[reported * n_molecule_classes +
@@ -125,18 +81,10 @@ public:
 	}
 #endif
 
-	/// Sums the row slots in row order and installs the results in the data sources. Called once,
-	/// after the parallel region.
+	/// Installs what the rows added up in LOTUS. Called once, after the parallel region.
 	void commit([[maybe_unused]] TDataModel &data_model) {
 #ifdef USE_LOTUS
 		data_model.get_lotus().install_present_cells(std::move(_lotus_present_cells));
-#endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		size_t total_disagree = 0;
-		for (const auto &row : _per_row) { total_disagree += row.n_disagree; }
-		// The update visits every leaf pair exactly once, so this is the complete disagreement
-		// count.
-		data_model.get_simple_error_model().set_n_disagree(total_disagree);
 #endif
 	}
 };
@@ -145,7 +93,7 @@ public:
 // The model
 //-----------------------------------
 
-/// The two trees and every compiled-in data source, as the block update wants them.
+/// The two trees and the data sources, as the block update wants them.
 ///
 /// Both trees have something to say from the first update on, because the chain is given a
 /// starting node state before it (TMarkovField::_start_the_chain).
@@ -155,30 +103,31 @@ public:
 ///
 /// Every thread of the update asks this one object. `begin_row` hands back a row that carries
 /// everything the walk down that row accumulates, so `factors` and `record` touch the caller's own
-/// row and nothing another thread also holds; `end_row` writes that row's slot, once.
+/// row and nothing another thread also holds; `end_row` hands the row's tallies over, once.
 class TBlockModel {
 private:
 	const TTree &_species_tree;
 	const TTree &_molecule_tree;
 	TDataModel &_data_model;
+	TCompiledBlockData &_data;
 	TDataUpdateAccumulator &_accumulator;
 
 public:
 	TBlockModel(const std::vector<std::unique_ptr<TTree>> &trees, TDataModel &data_model,
-	            TDataUpdateAccumulator &accumulator)
+	            TCompiledBlockData &data, TDataUpdateAccumulator &accumulator)
 	    : _species_tree(*trees.front()), _molecule_tree(*trees.back()), _data_model(data_model),
-	      _accumulator(accumulator) {}
+	      _data(data), _accumulator(accumulator) {}
 
-	/// Told once, before the parallel region starts, that a traversal is about to begin. A source
-	/// whose point query wants the leaf pairs in ascending order readies whatever cannot be
-	/// readied concurrently -- LOTUS sorts its record cache here, so that every row may then seed
-	/// a cursor of its own. It is told nothing about how the rows are shared out: that is what
-	/// used to tie the traversal's schedule to `ProgramOptions::NUMBER_OF_THREADS`. Only LOTUS
-	/// uses this today; a build without it is an empty function.
+	/// Told once, before the parallel region starts, that a traversal is about to begin. Every
+	/// data source readies whatever cannot be readied concurrently -- LOTUS sorts its record cache
+	/// here, so that every row may then seed a cursor of its own. It is told nothing about how the
+	/// rows are shared out: that is what used to tie the traversal's schedule to
+	/// `ProgramOptions::NUMBER_OF_THREADS`.
 	void prepare_for_traversal() {
 #ifdef USE_LOTUS
 		_data_model.get_lotus().prepare_for_block_update();
 #endif
+		_data.begin_pass();
 	}
 
 	/// P(a tree field cell = 1 | its parent's state), under one clique's process on one branch.
@@ -196,10 +145,10 @@ public:
 	/// type. The species tree's branch is the row's too -- a species leaf sits on one branch,
 	/// whichever molecule leaf the cell pairs it with. What is left per cell is the species tree's
 	/// clique (the molecule leaf) and the molecule tree's branch (likewise).
-	/// It also carries what the row accumulates: the data sources' running bookkeeping, and
-	/// LOTUS's forward cursor into its record cache. Both used to be one slot per thread, indexed
-	/// by `omp_get_thread_num()` and written once per leaf pair, which put two threads' slots in
-	/// one cache line and made the likelihood's rounding a function of the schedule.
+	/// It also carries what the row accumulates: each data source's row state, and LOTUS's forward
+	/// cursor into its record cache. Both used to be one slot per thread, indexed by
+	/// `omp_get_thread_num()` and written once per leaf pair, which put two threads' slots in one
+	/// cache line and made the likelihood's rounding a function of the schedule.
 	struct TRow {
 		/// The molecule tree's process for this row.
 		TTransitionGridView molecule_process;
@@ -210,8 +159,8 @@ public:
 		/// The molecule tree's clique this row is, kept so a debug build can check that it really
 		/// does not move down the row.
 		size_t molecule_clique;
-		/// What this row has added up for each data source so far.
-		TRowOutcome outcome;
+		/// Every pass's state for this row.
+		TCompiledBlockData::TRow data;
 #ifdef USE_LOTUS
 		/// This row's forward cursor into LOTUS's sorted record cache, seeded at the row's first
 		/// cell. The row walks its columns in ascending order, which is all the cursor asks.
@@ -224,7 +173,7 @@ public:
 #endif
 	};
 
-	[[nodiscard]] TRow begin_row(size_t species_leaf, [[maybe_unused]] size_t first_field_cell) {
+	[[nodiscard]] TRow begin_row(size_t species_leaf, size_t first_field_cell) {
 		// The molecule tree drops the molecule coordinate, so any molecule leaf names this row's
 		// clique; 0 is the one every field row has.
 		const IndexArray first_cell_of_row{species_leaf, 0};
@@ -233,7 +182,7 @@ public:
 		    .species_branch   = _species_tree.get_binned_branch_length(species_leaf),
 		    .species_leaf     = species_leaf,
 		    .molecule_clique  = _molecule_tree.clique_of_cell(first_cell_of_row),
-		    .outcome          = {},
+		    .data             = _data.begin_row(species_leaf, first_field_cell),
 #ifdef USE_LOTUS
 		    .lotus_cursor        = _data_model.get_lotus().cursor_for_row(first_field_cell),
 		    .lotus_species_class = _data_model.get_lotus().species_class(species_leaf),
@@ -270,7 +219,7 @@ public:
 	[[nodiscard]] block_update::TLeafPairFactors factors(TRow &row, const TColumn &column,
 	                                                     size_t molecule_leaf, bool species_parent,
 	                                                     bool molecule_parent) const {
-		const IndexArray cell{row.species_leaf, molecule_leaf};
+		[[maybe_unused]] const IndexArray cell{row.species_leaf, molecule_leaf};
 		// What the row and the column settled once has to be what this cell would have asked for.
 		DEBUG_ASSERT(_molecule_tree.clique_of_cell(cell) == row.molecule_clique);
 		DEBUG_ASSERT(_species_tree.clique_of_cell(cell) == column.species_clique);
@@ -284,60 +233,48 @@ public:
 		leaf_pair.prob_z_m_is_one =
 		    prob_of_one(row.molecule_process, column.molecule_branch, molecule_parent);
 
-		// 1.0 is the neutral value, adding log(1) = 0. A build that left a source out keeps it.
-		leaf_pair.lotus        = {coretools::P(1.0), coretools::P(1.0)};
-		leaf_pair.simple_error = {coretools::P(1.0), coretools::P(1.0)};
-		leaf_pair.mass_spec    = {coretools::P(1.0), coretools::P(1.0)};
+		// The cell data factor, multiplied left to right in the fixed order from 1.0: LOTUS, the
+		// passes, mass spectrometry (ADR-0017).
+		std::array<double, 2> cell_data{1.0, 1.0};
 #ifdef USE_LOTUS
 		const TLotus &lotus = _data_model.get_lotus();
-		std::array<double, 2> prob_lotus{1.0, 1.0};
-		lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(row.lotus_cursor, cell), prob_lotus);
-		leaf_pair.lotus = {coretools::P(prob_lotus[0]), coretools::P(prob_lotus[1])};
+		lotus.calculate_LL_update_Y(cell, lotus.holds_a_record(row.lotus_cursor, cell), cell_data);
 #endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		const TSimpleErrorModel &simple = _data_model.get_simple_error_model();
-		std::array<double, 2> prob_simple{};
-		simple.probabilities_for_Y_update(simple.observed_state_of(cell), prob_simple);
-		leaf_pair.simple_error = {coretools::P(prob_simple[0]), coretools::P(prob_simple[1])};
-#endif
+		cell_data = _data.cell_factor(row.data, molecule_leaf, cell_data);
 #ifdef USE_MS_DATA
 		// Exactly {1, 1} for a species without runs, so its draws match a build without mass spec.
 		const auto prob_mass_spec =
 		    _data_model.get_msms_data().per_cell_factor(row.species_leaf, molecule_leaf);
-		leaf_pair.mass_spec = {coretools::P(prob_mass_spec[0]), coretools::P(prob_mass_spec[1])};
+		cell_data[0] *= prob_mass_spec[0];
+		cell_data[1] *= prob_mass_spec[1];
 #endif
+		leaf_pair.cell_data = {coretools::P(cell_data[0]), coretools::P(cell_data[1])};
 		return leaf_pair;
 	}
 
 	/// Each source scored both field states before the draw, and only now knows which one to keep.
 	/// This writes the row, so the row is not const.
-	void record(TRow &row, [[maybe_unused]] size_t molecule_leaf,
-	            [[maybe_unused]] const block_update::TLeafPairFactors &factors,
-	            [[maybe_unused]] const field_math::TBlockStates &drawn) const {
-		[[maybe_unused]] const IndexArray cell{row.species_leaf, molecule_leaf};
-		TCellOutcome outcome;
+	void record(TRow &row, size_t molecule_leaf,
+	            const block_update::TLeafPairFactors & /*factors*/,
+	            const field_math::TBlockStates &drawn) const {
 #ifdef USE_LOTUS
 		// Only a present cell is tallied; an absent one's term does not depend on where it is.
 		// Asking the cursor about the cell `factors` asked about moves it nowhere.
 		if (drawn.y) {
+			const IndexArray cell{row.species_leaf, molecule_leaf};
 			const TLotus &lotus = _data_model.get_lotus();
 			const auto reported = static_cast<size_t>(lotus.holds_a_record(row.lotus_cursor, cell));
 			++row.lotus_present[reported * lotus.n_molecule_classes() +
 			                    lotus.molecule_class(molecule_leaf)];
 		}
 #endif
-#ifdef USE_SIMPLE_ERROR_MODEL
-		const TSimpleErrorModel &simple = _data_model.get_simple_error_model();
-		outcome.simple_model_disagrees  = simple.observed_state_of(cell) != drawn.y;
-#endif
-		row.outcome.add(outcome);
+		_data.record(row.data, molecule_leaf, drawn.y);
 	}
 
-	/// The row is done: hand what it added up to the accumulator. One write per row to its own
-	/// slot, so two rows sharing a cache line costs nothing, and one atomic add per kind of cell
-	/// the row holds to the LOTUS present-cell counts.
+	/// The row is done: every pass folds the row's tally into its own, and the row adds its LOTUS
+	/// present cells to the counts, one atomic add per kind of cell it holds.
 	void end_row(TRow &row) {
-		_accumulator.flush_row(row.species_leaf, row.outcome);
+		_data.end_row(row.data);
 #ifdef USE_LOTUS
 		_accumulator.add_lotus_row(row.lotus_species_class, row.lotus_present);
 #endif

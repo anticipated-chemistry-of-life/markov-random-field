@@ -7,6 +7,9 @@
 #include "coretools/Main/TParameters.h"
 #include <cstddef>
 #include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSources &sources,
@@ -120,6 +123,21 @@ void TDataModel::update_markov_field() {
 	// the assignments its block update read.
 	_msms_data.update_all_MS_assignments();
 #endif
+}
+
+TCompiledBlockData TDataModel::begin_block_update() {
+	return TCompiledBlockData::begin_with([this]<typename Pass>(std::type_identity<Pass> pass) {
+		return _source_of(pass).begin_block_update();
+	});
+}
+
+void TDataModel::end_block_update(TCompiledBlockData &&data) {
+	std::apply(
+	    [this]<typename... Passes>(Passes &&...pass) {
+		    (_source_of(std::type_identity<std::remove_cvref_t<Passes>>{}).end_block_update(pass),
+		     ...);
+	    },
+	    std::move(data).take_passes());
 }
 
 #ifdef USE_LOTUS

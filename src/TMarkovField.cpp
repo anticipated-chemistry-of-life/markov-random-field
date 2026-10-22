@@ -268,20 +268,24 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	const size_t n_rows = _Y.dimensions()[0];
-	TDataUpdateAccumulator accumulator(n_rows, data_model);
-	TBlockModel model(_trees, data_model, accumulator);
+	// Each data source that has a pass hands it out, and the model folds them. LOTUS has no pass
+	// yet. It adds its present cells to the accumulator.
+	TCompiledBlockData data = data_model.begin_block_update();
+	TDataUpdateAccumulator accumulator(data_model);
+	TBlockModel model(_trees, data_model, data, accumulator);
 
 	const field_math::TErrorProbability omega = _error_probability();
 	_link_counters = block_update::run<TLinkPolicy>(
 	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
 	    _trees.back()->phylogeny(), omega, model, field_uniforms);
 
-	_trace_link_counters(iteration);
-
-	// at the very end: sum the per-row accumulators, in row order, and store them in the data
-	// sources
+	// Each pass finishes its tally against the field the update left. Then each data source takes
+	// its pass back and installs the tally.
+	data.end_pass(_Y);
+	data_model.end_block_update(std::move(data));
 	accumulator.commit(data_model);
+
+	_trace_link_counters(iteration);
 #ifdef USE_LOTUS
 	// The present cells the rows counted have to be the field's, or every gamma and error-rate move
 	// after this reads the likelihood of another field. A pass over the field, so a debug build's

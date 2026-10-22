@@ -16,16 +16,24 @@
 // Every body is instantiated over all four field/node-state pairings. Continuous integration gates
 // two of them (`pixi run parity`), so this is where the other two are exercised at all.
 //
+// The last suite runs the real data fold (field/TBlockData.h) over the real passes, built from
+// plain data, through the same loop next to the free model's trees. What it asserts is what a data
+// source's statistic says about the field the update left.
+//
 
 #include "backend_pairings.h"
 #include "cli.h"
 #include "constants.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
+#include "field/TBlockData.h"
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
 #include "field/link_backend.h"
 #include "random/TCellUniforms.h"
+#include "simple_error_model/TSimpleErrorModelMath.h"
+#include "simple_error_model/block_pass.h"
+#include "storages/storage_backend.h"
 #include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZSparse.h"
 #include "thread_count.h"
@@ -132,9 +140,8 @@ public:
 		const auto target = target_at(row.species_leaf, molecule_leaf);
 		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
 		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
-		        .lotus = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)},
-		        .simple_error = {coretools::P(1.0), coretools::P(1.0)},
-		        .mass_spec    = {coretools::P(1.0), coretools::P(1.0)}};
+		        .cell_data       = {coretools::P(target.y ? 0.0 : 1.0),
+		                            coretools::P(target.y ? 1.0 : 0.0)}};
 	}
 
 	/// Neither mock model has anything it cannot ready inside the region, so this is a no-op --
@@ -163,9 +170,25 @@ private:
 static_assert(block_update::BlockModel<TForcingModel>,
               "The forcing model must answer what the block update asks a model.");
 
-/// A model that leaves the draw a real choice at every leaf pair, and accumulates a likelihood the
-/// way a real data source does: one running sum of logs per field row, handed over when the row
-/// ends.
+/// A drift in [0, 0.3] that depends on the leaf pair, so that a read of the wrong cell moves the
+/// chain.
+double drift_of(size_t species_leaf, size_t molecule_leaf) {
+	return 0.1 * static_cast<double>((species_leaf + molecule_leaf) % 4U);
+}
+
+/// What the free model's trees say about a leaf pair, with a cell data factor that says nothing.
+/// Values that depend on both the leaf pair and the parents, so that a read of the wrong parent, or
+/// of the wrong cell, moves the chain.
+block_update::TLeafPairFactors free_tree_factors(size_t species_leaf, size_t molecule_leaf,
+                                                 bool species_parent, bool molecule_parent) {
+	const double drift = drift_of(species_leaf, molecule_leaf);
+	return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
+	        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
+	        .cell_data       = {coretools::P(1.0), coretools::P(1.0)}};
+}
+
+/// A model that leaves the draw a real choice at every leaf pair, and accumulates a likelihood:
+/// one running sum of logs per field row, handed over when the row ends.
 ///
 /// The forcing model above pins every cell, which would let a wrong uniform pass unnoticed. Here
 /// all eight states carry mass, so the state a leaf pair ends in depends on the uniform it drew --
@@ -173,8 +196,8 @@ static_assert(block_update::BlockModel<TForcingModel>,
 ///
 /// The row slots are what makes the sum comparable too. A row writes only its own slot, so many
 /// threads may run at once, and summing the slots in row order gives a double that does not depend
-/// on how the rows were shared out. `TDataUpdateAccumulator` keeps its slots the same way, and for
-/// the same reason (TBlockModel.h).
+/// on how the rows were shared out. A sum of doubles needs that; the real data sources tally
+/// integers, and keep their own thread-count invariance (ADR-0017).
 class TFreeModel {
 public:
 	explicit TFreeModel(size_t n_species_leaves) : _per_row(n_species_leaves) {}
@@ -198,14 +221,11 @@ public:
 	                                                            size_t molecule_leaf,
 	                                                            bool species_parent,
 	                                                            bool molecule_parent) {
-		// Values that depend on both the leaf pair and the parents, so that a read of the wrong
-		// parent, or of the wrong cell, moves the chain.
-		const double drift = 0.1 * static_cast<double>((row.species_leaf + molecule_leaf) % 4U);
-		return {.prob_z_s_is_one = coretools::P(species_parent ? 0.7 : 0.2 + drift),
-		        .prob_z_m_is_one = coretools::P(molecule_parent ? 0.65 : 0.15 + drift),
-		        .lotus           = {coretools::P(0.4), coretools::P(0.6 - drift)},
-		        .simple_error    = {coretools::P(0.55), coretools::P(0.45)},
-		        .mass_spec       = {coretools::P(0.3 + drift), coretools::P(0.5)}};
+		auto factors =
+		    free_tree_factors(row.species_leaf, molecule_leaf, species_parent, molecule_parent);
+		const double drift = drift_of(row.species_leaf, molecule_leaf);
+		factors.cell_data  = {coretools::P(0.3 + drift), coretools::P(0.6 - drift)};
+		return factors;
 	}
 
 	/// Nothing here cannot be readied inside the region; a no-op to satisfy `BlockModel`.
@@ -216,7 +236,7 @@ public:
 	static void record(TRow &row, size_t /*molecule_leaf*/,
 	                   const block_update::TLeafPairFactors &factors,
 	                   const field_math::TBlockStates &drawn) {
-		row.log_likelihood.add(factors.lotus[static_cast<size_t>(drawn.y)].get());
+		row.log_likelihood.add(factors.cell_data[static_cast<size_t>(drawn.y)].get());
 	}
 
 	void end_row(TRow &row) { _per_row[row.species_leaf] = row.log_likelihood; }
@@ -235,6 +255,58 @@ private:
 
 static_assert(block_update::BlockModel<TFreeModel>,
               "The free model must answer what the block update asks a model.");
+
+/// The free model's trees, with the real data fold (field/TBlockData.h) in place of its data: what
+/// the production block model is, with test trees. The fold is driven through the hooks the
+/// production model drives it through, in the same places.
+template<typename Data> class TFoldModel {
+public:
+	explicit TFoldModel(Data &data) : _data(data) {}
+
+	struct TRow {
+		size_t species_leaf = 0;
+		typename Data::TRow data;
+	};
+
+	[[nodiscard]] TRow begin_row(size_t species_leaf, size_t first_field_cell) const {
+		return TRow{.species_leaf = species_leaf,
+		            .data         = _data.begin_row(species_leaf, first_field_cell)};
+	}
+
+	using TColumn = TFreeModel::TColumn;
+
+	[[nodiscard]] static TColumn begin_column(size_t molecule_leaf) {
+		return TFreeModel::begin_column(molecule_leaf);
+	}
+
+	[[nodiscard]] block_update::TLeafPairFactors factors(TRow &row, const TColumn &,
+	                                                     size_t molecule_leaf, bool species_parent,
+	                                                     bool molecule_parent) const {
+		auto factors =
+		    free_tree_factors(row.species_leaf, molecule_leaf, species_parent, molecule_parent);
+		const std::array<double, 2> cell_data = _data.cell_factor(row.data, molecule_leaf);
+		factors.cell_data = {coretools::P(cell_data[0]), coretools::P(cell_data[1])};
+		return factors;
+	}
+
+	void prepare_for_traversal() { _data.begin_pass(); }
+
+	void record(TRow &row, size_t molecule_leaf, const block_update::TLeafPairFactors &,
+	            const field_math::TBlockStates &drawn) const {
+		_data.record(row.data, molecule_leaf, drawn.y);
+	}
+
+	void end_row(TRow &row) { _data.end_row(row.data); }
+
+private:
+	Data &_data;
+};
+
+/// The fold over the simple error model's pass alone.
+using TSimpleErrorData = TBlockData<simple_error_model::TBlockPass>;
+
+static_assert(block_update::BlockModel<TFoldModel<TSimpleErrorData>>,
+              "The fold model must answer what the block update asks a model.");
 
 /// The six counters recomputed from a whole configuration, sharing nothing with the tally the
 /// update kept as it went.
@@ -516,6 +588,89 @@ TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 				EXPECT_EQ(dense_counters.count(bucket, y), sparse_counters.count(bucket, y));
 			}
 		}
+	}
+}
+
+// -------------------------------------------------------------------------
+// The real data fold through the real traversal, over all four storage pairings
+// -------------------------------------------------------------------------
+
+template<typename Backends> class BlockData : public ::testing::Test {
+public:
+	using Field     = typename Backends::field;
+	using NodeState = typename Backends::node_state;
+};
+
+TYPED_TEST_SUITE(BlockData, AllBackends);
+
+/// The simple error model's pass commits the number of cells D contradicts in the field the update
+/// left: the statistic the epsilon move reads in place of the field. At one thread and at four,
+/// because rows end on many threads at once and the tally must not depend on how many there are.
+TYPED_TEST(BlockData, the_simple_error_models_tally_is_the_disagreement_count_of_the_field) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		for (const size_t n_threads : {size_t{1}, size_t{4}}) {
+			SCOPED_TRACE(std::to_string(n_threads) + " threads");
+			const TThreadCount threads(n_threads);
+			auto Y          = make_storage<Field>(field_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+			auto D          = make_storage<TBinaryStorage>(field_shape(pair));
+			seed_ones(Y, 1);
+			seed_ones(Z_species, 2);
+			seed_ones(Z_molecule, 3);
+			seed_ones(D, 5);
+
+			TSimpleErrorData data{simple_error_model::TBlockPass(D, 0.2)};
+			TFoldModel<TSimpleErrorData> model(data);
+			const TCellUniforms uniforms(4242, TCellStream::field, 17);
+			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+			                                     pair.molecule,
+			                                     field_math::TErrorProbability(OMEGA), model,
+			                                     uniforms);
+			data.end_pass(Y);
+
+			EXPECT_EQ(data.template pass<simple_error_model::TBlockPass>().n_disagree(),
+			          simple_error_model::count_disagreements(Y, D));
+		}
+	}
+}
+
+/// With D near-certain, the field the update leaves is D, cell for cell: the data outweighs
+/// whatever the trees and the link say. A pass that scored another cell of D than the one being
+/// drawn -- at the seam between two bands or two tiles, or anywhere else -- leaves a cell that
+/// disagrees.
+TYPED_TEST(BlockData, near_certain_simple_error_data_decides_the_field) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		const TThreadCount threads(4);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		auto D          = make_storage<TBinaryStorage>(field_shape(pair));
+		// The field starts elsewhere than D, so it has to move to get there.
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+		seed_ones(D, 5);
+		ASSERT_NE(states_of(Y), states_of(D));
+
+		TSimpleErrorData data{simple_error_model::TBlockPass(D, 1e-12)};
+		TFoldModel<TSimpleErrorData> model(data);
+		const TCellUniforms uniforms(4242, TCellStream::field, 19);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
+		                                     model, uniforms);
+		data.end_pass(Y);
+
+		EXPECT_EQ(states_of(Y), states_of(D));
+		EXPECT_EQ(data.template pass<simple_error_model::TBlockPass>().n_disagree(), 0U);
 	}
 }
 

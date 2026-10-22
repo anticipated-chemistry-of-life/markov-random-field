@@ -60,18 +60,15 @@ static_assert(NUMBER_OF_TREES == 2,
               "The block update is written for one species tree and one molecule tree.");
 
 /// The factors at one leaf pair that the update does not read from its storages: what each tree's
-/// process says about its own tree field cell, and what each data source says about the field cell.
+/// process says about its own tree field cell, and what the data sources say about the field cell.
 struct TLeafPairFactors {
 	/// P(Z_s = 1 | the species parent's state), from the species tree's transition grid.
 	coretools::Probability prob_z_s_is_one;
 	/// P(Z_m = 1 | the molecule parent's state), from the molecule tree's transition grid.
 	coretools::Probability prob_z_m_is_one;
-	/// {P(L | Y = 0), P(L | Y = 1)} for this cell.
-	std::array<coretools::Probability, 2> lotus;
-	/// {P(D | Y = 0), P(D | Y = 1)} for this cell.
-	std::array<coretools::Probability, 2> simple_error;
-	/// {P(runs | Y = 0), P(runs | Y = 1)} for this cell, given the current assignments.
-	std::array<coretools::Probability, 2> mass_spec;
+	/// The cell data factor: {P(obs | Y = 0), P(obs | Y = 1)}, every compiled-in data source's
+	/// answer for this cell multiplied together.
+	field_math::TCellDataFactor cell_data;
 };
 
 /// The type a model's `begin_row` hands back. Named here so that the concept below can ask for an
@@ -227,9 +224,9 @@ void update_cell(TRow<ModelRow> &row, const TColumn<ModelColumn> &column, Field 
 
 	// The cell names the uniform it draws, so the thread that happens to reach this cell does not
 	// decide what it gets.
-	const auto draw = field_math::draw_block<Policy>(
-	    factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega, factors.lotus,
-	    factors.simple_error, factors.mass_spec, current, uniforms.at(field_cell));
+	const auto draw =
+	    field_math::draw_block<Policy>(factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega,
+	                                   factors.cell_data, current, uniforms.at(field_cell));
 
 	// Write each cell back where it was read from. A storage that holds the cell takes the write in
 	// place, and one that does not hands the cell back for a later insert.

@@ -92,6 +92,8 @@ The fourth is the traversal, and it could have. The block used to split the leaf
 
 **`field_math::prob_field_cell_is_one` is kept, though the same deletion leaves it with no caller in `src/`.** The rot argument above is about a pass over storages, and this is arithmetic: it takes two probabilities and an error probability, it holds no storage and no handle, and five tests pin it. It is also the kernel any of repairs 1 to 3 would call if a larger `omega` ever reopens them. An unreachable traversal and an unreachable expression are not the same risk.
 
+ADR-0017 later deleted it, with its tests: it had drifted from the block kernels by leaving mass spectrometry out.
+
 **Drop `f13fef9` from the branch instead of reverting it.** Rejected. The branch is pushed, so that is a force-push over a shared ref. Worse, `findings.md` and ADR-0008 both cite that sha, and dropping it would orphan the reference of the measurement this record stands on. The detour in the history is not noise; it is the evidence.
 
 ## Consequences

@@ -141,8 +141,12 @@ _Avoid_: branch-length grid, binning, discretisation
 ## Observations
 
 **Data source**:
-A likelihood term over the field, independent of every other data source and summed with them (ADR-0005's data factor, `log p(L, D | Y)`). Each observes one cell of `Y` at a time and answers, per cell, `{P(observation | Y=0), P(observation | Y=1)}`. A LOTUS record and simple error model data do so outright; mass spectrometry data does so only conditional on its current assignments, because it carries latent state of its own. Whether a build carries a given data source is a compile-time choice, made once per binary. `src/data_sources/`.
+A likelihood term over the field, independent of every other data source and summed with them (ADR-0005's data factor, `log p(L, D | Y)`). Each observes one cell of `Y` at a time and answers, per cell, `{P(observation | Y=0), P(observation | Y=1)}`. A LOTUS record and simple error model data do so outright; mass spectrometry data does so only conditional on its current assignments, because it carries latent state of its own. Each data source also keeps the statistic its own likelihood reads off the field -- the present cells by kind for LOTUS, the number of cells it contradicts for simple error model data, and none for mass spectrometry data, which reads the field itself -- and the block update tallies that statistic as it draws, so the moves on LOTUS's and the simple error model's parameters read the statistic and never the field. Whether a build carries a given data source is a compile-time choice, made once per binary. `src/data_sources/`.
 _Avoid_: observation, evidence, data
+
+**Cell data factor**:
+The pair `{P(every observation of a cell | Y=0), P(every observation of a cell | Y=1)}`: the product of every compiled-in data source's answer for that one cell. It is all the block update reads from the data, and it is ADR-0005's data factor taken one cell at a time. Mass spectrometry data contributes its answer given the current assignments, and a data source with nothing to say about a cell contributes `{1, 1}`.
+_Avoid_: evidence, data likelihood, emission
 
 **LOTUS record**:
 An observed (species, molecule) occurrence reported in the literature. Written `L`. Absence of a record is uninformative wherever research effort is low.
