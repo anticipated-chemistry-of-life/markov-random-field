@@ -75,9 +75,9 @@ template<typename Link, FieldStorage Field, BinaryStorage NodeState>
 	const size_t n_rows    = molecule_field.dimensions()[0];
 	const size_t n_columns = species_field.dimensions()[1];
 	if (n_rows * n_columns != field.total_size_of_container_space()) {
-		throw coretools::TDevError("Cannot hold the tree fields at the field: their leaf blocks are ",
-		                           n_rows, " x ", n_columns, " and the field holds ",
-		                           field.total_size_of_container_space(), " cells.");
+		throw coretools::TDevError(
+		    "Cannot hold the tree fields at the field: their leaf blocks are ", n_rows, " x ",
+		    n_columns, " and the field holds ", field.total_size_of_container_space(), " cells.");
 	}
 
 	field_math::TLinkCounters counters;

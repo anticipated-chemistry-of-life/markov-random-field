@@ -18,7 +18,6 @@
 #include "constants.h"
 #include "coretools/algorithms.h"
 #include "phylogeny_generators.h"
-#include "storages/TDense.h"
 #include "storages/z_storage/TStorageZDense.h"
 #include "storages/z_storage/TStorageZSparse.h"
 #include "tree/TPhylogeny.h"

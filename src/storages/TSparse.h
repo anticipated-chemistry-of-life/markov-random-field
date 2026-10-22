@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 /// A flag that starts false, is set once and never cleared, and which several threads may set at

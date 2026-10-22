@@ -21,7 +21,6 @@
 #include "random/TCellUniforms.h"
 #include "storages/storage_concepts.h"
 
-#include <concepts>
 #include <cstddef>
 
 namespace simulate_field {

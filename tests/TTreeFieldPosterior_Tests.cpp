@@ -13,7 +13,6 @@
 #include "backend_pairings.h"
 #include "constants.h"
 #include "field/tree_field_posterior.h"
-#include "storages/storage_concepts.h"
 #include "temp_file.h"
 #include "tree/TPhylogeny.h"
 #include "tree/io/node_state_columns.h"
@@ -21,15 +20,14 @@
 #include "gtest/gtest.h"
 
 #include <cstddef>
-#include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
 
 using backends::AllBackends;
-using backends::make_storage;
 using backends::make_node_state;
+using backends::make_storage;
 using phylo::edge;
 
 constexpr size_t SPECIES   = 0;

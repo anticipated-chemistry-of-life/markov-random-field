@@ -71,7 +71,8 @@ void count_transitions(const TPhylogeny &topology, const Bins &bin_of, const Sta
 	for (const size_t node : topology.branches()) {
 		const size_t bin = bin_of(node);
 		DEBUG_ASSERT(bin < n_bins);
-		++counts[transition_slot(bin, states.is_one(topology.parent_of(node)), states.is_one(node))];
+		++counts[transition_slot(bin, states.is_one(topology.parent_of(node)),
+		                         states.is_one(node))];
 	}
 	for (const size_t root : topology.roots()) { ++counts[root_slot(n_bins, states.is_one(root))]; }
 }

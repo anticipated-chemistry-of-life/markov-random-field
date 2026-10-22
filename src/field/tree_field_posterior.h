@@ -21,7 +21,6 @@
 
 #pragma once
 
-#include "constants.h"
 #include "coretools/Main/TError.h"
 
 #include <algorithm>

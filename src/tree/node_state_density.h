@@ -17,7 +17,6 @@
 #pragma once
 
 #include "tree/TPhylogeny.h"
-#include "tree/branch/TTransitionGrid.h"
 #include "tree/branch/TTransitionGridTable.h"
 
 #include <cmath>

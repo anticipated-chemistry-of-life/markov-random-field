@@ -20,12 +20,10 @@
 #ifdef USE_SIMPLE_ERROR_MODEL
 
 #include "Types.h"
-#include "constants.h"
 #include "data_sources/data_source.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
-#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>

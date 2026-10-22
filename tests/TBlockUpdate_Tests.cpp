@@ -22,7 +22,6 @@
 //
 
 #include "backend_pairings.h"
-#include "cli.h"
 #include "constants.h"
 #include "coretools/Containers/TNestedVector.h"
 #include "coretools/Math/TSumLog.h"
@@ -63,8 +62,8 @@ constexpr double OMEGA = 0.125;
 
 using backends::AllBackends;
 using backends::field_shape;
-using backends::make_storage;
 using backends::make_node_state;
+using backends::make_storage;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;
@@ -110,7 +109,8 @@ public:
 		bool species_parent  = false;
 		bool molecule_parent = false;
 		field_math::TBlockStates drawn;
-		bool column_was_its_own = false; ///< whether the column it was handed was its molecule leaf's
+		bool column_was_its_own =
+		    false; ///< whether the column it was handed was its molecule leaf's
 	};
 
 	TForcingModel(size_t n_species_leaves, size_t n_molecule_leaves)
@@ -141,15 +141,15 @@ public:
 	                                                     bool molecule_parent) {
 		TVisit &recorded = visit(row.species_leaf, molecule_leaf);
 		++recorded.n_asked;
-		recorded.species_parent  = species_parent;
-		recorded.molecule_parent = molecule_parent;
+		recorded.species_parent     = species_parent;
+		recorded.molecule_parent    = molecule_parent;
 		recorded.column_was_its_own = column.molecule_leaf == molecule_leaf;
 
 		const auto target = target_at(row.species_leaf, molecule_leaf);
-		return {.prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
-		        .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
-		        .cell_data       = {coretools::P(target.y ? 0.0 : 1.0),
-		                            coretools::P(target.y ? 1.0 : 0.0)}};
+		return {
+		    .prob_z_s_is_one = coretools::P(target.z_s ? 1.0 : 0.0),
+		    .prob_z_m_is_one = coretools::P(target.z_m ? 1.0 : 0.0),
+		    .cell_data = {coretools::P(target.y ? 0.0 : 1.0), coretools::P(target.y ? 1.0 : 0.0)}};
 	}
 
 	/// Neither mock model has anything it cannot ready inside the region, so this is a no-op --
@@ -387,9 +387,8 @@ TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
-		                                     model, uniforms);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                     field_math::TErrorProbability(OMEGA), model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -420,9 +419,8 @@ TYPED_TEST(BlockUpdate, writes_the_drawn_states_back) {
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
-		                                     model, uniforms);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                     field_math::TErrorProbability(OMEGA), model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -465,9 +463,8 @@ TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
-		                                     model, uniforms);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                     field_math::TErrorProbability(OMEGA), model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -553,9 +550,9 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 
 		TFreeModel model(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 11);
-		const field_math::TLinkCounters kept = block_update::run<TLinkPolicy>(
-		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		    field_math::TErrorProbability(OMEGA), model, uniforms);
+		const field_math::TLinkCounters kept =
+		    block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                   field_math::TErrorProbability(OMEGA), model, uniforms);
 
 		const field_math::TLinkCounters expected = recount(Y, Z_species, Z_molecule, pair);
 
@@ -648,10 +645,9 @@ TYPED_TEST(BlockData, the_simple_error_models_tally_is_the_disagreement_count_of
 			TSimpleErrorData data{simple_error_model::TBlockPass(D, 0.2)};
 			TFoldModel<TSimpleErrorData> model(data);
 			const TCellUniforms uniforms(4242, TCellStream::field, 17);
-			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-			                                     pair.molecule,
-			                                     field_math::TErrorProbability(OMEGA), model,
-			                                     uniforms);
+			(void)block_update::run<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			    field_math::TErrorProbability(OMEGA), model, uniforms);
 			data.end_pass(Y);
 
 			EXPECT_EQ(data.template pass<simple_error_model::TBlockPass>().n_disagree(),
@@ -685,9 +681,8 @@ TYPED_TEST(BlockData, near_certain_simple_error_data_decides_the_field) {
 		TSimpleErrorData data{simple_error_model::TBlockPass(D, 1e-12)};
 		TFoldModel<TSimpleErrorData> model(data);
 		const TCellUniforms uniforms(4242, TCellStream::field, 19);
-		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
-		                                     model, uniforms);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                     field_math::TErrorProbability(OMEGA), model, uniforms);
 		data.end_pass(Y);
 
 		EXPECT_EQ(states_of(Y), states_of(D));
@@ -733,10 +728,9 @@ TYPED_TEST(BlockData, the_lotus_tally_is_the_present_cells_of_the_field) {
 			TLotusData data{lotus_math::TBlockPass(L, classes, reporting)};
 			TFoldModel<TLotusData> model(data);
 			const TCellUniforms uniforms(4242, TCellStream::field, 23);
-			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-			                                     pair.molecule,
-			                                     field_math::TErrorProbability(OMEGA), model,
-			                                     uniforms);
+			(void)block_update::run<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			    field_math::TErrorProbability(OMEGA), model, uniforms);
 			data.end_pass(Y);
 
 			EXPECT_EQ(data.template pass<lotus_math::TBlockPass>().present_cells(),
@@ -778,9 +772,8 @@ TYPED_TEST(BlockData, near_certain_lotus_records_decide_the_field) {
 		TLotusData data{lotus_math::TBlockPass(L, classes, reporting)};
 		TFoldModel<TLotusData, neutral_tree_factors> model(data);
 		const TCellUniforms uniforms(4242, TCellStream::field, 29);
-		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
-		                                     model, uniforms);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		                                     field_math::TErrorProbability(OMEGA), model, uniforms);
 		data.end_pass(Y);
 
 		EXPECT_EQ(states_of(Y), states_of(L));
@@ -838,10 +831,9 @@ coretools::TNestedVector<TMassSpecRun> runs_of(const TTreePair &pair) {
 /// species without runs ends as it does when the fold leaves mass spectrometry out, byte for byte:
 /// its factor there is exactly `{1, 1}`, and every cell draws the uniform its position names.
 TYPED_TEST(BlockData, mass_spec_decides_the_rows_with_runs_and_leaves_the_others_alone) {
-	using Field     = typename TestFixture::Field;
-	using NodeState = typename TestFixture::NodeState;
-	using TMassSpecData =
-	    TBlockData<simple_error_model::TBlockPass, mass_spec_math::TBlockPass>;
+	using Field         = typename TestFixture::Field;
+	using NodeState     = typename TestFixture::NodeState;
+	using TMassSpecData = TBlockData<simple_error_model::TBlockPass, mass_spec_math::TBlockPass>;
 
 	ASSERT_TRUE(std::any_of(tree_pairs().begin(), tree_pairs().end(), [](const auto &pair) {
 		return pair.species.n_leaves() > 2;
@@ -869,18 +861,17 @@ TYPED_TEST(BlockData, mass_spec_decides_the_rows_with_runs_and_leaves_the_others
 			seed_ones(Z_molecule, 3);
 			TFoldModel<Data> model(data);
 			const TCellUniforms uniforms(4242, TCellStream::field, 31);
-			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
-			                                     pair.molecule,
-			                                     field_math::TErrorProbability(OMEGA), model,
-			                                     uniforms);
+			(void)block_update::run<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			    field_math::TErrorProbability(OMEGA), model, uniforms);
 			data.end_pass(Y);
 			return states_of(Y);
 		};
 
 		const auto without = field_after(TSimpleErrorData{simple_error_model::TBlockPass(D, 0.2)});
 		const auto with    = field_after(TMassSpecData{
-		    simple_error_model::TBlockPass(D, 0.2),
-		    mass_spec_math::TBlockPass(runs, filter_probabilities, n_molecules, 1e-12)});
+            simple_error_model::TBlockPass(D, 0.2),
+            mass_spec_math::TBlockPass(runs, filter_probabilities, n_molecules, 1e-12)});
 
 		for (size_t s = 0; s < n_species; ++s) {
 			for (size_t m = 0; m < n_molecules; ++m) {

@@ -20,8 +20,8 @@ namespace {
 
 using backends::AllBackends;
 using backends::field_shape;
-using backends::make_storage;
 using backends::make_node_state;
+using backends::make_storage;
 using backends::molecule_shape;
 using backends::seed_ones;
 using backends::species_shape;

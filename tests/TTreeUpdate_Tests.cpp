@@ -22,8 +22,8 @@
 #include "tree/node_state_density.h"
 #include "tree/node_state_shape.h"
 #include "tree/tree_update.h"
-#include "gtest/gtest.h"
 #include "gtest/gtest-spi.h"
+#include "gtest/gtest.h"
 
 #include <cmath>
 #include <cstddef>
@@ -138,9 +138,9 @@ private:
 	std::vector<bool> _accept;
 	bool _next_coin = false;
 
-	bool _sampled        = false;
-	size_t _n_decided    = 0;
-	size_t _n_samples    = 0;
+	bool _sampled     = false;
+	size_t _n_decided = 0;
+	size_t _n_samples = 0;
 	std::vector<bool> _coins;
 	std::vector<TDecision> _decisions;
 
@@ -279,8 +279,8 @@ template<typename NodeState> struct TTreeFixture {
 	}
 
 	explicit TTreeFixture(size_t n_cliques)
-	    : topology(tree()), leaf_counts{topology.n_leaves(), n_cliques},
-	      cliques(leaf_counts, TREE), Z(node_state_dimensions(leaf_counts, TREE, topology)) {
+	    : topology(tree()), leaf_counts{topology.n_leaves(), n_cliques}, cliques(leaf_counts, TREE),
+	      Z(node_state_dimensions(leaf_counts, TREE, topology)) {
 		backends::seed_ones(Z, 7);
 
 		std::mt19937_64 rng(4242);
@@ -537,9 +537,9 @@ TYPED_TEST(TreeUpdate, the_nu_ratio_is_measured_against_the_grid_alpha_left) {
 	ASSERT_EQ(decisions.size(), n);
 	for (size_t c = 0; c < n; ++c) {
 		EXPECT_EQ(decisions[c].clique, c);
-		const double alpha       = fx.alpha_after(c);
-		const double after_alpha = density_of_clique(
-		    fx, c, TTransitionGrid(alpha, std::exp(fx.log_nu[c]), fx.bin_grid));
+		const double alpha = fx.alpha_after(c);
+		const double after_alpha =
+		    density_of_clique(fx, c, TTransitionGrid(alpha, std::exp(fx.log_nu[c]), fx.bin_grid));
 		const double candidate = density_of_clique(
 		    fx, c, TTransitionGrid(alpha, std::exp(fx.log_nu_proposals[c]), fx.bin_grid));
 		const double tolerance = 1e-9 * (std::abs(candidate) + std::abs(after_alpha));
@@ -606,9 +606,9 @@ TYPED_TEST(TreeUpdate, with_fixed_node_state_the_state_is_unchanged_and_the_para
 	for (size_t c = 0; c < n; ++c) {
 		EXPECT_EQ(moves.alpha().decisions()[c].clique, c);
 		EXPECT_EQ(moves.log_nu().decisions()[c].clique, c);
-		expect_installed(fx.grids, c,
-		                 TTransitionGrid(fx.alpha_after(c), std::exp(fx.log_nu_after(c)),
-		                                 fx.bin_grid));
+		expect_installed(
+		    fx.grids, c,
+		    TTransitionGrid(fx.alpha_after(c), std::exp(fx.log_nu_after(c)), fx.bin_grid));
 	}
 	EXPECT_EQ(moves.branches().n_samples(), 1u);
 	expect_branch_pairs(fx, moves.branches());

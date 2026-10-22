@@ -431,7 +431,7 @@ template<LinkPolicy Policy>
 block_probabilities(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z_m_is_one,
                     const TErrorProbability &omega, const TCellDataFactor &cell_data) {
 	auto probability = block_weights<Policy>(prob_z_s_is_one, prob_z_m_is_one, omega, cell_data);
-	double total = 0.0;
+	double total     = 0.0;
 	for (const double w : probability) { total += w; }
 	if (!(total > 0.0)) { throw_no_block_mass(total); }
 	for (double &p : probability) { p /= total; }
@@ -498,7 +498,9 @@ draw_block(coretools::Probability prob_z_s_is_one, coretools::Probability prob_z
 
 	const double target = uniform * total;
 	size_t index        = 0;
-	for (size_t i = 0; i < n_block_states; ++i) { index += static_cast<size_t>(running[i] <= target); }
+	for (size_t i = 0; i < n_block_states; ++i) {
+		index += static_cast<size_t>(running[i] <= target);
+	}
 	if (index == n_block_states) [[unlikely]] {
 		// Every running sum is at or below the scaled uniform. A uniform below 1 scaled by the
 		// total is below the total, so only rounding gets here. The last state that has mass takes

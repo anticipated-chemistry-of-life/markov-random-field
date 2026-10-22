@@ -59,9 +59,9 @@ using PassRow =
 /// they may write is the row's own.
 template<typename P>
 concept DataSourcePass =
-    std::movable<P> && requires(P &pass, const P &read_only, PassRow<P> &row, size_t species_leaf,
-                                size_t first_field_cell, size_t molecule_leaf, bool drawn_y,
-                                const TFieldStorage &Y) {
+    std::movable<P> &&
+    requires(P &pass, const P &read_only, PassRow<P> &row, size_t species_leaf,
+             size_t first_field_cell, size_t molecule_leaf, bool drawn_y, const TFieldStorage &Y) {
 	    { pass.begin_pass() } -> std::same_as<void>;
 	    { read_only.begin_row(species_leaf, first_field_cell) } -> std::same_as<PassRow<P>>;
 	    { read_only.cell_factor(row, molecule_leaf) } -> std::same_as<std::array<double, 2>>;

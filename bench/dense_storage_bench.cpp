@@ -72,12 +72,12 @@ namespace {
 
 using Policy = field_math::TAndLinkPolicy;
 
-constexpr uint64_t SEED  = 20261020;
-constexpr double ALPHA   = 0.05;
-constexpr double NU      = 1.0;
-constexpr double OMEGA   = 0.01;
-constexpr double MIB     = 1024.0 * 1024.0;
-constexpr size_t SPECIES = 0;
+constexpr uint64_t SEED   = 20261020;
+constexpr double ALPHA    = 0.05;
+constexpr double NU       = 1.0;
+constexpr double OMEGA    = 0.01;
+constexpr double MIB      = 1024.0 * 1024.0;
+constexpr size_t SPECIES  = 0;
 constexpr size_t MOLECULE = 1;
 
 // The shapes of the LOTUS run in inference_lotus/ (leaves, internal nodes including roots, roots).
@@ -92,26 +92,27 @@ constexpr std::array<size_t, 3> LOTUS_MOLECULE = {141618, 752, 7};
 struct TOptions {
 	std::string species_tree;
 	std::string molecule_tree;
-	double scale        = 0.1;
-	size_t iterations   = 3;
-	size_t warmup       = 1;
-	size_t threads      = 0;
-	size_t n_bins       = 10;
+	double scale                      = 0.1;
+	size_t iterations                 = 3;
+	size_t warmup                     = 1;
+	size_t threads                    = 0;
+	size_t n_bins                     = 10;
 	std::vector<std::string> variants = {"own", "own_clique", "arma", "arma_clique"};
 };
 
 [[noreturn]] void usage(const std::string &problem) {
-	std::cerr << problem << "\n\n"
-	          << "acol_dense_bench [--species FILE --molecules FILE | --scale X] [--iterations N]\n"
-	          << "                 [--warmup N] [--threads N] [--n_bins N]\n"
-	          << "                 [--variants own,own_clique,arma,arma_clique]\n\n"
-	          << "  --species/--molecules  real tree files (child, parent, branch_length), as acol\n"
-	          << "                         infer reads them; both or neither\n"
-	          << "  --scale                synthetic trees shaped like inference_lotus/, leaf and\n"
-	          << "                         internal counts multiplied by X (default 0.1; 1 = full)\n"
-	          << "  --iterations           timed iterations (default 3)\n"
-	          << "  --warmup               untimed iterations before them (default 1)\n"
-	          << "  --threads              OpenMP threads (default: all)\n";
+	std::cerr
+	    << problem << "\n\n"
+	    << "acol_dense_bench [--species FILE --molecules FILE | --scale X] [--iterations N]\n"
+	    << "                 [--warmup N] [--threads N] [--n_bins N]\n"
+	    << "                 [--variants own,own_clique,arma,arma_clique]\n\n"
+	    << "  --species/--molecules  real tree files (child, parent, branch_length), as acol\n"
+	    << "                         infer reads them; both or neither\n"
+	    << "  --scale                synthetic trees shaped like inference_lotus/, leaf and\n"
+	    << "                         internal counts multiplied by X (default 0.1; 1 = full)\n"
+	    << "  --iterations           timed iterations (default 3)\n"
+	    << "  --warmup               untimed iterations before them (default 1)\n"
+	    << "  --threads              OpenMP threads (default: all)\n";
 	std::exit(2);
 }
 
@@ -235,14 +236,12 @@ public:
 		return {_in->molecule_process.bins[molecule_leaf]};
 	}
 
-	[[nodiscard]] block_update::TLeafPairFactors factors(const TRowState &row,
-	                                                     const TColumnState &column,
-	                                                     size_t /*molecule_leaf*/,
-	                                                     bool species_parent,
-	                                                     bool molecule_parent) const {
+	[[nodiscard]] block_update::TLeafPairFactors
+	factors(const TRowState &row, const TColumnState &column, size_t /*molecule_leaf*/,
+	        bool species_parent, bool molecule_parent) const {
 		const coretools::Probability one = coretools::P(1.0);
-		return {.prob_z_s_is_one = coretools::P(_in->species_process.grid.probability(
-		            row.species_bin, species_parent, true)),
+		return {.prob_z_s_is_one = coretools::P(
+		            _in->species_process.grid.probability(row.species_bin, species_parent, true)),
 		        .prob_z_m_is_one = coretools::P(_in->molecule_process.grid.probability(
 		            column.molecule_bin, molecule_parent, true)),
 		        .cell_data       = {one, one}};
@@ -306,8 +305,8 @@ std::string to_string(const TFingerprint &f) {
 /// What one variant measured, and the state it ended in.
 struct TResult {
 	std::string name;
-	double nominal_mib   = 0.0; ///< the bytes the three containers allocate
-	double resident_mib  = 0.0; ///< the growth of the resident set once they are built and run
+	double nominal_mib  = 0.0; ///< the bytes the three containers allocate
+	double resident_mib = 0.0; ///< the growth of the resident set once they are built and run
 	std::map<std::string, std::vector<double>> pass_ms{};
 	TFingerprint y{}, z_species{}, z_molecule{};
 	std::array<std::array<size_t, 2>, 3> link_counters{};
@@ -315,8 +314,8 @@ struct TResult {
 	double molecule_density = 0.0;
 };
 
-const std::vector<std::string> PASSES = {"block update",   "species walk",     "species density",
-                                         "molecule walk",  "molecule density", "posterior counter"};
+const std::vector<std::string> PASSES = {"block update",  "species walk",     "species density",
+                                         "molecule walk", "molecule density", "posterior counter"};
 
 std::array<std::array<size_t, 2>, 3> counts_of(const field_math::TLinkCounters &counters) {
 	std::array<std::array<size_t, 2>, 3> out{};
@@ -342,11 +341,12 @@ void run_chain(const TOptions &options, TPasses &passes, TResult &result) {
 		const bool timed = iteration >= options.warmup;
 		std::map<std::string, double> ms;
 		field_math::TLinkCounters counters;
-		ms["block update"]      = time_ms([&] { counters = passes.block(iteration); });
-		ms["species walk"]      = time_ms([&] { passes.species_walk(iteration); });
-		ms["species density"]   = time_ms([&] { result.species_density = passes.species_density(); });
-		ms["molecule walk"]     = time_ms([&] { passes.molecule_walk(iteration); });
-		ms["molecule density"]  = time_ms([&] { result.molecule_density = passes.molecule_density(); });
+		ms["block update"]    = time_ms([&] { counters = passes.block(iteration); });
+		ms["species walk"]    = time_ms([&] { passes.species_walk(iteration); });
+		ms["species density"] = time_ms([&] { result.species_density = passes.species_density(); });
+		ms["molecule walk"]   = time_ms([&] { passes.molecule_walk(iteration); });
+		ms["molecule density"] =
+		    time_ms([&] { result.molecule_density = passes.molecule_density(); });
 		ms["posterior counter"] = time_ms([&] { passes.counter(iteration); });
 		result.link_counters    = counts_of(counters);
 
@@ -575,8 +575,8 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 		std::vector<field_math::TLinkCounters> per_row(n_s);
 #pragma omp parallel for num_threads(n_threads) schedule(static)
 		for (size_t s = 0; s < n_s; ++s) {
-			auto row                     = model.begin_row(s, s * n_m);
-			const size_t species_parent  = species.parent_of(s);
+			auto row                    = model.begin_row(s, s * n_m);
+			const size_t species_parent = species.parent_of(s);
 			field_math::TLinkCounters counters;
 			for (size_t m = 0; m < n_m; ++m) {
 				const bool parent_s = Z_s.at(species_parent, m) != 0;
@@ -611,14 +611,14 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 
 	auto species_view  = [&](size_t c) { return TArmaCliqueColumn<TZs, true>(Z_s, c); };
 	auto molecule_view = [&](size_t c) { return TArmaCliqueColumn<TZm, false>(Z_m, c); };
-	auto walk = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
-	                size_t n_cliques, size_t dimension, size_t iteration) {
-		const TCellUniforms uniforms(SEED, TCellStream::node_state, iteration, dimension);
-		auto bins   = process.bin_of();
-		auto kernel = [&](size_t /*c*/, auto &view) {
-			node_state_walk::update_clique(tree, process.grid, bins, uniforms, view);
-		};
-		(void)clique_traversal::run(n_cliques, view_factory, kernel);
+	auto walk          = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
+                    size_t n_cliques, size_t dimension, size_t iteration) {
+        const TCellUniforms uniforms(SEED, TCellStream::node_state, iteration, dimension);
+        auto bins   = process.bin_of();
+        auto kernel = [&](size_t /*c*/, auto &view) {
+            node_state_walk::update_clique(tree, process.grid, bins, uniforms, view);
+        };
+        (void)clique_traversal::run(n_cliques, view_factory, kernel);
 	};
 	auto density = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
 	                   size_t n_cliques) {
@@ -713,7 +713,7 @@ void report(const std::vector<TResult> &results) {
 /// Every variant ran one chain, so every variant ends in one state. A difference means a backing
 /// read or wrote a cell other than the one it named, and its timings measured something else.
 bool same_chain(const std::vector<TResult> &results) {
-	bool same = true;
+	bool same            = true;
 	const TResult &first = results.front();
 	std::printf("\nfinal state (non-zero cells / hash):\n");
 	for (const auto &r : results) {
@@ -739,8 +739,8 @@ int main(int argc, char **argv) {
 	omp_set_num_threads(static_cast<int>(ProgramOptions::NUMBER_OF_THREADS));
 
 	auto scaled = [&](size_t n) {
-		return std::max<size_t>(1, static_cast<size_t>(std::llround(options.scale *
-		                                                            static_cast<double>(n))));
+		return std::max<size_t>(
+		    1, static_cast<size_t>(std::llround(options.scale * static_cast<double>(n))));
 	};
 	const bool real = !options.species_tree.empty();
 	const TPhylogeny species =

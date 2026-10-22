@@ -17,12 +17,10 @@
 #ifdef USE_LOTUS
 
 #include "cli.h"
-#include "constants.h"
 #include "data_sources/data_source.h"
 #include "lotus/TLotusMath.h"
 #include "lotus/block_pass.h"
 #include "ntfy/TNtfyNotifier.h"
-#include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/TSparse.h"
 #include "storages/storage_backend.h"

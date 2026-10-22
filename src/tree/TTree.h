@@ -6,14 +6,10 @@
 #define METABOLITE_INFERENCE_TREE_H
 
 #include "Types.h"
-#include "cli.h"
 #include "constants.h"
-#include "coretools/Files/TInputFile.h"
-#include "coretools/Files/TOutputFile.h"
 #include "coretools/Main/TError.h"
 #include "coretools/Main/TParameters.h"
 #include "coretools/algorithms.h"
-#include "omp.h"
 #include "random/TCellUniforms.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/storage_backend.h"
@@ -30,7 +26,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <optional>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -268,8 +263,8 @@ public:
 		// move with the thread count and the trace would stop being reproducible from its seed.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
-			return node_state_density::log_density_of_clique(_topology(), transition_grid(c),
-			                                                 states, _bins());
+            return node_state_density::log_density_of_clique(_topology(), transition_grid(c),
+			                                                       states, _bins());
 		};
 		auto [per_clique, inserts] = clique_traversal::run(n_cliques(), view_factory, kernel);
 
@@ -293,7 +288,7 @@ public:
 
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
-			_initialize_clique_from_children(c, states);
+            _initialize_clique_from_children(c, states);
 		};
 		const auto indices_to_insert = clique_traversal::run(n_cliques(), view_factory, kernel);
 

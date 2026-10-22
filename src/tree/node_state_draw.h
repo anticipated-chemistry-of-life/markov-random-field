@@ -18,7 +18,6 @@
 
 #include "random/TCellUniforms.h"
 #include "tree/TPhylogeny.h"
-#include "tree/branch/TTransitionGrid.h"
 #include "tree/branch/TTransitionGridTable.h"
 #include "tree/node_state_density.h"
 

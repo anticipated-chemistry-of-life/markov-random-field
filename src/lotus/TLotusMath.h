@@ -163,8 +163,8 @@ template<FieldStorage Field, BinaryStorage Records>
 		const size_t cell = present.linear_index();
 		while (record.valid() && record.linear_index() < cell) { record.advance(); }
 		const bool reported = record.valid() && record.linear_index() == cell;
-		const size_t slot =
-		    cells.slot(classes.class_of(0, cell / n_columns), classes.class_of(1, cell % n_columns));
+		const size_t slot   = cells.slot(classes.class_of(0, cell / n_columns),
+		                                 classes.class_of(1, cell % n_columns));
 		++cells.ones[static_cast<size_t>(reported)][slot];
 	}
 	return cells;
@@ -194,7 +194,8 @@ inline double weighted_log(uint64_t n, double p) {
 	for (size_t dimension = 0; dimension < 2; ++dimension) {
 		factor[dimension].resize(classes.n_classes(dimension));
 		for (size_t c = 0; c < classes.n_classes(dimension); ++c) {
-			factor[dimension][c] = detection_factor(gammas[dimension], classes.count_of(dimension, c));
+			factor[dimension][c] =
+			    detection_factor(gammas[dimension], classes.count_of(dimension, c));
 		}
 	}
 

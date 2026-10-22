@@ -9,8 +9,6 @@
 #include "constants.h"
 #include "coretools/Main/TLog.h"
 #include "coretools/Main/TParameters.h"
-#include "coretools/Main/progressTools.h"
-#include "coretools/algorithms.h"
 #include "field/TBlockModel.h"
 #include "field/TBlockUpdate.h"
 #include "field/leaf_layer_start.h"
@@ -273,9 +271,9 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	TBlockModel model(_trees, data);
 
 	const field_math::TErrorProbability omega = _error_probability();
-	_link_counters = block_update::run<TLinkPolicy>(
-	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
-	    _trees.back()->phylogeny(), omega, model, field_uniforms);
+	_link_counters                            = block_update::run<TLinkPolicy>(
+        _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
+        _trees.back()->phylogeny(), omega, model, field_uniforms);
 
 	// Each pass finishes its tally against the field the update left. Then each data source takes
 	// its pass back and installs the tally.

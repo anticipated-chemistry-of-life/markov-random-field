@@ -171,12 +171,10 @@ template<typename Inserts> [[nodiscard]] bool no_deferred_inserts(const Inserts 
 /// on: the candidate grid's on accept, the installed grid's on reject.
 template<bool FixZ, typename NodeState, CellUniforms Uniforms, TreeMoves Moves, typename BinOf,
          typename ViewFactory>
-[[nodiscard]] std::vector<double>
-node_states_and_alpha(const TPhylogeny &topology, size_t n, NodeState &Z,
-                      TTransitionGridTable &grids, const TBinGrid &bin_grid,
-                      const Uniforms &uniforms, Moves &moves, const BinOf &bin_of,
-                      const ViewFactory &view_factory,
-                      transition_counts::TTransitionCountTable &counts) {
+[[nodiscard]] std::vector<double> node_states_and_alpha(
+    const TPhylogeny &topology, size_t n, NodeState &Z, TTransitionGridTable &grids,
+    const TBinGrid &bin_grid, const Uniforms &uniforms, Moves &moves, const BinOf &bin_of,
+    const ViewFactory &view_factory, transition_counts::TTransitionCountTable &counts) {
 	moves.propose_alphas();
 	std::vector<double> proposed_alpha(n);
 	std::vector<double> accepted_nu(n);
@@ -257,8 +255,8 @@ void nu(size_t n, TTransitionGridTable &grids, const TBinGrid &bin_grid, Moves &
 /// The branch-length move, from the bins every branch holds at the start of the tree update.
 template<TreeMoves Moves, typename ViewFactory>
 void branch_lengths(const TPhylogeny &topology, size_t n, const TTransitionGridTable &grids,
-                    const TBinGrid &bin_grid, Moves &moves,
-                    const std::vector<size_t> &current_bin, const ViewFactory &view_factory) {
+                    const TBinGrid &bin_grid, Moves &moves, const std::vector<size_t> &current_bin,
+                    const ViewFactory &view_factory) {
 	// --- the branch-length pairs and their proposed bins, in serial code ---
 	// The adapter draws the pairs first, then the coins in pair order. This function asks for a
 	// coin only where the bin grid leaves the direction free: at a boundary the direction is

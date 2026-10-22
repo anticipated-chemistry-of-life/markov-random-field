@@ -193,8 +193,8 @@ TEST(LotusMath, an_unstudied_present_pair_looks_absent_but_is_not_evidence) {
 namespace {
 
 /// A small field and LOTUS on it, every cell drawn at random, with paper counts that repeat within
-/// each tree -- so that several leaves share a class and the counts have to add them up. A leaf with
-/// no papers is never reported when present, because the model gives that no probability.
+/// each tree -- so that several leaves share a class and the counts have to add them up. A leaf
+/// with no papers is never reported when present, because the model gives that no probability.
 struct TSmallField {
 	std::vector<std::vector<size_t>> paper_counts{{0, 3, 3, 7, 0, 12, 3}, {5, 0, 5, 1, 40, 1}};
 	std::vector<std::vector<bool>> present;
@@ -254,8 +254,7 @@ TEST(LotusMath, the_present_cells_give_the_likelihood_of_every_cell) {
 		const TSmallField field(seed);
 		const lotus_math::TPaperCountClasses classes(field.paper_counts);
 		const auto cells = field.present_cells(classes);
-		for (const auto &[gammas, error_rate] :
-		     std::vector<std::pair<std::vector<double>, double>>{
+		for (const auto &[gammas, error_rate] : std::vector<std::pair<std::vector<double>, double>>{
 		         {{0.3, 1.2}, 0.01}, {{2.0, 0.05}, 0.2}, {{0.9, 0.9}, 0.5}}) {
 			const double expected = field.cell_by_cell(gammas, error_rate);
 			ASSERT_TRUE(std::isfinite(expected));
@@ -431,8 +430,8 @@ TYPED_TEST(PresentCellCount, no_present_cell_reported_fills_the_unreported_half_
 		const auto counted = lotus_math::count_present_cells(field.Y, L, classes);
 		ASSERT_EQ(counted, tally_every_cell(field.Y, L, classes)) << "trial " << trial;
 		EXPECT_EQ(total(counted.ones[1]), 0U) << "trial " << trial;
-		EXPECT_EQ(total(counted.ones[0]), field.Y.total_size_of_container_space() -
-		                                      L.number_of_ones())
+		EXPECT_EQ(total(counted.ones[0]),
+		          field.Y.total_size_of_container_space() - L.number_of_ones())
 		    << "trial " << trial;
 	}
 }

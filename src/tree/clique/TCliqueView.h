@@ -8,7 +8,6 @@
 #include "coretools/Main/TError.h"
 #include "storages/cell_write.h"
 #include "storages/storage_backend.h"
-#include "storages/storage_concepts.h"
 #include "tree/TPhylogeny.h"
 
 #include <cstddef>
@@ -97,9 +96,9 @@ public:
 		const auto linear_index_of = [&Z](const IndexArray &cell) {
 			return Z.get_linear_index_in_container_space(cell);
 		};
-		const auto position_of = [&Z](const IndexArray &cell) { return Z.position_of(cell); };
+		const auto position_of      = [&Z](const IndexArray &cell) { return Z.position_of(cell); };
 		const IndexArray first_cell = clique_cell(clique_index, dimension, 0);
-		_start_linear   = linear_index_of(first_cell);
+		_start_linear               = linear_index_of(first_cell);
 		_stride         = clique_stride(linear_index_of, clique_index, dimension, n_cells);
 		_start_position = position_of(first_cell);
 		_position_step  = clique_stride(position_of, clique_index, dimension, n_cells);

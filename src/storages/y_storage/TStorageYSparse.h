@@ -56,7 +56,7 @@ public:
 		// even for a chain with no iterations to thin.
 		_thinning_factor =
 		    std::max<size_t>(1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
-			                                                  static_cast<double>(MAX_COUNTER))));
+		                                                      static_cast<double>(MAX_COUNTER))));
 		_total_counts = 0;
 		initialize_dimensions(dimensions);
 	}
@@ -90,7 +90,8 @@ public:
 		return fraction_of_ones_of((*this)[linear_index]);
 	}
 
-	/// The fraction of counted iterations `held` was a one in, for a caller already holding the cell.
+	/// The fraction of counted iterations `held` was a one in, for a caller already holding the
+	/// cell.
 	[[nodiscard]] double fraction_of_ones_of(const TStorageY &held) const {
 		// Nothing counted yet: no posterior to report, and nothing to divide by.
 		if (_total_counts == 0) { return 0.0; }

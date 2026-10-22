@@ -91,8 +91,7 @@ template<typename Storage> Storage make_storage(const IndexArray &dimensions) {
 
 /// A tree's node state, sized and laid out the way TTree sizes and lays out its own: over
 /// `shape`, with the tree's own `dimension` contiguous (ADR-0013).
-template<typename NodeState>
-NodeState make_node_state(const IndexArray &shape, size_t dimension) {
+template<typename NodeState> NodeState make_node_state(const IndexArray &shape, size_t dimension) {
 	return NodeState(shape, dimension);
 }
 

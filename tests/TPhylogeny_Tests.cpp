@@ -111,10 +111,10 @@ TEST(PhylogenyGolden, nodes_are_in_canonical_order) {
 	// roots in that order, each node's leaf children together (ADR-0014): insect's two, then
 	// mammal's chimp before human's denisovan, then fish's two.
 	const auto tree                         = golden();
-	const std::vector<std::string> expected = {"mosquito", "fly",        "chimp",
-	                                           "denisovan", "crab",      "baby_shark", // leaves
+	const std::vector<std::string> expected = {"mosquito",  "fly",    "chimp",
+	                                           "denisovan", "crab",   "baby_shark", // leaves
 	                                           "human",     "mammal", // internal, post-order
-	                                           "insect",    "animal",    "fish"}; // roots
+	                                           "insect",    "animal", "fish"}; // roots
 	ASSERT_EQ(tree.n_nodes(), expected.size());
 	for (size_t i = 0; i < expected.size(); ++i) {
 		EXPECT_EQ(tree.id_of(i), expected[i]) << "at " << i;

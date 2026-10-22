@@ -101,8 +101,8 @@ TEST(TMassSpecMath_Tests, detected_query_agrees_with_a_scan_after_accepted_moves
 	// overlapping candidates, so every move type, swaps included, is reachable
 	auto run = make_run(
 	    {{TFeatureLikelihood(1, 100), TFeatureLikelihood(2, 120)},
-		 {TFeatureLikelihood(1, 90), TFeatureLikelihood(2, 80), TFeatureLikelihood(3, 70)},
-		 {TFeatureLikelihood(2, 60), TFeatureLikelihood(3, 50), TFeatureLikelihood(5, 40)}});
+	     {TFeatureLikelihood(1, 90), TFeatureLikelihood(2, 80), TFeatureLikelihood(3, 70)},
+	     {TFeatureLikelihood(2, 60), TFeatureLikelihood(3, 50), TFeatureLikelihood(5, 40)}});
 	run.set_current_assignment(0, TFeatureLikelihood(1, 100));
 
 	const TAcceptAll scorer;
@@ -145,9 +145,9 @@ TEST(TMassSpecMath_Tests, per_cell_factor_is_the_change_in_the_whole_log_likelih
 			present.insert({species, molecule});
 			const double change =
 			    mass_spec_math::log_likelihood(runs_per_species, make_field(present),
-				                               filter_probability, CONTAMINATION) -
+			                                   filter_probability, CONTAMINATION) -
 			    mass_spec_math::log_likelihood(runs_per_species, make_field(absent),
-				                               filter_probability, CONTAMINATION);
+			                                   filter_probability, CONTAMINATION);
 
 			const auto factor = mass_spec_math::per_cell_factor(
 			    runs_per_species.at(species), molecule, filter_probability, CONTAMINATION);

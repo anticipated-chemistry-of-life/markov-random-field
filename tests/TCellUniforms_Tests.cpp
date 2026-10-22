@@ -15,7 +15,6 @@
 // statistic to the edge is a change worth looking at rather than noise.
 //
 
-#include "omp.h"
 #include "random/TCellUniforms.h"
 #include "gtest/gtest.h"
 

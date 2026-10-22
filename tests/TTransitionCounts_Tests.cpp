@@ -71,9 +71,8 @@ std::vector<TTransitionGrid> grids_over(std::mt19937_64 &rng, const TBinGrid &bi
 }
 
 /// The two scores of one configuration under every grid, from one count.
-void expect_scores_match(const TPhylogeny &topology, const TColumn &states,
-                         const TRandomBins &bins, const std::vector<TTransitionGrid> &grids,
-                         size_t n_bins) {
+void expect_scores_match(const TPhylogeny &topology, const TColumn &states, const TRandomBins &bins,
+                         const std::vector<TTransitionGrid> &grids, size_t n_bins) {
 	std::vector<uint32_t> counts(n_counts(n_bins));
 	count_transitions(topology, bins, states, std::span<uint32_t>(counts));
 	for (size_t g = 0; g < grids.size(); ++g) {
@@ -103,8 +102,8 @@ TEST(TransitionCounts, score_the_log_density_of_random_forests_under_random_grid
 		const size_t n_bins = pick_bins(rng);
 		const TBinGrid bin_grid(n_bins);
 
-		const TColumn states    = random_states(rng, topology, pick_p_one(rng));
-		const TRandomBins bins  = random_bins(rng, topology, n_bins);
+		const TColumn states   = random_states(rng, topology, pick_p_one(rng));
+		const TRandomBins bins = random_bins(rng, topology, n_bins);
 		expect_scores_match(topology, states, bins, grids_over(rng, bin_grid), n_bins);
 	}
 }
@@ -149,18 +148,16 @@ TEST(TransitionCounts, a_probability_of_zero_no_node_reaches_leaves_the_score_fi
 	constexpr size_t N_BINS = 3;
 	// root -> inner -> {a, b}, root -> c, every node a one: no parent in state 1 has a child in
 	// state 0, so the ruled-out transition has a count of zero.
-	const TPhylogeny topology = build_phylogeny({phylo::edge("a", "inner"),
-	                                             phylo::edge("b", "inner"),
-	                                             phylo::edge("inner", "root"),
-	                                             phylo::edge("c", "root")});
+	const TPhylogeny topology =
+	    build_phylogeny({phylo::edge("a", "inner"), phylo::edge("b", "inner"),
+	                     phylo::edge("inner", "root"), phylo::edge("c", "root")});
 	TColumn states(topology.n_nodes());
 	for (size_t node = 0; node < topology.n_nodes(); ++node) { states.set_state(node, true); }
 	const clique::TBinPerBranch bins{N_BINS};
 
 	std::vector<uint32_t> counts(n_counts(N_BINS));
 	count_transitions(topology, bins, states, std::span<uint32_t>(counts));
-	const double scored =
-	    log_likelihood(std::span<const uint32_t>(counts), TNoLossProcess{});
+	const double scored = log_likelihood(std::span<const uint32_t>(counts), TNoLossProcess{});
 
 	EXPECT_TRUE(std::isfinite(scored));
 	EXPECT_NEAR(scored, log_density_of_clique(topology, TNoLossProcess{}, states, bins), 1e-12);

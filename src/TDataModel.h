@@ -34,7 +34,6 @@
 
 #include "TMarkovField.h"
 #include "Types.h"
-#include "constants.h"
 #include "data_sources/data_source.h"
 #include "field/TBlockData.h"
 #include "lotus/TLotus.h"

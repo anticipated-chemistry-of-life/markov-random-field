@@ -45,9 +45,8 @@
 #include <cstdint>
 #include <random>
 #include <string>
-#include <type_traits>
 #include <tuple>
-#include <utility>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -1550,9 +1549,7 @@ TEST(StorageEquivalence, the_cursor_the_likelihoods_walk_yields_the_same_cells_u
 		// The sparse field holds cells that are not ones -- otherwise the two would agree here for
 		// no reason worth having, since the interesting case is exactly the cell one backend holds
 		// and the other does not.
-		if (sparse.size() > expected_ones.size()) {
-			++n_shapes_with_a_stored_zero;
-		}
+		if (sparse.size() > expected_ones.size()) { ++n_shapes_with_a_stored_zero; }
 	}
 	EXPECT_GT(n_shapes_with_a_stored_zero, 0u)
 	    << "no generated shape left the sparse field holding a zero, so the cursors were never "

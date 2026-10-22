@@ -23,8 +23,8 @@
 /// dimension is contiguous -- and a storage sized with another `contiguous_dimension` keeps that
 /// dimension contiguous instead. A node state is sized with its own tree's dimension contiguous,
 /// so each of that tree's cliques is one run of adjacent cells, which is what the tree's walks read
-/// it as (ADR-0013). Every member taking a linear index converts it; `position_of` and the two `_at`
-/// members below are the way in for a caller that walks positions itself.
+/// it as (ADR-0013). Every member taking a linear index converts it; `position_of` and the two
+/// `_at` members below are the way in for a caller that walks positions itself.
 ///
 /// The cell is the template argument, because the two dense storages carry different amounts in
 /// one: a node state carries a bare state, and the field carries a state and the counter beside it
@@ -97,8 +97,8 @@ public:
 			                           " to lay a container of ", NUMBER_OF_TREES,
 			                           " dimensions out along.");
 		}
-		_dimensions           = dimensions;
-		_contiguous_dimension = contiguous_dimension;
+		_dimensions                    = dimensions;
+		_contiguous_dimension          = contiguous_dimension;
 		_strides[contiguous_dimension] = 1;
 		size_t stride                  = dimensions[contiguous_dimension];
 		for (size_t d = NUMBER_OF_TREES; d-- > 0;) {

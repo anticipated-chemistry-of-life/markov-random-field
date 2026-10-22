@@ -12,12 +12,12 @@
 // leaf pair visited once, the right neighbours read, the writes landing, and one chain at any
 // thread count.
 //
-// A thread takes a band of rows: every leaf pair of a few dozen species leaves. A leaf pair's Markov
-// blanket holds no cell of another leaf pair -- it holds the two tree parents and the two data
-// terms -- so the leaf pairs are conditionally independent and the split between threads is free.
-// The pass is a parallel loop over bands; a band is drawn a tile of columns at a time, row after
-// row, and each row walks its own columns in ascending order. A cell's uniform is hashed from its
-// position (ADR-0007), so neither the thread that reaches a cell nor the order it is reached in
+// A thread takes a band of rows: every leaf pair of a few dozen species leaves. A leaf pair's
+// Markov blanket holds no cell of another leaf pair -- it holds the two tree parents and the two
+// data terms -- so the leaf pairs are conditionally independent and the split between threads is
+// free. The pass is a parallel loop over bands; a band is drawn a tile of columns at a time, row
+// after row, and each row walks its own columns in ascending order. A cell's uniform is hashed from
+// its position (ADR-0007), so neither the thread that reaches a cell nor the order it is reached in
 // decides what it gets: the chain is the same at any thread count, and the same as the flat
 // per-cell loop this replaced.
 //
@@ -44,7 +44,6 @@
 #include "storages/cell_write.h"
 #include "tree/TPhylogeny.h"
 #include <algorithm>
-#include <array>
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
@@ -113,9 +112,9 @@ using BlockModelColumn = std::remove_cvref_t<decltype(std::declval<T &>().begin_
 template<typename T>
 concept BlockModel =
     requires(T &model, BlockModelRow<T> &row, const BlockModelColumn<T> &column,
-	         size_t species_leaf, size_t first_field_cell, size_t molecule_leaf,
-	         bool species_parent, bool molecule_parent, const TLeafPairFactors &factors,
-	         const field_math::TBlockStates &drawn) {
+             size_t species_leaf, size_t first_field_cell, size_t molecule_leaf,
+             bool species_parent, bool molecule_parent, const TLeafPairFactors &factors,
+             const field_math::TBlockStates &drawn) {
 	    { model.begin_row(species_leaf, first_field_cell) } -> std::same_as<BlockModelRow<T>>;
 	    { model.begin_column(molecule_leaf) } -> std::same_as<BlockModelColumn<T>>;
 	    {
@@ -138,17 +137,17 @@ concept BlockModel =
 /// leaf (or node) 0 sits.
 template<typename ModelRow> struct TRow {
 	/// The species leaf this row is, which is the first coordinate of every leaf pair in it.
-	size_t species_leaf             = 0;
+	size_t species_leaf            = 0;
 	/// The field's linear index of this row's first cell. The field is row-major over
 	/// (species leaf, molecule leaf), so a cell's index is this plus its molecule leaf.
-	size_t first_field_cell         = 0;
+	size_t first_field_cell        = 0;
 	/// The row's term of a position in the species node state: the species leaf's.
-	size_t species_position         = 0;
+	size_t species_position        = 0;
 	/// The same for the species leaf's parent node, whose state is the species parent of every
 	/// leaf pair in this row. A leaf is never a root, so it has one.
-	size_t species_parent_position  = 0;
+	size_t species_parent_position = 0;
 	/// The row's term of a position in the molecule node state.
-	size_t molecule_position        = 0;
+	size_t molecule_position       = 0;
 	/// What the model settled for this row.
 	ModelRow model_row;
 };
@@ -311,13 +310,12 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 		const size_t end_column = std::min(first_column + TILE_COLUMNS, n_molecule_leaves);
 		columns.clear();
 		for (size_t molecule_leaf = first_column; molecule_leaf < end_column; ++molecule_leaf) {
-			columns.push_back(
-			    {.molecule_leaf     = molecule_leaf,
-			     .species_position  = column_term(Z_species, molecule_leaf),
-			     .molecule_position = column_term(Z_molecule, molecule_leaf),
-			     .molecule_parent_position =
-			         column_term(Z_molecule, molecule.parent_of(molecule_leaf)),
-			     .model_column = model.begin_column(molecule_leaf)});
+			columns.push_back({.molecule_leaf     = molecule_leaf,
+			                   .species_position  = column_term(Z_species, molecule_leaf),
+			                   .molecule_position = column_term(Z_molecule, molecule_leaf),
+			                   .molecule_parent_position =
+			                       column_term(Z_molecule, molecule.parent_of(molecule_leaf)),
+			                   .model_column = model.begin_column(molecule_leaf)});
 		}
 		for (size_t r = 0; r < rows.size(); ++r) {
 			for (const auto &column : columns) {
@@ -343,10 +341,10 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 /// few hundred of them, too few for a static split to come out even, and a band holding a species
 /// with mass-spec runs costs more than one without.
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
-[[nodiscard]] field_math::TLinkCounters
-run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
-    const TPhylogeny &molecule, const field_math::TErrorProbability &omega, Model &model,
-    const TCellUniforms &uniforms) {
+[[nodiscard]] field_math::TLinkCounters run(Field &Y, NodeState &Z_species, NodeState &Z_molecule,
+                                            const TPhylogeny &species, const TPhylogeny &molecule,
+                                            const field_math::TErrorProbability &omega,
+                                            Model &model, const TCellUniforms &uniforms) {
 	// The field is row-major over (species leaf, molecule leaf): one row per species leaf, one
 	// column per molecule leaf.
 	// Not const: OpenMP made a const variable predetermined shared before version 4.0 and does not
@@ -382,9 +380,9 @@ run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &spe
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none)                                                                \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, per_row_counters,  \
-	           field_inserts, species_inserts, molecule_inserts, n_rows, n_columns, n_bands)
+               field_inserts, species_inserts, molecule_inserts, n_rows, n_columns, n_bands)
 	for (size_t band = 0; band < n_bands; ++band) {
-		const auto thread    = static_cast<size_t>(omp_get_thread_num());
+		const auto thread      = static_cast<size_t>(omp_get_thread_num());
 		const size_t first_row = band * BAND_ROWS;
 		update_band<Policy>(first_row, std::min(first_row + BAND_ROWS, n_rows), n_columns, Y,
 		                    Z_species, Z_molecule, species, molecule, omega, model, uniforms,

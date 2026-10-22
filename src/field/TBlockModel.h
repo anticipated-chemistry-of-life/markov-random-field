@@ -22,9 +22,7 @@
 #include "field/TBlockData.h"
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
-#include "omp.h"
 #include "tree/TTree.h"
-#include "tree/branch/TTransitionGrid.h"
 #include "tree/branch/TTransitionGridTable.h"
 #include <array>
 #include <cstddef>
@@ -152,8 +150,7 @@ public:
 
 	/// Each source scored both field states before the draw, and only now knows which one to keep.
 	/// This writes the row, so the row is not const.
-	void record(TRow &row, size_t molecule_leaf,
-	            const block_update::TLeafPairFactors & /*factors*/,
+	void record(TRow &row, size_t molecule_leaf, const block_update::TLeafPairFactors & /*factors*/,
 	            const field_math::TBlockStates &drawn) const {
 		_data.record(row.data, molecule_leaf, drawn.y);
 	}

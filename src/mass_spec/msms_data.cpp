@@ -35,7 +35,7 @@ void TMSMSData::_load_runs() {
 	}
 	auto loaded =
 	    mass_spec_file::load(filename, leaf_names(*_species_tree), leaf_names(*_molecules_tree),
-		                     ProgramOptions::MS_UNKNOWN_FRACTION);
+	                         ProgramOptions::MS_UNKNOWN_FRACTION);
 	_msms_data = std::move(loaded.runs_per_species);
 
 	_species_has_ms_data.assign(_number_of_species, false);
@@ -196,7 +196,7 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	size_t n_removed = 0;
 	size_t n_added   = 0;
 	auto push_real   = [](std::array<uint32_t, 2> &out, size_t &n, const TFeatureLikelihood &a) {
-		if (!a.is_unknown_molecule()) { out[n++] = a.get_molecule_index(); }
+        if (!a.is_unknown_molecule()) { out[n++] = a.get_molecule_index(); }
 	};
 	push_real(removed, n_removed, move.old_a);
 	push_real(added, n_added, move.new_a);
@@ -214,8 +214,8 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	const double cont              = (double)_proba_contamination->value();
 	const TFieldStorage &y_storage = _markov_field.get_Y_matrix();
 	auto y_present                 = [&](uint32_t molecule_idx) {
-		return y_storage.is_one(
-		    y_storage.get_linear_index_in_Y_space({species_idx, (size_t)molecule_idx}));
+        return y_storage.is_one(
+            y_storage.get_linear_index_in_Y_space({species_idx, (size_t)molecule_idx}));
 	};
 	auto filter_prob = [&](uint32_t molecule_idx) {
 		return _filter_probability(run.filter_index(), molecule_idx);

@@ -37,7 +37,9 @@ namespace profiling {
 	for (int i = 1; i < argc; ++i) {
 		const std::string_view arg = argv[i];
 		if (arg == spaced && i + 1 < argc) { return std::string(argv[i + 1]) + "_profile.prof"; }
-		if (arg.starts_with(equals)) { return std::string(arg.substr(equals.size())) + "_profile.prof"; }
+		if (arg.starts_with(equals)) {
+			return std::string(arg.substr(equals.size())) + "_profile.prof";
+		}
 	}
 	return "acol_profile.prof";
 }

@@ -21,7 +21,6 @@
 #include "field/leaf_layer_start.h"
 #include "field/link_backend.h"
 #include "phylogeny_generators.h"
-#include "storages/storage_concepts.h"
 #include "temp_file.h"
 #include "tree/TPhylogeny.h"
 #include "tree/io/node_state_columns.h"
@@ -39,8 +38,8 @@
 namespace {
 
 using backends::AllBackends;
-using backends::make_storage;
 using backends::make_node_state;
+using backends::make_storage;
 using phylo::edge;
 
 /// Which column belongs to which tree. The species tree is dimension 0 and the molecule tree

@@ -42,8 +42,8 @@ private:
 public:
 	TStattoolsTreeMoves(TypeParamAlpha &alpha, TypeParamLogNu &log_nu,
 	                    TypeParamBinBranches &branch_lengths, size_t n_cliques, size_t n_branches)
-	    : _alpha(&alpha), _log_nu(&log_nu), _branch_lengths(&branch_lengths),
-	      _n_cliques(n_cliques), _pairs(n_branches) {}
+	    : _alpha(&alpha), _log_nu(&log_nu), _branch_lengths(&branch_lengths), _n_cliques(n_cliques),
+	      _pairs(n_branches) {}
 
 	// stattools holds the proposal in `value()` while it is pending, and the accepted value
 	// otherwise. So `proposed_*` and `accepted_*` read the same accessor, at different times.

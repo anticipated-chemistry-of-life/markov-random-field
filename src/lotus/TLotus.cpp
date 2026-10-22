@@ -13,7 +13,6 @@
 #include "coretools/Files/TOutputFile.h"
 #include "coretools/Types/probability.h"
 #include "lotus/paper_counts.h"
-#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <string>
