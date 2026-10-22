@@ -320,13 +320,10 @@ struct TResult {
 const std::vector<std::string> PASSES = {"block update",   "species walk",     "species density",
                                          "molecule walk",  "molecule density", "posterior counter"};
 
-std::array<std::array<size_t, 2>, 3>
-merge_counters(const std::vector<field_math::TLinkCounters> &per_row) {
-	field_math::TLinkCounters total;
-	for (const auto &row : per_row) { total.merge(row); }
+std::array<std::array<size_t, 2>, 3> counts_of(const field_math::TLinkCounters &counters) {
 	std::array<std::array<size_t, 2>, 3> out{};
 	for (size_t bucket = 0; bucket < 3; ++bucket) {
-		for (size_t y = 0; y < 2; ++y) { out[bucket][y] = total.count(bucket, y != 0); }
+		for (size_t y = 0; y < 2; ++y) { out[bucket][y] = counters.count(bucket, y != 0); }
 	}
 	return out;
 }
@@ -334,7 +331,7 @@ merge_counters(const std::vector<field_math::TLinkCounters> &per_row) {
 /// The shared driver: one iteration is every pass once, in the order a chain runs them. The
 /// variant supplies each pass, and what is left is the bookkeeping.
 struct TPasses {
-	std::function<void(size_t, std::vector<field_math::TLinkCounters> &)> block;
+	std::function<field_math::TLinkCounters(size_t)> block;
 	std::function<void(size_t)> species_walk;
 	std::function<double()> species_density;
 	std::function<void(size_t)> molecule_walk;
@@ -342,18 +339,18 @@ struct TPasses {
 	std::function<void(size_t)> counter;
 };
 
-void run_chain(const TOptions &options, size_t n_rows, TPasses &passes, TResult &result) {
+void run_chain(const TOptions &options, TPasses &passes, TResult &result) {
 	for (size_t iteration = 0; iteration < options.warmup + options.iterations; ++iteration) {
 		const bool timed = iteration >= options.warmup;
-		std::vector<field_math::TLinkCounters> per_row(n_rows);
 		std::map<std::string, double> ms;
-		ms["block update"]      = time_ms([&] { passes.block(iteration, per_row); });
+		field_math::TLinkCounters counters;
+		ms["block update"]      = time_ms([&] { counters = passes.block(iteration); });
 		ms["species walk"]      = time_ms([&] { passes.species_walk(iteration); });
 		ms["species density"]   = time_ms([&] { result.species_density = passes.species_density(); });
 		ms["molecule walk"]     = time_ms([&] { passes.molecule_walk(iteration); });
 		ms["molecule density"]  = time_ms([&] { result.molecule_density = passes.molecule_density(); });
 		ms["posterior counter"] = time_ms([&] { passes.counter(iteration); });
-		result.link_counters    = merge_counters(per_row);
+		result.link_counters    = counts_of(counters);
 
 		double total = 0.0;
 		std::cout << "    iteration " << iteration << (timed ? "" : " (warm-up)") << ":";
@@ -407,10 +404,10 @@ TResult run_own(const std::string &name, const TOptions &options, const TModelIn
 	};
 
 	TPasses passes;
-	passes.block = [&](size_t iteration, std::vector<field_math::TLinkCounters> &per_row) {
+	passes.block = [&](size_t iteration) {
 		const TCellUniforms uniforms(SEED, TCellStream::field, iteration);
-		block_update::run<Policy>(Y, Z_s, Z_m, in.species, in.molecule, omega, model, uniforms,
-		                          per_row);
+		return block_update::run<Policy>(Y, Z_s, Z_m, in.species, in.molecule, omega, model,
+		                                 uniforms);
 	};
 	auto walk = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
 	                size_t n_cliques, size_t dimension, size_t iteration) {
@@ -443,7 +440,7 @@ TResult run_own(const std::string &name, const TOptions &options, const TModelIn
 	};
 	passes.counter = [&](size_t iteration) { Y.add_to_counter(iteration); };
 
-	run_chain(options, n_s, passes, result);
+	run_chain(options, passes, result);
 	result.resident_mib = resident_mib() - before;
 
 	// The fingerprints, by row-major linear index -- which names a cell under every layout.
@@ -573,10 +570,11 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 	TPasses passes;
 	// block_update::run, with the storage reads and writes spelled against the matrices. The
 	// schedule, the order inside a row, the draw and the tally are the same.
-	passes.block = [&](size_t iteration, std::vector<field_math::TLinkCounters> &per_row) {
+	passes.block = [&](size_t iteration) {
 		const TCellUniforms uniforms(SEED, TCellStream::field, iteration);
 		const TPhylogeny &species  = in.species;
 		const TPhylogeny &molecule = in.molecule;
+		std::vector<field_math::TLinkCounters> per_row(n_s);
 #pragma omp parallel for num_threads(n_threads) schedule(static)
 		for (size_t s = 0; s < n_s; ++s) {
 			auto row                     = model.begin_row(s, s * n_m);
@@ -608,6 +606,9 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 			per_row[s].merge(counters);
 			model.end_row(row);
 		}
+		field_math::TLinkCounters total;
+		for (const auto &row : per_row) { total.merge(row); }
+		return total;
 	};
 
 	auto species_view  = [&](size_t c) { return TArmaCliqueColumn<TZs, true>(Z_s, c); };
@@ -652,7 +653,7 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 		}
 	};
 
-	run_chain(options, n_s, passes, result);
+	run_chain(options, passes, result);
 	result.resident_mib = resident_mib() - before;
 
 	auto fingerprint = [](const auto &grid, bool with_value) {

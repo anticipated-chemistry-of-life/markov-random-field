@@ -255,14 +255,6 @@ field_math::TLinkCounters recount(const Field &Y, const NodeState &Z_species,
 	return counters;
 }
 
-/// The row tallies of one run, merged the way the caller of a block update merges them: in row
-/// order.
-field_math::TLinkCounters merged(const std::vector<field_math::TLinkCounters> &per_row) {
-	field_math::TLinkCounters counters;
-	for (const auto &row : per_row) { counters.merge(row); }
-	return counters;
-}
-
 using threads::TThreadCount;
 
 // -------------------------------------------------------------------------
@@ -301,11 +293,10 @@ TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 		seed_ones(Z_molecule, 3);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               per_row);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
+		                                     model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -335,11 +326,10 @@ TYPED_TEST(BlockUpdate, writes_the_drawn_states_back) {
 		seed_ones(Z_molecule, 3);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               per_row);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
+		                                     model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -381,11 +371,10 @@ TYPED_TEST(BlockUpdate, reads_the_tree_parent_of_each_leaf_pair) {
 		std::vector<uint8_t> molecule_before = states_of(Z_molecule);
 
 		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
-		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 0);
-		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               per_row);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
+		                                     model, uniforms);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -429,13 +418,12 @@ TYPED_TEST(BlockUpdate, gives_the_same_chain_at_any_thread_count) {
 			seed_ones(Z_molecule, 3);
 
 			TFreeModel model(pair.species.n_leaves());
-			std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 			const TCellUniforms uniforms(4242, TCellStream::field, 7);
-			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-			                               field_math::TErrorProbability(OMEGA), model, uniforms,
-			                               per_row);
-			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
-			                  merged(per_row), model.log_likelihood()};
+			const field_math::TLinkCounters counters = block_update::run<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			    field_math::TErrorProbability(OMEGA), model, uniforms);
+			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule), counters,
+			                  model.log_likelihood()};
 		};
 
 		const auto [one_Y, one_species, one_molecule, one_counters, one_LL]      = run_once(1);
@@ -471,13 +459,11 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 		seed_ones(Z_molecule, 3);
 
 		TFreeModel model(pair.species.n_leaves());
-		std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 		const TCellUniforms uniforms(4242, TCellStream::field, 11);
-		block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		                               field_math::TErrorProbability(OMEGA), model, uniforms,
-		                               per_row);
+		const field_math::TLinkCounters kept = block_update::run<TLinkPolicy>(
+		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		    field_math::TErrorProbability(OMEGA), model, uniforms);
 
-		const field_math::TLinkCounters kept     = merged(per_row);
 		const field_math::TLinkCounters expected = recount(Y, Z_species, Z_molecule, pair);
 
 		EXPECT_EQ(kept.total(), pair.species.n_leaves() * pair.molecule.n_leaves());
@@ -510,13 +496,11 @@ TEST(BlockUpdate, gives_the_same_chain_under_both_backends) {
 			seed_ones(Z_molecule, 3);
 
 			TFreeModel model(pair.species.n_leaves());
-			std::vector<field_math::TLinkCounters> per_row(pair.species.n_leaves());
 			const TCellUniforms uniforms(4242, TCellStream::field, 13);
-			block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-			                               field_math::TErrorProbability(OMEGA), model, uniforms,
-			                               per_row);
-			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule),
-			                  merged(per_row)};
+			const field_math::TLinkCounters counters = block_update::run<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+			    field_math::TErrorProbability(OMEGA), model, uniforms);
+			return std::tuple{states_of(Y), states_of(Z_species), states_of(Z_molecule), counters};
 		};
 
 		const auto [dense_Y, dense_species, dense_molecule, dense_counters] =

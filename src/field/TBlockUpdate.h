@@ -332,32 +332,24 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 	}
 
 	for (size_t r = 0; r < rows.size(); ++r) {
-		per_row_counters[rows[r].species_leaf].merge(counters[r]);
+		per_row_counters[rows[r].species_leaf] = counters[r];
 		model.end_row(rows[r].model_row);
 	}
 }
 
 /// One block update: every leaf pair of the field's container space, one band of rows to a thread
-/// at a time.
-///
-/// `per_row_counters` is one entry per field row, and the caller merges them in row order. It is
-/// not cleared here: a caller that hands over used counters gets their counts added to, which is
-/// what makes the merge its business rather than this one's.
-///
-/// One slot per row, and not one per thread. A row writes its slot once, when it ends, so two
-/// rows sharing a cache line costs one write per row rather than one per leaf pair -- and a merge
-/// in row order does not depend on how the rows were shared out. The counters are integers and so
-/// would sum the same either way; the model's likelihood is not, and it takes the same treatment
-/// for the reason `TTree::log_node_state_density` gives.
+/// at a time. It returns the link counters it tallied over every leaf pair. The update covers
+/// every leaf pair, so the tally is that of the configuration it leaves.
 ///
 /// Because nothing here is indexed by thread and nothing the model sums depends on the schedule,
 /// the schedule is this file's own business. It is `schedule(dynamic)` over bands: there are a
 /// few hundred of them, too few for a static split to come out even, and a band holding a species
 /// with mass-spec runs costs more than one without.
 template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
-void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
-         const TPhylogeny &molecule, const field_math::TErrorProbability &omega, Model &model,
-         const TCellUniforms &uniforms, std::vector<field_math::TLinkCounters> &per_row_counters) {
+[[nodiscard]] field_math::TLinkCounters
+run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
+    const TPhylogeny &molecule, const field_math::TErrorProbability &omega, Model &model,
+    const TCellUniforms &uniforms) {
 	// The field is row-major over (species leaf, molecule leaf): one row per species leaf, one
 	// column per molecule leaf.
 	// Not const: OpenMP made a const variable predetermined shared before version 4.0 and does not
@@ -365,10 +357,12 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	// others.
 	size_t n_rows    = Y.dimensions()[0];
 	size_t n_columns = Y.dimensions()[1];
-	if (per_row_counters.size() != n_rows) {
-		throw coretools::TDevError("The block update was given ", per_row_counters.size(),
-		                           " counter slots for a field of ", n_rows, " rows.");
-	}
+
+	// The link counters keep one slot per field row, not one per thread. A row writes its slot
+	// once, when it ends. So two rows that share a cache line cost one write per row, not one per
+	// leaf pair. This function merges the slots in row order after the region. Nothing in the
+	// merge depends on the schedule, so the counters are the same at any thread count.
+	std::vector<field_math::TLinkCounters> per_row_counters(n_rows);
 
 	// Whatever a source cannot ready from inside the parallel region. It is told nothing about the
 	// schedule: a row seeds its own cursor.
@@ -414,6 +408,10 @@ void run(Field &Y, NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny
 	Y.insert_in_Y(field_batch);
 	Z_species.insert_in_Z(species_batch);
 	Z_molecule.insert_in_Z(molecule_batch);
+
+	field_math::TLinkCounters counters;
+	for (const auto &row : per_row_counters) { counters.merge(row); }
+	return counters;
 }
 
 } // namespace block_update

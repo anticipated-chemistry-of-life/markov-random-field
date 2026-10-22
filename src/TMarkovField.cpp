@@ -268,21 +268,14 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	// One slot per field row, merged in row order below. Not one per thread: a slot per row keeps
-	// what the rows add up from depending on how the schedule shared them out (TBlockModel.h).
 	const size_t n_rows = _Y.dimensions()[0];
 	TDataUpdateAccumulator accumulator(n_rows, data_model);
 	TBlockModel model(_trees, data_model, accumulator);
-	std::vector<field_math::TLinkCounters> per_row_counters(n_rows);
 
 	const field_math::TErrorProbability omega = _error_probability();
-	block_update::run<TLinkPolicy>(_Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
-	                               _trees.front()->phylogeny(), _trees.back()->phylogeny(), omega,
-	                               model, field_uniforms, per_row_counters);
-
-	// The update covered every leaf pair, so the tally it built is the configuration itself.
-	_link_counters = field_math::TLinkCounters();
-	for (const auto &row : per_row_counters) { _link_counters.merge(row); }
+	_link_counters = block_update::run<TLinkPolicy>(
+	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
+	    _trees.back()->phylogeny(), omega, model, field_uniforms);
 
 	_trace_link_counters(iteration);
 
