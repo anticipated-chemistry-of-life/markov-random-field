@@ -24,6 +24,7 @@
 #include "backend_pairings.h"
 #include "cli.h"
 #include "constants.h"
+#include "coretools/Containers/TNestedVector.h"
 #include "coretools/Math/TSumLog.h"
 #include "coretools/Types/probability.h"
 #include "field/TBlockData.h"
@@ -32,6 +33,9 @@
 #include "field/link_backend.h"
 #include "lotus/TLotusMath.h"
 #include "lotus/block_pass.h"
+#include "mass_spec/block_pass.h"
+#include "mass_spec/feature_likelihood.h"
+#include "mass_spec/msms_run.h"
 #include "random/TCellUniforms.h"
 #include "simple_error_model/TSimpleErrorModelMath.h"
 #include "simple_error_model/block_pass.h"
@@ -48,6 +52,7 @@
 #include <cstdint>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -779,6 +784,115 @@ TYPED_TEST(BlockData, near_certain_lotus_records_decide_the_field) {
 		data.end_pass(Y);
 
 		EXPECT_EQ(states_of(Y), states_of(L));
+	}
+}
+
+/// Whether a species leaf carries mass-spec runs. Every third one does not.
+bool has_runs(size_t species_leaf) { return species_leaf % 3 != 2; }
+
+/// Whether the runs of a species leaf detect a molecule leaf. Spread over every row and across the
+/// tile seams.
+bool detected_at(size_t species_leaf, size_t molecule_leaf) {
+	return (species_leaf * 7 + molecule_leaf * 13) % 5 == 0;
+}
+
+/// The runs of every species leaf of a pair. A species leaf with runs has two, one per filter,
+/// and both detect the molecule leaves `detected_at` names: one feature per detected molecule,
+/// assigned to it, and one more at the unknown molecule, so that a run detecting nothing still
+/// takes part.
+coretools::TNestedVector<TMassSpecRun> runs_of(const TTreePair &pair) {
+	coretools::TNestedVector<TMassSpecRun> runs_per_species;
+	for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+		if (!has_runs(s)) {
+			runs_per_species.push_back();
+			continue;
+		}
+		std::vector<TMassSpecRun> runs;
+		for (const size_t filter : {size_t{0}, size_t{1}}) {
+			TMassSpecRun run;
+			std::vector<uint32_t> detected;
+			for (uint32_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+				if (!detected_at(s, m)) { continue; }
+				std::vector<TFeatureLikelihood> candidates{TFeatureLikelihood(m, 100)};
+				run.add_likelihood_vector(candidates);
+				detected.push_back(m);
+			}
+			std::vector<TFeatureLikelihood> unassigned{TFeatureLikelihood(0, 10)};
+			run.add_likelihood_vector(unassigned);
+			run.set_filter_index(filter);
+			run.set_probabilities_of_unknowns(std::vector<uint8_t>(detected.size() + 1, 50));
+			run.initialize_assignments_to_unknown();
+			for (size_t f = 0; f < detected.size(); ++f) {
+				run.set_current_assignment(f, TFeatureLikelihood(detected[f], 100));
+			}
+			runs.push_back(std::move(run));
+		}
+		runs_per_species.push_back(runs);
+	}
+	return runs_per_species;
+}
+
+/// Mass spectrometry is near-certain here: a present molecule passes either filter almost always,
+/// and an absent one is almost never detected. So a row of a species with runs ends at what its
+/// runs detect, cell for cell, whatever the trees and the simple error model say. A row of a
+/// species without runs ends as it does when the fold leaves mass spectrometry out, byte for byte:
+/// its factor there is exactly `{1, 1}`, and every cell draws the uniform its position names.
+TYPED_TEST(BlockData, mass_spec_decides_the_rows_with_runs_and_leaves_the_others_alone) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+	using TMassSpecData =
+	    TBlockData<simple_error_model::TBlockPass, mass_spec_math::TBlockPass>;
+
+	ASSERT_TRUE(std::any_of(tree_pairs().begin(), tree_pairs().end(), [](const auto &pair) {
+		return pair.species.n_leaves() > 2;
+	})) << "no field has a species leaf without runs";
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		const size_t n_species   = pair.species.n_leaves();
+		const size_t n_molecules = pair.molecule.n_leaves();
+		const TThreadCount threads(4);
+		const auto runs = runs_of(pair);
+		// Every filter probability is near-certain, and so is every absent molecule's chance of
+		// going undetected.
+		const std::vector<double> filter_probabilities(2 * n_molecules, 1.0 - 1e-12);
+		auto D = make_storage<TBinaryStorage>(field_shape(pair));
+		seed_ones(D, 5);
+
+		// The field the update leaves under one fold, from the same start and the same uniforms.
+		const auto field_after = [&]<typename Data>(Data data) {
+			auto Y          = make_storage<Field>(field_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+			seed_ones(Y, 1);
+			seed_ones(Z_species, 2);
+			seed_ones(Z_molecule, 3);
+			TFoldModel<Data> model(data);
+			const TCellUniforms uniforms(4242, TCellStream::field, 31);
+			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+			                                     pair.molecule,
+			                                     field_math::TErrorProbability(OMEGA), model,
+			                                     uniforms);
+			data.end_pass(Y);
+			return states_of(Y);
+		};
+
+		const auto without = field_after(TSimpleErrorData{simple_error_model::TBlockPass(D, 0.2)});
+		const auto with    = field_after(TMassSpecData{
+		    simple_error_model::TBlockPass(D, 0.2),
+		    mass_spec_math::TBlockPass(runs, filter_probabilities, n_molecules, 1e-12)});
+
+		for (size_t s = 0; s < n_species; ++s) {
+			for (size_t m = 0; m < n_molecules; ++m) {
+				const size_t cell = s * n_molecules + m;
+				if (has_runs(s)) {
+					EXPECT_EQ(with[cell], static_cast<uint8_t>(detected_at(s, m)))
+					    << "cell (" << s << ", " << m << ")";
+				} else {
+					EXPECT_EQ(with[cell], without[cell]) << "cell (" << s << ", " << m << ")";
+				}
+			}
+		}
 	}
 }
 

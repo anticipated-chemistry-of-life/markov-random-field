@@ -10,14 +10,12 @@
 // This is the whole of what the traversal must not know about. So the traversal keeps no tree, no
 // clique and no data source, and a test can run its loop against a model of its own.
 //
-// The data sources that bring their own pass through the block update are folded by
-// field/TBlockData.h, which this holds (ADR-0017). Mass spectrometry does not bring one yet: its
-// factor is multiplied in here, after the passes, at its own position in the fixed order.
+// The data sources each bring their own pass through the block update, folded by
+// field/TBlockData.h, which this holds (ADR-0017).
 //
 
 #pragma once
 
-#include "TDataModel.h"
 #include "Types.h"
 #include "constants.h"
 #include "coretools/Types/probability.h"
@@ -48,14 +46,11 @@ class TBlockModel {
 private:
 	const TTree &_species_tree;
 	const TTree &_molecule_tree;
-	TDataModel &_data_model;
 	TCompiledBlockData &_data;
 
 public:
-	TBlockModel(const std::vector<std::unique_ptr<TTree>> &trees, TDataModel &data_model,
-	            TCompiledBlockData &data)
-	    : _species_tree(*trees.front()), _molecule_tree(*trees.back()), _data_model(data_model),
-	      _data(data) {}
+	TBlockModel(const std::vector<std::unique_ptr<TTree>> &trees, TCompiledBlockData &data)
+	    : _species_tree(*trees.front()), _molecule_tree(*trees.back()), _data(data) {}
 
 	/// Told once, before the parallel region starts, that a traversal is about to begin. Every
 	/// pass readies here whatever it cannot ready concurrently. It is told nothing about how the
@@ -83,7 +78,8 @@ public:
 		TTransitionGridView molecule_process;
 		/// The bin the species leaf's branch sits in.
 		TypeBinnedBranchLengths species_branch;
-		/// The species leaf the row is, which `factors` needs to name a cell.
+		/// The species leaf the row is, kept so a debug build can name the cell whose cliques
+		/// `factors` checks.
 		size_t species_leaf;
 		/// The molecule tree's clique this row is, kept so a debug build can check that it really
 		/// does not move down the row.
@@ -147,16 +143,9 @@ public:
 		leaf_pair.prob_z_m_is_one =
 		    prob_of_one(row.molecule_process, column.molecule_branch, molecule_parent);
 
-		// The cell data factor, multiplied left to right in the fixed order from 1.0: the passes
-		// (LOTUS, the simple error model), then mass spectrometry (ADR-0017).
-		std::array<double, 2> cell_data = _data.cell_factor(row.data, molecule_leaf);
-#ifdef USE_MS_DATA
-		// Exactly {1, 1} for a species without runs, so its draws match a build without mass spec.
-		const auto prob_mass_spec =
-		    _data_model.get_msms_data().per_cell_factor(row.species_leaf, molecule_leaf);
-		cell_data[0] *= prob_mass_spec[0];
-		cell_data[1] *= prob_mass_spec[1];
-#endif
+		// The cell data factor, multiplied left to right in the fixed order from 1.0: LOTUS, the
+		// simple error model, mass spectrometry (ADR-0017).
+		const std::array<double, 2> cell_data = _data.cell_factor(row.data, molecule_leaf);
 		leaf_pair.cell_data = {coretools::P(cell_data[0]), coretools::P(cell_data[1])};
 		return leaf_pair;
 	}

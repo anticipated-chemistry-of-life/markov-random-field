@@ -250,6 +250,24 @@ double TMSMSData::_log_likelihood(double contamination) const {
 	    contamination);
 }
 
+TMSMSData::TBlockPass TMSMSData::begin_block_update() {
+	// The pass lays the probabilities out as the parameter does: filter-major.
+	const size_t n_molecules = _dimensions_for_filters[1];
+	_block_filter_probabilities.resize(_number_of_filters * n_molecules);
+	for (size_t filter = 0; filter < _number_of_filters; ++filter) {
+		for (size_t m = 0; m < n_molecules; ++m) {
+			_block_filter_probabilities[_get_linear_index_filter_molecule_pair({filter, m})] =
+			    _filter_probability(filter, static_cast<uint32_t>(m));
+		}
+	}
+	return TBlockPass(_msms_data, std::move(_block_filter_probabilities), n_molecules,
+	                  static_cast<double>(_proba_contamination->value()));
+}
+
+void TMSMSData::end_block_update(TBlockPass &&pass) {
+	_block_filter_probabilities = std::move(pass).filter_probabilities();
+}
+
 namespace {
 /// Supplies `TMassSpecRun` with the part of the assignment likelihood ratio that lives in
 /// `TMSMSData`: Y, the mass-spec filter probabilities and the contamination probability. One

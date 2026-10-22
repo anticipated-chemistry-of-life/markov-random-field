@@ -8,6 +8,7 @@
 #include "coretools/Math/TSumLog.h"
 #include "coretools/algorithms.h"
 #include "mass_spec/TMassSpecMath.h"
+#include "mass_spec/block_pass.h"
 #include "mass_spec/msms_run.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "tree/TTree.h"
@@ -25,12 +26,12 @@ class TMarkovField;
 /// probabilities) hang off TDataModel, which owns this object and forwards the MCMC callbacks --
 /// the same pattern as TLotus and TSimpleErrorModel (see TDataModel.h).
 ///
-/// Conditional on its assignments, mass spec is per-cell shaped. The block update reads
-/// `per_cell_factor`. The data log-likelihood reads `log_likelihood`. The class still does not
-/// satisfy the DataSource concept (data_sources/data_source.h). It carries latent state of its
-/// own, the assignments. They need their own Metropolis update every iteration
-/// (update_all_MS_assignments). So TDataModel wires the class by hand, and ACOL_DATA_SOURCES does
-/// not name it.
+/// Conditional on its assignments, mass spec is per-cell shaped. The block update reads it through
+/// the pass this class hands out (`begin_block_update`, mass_spec/block_pass.h). The data
+/// log-likelihood reads `log_likelihood`. The class still does not satisfy the DataSource concept
+/// (data_sources/data_source.h). It carries latent state of its own, the assignments. They need
+/// their own Metropolis update every iteration (update_all_MS_assignments). So TDataModel wires
+/// the class by hand, and ACOL_DATA_SOURCES does not name it.
 class TMSMSData {
 public:
 	using TypeParamMassSpecFilter = stattools::TParameter<SpecMassSpecFilter, TDataModel>;
@@ -52,6 +53,9 @@ private:
 	/// The species leaves that carry runs, in ascending order. Few species leaves carry runs. Code
 	/// that reads only those species walks this list instead of every species leaf.
 	std::vector<size_t> _species_with_ms_data;
+	/// The buffer the filter probabilities are read into for a block update. The pass holds it
+	/// during the update and hands it back at the end, so that each update refills it in place.
+	std::vector<double> _block_filter_probabilities;
 
 	/// Private functions
 private:
@@ -99,21 +103,18 @@ public:
 
 	[[nodiscard]] bool empty() const { return _msms_data.empty(); }
 
-	/// `{P(runs | Y = 0), P(runs | Y = 1)}` for the field cell (species leaf, molecule leaf), given
-	/// the current assignments, filter probabilities and contamination
-	/// (`mass_spec_math::per_cell_factor`). The feature terms do not read the field, so the factor
-	/// leaves them out. `{1, 1}` for a species without runs.
-	///
-	/// The block update calls this from many threads at once. It only reads. The assignments and
-	/// the parameters do not move during the block update.
-	[[nodiscard]] std::array<double, 2> per_cell_factor(size_t species_leaf,
-	                                                    size_t molecule_leaf) const {
-		if (!_species_has_ms_data[species_leaf]) { return {1.0, 1.0}; }
-		return mass_spec_math::per_cell_factor(
-		    _msms_data.at(species_leaf), static_cast<uint32_t>(molecule_leaf),
-		    [this](size_t filter, uint32_t m) { return _filter_probability(filter, m); },
-		    (double)_proba_contamination->value());
-	}
+	// --- the block update ---
+
+	/// This source's part in one block update (mass_spec/block_pass.h).
+	using TBlockPass = mass_spec_math::TBlockPass;
+
+	/// A pass over the runs at the current assignments, filter probabilities and contamination.
+	/// None of them moves until the pass is handed back.
+	[[nodiscard]] TBlockPass begin_block_update();
+
+	/// Takes back the buffer the pass read the filter probabilities into. The pass tallied
+	/// nothing.
+	void end_block_update(TBlockPass &&pass);
 
 	/// The whole mass-spec log-likelihood at the current field, assignments and parameters.
 	[[nodiscard]] double log_likelihood() const {

@@ -5,14 +5,14 @@
 // The block update reads which passes a build carries from this list alone. TDataModel names the
 // data source that hands out each pass. The fold over the list is field/TBlockData.h. The list
 // order is part of the chain (ADR-0017): LOTUS, then the simple error model, then mass
-// spectrometry. Mass spectrometry has no pass yet, so the block model multiplies it in after the
-// fold (field/TBlockModel.h).
+// spectrometry.
 //
 
 #pragma once
 
 #include "data_sources/data_source_pass.h"
 #include "lotus/block_pass.h"
+#include "mass_spec/block_pass.h"
 #include "simple_error_model/block_pass.h"
 
 /// A compile-time list of passes.
@@ -37,6 +37,12 @@ using TSimpleErrorPasses = TPassList<simple_error_model::TBlockPass>;
 #else
 using TSimpleErrorPasses = TPassList<>;
 #endif
+#ifdef USE_MS_DATA
+using TMassSpecPasses = TPassList<mass_spec_math::TBlockPass>;
+#else
+using TMassSpecPasses = TPassList<>;
+#endif
 
 /// Every compiled-in pass, in the order the block update multiplies their cell factors.
-using TBlockSources = typename TPassListConcat<TLotusPasses, TSimpleErrorPasses>::type;
+using TBlockSources =
+    typename TPassListConcat<TLotusPasses, TSimpleErrorPasses, TMassSpecPasses>::type;

@@ -270,7 +270,7 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 
 	// Each data source hands out its pass, and the model folds them.
 	TCompiledBlockData data = data_model.begin_block_update();
-	TBlockModel model(_trees, data_model, data);
+	TBlockModel model(_trees, data);
 
 	const field_math::TErrorProbability omega = _error_probability();
 	_link_counters = block_update::run<TLinkPolicy>(

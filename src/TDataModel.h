@@ -9,9 +9,9 @@
 // sum, notifier-stats collection, simulate + write, the accessor pair) from that one list.
 //
 // Mass spectrometry (USE_MS_DATA, TMSMSData) does not satisfy DataSource. It carries latent state
-// of its own, the assignments. So this class wires it by hand. TMSMSData's class comment says how
-// it still reaches the block update and the data log-likelihood. Its sites are written out below,
-// beside the ones ACOL_DATA_SOURCES generates.
+// of its own, the assignments. So this class wires it by hand. It still takes part in the block
+// update through a pass of its own, like every other source (ADR-0017). Its sites are written out
+// below, beside the ones ACOL_DATA_SOURCES generates.
 //
 // Three things per source stay hand-written rather than generated: the member declaration, the
 // constructor's forwarding of that source's parameters, and the params-vector push in the
@@ -117,6 +117,11 @@ private:
 		return _simple_error_model;
 	}
 #endif
+#ifdef USE_MS_DATA
+	[[nodiscard]] TMSMSData &_source_of(std::type_identity<TMSMSData::TBlockPass>) {
+		return _msms_data;
+	}
+#endif
 
 	// output file
 	std::string _prefix;
@@ -220,8 +225,4 @@ public:
 	[[nodiscard]] Type &get_##member() { return _##member; }
 	ACOL_DATA_SOURCES(ACOL_DATA_SOURCE_ACCESSOR)
 #undef ACOL_DATA_SOURCE_ACCESSOR
-#ifdef USE_MS_DATA
-	// Hand-written, like the rest of mass spec's wiring (see the file comment).
-	[[nodiscard]] const TMSMSData &get_msms_data() const { return _msms_data; }
-#endif
 };

@@ -48,9 +48,9 @@ struct TNotifierStats {
 /// - append whatever it has to report to a shared stats collector (`contribute_stats`).
 ///
 /// Not part of this concept: a source's part in the block update, which is its pass
-/// (data_sources/data_source_pass.h, ADR-0017) -- mass spec still takes part through a per-cell
-/// hook of its own (TMSMSData::per_cell_factor) -- and the parameter-move dispatch, which
-/// stattools forces to be one overload per parameter type.
+/// (data_sources/data_source_pass.h, ADR-0017), and the parameter-move dispatch, which stattools
+/// forces to be one overload per parameter type. Mass spec has a pass without satisfying this
+/// concept.
 template<typename T>
 concept DataSource = requires(T &s, TDataModel *box, bool simulate, const TFieldStorage &Y,
                               const std::string &prefix, TNotifierStats &stats) {
