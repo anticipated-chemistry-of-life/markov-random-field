@@ -179,12 +179,9 @@ TEST(YStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
 	Y.insert_one(1);
 	Y.insert_one(3);
 	Y.insert_zero(2);
-	EXPECT_EQ(Y.get_stored_entries().size(), 3);
+	EXPECT_EQ(Y.size(), 3u);
 	Y.remove_zeros();
-	const auto entries = Y.get_stored_entries();
-	ASSERT_EQ(entries.size(), 2);
-	EXPECT_EQ(entries[0].first, 1u);
-	EXPECT_EQ(entries[1].first, 3u);
+	EXPECT_EQ(Y.size(), 2u);
 	EXPECT_TRUE(Y.is_one(1));
 	EXPECT_TRUE(Y.is_one(3));
 }
@@ -194,9 +191,9 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
 	Y.insert_zero(0);
 	Y.insert_zero(2);
 	Y.insert_zero(4);
-	EXPECT_EQ(Y.get_stored_entries().size(), 3);
+	EXPECT_EQ(Y.size(), 3u);
 	Y.remove_zeros();
-	EXPECT_EQ(Y.get_stored_entries().size(), 0);
+	EXPECT_EQ(Y.size(), 0u);
 	EXPECT_TRUE(Y.empty());
 }
 
@@ -205,9 +202,9 @@ TEST(YStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
 	Y.insert_one(0);
 	Y.insert_one(2);
 	Y.insert_one(4);
-	EXPECT_EQ(Y.get_stored_entries().size(), 3);
+	EXPECT_EQ(Y.size(), 3u);
 	Y.remove_zeros();
-	EXPECT_EQ(Y.get_stored_entries().size(), 3);
+	EXPECT_EQ(Y.size(), 3u);
 	EXPECT_EQ(Y.number_of_ones(), 3);
 }
 
@@ -218,10 +215,10 @@ TEST(YStorageMatrix_Tests, set_state_to_zero_then_remove) {
 	Y.insert_one(3);
 	Y.set_state(2, false); // linear index 2
 	Y.remove_zeros();
-	const auto entries = Y.get_stored_entries();
-	ASSERT_EQ(entries.size(), 2);
-	EXPECT_EQ(entries[0].first, 1u);
-	EXPECT_EQ(entries[1].first, 3u);
+	EXPECT_EQ(Y.size(), 2u);
+	EXPECT_TRUE(Y.is_one(1));
+	EXPECT_FALSE(Y.is_one(2));
+	EXPECT_TRUE(Y.is_one(3));
 }
 
 TEST(YStorageMatrix_Tests, reset_counts_sets_all_counters_to_zero) {
@@ -291,7 +288,5 @@ TEST(YStorageMatrix_Tests, add_data) {
 	EXPECT_EQ(Y.get_thinning_factor(), 1u);
 
 	// linear 5 is still stored (as a zero) until remove_zeros
-	const auto entries = Y.get_stored_entries();
-	ASSERT_EQ(entries.size(), 1u);
-	EXPECT_EQ(entries[0].first, 5u);
+	EXPECT_EQ(Y.size(), 1u);
 }

@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 class TDataModel; // forward declaration
@@ -191,14 +192,17 @@ private:
 
 	void _write_full_Y(coretools::TOutputFile &file) const {
 		std::array<size_t, 2> line{};
+		const auto first_element = _Y.get_multi_dimensional_index(0);
+		static_assert(NUMBER_OF_TREES == first_element.size(),
+		              "NUMBER_OF_TREES must match leaf_index_of_Y size");
 		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
 			// a missing cell reads as state 0, so a direct point lookup covers both cases
 			line                 = {i, _Y.is_one(i)};
 			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(i);
-			std::vector<std::string> node_names;
+			std::array<std::string_view, NUMBER_OF_TREES> node_names;
 			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
 				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
-				node_names.push_back(_trees[idx]->get_node_id(node_idx));
+				node_names[idx] = _trees[idx]->get_node_id(node_idx);
 			};
 			const double fraction = _Y.get_fraction_of_ones(i);
 			file.writeln(line, node_names, fraction);
@@ -207,25 +211,25 @@ private:
 
 	void _write_only_values_in_Y_vector(coretools::TOutputFile &file) const {
 		std::array<size_t, 2> line{};
-		// iterate only the stored (non-default) cells, in ascending linear-index order
-		for (const auto &[linear_index_in_y, storage] : _Y.get_stored_entries()) {
-			// A cell that is not a one now and was never counted a one carries no posterior. Which
-			// cells are *stored* is a property of the backend -- the sparse field holds the cells
-			// it was given, ones and zeros alike, and the dense one holds the whole container
-			// space -- so leaving those cells out is what makes this file say the same thing under
-			// either backend, and it drops no information: every column of such a row is the
-			// default.
-			if (!storage.is_one() && storage.get_counter() == 0) { continue; }
+		// Only the cells that carry a posterior -- a one now, or counted a one at least once -- in
+		// ascending linear-index order. Which cells are *stored* is a property of the backend: the
+		// sparse field holds the cells it was given, ones and zeros alike, and the dense one holds
+		// the whole container space. Visiting only the cells with a posterior is what makes this
+		// file say the same thing under either backend, and it drops no information: every column
+		// of any other row is the default.
+		const auto first_element = _Y.get_multi_dimensional_index(0);
+		static_assert(NUMBER_OF_TREES == first_element.size(),
+		              "NUMBER_OF_TREES must match leaf_index_of_Y size");
+		_Y.for_each_cell_with_a_posterior([&](size_t linear_index_in_y, const TStorageY &storage) {
 			line                 = {linear_index_in_y, storage.is_one()};
 			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
-			std::vector<std::string> node_names;
+			std::array<std::string_view, NUMBER_OF_TREES> node_names;
 			for (size_t idx = 0; idx < leaf_index_of_Y.size(); ++idx) {
 				size_t node_idx = _trees[idx]->get_node_index_from_leaf_index(leaf_index_of_Y[idx]);
-				node_names.push_back(_trees[idx]->get_node_id(node_idx));
+				node_names[idx] = _trees[idx]->get_node_id(node_idx);
 			};
-			const double fraction = _Y.get_fraction_of_ones(linear_index_in_y);
-			file.writeln(line, node_names, fraction);
-		}
+			file.writeln(line, node_names, _Y.fraction_of_ones_of(storage));
+		});
 	}
 
 public:

@@ -99,10 +99,14 @@ public:
 
 	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
 		DEBUG_ASSERT(linear_index < total_size_of_container_space());
+		return fraction_of_ones_of(cell(linear_index));
+	}
+
+	/// The fraction of counted iterations `held` was a one in, for a caller already holding the cell.
+	[[nodiscard]] double fraction_of_ones_of(const TStorageY &held) const {
 		// Nothing counted yet: no posterior to report, and nothing to divide by.
 		if (_total_counts == 0) { return 0.0; }
-		return static_cast<double>(cell(linear_index).get_counter()) /
-		       static_cast<double>(_total_counts);
+		return static_cast<double>(held.get_counter()) / static_cast<double>(_total_counts);
 	}
 
 	/// How often the cell was counted a one -- the numerator of the fraction above, and what a
@@ -134,14 +138,18 @@ public:
 		return whole_space_states<uint8_t>(*this);
 	}
 
-	/// Every stored cell as (linear index, cell), in ascending linear-index order -- which here is
-	/// every cell of the container space, since the dense field stores all of them.
-	[[nodiscard]] std::vector<std::pair<size_t, TStorageY>> get_stored_entries() const {
+	/// Calls `visit(linear_index, cell)` for every cell that carries a posterior -- a one now, or
+	/// counted a one at least once -- in ascending linear-index order. Every other cell reads as
+	/// state 0 with no count under either backend, so the two visit the same cells.
+	///
+	/// One pass over the array in place: the field is laid out with its last dimension
+	/// contiguous, so positions and linear indices coincide and the pass reads the cells in order.
+	template<typename Visit> void for_each_cell_with_a_posterior(Visit &&visit) const {
 		const size_t total = total_size_of_container_space();
-		std::vector<std::pair<size_t, TStorageY>> entries;
-		entries.reserve(total);
-		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, cell(i)); }
-		return entries;
+		for (size_t i = 0; i < total; ++i) {
+			const TStorageY &held = cell(i);
+			if (!held.is_empty()) { visit(i, held); }
+		}
 	}
 
 	/// One stored cell, by linear index. The sparse field spells the same lookup, so a test that

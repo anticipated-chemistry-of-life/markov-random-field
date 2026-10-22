@@ -87,10 +87,14 @@ public:
 	}
 
 	[[nodiscard]] double get_fraction_of_ones(size_t linear_index) const {
+		return fraction_of_ones_of((*this)[linear_index]);
+	}
+
+	/// The fraction of counted iterations `held` was a one in, for a caller already holding the cell.
+	[[nodiscard]] double fraction_of_ones_of(const TStorageY &held) const {
 		// Nothing counted yet: no posterior to report, and nothing to divide by.
 		if (_total_counts == 0) { return 0.0; }
-		return static_cast<double>((*this)[linear_index].get_counter()) /
-		       static_cast<double>(_total_counts);
+		return static_cast<double>(held.get_counter()) / static_cast<double>(_total_counts);
 	}
 
 	[[nodiscard]] size_t get_total_counts() const { return _total_counts; }
@@ -121,13 +125,22 @@ public:
 		return whole_space_states<uint8_t>(*this);
 	}
 
-	/// Every stored cell as (linear index, cell), in ascending linear-index order. Which cells
-	/// those are is a property of this backend: the map holds the cells it was given, ones and
-	/// zeros alike, where the dense field holds the whole container space. Only the posterior
-	/// field is written from this, and it drops a cell that is neither a one nor ever counted
-	/// (TMarkovField::_write_only_values_in_Y_vector), which is what makes the two files agree.
-	[[nodiscard]] std::vector<std::pair<size_t, TStorageY>> get_stored_entries() const {
-		return stored_cells_in_order();
+	/// Calls `visit(linear_index, cell)` for every cell that carries a posterior -- a one now, or
+	/// counted a one at least once -- in ascending linear-index order. Every other cell reads as
+	/// state 0 with no count under either backend, so the two visit the same cells. The map also
+	/// holds zeros that were never counted, and those are what this leaves out.
+	///
+	/// The map has no order of its own, so the cells are copied out and sorted: this costs the
+	/// cells that carry a posterior, not the container space.
+	template<typename Visit> void for_each_cell_with_a_posterior(Visit &&visit) const {
+		std::vector<std::pair<size_t, TStorageY>> in_order;
+		in_order.reserve(cells().size());
+		for (const auto &stored : cells()) {
+			if (!stored.second.is_empty()) { in_order.push_back(stored); }
+		}
+		std::sort(in_order.begin(), in_order.end(),
+		          [](const auto &left, const auto &right) { return left.first < right.first; });
+		for (const auto &[linear_index, held] : in_order) { visit(linear_index, held); }
 	}
 };
 

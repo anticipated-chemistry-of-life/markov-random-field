@@ -46,6 +46,7 @@
 #include <random>
 #include <string>
 #include <type_traits>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -1450,16 +1451,18 @@ TEST(StorageEquivalence, the_backends_agree_on_the_bulk_insert_and_the_whole_spa
 	}
 }
 
-// Which cells a field reports as *stored* is the one place where the two differ and it still
+// Which cells a backend stores is the one property the two are allowed to differ on, and it never
 // reaches a file: the sparse matrix holds the cells it was given, the dense array holds the whole
-// container space, and the posterior field is written by walking that list.
+// container space, and the posterior field is written by visiting only the cells that carry a
+// posterior -- a one now, or counted a one at least once
+// (`for_each_cell_with_a_posterior`, which TMarkovField::_write_only_values_in_Y_vector walks).
+// A cell that is neither has every column at its default, and is exactly the kind of cell the two
+// backends disagree about holding.
 //
-// What makes the two files agree anyway is that a cell only earns a line when it is a one now or
-// was counted a one at least once (TMarkovField::_write_only_values_in_Y_vector) -- a cell that is
-// neither has every column at its default, and is exactly the kind of cell the two backends
-// disagree about holding. That filter is what this asserts, over a chain rather than over a few
-// writes, because the counter is half of the rule.
-TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_ones) {
+// This asserts that both visit those cells and no others, in ascending linear-index order, each
+// holding its state and counter -- over a chain rather than over a few writes, because the counter
+// is half of the rule.
+TEST(StorageEquivalence, both_backends_visit_the_cells_that_carry_a_posterior_in_order) {
 	std::mt19937_64 rng(20260828);
 	size_t n_shapes_where_the_backends_hold_different_cells = 0;
 	for (const auto &shape : generated_shapes()) {
@@ -1473,33 +1476,34 @@ TEST(StorageEquivalence, the_stored_cells_that_carry_a_posterior_are_the_same_on
 		run_chain(sparse, script, sparse_expected);
 		run_chain(dense, script, dense_expected);
 
-		// Both fields hand out the same packed cell, and it answers the two questions the filter
-		// asks, which is the whole of what the writer needs from it.
-		const auto reported = [](const auto &field) {
-			std::vector<std::pair<size_t, bool>> lines;
-			for (const auto &[linear_index, cell] : field.get_stored_entries()) {
-				if (!cell.is_one() && cell.get_counter() == 0) { continue; }
-				lines.emplace_back(linear_index, cell.is_one());
+		// What the visit is supposed to yield, from the expectation rather than from either field.
+		using TLine = std::tuple<size_t, bool, size_t>;
+		std::vector<TLine> expected;
+		for (size_t i = 0; i < n_cells; ++i) {
+			if (sparse_expected.states[i] != 0 || sparse_expected.counts[i] != 0) {
+				expected.emplace_back(i, sparse_expected.states[i] != 0, sparse_expected.counts[i]);
 			}
+		}
+		const auto visited = [](const auto &field) {
+			std::vector<TLine> lines;
+			field.for_each_cell_with_a_posterior([&](size_t linear_index, const TStorageY &cell) {
+				lines.emplace_back(linear_index, cell.is_one(), cell.get_counter());
+			});
 			return lines;
 		};
-		ASSERT_EQ(reported(sparse), reported(dense)) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_EQ(visited(sparse), expected) << "shape " << shape[0] << "x" << shape[1];
+		ASSERT_EQ(visited(dense), expected) << "shape " << shape[0] << "x" << shape[1];
 
-		// The dense field really does report the whole space, and the sparse one a subset of it:
-		// the difference above is a filter doing its job, not two lists that happen to coincide.
-		ASSERT_EQ(dense.get_stored_entries().size(), n_cells);
-		ASSERT_LE(sparse.get_stored_entries().size(), n_cells);
-		if (sparse.get_stored_entries().size() < dense.get_stored_entries().size()) {
-			++n_shapes_where_the_backends_hold_different_cells;
-		}
-
-		if (::testing::Test::HasFailure()) { FAIL() << "shape " << shape[0] << "x" << shape[1]; }
+		// The sparse field really does hold fewer cells than the space, so the dense one holds
+		// cells it does not: the agreement above is the visit doing its job, not two backends
+		// that happen to hold the same cells.
+		if (sparse.size() < n_cells) { ++n_shapes_where_the_backends_hold_different_cells; }
 	}
 
-	// Without this the test would pass just as happily on a script that leaves the two lists
-	// identical, which is the one case in which it proves nothing.
+	// Without this the test would pass just as happily on a script that leaves the two holding
+	// the same cells, which is the one case in which it proves nothing.
 	EXPECT_GT(n_shapes_where_the_backends_hold_different_cells, 0u)
-	    << "no generated shape left the two backends holding different cells, so the filter was "
+	    << "no generated shape left the two backends holding different cells, so the visit was "
 	       "never asked to reconcile anything";
 }
 
@@ -1546,7 +1550,7 @@ TEST(StorageEquivalence, the_cursor_the_likelihoods_walk_yields_the_same_cells_u
 		// The sparse field holds cells that are not ones -- otherwise the two would agree here for
 		// no reason worth having, since the interesting case is exactly the cell one backend holds
 		// and the other does not.
-		if (sparse.get_stored_entries().size() > expected_ones.size()) {
+		if (sparse.size() > expected_ones.size()) {
 			++n_shapes_with_a_stored_zero;
 		}
 	}

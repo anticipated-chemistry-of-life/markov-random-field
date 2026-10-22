@@ -4,30 +4,23 @@
 
 #pragma once
 
-#include "TStorageZ.h"
 #include "storages/TDense.h"
 #include "storages/bulk_paths.h"
 
 #include <cstddef>
-#include <utility>
 #include <vector>
 
-/// The dense internal state: the dense state array, plus the three bulk paths `Z` is asked for by
+/// The dense internal state: the dense state array, plus the two bulk paths `Z` is asked for by
 /// name. The state array is inherited rather than wrapped because `Z` carries one binary state per
-/// cell and nothing else -- there is no member to add, only the whole-space dump, the bulk insert
-/// and the stored-entry walk, none of which the storage concept covers (see storage_concepts.h) and
-/// all of which the sparse implementation spells with a `Z` in the name too.
+/// cell and nothing else -- there is no member to add, only the whole-space dump and the bulk
+/// insert, neither of which the storage concept covers (see storage_concepts.h) and both of which
+/// the sparse implementation spells with a `Z` in the name too.
 ///
 /// `locate` comes with the array too, so the node state points an updater at one of its cells
 /// without a member of its own.
 ///
 /// The array is laid out by whoever sizes it. A tree sizes its node state with its own dimension
 /// contiguous, so each of its cliques is one run of adjacent cells (ADR-0013).
-///
-/// Every cell of the container space is stored here, so "the stored entries" is "every cell". That
-/// is the one difference from the sparse implementation that is visible in output:
-/// `write_Z_to_file` asked for only the stored cells writes the whole container space under this
-/// backend. Production only ever asks it for the whole space anyway.
 class TStorageZDense : public TDenseBinary {
 public:
 	TStorageZDense() = default;
@@ -43,16 +36,6 @@ public:
 	/// The state of every cell of the container space, in ascending linear-index order.
 	[[nodiscard]] std::vector<size_t> get_full_Z_binary_vector() const {
 		return whole_space_states<size_t>(*this);
-	}
-
-	/// Every stored cell as (linear index in Z space, value), in ascending linear-index order --
-	/// which here is every cell of the container space.
-	[[nodiscard]] std::vector<std::pair<size_t, TStorageZ>> get_stored_entries() const {
-		const size_t total = total_size_of_container_space();
-		std::vector<std::pair<size_t, TStorageZ>> entries;
-		entries.reserve(total);
-		for (size_t i = 0; i < total; ++i) { entries.emplace_back(i, TStorageZ(is_one(i))); }
-		return entries;
 	}
 };
 

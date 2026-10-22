@@ -365,7 +365,7 @@ void TMarkovField::simulate(TDataModel &data_model) {
 	if (ProgramOptions::WRITE_Z) {
 		for (const auto &tree : _trees) {
 			write_Z_to_file(_prefix + "_simulated_Z_" + tree->get_tree_name() + ".tsv",
-			                tree->get_Z(), node_state_columns(_trees), /*write_full_Z =*/true);
+			                tree->get_Z(), node_state_columns(_trees));
 			if (ProgramOptions::WRITE_BRANCH_LENGTHS) { write_branch_length_grid(*tree); }
 		}
 	}

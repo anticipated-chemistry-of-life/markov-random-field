@@ -275,7 +275,7 @@ TYPED_TEST(NodeStateFile, a_written_file_carries_the_leaf_rows_and_reads_back_as
 	Z.insert_one(Z.get_linear_index_in_container_space(trees.cell("s_root", "base"))); // a root
 
 	const TTempFile file("written_species_Z.txt");
-	write_Z_to_file(file.path(), Z, trees.columns(), /*write_full_Z =*/true);
+	write_Z_to_file(file.path(), Z, trees.columns());
 
 	const auto states = states_by_name(file.content());
 	EXPECT_EQ(states.size(), Z.total_size_of_container_space());

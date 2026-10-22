@@ -122,15 +122,6 @@ protected:
 	[[nodiscard]] std::unordered_map<size_t, Cell> &cells() { return _states; }
 	[[nodiscard]] const std::unordered_map<size_t, Cell> &cells() const { return _states; }
 
-	/// Every stored cell as (linear index, cell), in ascending linear-index order. The map has no
-	/// order of its own, and a file written from these has to read the same under either backend.
-	[[nodiscard]] std::vector<std::pair<size_t, Cell>> stored_cells_in_order() const {
-		std::vector<std::pair<size_t, Cell>> entries(_states.begin(), _states.end());
-		std::sort(entries.begin(), entries.end(),
-		          [](const auto &left, const auto &right) { return left.first < right.first; });
-		return entries;
-	}
-
 public:
 	TSparseStorage() = default;
 	explicit TSparseStorage(const IndexArray &dimensions,

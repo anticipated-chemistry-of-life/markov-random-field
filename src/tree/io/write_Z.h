@@ -23,13 +23,11 @@ class TTree;
 /// then the state.
 ///
 /// The node state spans every node of its own tree, so a written file carries the leaf rows and
-/// not only the internal ones (ADR-0005).
-///
-/// `write_full_Z` picks the cells: the whole container space, a missing cell reading as state 0,
-/// or only the stored ones. Simulation, the only caller today, asks for the whole space.
+/// not only the internal ones (ADR-0005). Every cell of the container space gets a row, a missing
+/// cell reading as state 0, so the file reads the same under either backend.
 template<BinaryStorage NodeState>
 void write_Z_to_file(const std::string &filename, const NodeState &Z,
-                     const std::vector<TNodeStateColumn> &columns, bool write_full_Z) {
+                     const std::vector<TNodeStateColumn> &columns) {
 	throw_unless_one_column_per_tree(columns);
 
 	std::vector<std::string> header;
@@ -40,23 +38,9 @@ void write_Z_to_file(const std::string &filename, const NodeState &Z,
 
 	coretools::TOutputFile file(filename, header, "\t");
 
-	const auto write_cell = [&](size_t linear_index_in_Z_space, bool state) {
-		const std::array<size_t, 2> line{linear_index_in_Z_space, state};
-		file.writeln(node_names_of(Z.get_multi_dimensional_index(linear_index_in_Z_space), columns),
-		             line);
-	};
-
-	// Which cells, and nothing else, is what the two write paths differ in: the whole container
-	// space, where a missing cell reads as state 0 and so a point lookup covers both cases, or
-	// only the stored entries, which come in ascending linear-index order.
-	if (write_full_Z) {
-		for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) {
-			write_cell(i, Z.is_one(i));
-		}
-	} else {
-		for (const auto &[linear_index_in_Z_space, storage] : Z.get_stored_entries()) {
-			write_cell(linear_index_in_Z_space, storage.is_one());
-		}
+	for (size_t i = 0; i < Z.total_size_of_container_space(); ++i) {
+		const std::array<size_t, 2> line{i, Z.is_one(i)};
+		file.writeln(node_names_of(Z.get_multi_dimensional_index(i), columns), line);
 	}
 }
 

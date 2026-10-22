@@ -3,75 +3,11 @@
 //
 
 #include "constants.h"
-#include "storages/z_storage/TStorageZ.h"
 #include "storages/z_storage/TStorageZSparse.h"
 #include "gtest/gtest.h"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-
-//-----------------------------------
-// TStorageZ (single state byte; the cell a node state hands out when asked for its stored ones; no
-// longer stores its own linear index, only the state bit)
-//-----------------------------------
-
-TEST(ZStorage_Tests, default_constructor_is_empty) {
-	const TStorageZ z;
-	EXPECT_FALSE(z.is_one());
-	EXPECT_TRUE(z.is_empty());
-}
-
-TEST(ZStorage_Tests, constructor_from_state) {
-	const TStorageZ one{true};
-	EXPECT_TRUE(one.is_one());
-	EXPECT_FALSE(one.is_empty());
-	const TStorageZ zero{false};
-	EXPECT_FALSE(zero.is_one());
-	EXPECT_TRUE(zero.is_empty());
-}
-
-TEST(ZStorage_Tests, set_state) {
-	TStorageZ z;
-	z.set_state(true);
-	EXPECT_TRUE(z.is_one());
-	z.set_state(false);
-	EXPECT_FALSE(z.is_one());
-	// idempotent: setting the same state twice keeps it
-	z.set_state(false);
-	EXPECT_FALSE(z.is_one());
-	z.set_state(true);
-	z.set_state(true);
-	EXPECT_TRUE(z.is_one());
-}
-
-TEST(ZStorage_Tests, switch_state) {
-	TStorageZ z{true};
-	EXPECT_TRUE(z.is_one());
-	z.switch_state();
-	EXPECT_FALSE(z.is_one());
-	z.switch_state();
-	EXPECT_TRUE(z.is_one());
-}
-
-TEST(ZStorage_Tests, is_empty_tracks_state) {
-	TStorageZ z;
-	EXPECT_TRUE(z.is_empty()); // default: state false
-	z.set_state(true);
-	EXPECT_FALSE(z.is_empty());
-	z.set_state(false);
-	EXPECT_TRUE(z.is_empty()); // state false == empty == TStorageZ{}
-}
-
-TEST(ZStorage_Tests, equality) {
-	const TStorageZ a{true};
-	const TStorageZ b{true};
-	const TStorageZ c{false};
-	EXPECT_TRUE(a == b);
-	EXPECT_FALSE(a == c);
-	EXPECT_TRUE(a != c);
-}
-
-TEST(ZStorage_Tests, size_is_one_byte) { EXPECT_EQ(sizeof(TStorageZ), 1u); }
 
 //-----------------------------------
 // TStorageZSparse -- the sparse node state: a hash map of state bytes, keyed by linear index.
@@ -125,12 +61,9 @@ TEST(ZStorageMatrix_Tests, remove_zeros_removes_zero_state_elements) {
 	Z.insert_one(1);
 	Z.insert_one(3);
 	Z.insert_zero(2);
-	EXPECT_EQ(Z.get_stored_entries().size(), 3u);
+	EXPECT_EQ(Z.size(), 3u);
 	Z.remove_zeros();
-	const auto entries = Z.get_stored_entries();
-	ASSERT_EQ(entries.size(), 2u);
-	EXPECT_EQ(entries[0].first, 1u);
-	EXPECT_EQ(entries[1].first, 3u);
+	EXPECT_EQ(Z.size(), 2u);
 	EXPECT_TRUE(Z.is_one(1));
 	EXPECT_TRUE(Z.is_one(3));
 }
@@ -140,9 +73,9 @@ TEST(ZStorageMatrix_Tests, remove_zeros_all_zeros_empties_matrix) {
 	Z.insert_zero(0);
 	Z.insert_zero(2);
 	Z.insert_zero(4);
-	EXPECT_EQ(Z.get_stored_entries().size(), 3u);
+	EXPECT_EQ(Z.size(), 3u);
 	Z.remove_zeros();
-	EXPECT_EQ(Z.get_stored_entries().size(), 0u);
+	EXPECT_EQ(Z.size(), 0u);
 	EXPECT_TRUE(Z.empty());
 }
 
@@ -156,20 +89,6 @@ TEST(ZStorageMatrix_Tests, remove_zeros_all_ones_unchanged) {
 	EXPECT_TRUE(Z.is_one(0));
 	EXPECT_TRUE(Z.is_one(2));
 	EXPECT_TRUE(Z.is_one(4));
-}
-
-TEST(ZStorageMatrix_Tests, get_stored_entries_ascending_linear_index) {
-	TStorageZSparse Z({2, 3}); // 2 rows, 3 cols (row-major linear index)
-	Z.insert_one(5);           // (1, 2)
-	Z.insert_one(0);           // (0, 0)
-	Z.insert_one(4);           // (1, 1)
-	Z.insert_one(1);           // (0, 1)
-	const auto entries = Z.get_stored_entries();
-	ASSERT_EQ(entries.size(), 4u);
-	EXPECT_EQ(entries[0].first, 0u);
-	EXPECT_EQ(entries[1].first, 1u);
-	EXPECT_EQ(entries[2].first, 4u);
-	EXPECT_EQ(entries[3].first, 5u);
 }
 
 TEST(ZStorageMatrix_Tests, add_data) {
@@ -187,10 +106,7 @@ TEST(ZStorageMatrix_Tests, add_data) {
 	EXPECT_FALSE(Z.is_one(5));
 
 	// linear 5 is still stored (as a zero) until remove_zeros
-	const auto entries = Z.get_stored_entries();
-	ASSERT_EQ(entries.size(), 1u);
-	EXPECT_EQ(entries[0].first, 5u);
-	EXPECT_FALSE(entries[0].second.is_one());
+	EXPECT_EQ(Z.size(), 1u);
 }
 
 TEST(ZStorageMatrix_Tests, insert_one_exceeds_size_throws) {
@@ -251,7 +167,7 @@ TEST(ZStorageMatrix_Tests, a_run_that_starts_partway_along_a_row_reads_from_ther
 	}
 }
 
-TEST(ZStorageMatrix_Tests, insert_in_Z_bulk_merges_and_sorts) {
+TEST(ZStorageMatrix_Tests, insert_in_Z_inserts_every_batch) {
 	TStorageZSparse Z({1, 6});
 	const std::vector<std::vector<size_t>> to_insert = {{1, 4}, {2}};
 	Z.insert_in_Z(to_insert);
@@ -259,11 +175,7 @@ TEST(ZStorageMatrix_Tests, insert_in_Z_bulk_merges_and_sorts) {
 	EXPECT_TRUE(Z.is_one(2));
 	EXPECT_TRUE(Z.is_one(4));
 	EXPECT_FALSE(Z.is_one(0));
-	const auto entries = Z.get_stored_entries();
-	ASSERT_EQ(entries.size(), 3u);
-	EXPECT_EQ(entries[0].first, 1u);
-	EXPECT_EQ(entries[1].first, 2u);
-	EXPECT_EQ(entries[2].first, 4u);
+	EXPECT_EQ(Z.size(), 3u);
 }
 
 TEST(ZStorageMatrix_Tests, get_full_Z_binary_vector_multi_row) {

@@ -208,7 +208,9 @@ public:
 	[[nodiscard]] const TNodeStateStorage &get_Z() const;
 	TNodeStateStorage &get_Z();
 
-	[[nodiscard]] std::string get_node_id(size_t index) const { return _topology().id_of(index); }
+	[[nodiscard]] const std::string &get_node_id(size_t index) const {
+		return _topology().id_of(index);
+	}
 
 	/// The tree update (GLOSSARY.md): the node-state update, then the moves on alpha, nu and the
 	/// branch lengths. `tree_update::run` runs all of it.
