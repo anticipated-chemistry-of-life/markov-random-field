@@ -73,7 +73,7 @@ constexpr void probabilities_for_both_Y_states(bool d, double eps,
 ///
 /// A cell that is zero in both always agrees and need not be visited, so the field and the data
 /// are merge-joined over their ones in ascending linear-index order (the same technique as
-/// TLotus::count_present_cells), which costs O(ones(Y) + ones(D)) rather than O(total cells).
+/// lotus_math::count_present_cells), which costs O(ones(Y) + ones(D)) rather than O(total cells).
 ///
 /// The field and the data no longer share a type -- D carries no posterior counter -- so this
 /// takes one of each rather than two of one. Both are named by their concept, which is also what

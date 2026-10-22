@@ -108,7 +108,7 @@ void TLotus::guess_initial_values(const TFieldStorage &Y) {
 
 	_reporting_model = _build_reporting_model(); // parameters just set -> build before the LL
 
-	install_present_cells(count_present_cells(Y));
+	install_present_cells(lotus_math::count_present_cells(Y, _L, _classes));
 	_oldLL = _curLL;
 }
 
@@ -143,25 +143,6 @@ lotus_math::TPresentCells TLotus::no_present_cells() const {
 void TLotus::install_present_cells(lotus_math::TPresentCells cells) {
 	_present_cells = std::move(cells);
 	_curLL         = _log_likelihood_of_present_cells();
-}
-
-lotus_math::TPresentCells TLotus::count_present_cells(const TFieldStorage &Y) const {
-	static_assert(NUMBER_OF_TREES == 2, "a cell is a species leaf by a molecule leaf");
-	lotus_math::TPresentCells cells = no_present_cells();
-	const size_t n_columns          = Y.dimensions()[1];
-
-	// Only the present cells are counted, so the walk is over the field's ones. Whether LOTUS
-	// reports one is a forward cursor over its records, which are in the same order.
-	auto record = _L.ones_cursor();
-	for (auto present = Y.ones_cursor(); present.valid(); present.advance()) {
-		const size_t cell = present.linear_index();
-		while (record.valid() && record.linear_index() < cell) { record.advance(); }
-		const bool reported = record.valid() && record.linear_index() == cell;
-		const size_t slot   = cells.slot(species_class(cell / n_columns),
-		                                 molecule_class(cell % n_columns));
-		++cells.ones[static_cast<size_t>(reported)][slot];
-	}
-	return cells;
 }
 
 void TLotus::prepare_for_simulation() {

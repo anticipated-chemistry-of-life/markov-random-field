@@ -6,6 +6,9 @@
 // tree.
 
 #include "lotus/TLotusMath.h"
+#include "storages/TSparse.h"
+#include "storages/y_storage/TStorageYDense.h"
+#include "storages/y_storage/TStorageYSparse.h"
 #include "gtest/gtest.h"
 
 #include <cmath>
@@ -13,6 +16,8 @@
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -277,4 +282,173 @@ TEST(LotusMath, counts_of_more_cells_than_the_field_holds_are_refused) {
 	cells.ones[0][0] = 2;
 	EXPECT_THROW((void)lotus_math::log_likelihood_of_L(cells, classes, {1.0, 1.0}, 0.1),
 	             std::invalid_argument);
+}
+
+// --------------------------------------------------------------------------
+// The field's present cells, counted from scratch
+// --------------------------------------------------------------------------
+
+namespace {
+
+constexpr size_t N_ITERATIONS = 100;
+
+/// The count, cell by cell. The tally reads every cell of the container space by point lookup,
+/// present or not. It therefore shares no walk with the count it checks.
+template<typename Field>
+lotus_math::TPresentCells tally_every_cell(const Field &Y, const TSparseBinary &L,
+                                           const lotus_math::TPaperCountClasses &classes) {
+	const size_t n_cells   = Y.total_size_of_container_space();
+	const size_t n_columns = Y.dimensions()[1];
+	size_t n_records       = 0;
+	for (size_t i = 0; i < n_cells; ++i) { n_records += static_cast<size_t>(L.is_one(i)); }
+
+	lotus_math::TPresentCells cells(n_cells, n_records, classes);
+	for (size_t i = 0; i < n_cells; ++i) {
+		if (!Y.is_one(i)) { continue; }
+		const uint32_t species  = classes.class_of(0, i / n_columns);
+		const uint32_t molecule = classes.class_of(1, i % n_columns);
+		++cells.ones[static_cast<size_t>(L.is_one(i))][cells.slot(species, molecule)];
+	}
+	return cells;
+}
+
+/// A field of random shape and fill, with paper counts drawn from a few values so that several
+/// leaves share a class. The field also stores zeros, which are cells the count must not take
+/// for present.
+template<typename Field> struct TRandomField {
+	IndexArray shape;
+	std::vector<std::vector<size_t>> paper_counts;
+	Field Y;
+
+	explicit TRandomField(std::mt19937_64 &rng, double fill) {
+		std::uniform_int_distribution<size_t> n_leaves(1, 40);
+		shape = IndexArray{n_leaves(rng), n_leaves(rng)};
+
+		std::uniform_int_distribution<size_t> papers(0, 6);
+		paper_counts.resize(2);
+		for (size_t dimension = 0; dimension < 2; ++dimension) {
+			for (size_t leaf = 0; leaf < shape[dimension]; ++leaf) {
+				paper_counts[dimension].push_back(papers(rng));
+			}
+		}
+
+		Y = Field(N_ITERATIONS, shape);
+		std::bernoulli_distribution present(fill);
+		std::bernoulli_distribution stored_zero(0.2);
+		for (size_t i = 0; i < Y.total_size_of_container_space(); ++i) {
+			if (present(rng)) {
+				Y.insert_one(i);
+			} else if (stored_zero(rng)) {
+				Y.insert_zero(i);
+			}
+		}
+	}
+
+	/// Records at random, each cell reported with probability `rate`.
+	[[nodiscard]] TSparseBinary random_records(std::mt19937_64 &rng, double rate) const {
+		TSparseBinary L(shape);
+		std::bernoulli_distribution reported(rate);
+		for (size_t i = 0; i < L.total_size_of_container_space(); ++i) {
+			if (reported(rng)) { L.insert_one(i); }
+		}
+		return L;
+	}
+
+	/// Records on exactly the present cells, or on exactly the absent ones.
+	[[nodiscard]] TSparseBinary records_where_present_is(bool state) const {
+		TSparseBinary L(shape);
+		for (size_t i = 0; i < L.total_size_of_container_space(); ++i) {
+			if (Y.is_one(i) == state) { L.insert_one(i); }
+		}
+		return L;
+	}
+};
+
+uint64_t total(const std::vector<uint64_t> &table) {
+	uint64_t sum = 0;
+	for (const uint64_t n : table) { sum += n; }
+	return sum;
+}
+
+class FieldNames {
+public:
+	template<typename Field> static std::string GetName(int /*index*/) {
+		if constexpr (std::is_same_v<Field, TStorageYSparse>) {
+			return "sparse";
+		} else {
+			return "dense";
+		}
+	}
+};
+
+} // namespace
+
+template<typename Field> class PresentCellCount : public ::testing::Test {};
+using Fields = ::testing::Types<TStorageYSparse, TStorageYDense>;
+TYPED_TEST_SUITE(PresentCellCount, Fields, FieldNames);
+
+TYPED_TEST(PresentCellCount, matches_a_tally_of_every_cell_on_random_fields) {
+	std::mt19937_64 rng(20261022);
+	std::uniform_real_distribution<double> rate(0.05, 0.7);
+	uint64_t reported   = 0;
+	uint64_t unreported = 0;
+	for (size_t trial = 0; trial < 50; ++trial) {
+		const TRandomField<TypeParam> field(rng, rate(rng));
+		const lotus_math::TPaperCountClasses classes(field.paper_counts);
+		const TSparseBinary L = field.random_records(rng, rate(rng));
+
+		const auto counted = lotus_math::count_present_cells(field.Y, L, classes);
+		ASSERT_EQ(counted, tally_every_cell(field.Y, L, classes)) << "trial " << trial;
+		reported += total(counted.ones[1]);
+		unreported += total(counted.ones[0]);
+	}
+	// The trials count both halves. A swap of the two fails this check.
+	EXPECT_GT(reported, 0U);
+	EXPECT_GT(unreported, 0U);
+}
+
+TYPED_TEST(PresentCellCount, every_present_cell_reported_fills_the_reported_half_alone) {
+	std::mt19937_64 rng(1);
+	for (size_t trial = 0; trial < 10; ++trial) {
+		const TRandomField<TypeParam> field(rng, 0.4);
+		const lotus_math::TPaperCountClasses classes(field.paper_counts);
+		const TSparseBinary L = field.records_where_present_is(true);
+
+		const auto counted = lotus_math::count_present_cells(field.Y, L, classes);
+		ASSERT_EQ(counted, tally_every_cell(field.Y, L, classes)) << "trial " << trial;
+		EXPECT_EQ(total(counted.ones[0]), 0U) << "trial " << trial;
+		EXPECT_EQ(total(counted.ones[1]), L.number_of_ones()) << "trial " << trial;
+	}
+}
+
+TYPED_TEST(PresentCellCount, no_present_cell_reported_fills_the_unreported_half_alone) {
+	std::mt19937_64 rng(2);
+	for (size_t trial = 0; trial < 10; ++trial) {
+		const TRandomField<TypeParam> field(rng, 0.4);
+		const lotus_math::TPaperCountClasses classes(field.paper_counts);
+		const TSparseBinary L = field.records_where_present_is(false);
+
+		const auto counted = lotus_math::count_present_cells(field.Y, L, classes);
+		ASSERT_EQ(counted, tally_every_cell(field.Y, L, classes)) << "trial " << trial;
+		EXPECT_EQ(total(counted.ones[1]), 0U) << "trial " << trial;
+		EXPECT_EQ(total(counted.ones[0]), field.Y.total_size_of_container_space() -
+		                                      L.number_of_ones())
+		    << "trial " << trial;
+	}
+}
+
+TYPED_TEST(PresentCellCount, a_field_with_no_present_cell_counts_none) {
+	std::mt19937_64 rng(3);
+	for (size_t trial = 0; trial < 10; ++trial) {
+		// Stored zeros only: the field has entries, and none of them is present.
+		const TRandomField<TypeParam> field(rng, 0.0);
+		const lotus_math::TPaperCountClasses classes(field.paper_counts);
+		const TSparseBinary L = field.random_records(rng, 0.3);
+
+		const auto counted = lotus_math::count_present_cells(field.Y, L, classes);
+		const lotus_math::TPresentCells none(field.Y.total_size_of_container_space(),
+		                                     L.number_of_ones(), classes);
+		EXPECT_EQ(counted, none) << "trial " << trial;
+		EXPECT_EQ(counted, tally_every_cell(field.Y, L, classes)) << "trial " << trial;
+	}
 }

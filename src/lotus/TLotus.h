@@ -100,10 +100,6 @@ public:
 	/// Satisfies DataSource.
 	[[nodiscard]] double log_likelihood() const { return _curLL; }
 
-	/// Counts a field's present cells from scratch: one pass over its ones. The block update counts
-	/// them as it draws, so this is for a field that arrived some other way.
-	[[nodiscard]] lotus_math::TPresentCells count_present_cells(const TFieldStorage &Y) const;
-
 	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
 
 	/// The cursor a row of the block update walks `_L`'s sorted-ones cache with. One per field
@@ -152,6 +148,10 @@ public:
 		return _classes.class_of(1, molecule_leaf);
 	}
 	[[nodiscard]] size_t n_molecule_classes() const { return _classes.n_classes(1); }
+	/// The paper-count classes of every leaf, for a count of the present cells from scratch.
+	[[nodiscard]] const lotus_math::TPaperCountClasses &paper_count_classes() const {
+		return _classes;
+	}
 	/// The counts of a field with no present cell, for the block update to count its own into.
 	[[nodiscard]] lotus_math::TPresentCells no_present_cells() const;
 	/// The field's present cells after a block update, which counted them as it drew. Replaces the

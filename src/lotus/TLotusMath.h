@@ -41,6 +41,7 @@
 #pragma once
 
 #include "constants.h"
+#include "storages/storage_concepts.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -142,6 +143,32 @@ struct TPresentCells {
 	}
 	bool operator==(const TPresentCells &) const = default;
 };
+
+/// Counts a field's present cells from scratch. `L` holds the LOTUS records and has the field's
+/// dimensions. A cell of the field is therefore the same cell of `L`.
+///
+/// The count walks the field's ones and nothing else. A forward cursor over the records says
+/// whether LOTUS reports each one. The records come in the same ascending order. The cost is
+/// O(ones(Y) + ones(L)), not O(total cells). The block update counts the present cells as it
+/// draws. This count is for a field that arrived some other way, and for checking that count.
+template<FieldStorage Field, BinaryStorage Records>
+[[nodiscard]] TPresentCells count_present_cells(const Field &Y, const Records &L,
+                                                const TPaperCountClasses &classes) {
+	static_assert(NUMBER_OF_TREES == 2, "a cell is a species leaf by a molecule leaf");
+	TPresentCells cells(L.total_size_of_container_space(), L.number_of_ones(), classes);
+	const size_t n_columns = Y.dimensions()[1];
+
+	auto record = L.ones_cursor();
+	for (auto present = Y.ones_cursor(); present.valid(); present.advance()) {
+		const size_t cell = present.linear_index();
+		while (record.valid() && record.linear_index() < cell) { record.advance(); }
+		const bool reported = record.valid() && record.linear_index() == cell;
+		const size_t slot =
+		    cells.slot(classes.class_of(0, cell / n_columns), classes.class_of(1, cell % n_columns));
+		++cells.ones[static_cast<size_t>(reported)][slot];
+	}
+	return cells;
+}
 
 /// `n * log(p)`, read as 0 when there is nothing to count: a kind of cell that the field does not
 /// hold contributes nothing, even where the model gives it no probability at all.

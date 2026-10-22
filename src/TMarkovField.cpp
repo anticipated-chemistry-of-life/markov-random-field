@@ -286,8 +286,9 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// The present cells the rows counted have to be the field's, or every gamma and error-rate move
 	// after this reads the likelihood of another field. A pass over the field, so a debug build's
 	// alone.
-	DEBUG_ASSERT(data_model.get_lotus().present_cells() ==
-	             data_model.get_lotus().count_present_cells(_Y));
+	[[maybe_unused]] const auto &lotus = data_model.get_lotus();
+	DEBUG_ASSERT(lotus.present_cells() ==
+	             lotus_math::count_present_cells(_Y, lotus.get_L(), lotus.paper_count_classes()));
 #endif
 	using namespace coretools::instances;
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _coretools_thinning == 0) && !_fix_Y) {
