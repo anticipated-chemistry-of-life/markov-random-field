@@ -192,9 +192,7 @@ private:
 
 	void _write_full_Y(coretools::TOutputFile &file) const {
 		std::array<size_t, 2> line{};
-		const auto first_element = _Y.get_multi_dimensional_index(0);
-		static_assert(NUMBER_OF_TREES == first_element.size(),
-		              "NUMBER_OF_TREES must match leaf_index_of_Y size");
+		static_assert(std::tuple_size_v<IndexArray> == NUMBER_OF_TREES);
 		for (size_t i = 0; i < _Y.total_size_of_container_space(); ++i) {
 			// a missing cell reads as state 0, so a direct point lookup covers both cases
 			line                 = {i, _Y.is_one(i)};
@@ -217,9 +215,7 @@ private:
 		// the whole container space. Visiting only the cells with a posterior is what makes this
 		// file say the same thing under either backend, and it drops no information: every column
 		// of any other row is the default.
-		const auto first_element = _Y.get_multi_dimensional_index(0);
-		static_assert(NUMBER_OF_TREES == first_element.size(),
-		              "NUMBER_OF_TREES must match leaf_index_of_Y size");
+		static_assert(std::tuple_size_v<IndexArray> == NUMBER_OF_TREES);
 		_Y.for_each_cell_with_a_posterior([&](size_t linear_index_in_y, const TStorageY &storage) {
 			line                 = {linear_index_in_y, storage.is_one()};
 			auto leaf_index_of_Y = _Y.get_multi_dimensional_index(linear_index_in_y);
