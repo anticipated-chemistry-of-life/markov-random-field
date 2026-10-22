@@ -134,7 +134,8 @@ TCompiledBlockData TDataModel::begin_block_update() {
 void TDataModel::end_block_update(TCompiledBlockData &&data) {
 	std::apply(
 	    [this]<typename... Passes>(Passes &&...pass) {
-		    (_source_of(std::type_identity<std::remove_cvref_t<Passes>>{}).end_block_update(pass),
+		    (_source_of(std::type_identity<std::remove_cvref_t<Passes>>{})
+		         .end_block_update(std::forward<Passes>(pass)),
 		     ...);
 	    },
 	    std::move(data).take_passes());

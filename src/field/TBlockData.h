@@ -73,21 +73,19 @@ public:
 		    _passes);
 	}
 
-	/// Multiplies every pass's answer for one cell into `product`, in list order, and returns it.
-	/// `product` is 1.0 unless a data source not yet migrated to a pass was multiplied in ahead of
-	/// the list (field/TBlockModel.h).
+	/// Multiplies every pass's answer for one cell into a running product that starts from 1.0,
+	/// in list order, and returns it.
 	///
 	/// A debug build asserts the ordering guarantee every pass relies on: within a row, ascending
 	/// molecule leaves, each once, the cell factor before the record.
-	[[nodiscard]] std::array<double, 2>
-	cell_factor(TRow &row, size_t molecule_leaf,
-	            std::array<double, 2> product = {1.0, 1.0}) const {
+	[[nodiscard]] std::array<double, 2> cell_factor(TRow &row, size_t molecule_leaf) const {
 #ifndef NDEBUG
 		DEBUG_ASSERT(!row.awaiting_record);
 		DEBUG_ASSERT(molecule_leaf >= row.next_molecule_leaf);
 		row.awaiting_record = true;
 		row.asked           = molecule_leaf;
 #endif
+		std::array<double, 2> product{1.0, 1.0};
 		_each(_passes, row.passes, [&](const auto &pass, auto &pass_row) {
 			const std::array<double, 2> factor = pass.cell_factor(pass_row, molecule_leaf);
 			product[0] *= factor[0];

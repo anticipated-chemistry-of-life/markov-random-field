@@ -20,15 +20,14 @@
 #include "constants.h"
 #include "data_sources/data_source.h"
 #include "lotus/TLotusMath.h"
+#include "lotus/block_pass.h"
 #include "ntfy/TNtfyNotifier.h"
 #include "omp.h"
 #include "stattools/ParametersObservations/TParameter.h"
 #include "storages/TSparse.h"
 #include "storages/storage_backend.h"
 #include "tree/TTree.h"
-#include <array>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -84,6 +83,8 @@ private:
 	[[nodiscard]] std::vector<double> _gammas() const;
 	/// The likelihood of L at the current present cells, gamma and error rate.
 	[[nodiscard]] double _log_likelihood_of_present_cells() const;
+	/// Replaces the present cells, and the likelihood read from them.
+	void _install_present_cells(lotus_math::TPresentCells cells);
 
 public:
 	TLotus(const std::vector<std::unique_ptr<TTree>> &trees, TypeParamGamma *gamma,
@@ -100,64 +101,20 @@ public:
 	/// Satisfies DataSource.
 	[[nodiscard]] double log_likelihood() const { return _curLL; }
 
-	// --- hooks used by the field update (see TMarkovField::_update_Y) ---
+	// --- the block update ---
 
-	/// The cursor a row of the block update walks `_L`'s sorted-ones cache with. One per field
-	/// row, seeded at that row's first cell, and owned by the row rather than by the thread that
-	/// happens to draw it.
-	using RecordCursor = TSparseBinary::OnesCursor;
+	/// This source's part in one block update (lotus/block_pass.h).
+	using TBlockPass = lotus_math::TBlockPass;
 
-	/// Makes `_L`'s sorted-ones cache fresh, so that every row of the block update may seed a
-	/// cursor of its own from inside the parallel region. Has to run once, single-threaded,
-	/// before that region starts, because the sort is what is not safe to do concurrently.
-	///
-	/// It is told nothing about how the traversal shares its rows out. The cursor used to be one
-	/// per thread, which meant this had to be handed the exact chunk size
-	/// `schedule(static, ...)` would use -- and so the block update had to derive its schedule
-	/// from `ProgramOptions::NUMBER_OF_THREADS` rather than from the team it actually got.
-	void prepare_for_block_update() const { _L.refresh_ones(); }
-
-	/// A cursor seeded at the first cell of one field row. `prepare_for_block_update` has to have
-	/// run first. Safe to call from every row at once: it reads the cache and never rebuilds it.
-	[[nodiscard]] RecordCursor cursor_for_row(size_t first_cell_of_row) const {
-		return _L.fresh_ones_cursor_from(first_cell_of_row);
+	/// A pass over L under the current reporting model. L, the paper counts, gamma and the error
+	/// rate do not move until the pass is handed back.
+	[[nodiscard]] TBlockPass begin_block_update() const {
+		return TBlockPass(_L, _classes, _reporting());
 	}
 
-	/// Whether LOTUS holds a record for one cell of the field. L has the field's dimensions, so
-	/// the field's index is already L's. The update asks this once per leaf pair, in ascending
-	/// linear-index order down the row -- a row walks its columns in order -- which is what lets
-	/// this walk the sorted-ones cache forward with the row's own cursor instead of hashing.
-	/// Nothing else calls this out of order: it is `TBlockModel::factors`'s alone.
-	[[nodiscard]] bool holds_a_record(RecordCursor &cursor,
-	                                  const IndexArray &index_in_leaves_space) const {
-		const size_t linear_index = _L.get_linear_index_in_container_space(index_in_leaves_space);
-		return cursor.advance_to_and_check(linear_index);
-	}
-
-	/// prob[0] = P(L_cell | Y = 0), prob[1] = P(L_cell | Y = 1). `reports_the_cell` is whether
-	/// LOTUS holds a record for it, which the caller reads through the accessor above.
-	void calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
-	                           std::array<double, 2> &prob) const;
-
-	/// The paper-count class of a species leaf, and of a molecule leaf: where a present cell is
-	/// counted.
-	[[nodiscard]] uint32_t species_class(size_t species_leaf) const {
-		return _classes.class_of(0, species_leaf);
-	}
-	[[nodiscard]] uint32_t molecule_class(size_t molecule_leaf) const {
-		return _classes.class_of(1, molecule_leaf);
-	}
-	[[nodiscard]] size_t n_molecule_classes() const { return _classes.n_classes(1); }
-	/// The paper-count classes of every leaf, for a count of the present cells from scratch.
-	[[nodiscard]] const lotus_math::TPaperCountClasses &paper_count_classes() const {
-		return _classes;
-	}
-	/// The counts of a field with no present cell, for the block update to count its own into.
-	[[nodiscard]] lotus_math::TPresentCells no_present_cells() const;
-	/// The field's present cells after a block update, which counted them as it drew. Replaces the
-	/// counts and the likelihood read from them.
-	void install_present_cells(lotus_math::TPresentCells cells);
-	[[nodiscard]] const lotus_math::TPresentCells &present_cells() const { return _present_cells; }
+	/// Installs the present cells the pass counted over the whole field, and the likelihood read
+	/// from them.
+	void end_block_update(TBlockPass &&pass);
 
 	// --- MCMC moves on gamma / epsilon ---
 	// Both enter every present cell, and neither moves the field: each builds a candidate reporting

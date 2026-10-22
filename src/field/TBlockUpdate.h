@@ -268,7 +268,7 @@ inline constexpr size_t TILE_COLUMNS = 128;
 /// columns are settled the same way, once per tile rather than once per row: the molecule leaf's
 /// parent node and its branch, and the species tree's clique -- which *is* the molecule leaf. The
 /// ascending order is not cosmetic: it is what lets a data source answer a point query from a
-/// forward cursor (`TLotus::holds_a_record`) rather than by hashing every cell.
+/// forward cursor (LOTUS's pass, lotus/block_pass.h) rather than by hashing every cell.
 ///
 /// No leaf pair reads a cell another one writes, so the interleaving draws what the rows drawn one
 /// after another would: each row's tally and bookkeeping see the same cells in the same order, and

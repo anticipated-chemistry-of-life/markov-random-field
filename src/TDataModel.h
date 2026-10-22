@@ -109,6 +109,9 @@ private:
 
 	// Which data source hands out each pass of TCompiledBlockData. One overload per source that
 	// brings a pass of its own to the block update (ADR-0017).
+#ifdef USE_LOTUS
+	[[nodiscard]] TLotus &_source_of(std::type_identity<TLotus::TBlockPass>) { return _lotus; }
+#endif
 #ifdef USE_SIMPLE_ERROR_MODEL
 	[[nodiscard]] TSimpleErrorModel &_source_of(std::type_identity<TSimpleErrorModel::TBlockPass>) {
 		return _simple_error_model;

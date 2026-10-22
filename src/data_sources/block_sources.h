@@ -5,21 +5,38 @@
 // The block update reads which passes a build carries from this list alone. TDataModel names the
 // data source that hands out each pass. The fold over the list is field/TBlockData.h. The list
 // order is part of the chain (ADR-0017): LOTUS, then the simple error model, then mass
-// spectrometry. LOTUS and mass spectrometry have no pass yet, so the block model multiplies them
-// in at their own positions (field/TBlockModel.h).
+// spectrometry. Mass spectrometry has no pass yet, so the block model multiplies it in after the
+// fold (field/TBlockModel.h).
 //
 
 #pragma once
 
 #include "data_sources/data_source_pass.h"
+#include "lotus/block_pass.h"
 #include "simple_error_model/block_pass.h"
 
 /// A compile-time list of passes.
 template<DataSourcePass... Passes> struct TPassList {};
 
-#ifdef USE_SIMPLE_ERROR_MODEL
-/// Every compiled-in pass, in the order the block update multiplies their cell factors.
-using TBlockSources = TPassList<simple_error_model::TBlockPass>;
+/// The passes of every list, one list after the other.
+template<typename... Lists> struct TPassListConcat;
+template<DataSourcePass... Passes> struct TPassListConcat<TPassList<Passes...>> {
+	using type = TPassList<Passes...>;
+};
+template<DataSourcePass... First, DataSourcePass... Second, typename... Rest>
+struct TPassListConcat<TPassList<First...>, TPassList<Second...>, Rest...>
+    : TPassListConcat<TPassList<First..., Second...>, Rest...> {};
+
+#ifdef USE_LOTUS
+using TLotusPasses = TPassList<lotus_math::TBlockPass>;
 #else
-using TBlockSources = TPassList<>;
+using TLotusPasses = TPassList<>;
 #endif
+#ifdef USE_SIMPLE_ERROR_MODEL
+using TSimpleErrorPasses = TPassList<simple_error_model::TBlockPass>;
+#else
+using TSimpleErrorPasses = TPassList<>;
+#endif
+
+/// Every compiled-in pass, in the order the block update multiplies their cell factors.
+using TBlockSources = typename TPassListConcat<TLotusPasses, TSimpleErrorPasses>::type;

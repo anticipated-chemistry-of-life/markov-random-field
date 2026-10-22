@@ -268,11 +268,9 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	// Each data source that has a pass hands it out, and the model folds them. LOTUS has no pass
-	// yet. It adds its present cells to the accumulator.
+	// Each data source hands out its pass, and the model folds them.
 	TCompiledBlockData data = data_model.begin_block_update();
-	TDataUpdateAccumulator accumulator(data_model);
-	TBlockModel model(_trees, data_model, data, accumulator);
+	TBlockModel model(_trees, data_model, data);
 
 	const field_math::TErrorProbability omega = _error_probability();
 	_link_counters = block_update::run<TLinkPolicy>(
@@ -283,17 +281,8 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// its pass back and installs the tally.
 	data.end_pass(_Y);
 	data_model.end_block_update(std::move(data));
-	accumulator.commit(data_model);
 
 	_trace_link_counters(iteration);
-#ifdef USE_LOTUS
-	// The present cells the rows counted have to be the field's, or every gamma and error-rate move
-	// after this reads the likelihood of another field. A pass over the field, so a debug build's
-	// alone.
-	[[maybe_unused]] const auto &lotus = data_model.get_lotus();
-	DEBUG_ASSERT(lotus.present_cells() ==
-	             lotus_math::count_present_cells(_Y, lotus.get_L(), lotus.paper_count_classes()));
-#endif
 	using namespace coretools::instances;
 	if (ProgramOptions::WRITE_Y_TRACE && (iteration % _coretools_thinning == 0) && !_fix_Y) {
 		_Y_trace_file.writeln(_Y.get_full_Y_binary_vector());

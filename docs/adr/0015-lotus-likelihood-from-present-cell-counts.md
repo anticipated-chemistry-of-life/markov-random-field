@@ -13,13 +13,13 @@ So the likelihood is a function of the parameters and of how many present cells 
 
 `lotus_math::TPresentCells` holds those counts, indexed by each leaf's paper-count class (`TPaperCountClasses`), and `lotus_math::log_likelihood_of_L` reads the likelihood off them: two logarithms per kind. A move costs a few milliseconds and no pass over the field.
 
-The counts change only when the field does, and the field changes only in the block update — which already visits every cell and knows whether LOTUS reports it. So the block update counts them as it draws: a row counts its present cells by molecule class (`TBlockModel::record`), and adds its row of counts to the field's when it ends (`TDataUpdateAccumulator::add_lotus_row`). The field's counts are counted from scratch once, when the data sources take their starting values (`lotus_math::count_present_cells`), and a debug build checks after every block update that what the rows counted is what a count from scratch finds.
+The counts change only when the field does, and the field changes only in the block update — which already visits every cell and knows whether LOTUS reports it. So the block update counts them as it draws, through LOTUS's pass (`lotus_math::TBlockPass`, ADR-0017): a row counts its present cells by molecule class (`record`), and adds its row of counts to the field's when it ends (`end_row`). The field's counts are counted from scratch once, when the data sources take their starting values (`lotus_math::count_present_cells`), and a debug build checks at the end of every block update (`end_pass`) that what the rows counted is what a count from scratch finds.
 
 This is the move ADR-0005 made for omega and the simple error model makes for its error rate: replace a pass over the cells by counts the block update keeps.
 
 ## Determinism
 
-The counts are integers, so they come out the same whichever order the rows add them in. The rows add into one shared set of counts with atomic adds, rather than into a slot per row as `TDataUpdateAccumulator` does for everything else: a row's share is a row of the counts, and a slot per species leaf would be a copy of them per species leaf. The likelihood is then summed over the kinds in class order, so it is a function of the counts and the parameters alone — the same under either backend and at any thread count, which the parity gate checks.
+The counts are integers, so they come out the same whichever order the rows add them in. The rows add into one shared set of counts with atomic adds, rather than into a slot per row: a row's share is a row of the counts, and a slot per species leaf would be a copy of them per species leaf. The likelihood is then summed over the kinds in class order, so it is a function of the counts and the parameters alone — the same under either backend and at any thread count, which the parity gate checks.
 
 The block update no longer sums the LOTUS likelihood per cell, so the per-row `TSumLogProbability` that existed to make that sum schedule-independent is gone.
 

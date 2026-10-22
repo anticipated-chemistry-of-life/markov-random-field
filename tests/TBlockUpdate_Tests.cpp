@@ -30,9 +30,12 @@
 #include "field/TBlockUpdate.h"
 #include "field/TFieldMath.h"
 #include "field/link_backend.h"
+#include "lotus/TLotusMath.h"
+#include "lotus/block_pass.h"
 #include "random/TCellUniforms.h"
 #include "simple_error_model/TSimpleErrorModelMath.h"
 #include "simple_error_model/block_pass.h"
+#include "storages/TSparse.h"
 #include "storages/storage_backend.h"
 #include "storages/y_storage/TStorageYSparse.h"
 #include "storages/z_storage/TStorageZSparse.h"
@@ -187,6 +190,16 @@ block_update::TLeafPairFactors free_tree_factors(size_t species_leaf, size_t mol
 	        .cell_data       = {coretools::P(1.0), coretools::P(1.0)}};
 }
 
+/// Trees that say nothing: every tree field state is as likely as the other, whatever the parent.
+block_update::TLeafPairFactors neutral_tree_factors(size_t /*species_leaf*/,
+                                                    size_t /*molecule_leaf*/,
+                                                    bool /*species_parent*/,
+                                                    bool /*molecule_parent*/) {
+	return {.prob_z_s_is_one = coretools::P(0.5),
+	        .prob_z_m_is_one = coretools::P(0.5),
+	        .cell_data       = {coretools::P(1.0), coretools::P(1.0)}};
+}
+
 /// A model that leaves the draw a real choice at every leaf pair, and accumulates a likelihood:
 /// one running sum of logs per field row, handed over when the row ends.
 ///
@@ -241,8 +254,7 @@ public:
 
 	void end_row(TRow &row) { _per_row[row.species_leaf] = row.log_likelihood; }
 
-	/// Not const: `TSumLogProbability::getSum` is not, and the production accumulator's `commit`
-	/// reads its slots the same way.
+	/// Not const, because `TSumLogProbability::getSum` is not.
 	[[nodiscard]] double log_likelihood() {
 		double sum = 0.0;
 		for (auto &row : _per_row) { sum += row.getSum(); }
@@ -256,10 +268,11 @@ private:
 static_assert(block_update::BlockModel<TFreeModel>,
               "The free model must answer what the block update asks a model.");
 
-/// The free model's trees, with the real data fold (field/TBlockData.h) in place of its data: what
-/// the production block model is, with test trees. The fold is driven through the hooks the
-/// production model drives it through, in the same places.
-template<typename Data> class TFoldModel {
+/// A pair of test trees, with the real data fold (field/TBlockData.h) in place of the free model's
+/// data: what the production block model is, with test trees. The fold is driven through the hooks
+/// the production model drives it through, in the same places. The trees are the free model's
+/// unless the test names others.
+template<typename Data, auto tree_factors = free_tree_factors> class TFoldModel {
 public:
 	explicit TFoldModel(Data &data) : _data(data) {}
 
@@ -283,7 +296,7 @@ public:
 	                                                     size_t molecule_leaf, bool species_parent,
 	                                                     bool molecule_parent) const {
 		auto factors =
-		    free_tree_factors(row.species_leaf, molecule_leaf, species_parent, molecule_parent);
+		    tree_factors(row.species_leaf, molecule_leaf, species_parent, molecule_parent);
 		const std::array<double, 2> cell_data = _data.cell_factor(row.data, molecule_leaf);
 		factors.cell_data = {coretools::P(cell_data[0]), coretools::P(cell_data[1])};
 		return factors;
@@ -304,6 +317,9 @@ private:
 
 /// The fold over the simple error model's pass alone.
 using TSimpleErrorData = TBlockData<simple_error_model::TBlockPass>;
+
+/// The fold over LOTUS's pass alone.
+using TLotusData = TBlockData<lotus_math::TBlockPass>;
 
 static_assert(block_update::BlockModel<TFoldModel<TSimpleErrorData>>,
               "The fold model must answer what the block update asks a model.");
@@ -671,6 +687,98 @@ TYPED_TEST(BlockData, near_certain_simple_error_data_decides_the_field) {
 
 		EXPECT_EQ(states_of(Y), states_of(D));
 		EXPECT_EQ(data.template pass<simple_error_model::TBlockPass>().n_disagree(), 0U);
+	}
+}
+
+/// The paper counts of every leaf: none zero, so research effort reaches every cell, and several
+/// distinct ones per tree, so present cells land in more than one kind.
+std::vector<std::vector<size_t>> paper_counts_of(const TTreePair &pair) {
+	std::vector<std::vector<size_t>> counts(2);
+	counts[0].resize(pair.species.n_leaves());
+	counts[1].resize(pair.molecule.n_leaves());
+	for (size_t s = 0; s < counts[0].size(); ++s) { counts[0][s] = 1 + (s * 7) % 5; }
+	for (size_t m = 0; m < counts[1].size(); ++m) { counts[1][m] = 2 + (m * 3) % 7; }
+	return counts;
+}
+
+/// LOTUS's pass commits the present cells of the field the update left, by kind: the counts every
+/// gamma and error-rate move reads in place of the field (ADR-0015). At one thread and at four,
+/// because rows add their counts on many threads at once.
+TYPED_TEST(BlockData, the_lotus_tally_is_the_present_cells_of_the_field) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		const auto paper_counts = paper_counts_of(pair);
+		const lotus_math::TPaperCountClasses classes(paper_counts);
+		const lotus_math::TReportingModel reporting({0.7, 1.3}, 0.05, paper_counts);
+		for (const size_t n_threads : {size_t{1}, size_t{4}}) {
+			SCOPED_TRACE(std::to_string(n_threads) + " threads");
+			const TThreadCount threads(n_threads);
+			auto Y          = make_storage<Field>(field_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+			auto L          = TSparseBinary(field_shape(pair));
+			seed_ones(Y, 1);
+			seed_ones(Z_species, 2);
+			seed_ones(Z_molecule, 3);
+			seed_ones(L, 5);
+
+			TLotusData data{lotus_math::TBlockPass(L, classes, reporting)};
+			TFoldModel<TLotusData> model(data);
+			const TCellUniforms uniforms(4242, TCellStream::field, 23);
+			(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+			                                     pair.molecule,
+			                                     field_math::TErrorProbability(OMEGA), model,
+			                                     uniforms);
+			data.end_pass(Y);
+
+			EXPECT_EQ(data.template pass<lotus_math::TBlockPass>().present_cells(),
+			          lotus_math::count_present_cells(Y, L, classes));
+		}
+	}
+}
+
+/// LOTUS is near-certain here: it almost never reports an absent cell, and almost always reports a
+/// present one. The trees are neutral. So the field the update leaves is the records, cell for
+/// cell. The pass asks its cursor about the cell being drawn. A cursor that answers for another
+/// cell leaves a cell that disagrees, at a tile seam or anywhere else.
+TYPED_TEST(BlockData, near_certain_lotus_records_decide_the_field) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	ASSERT_TRUE(std::any_of(tree_pairs().begin(), tree_pairs().end(), [](const auto &pair) {
+		return pair.molecule.n_leaves() > block_update::TILE_COLUMNS;
+	})) << "no field spans more than one tile of columns, so no tile seam is tested";
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		const TThreadCount threads(4);
+		const auto paper_counts = paper_counts_of(pair);
+		const lotus_math::TPaperCountClasses classes(paper_counts);
+		// Every paper count is at least 1, so each detection factor is at least 1 - 2^-40.
+		const lotus_math::TReportingModel reporting({40.0, 40.0}, 1e-12, paper_counts);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		auto L          = TSparseBinary(field_shape(pair));
+		// The field starts elsewhere than the records, so it has to move to get there.
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+		seed_ones(L, 5);
+		ASSERT_NE(states_of(Y), states_of(L));
+
+		TLotusData data{lotus_math::TBlockPass(L, classes, reporting)};
+		TFoldModel<TLotusData, neutral_tree_factors> model(data);
+		const TCellUniforms uniforms(4242, TCellStream::field, 29);
+		(void)block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species,
+		                                     pair.molecule, field_math::TErrorProbability(OMEGA),
+		                                     model, uniforms);
+		data.end_pass(Y);
+
+		EXPECT_EQ(states_of(Y), states_of(L));
 	}
 }
 

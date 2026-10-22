@@ -74,16 +74,6 @@ TNtfyNotifier::ParamStats TLotus::error_rate_stats() const {
 	return {_error_rate->mean(0), _error_rate->var(0), _error_rate->sd(0)};
 }
 
-/// This function will be used when we update Y.
-void TLotus::calculate_LL_update_Y(const IndexArray &index_in_leaves_space, bool reports_the_cell,
-                                   std::array<double, 2> &prob) const {
-	// A field cell is its own L cell now, so the emission depends on this cell alone: no clique of
-	// other cells can make L's latent state one while this one is zero.
-	for (size_t i = 0; i < 2; ++i) {
-		prob[i] = _reporting().probability(i, reports_the_cell, index_in_leaves_space);
-	}
-}
-
 double TLotus::ll_ratio_after_parameter_move() {
 	// One function for both gamma and the error rate: the reporting model is built from both, so a
 	// move on either replaces it wholesale. Neither moves the field, so the present cells the last
@@ -108,7 +98,7 @@ void TLotus::guess_initial_values(const TFieldStorage &Y) {
 
 	_reporting_model = _build_reporting_model(); // parameters just set -> build before the LL
 
-	install_present_cells(lotus_math::count_present_cells(Y, _L, _classes));
+	_install_present_cells(lotus_math::count_present_cells(Y, _L, _classes));
 	_oldLL = _curLL;
 }
 
@@ -136,13 +126,13 @@ double TLotus::_log_likelihood_of_present_cells() const {
 	                                       (double)_error_rate->value());
 }
 
-lotus_math::TPresentCells TLotus::no_present_cells() const {
-	return {_L.total_size_of_container_space(), _L.number_of_ones(), _classes};
-}
-
-void TLotus::install_present_cells(lotus_math::TPresentCells cells) {
+void TLotus::_install_present_cells(lotus_math::TPresentCells cells) {
 	_present_cells = std::move(cells);
 	_curLL         = _log_likelihood_of_present_cells();
+}
+
+void TLotus::end_block_update(TBlockPass &&pass) {
+	_install_present_cells(std::move(pass).present_cells());
 }
 
 void TLotus::prepare_for_simulation() {
