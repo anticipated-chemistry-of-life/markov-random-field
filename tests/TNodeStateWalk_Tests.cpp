@@ -119,7 +119,7 @@ TEST(NodeStateWalk, visits_every_internal_node_once_and_no_leaf) {
 	const TTransitionGrid process(0.4, 1.0, grid);
 	const TPhylogeny topology =
 	    build_phylogeny({edge("a", "inner"), edge("b", "inner"), edge("inner", "root"),
-	                     edge("c", "root"), edge("d", "second_root")});
+		                 edge("c", "root"), edge("d", "second_root")});
 	ASSERT_GT(topology.n_leaves(), 0u);
 	ASSERT_EQ(topology.n_roots(), 2u);
 

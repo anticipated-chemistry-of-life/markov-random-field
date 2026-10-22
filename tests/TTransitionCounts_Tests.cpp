@@ -150,7 +150,7 @@ TEST(TransitionCounts, a_probability_of_zero_no_node_reaches_leaves_the_score_fi
 	// state 0, so the ruled-out transition has a count of zero.
 	const TPhylogeny topology =
 	    build_phylogeny({phylo::edge("a", "inner"), phylo::edge("b", "inner"),
-	                     phylo::edge("inner", "root"), phylo::edge("c", "root")});
+		                 phylo::edge("inner", "root"), phylo::edge("c", "root")});
 	TColumn states(topology.n_nodes());
 	for (size_t node = 0; node < topology.n_nodes(); ++node) { states.set_state(node, true); }
 	const clique::TBinPerBranch bins{N_BINS};

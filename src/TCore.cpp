@@ -102,7 +102,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
       ,
       _mass_spec_filters("filter_proba", &_prior_on_mass_spec_filter, {_prefix}),
       _contamination_proba("contamination_proba", &_prior_contamination_proba,
-                           {_prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
+	                       {_prefix, ProgramOptions::FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA})
 #endif
 {
 	// The support is set before stattools sizes any parameter. A value stattools makes then is

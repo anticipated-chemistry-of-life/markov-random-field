@@ -443,7 +443,7 @@ template<typename Storage> class StorageConformance : public ::testing::Test {};
 /// observed data is held in.
 using Storages =
     ::testing::Types<TStorageZSparse, TStorageZDense, TStorageZDenseFirstDimensionContiguous,
-                     TStorageYSparse, TStorageYDense, TSparseBinary, TDenseBinary>;
+	                 TStorageYSparse, TStorageYDense, TSparseBinary, TDenseBinary>;
 TYPED_TEST_SUITE(StorageConformance, Storages, StorageNames);
 
 template<typename Storage> class HandleConformance : public ::testing::Test {};

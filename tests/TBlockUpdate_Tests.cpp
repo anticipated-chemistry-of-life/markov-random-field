@@ -372,7 +372,7 @@ TYPED_TEST(BlockUpdate, visits_every_leaf_pair_exactly_once) {
 	const bool a_pairing_has_seams =
 	    std::any_of(tree_pairs().begin(), tree_pairs().end(), [](const auto &pair) {
 		    return pair.species.n_leaves() > block_update::BAND_ROWS &&
-		           pair.molecule.n_leaves() > block_update::TILE_COLUMNS;
+			       pair.molecule.n_leaves() > block_update::TILE_COLUMNS;
 	    });
 	ASSERT_TRUE(a_pairing_has_seams) << "no pairing crosses a band or a tile, so no seam is tested";
 
@@ -552,7 +552,7 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 		const TCellUniforms uniforms(4242, TCellStream::field, 11);
 		const field_math::TLinkCounters kept =
 		    block_update::run<TLinkPolicy>(Y, Z_species, Z_molecule, pair.species, pair.molecule,
-		                                   field_math::TErrorProbability(OMEGA), model, uniforms);
+			                               field_math::TErrorProbability(OMEGA), model, uniforms);
 
 		const field_math::TLinkCounters expected = recount(Y, Z_species, Z_molecule, pair);
 
@@ -870,8 +870,8 @@ TYPED_TEST(BlockData, mass_spec_decides_the_rows_with_runs_and_leaves_the_others
 
 		const auto without = field_after(TSimpleErrorData{simple_error_model::TBlockPass(D, 0.2)});
 		const auto with    = field_after(TMassSpecData{
-            simple_error_model::TBlockPass(D, 0.2),
-            mass_spec_math::TBlockPass(runs, filter_probabilities, n_molecules, 1e-12)});
+		    simple_error_model::TBlockPass(D, 0.2),
+		    mass_spec_math::TBlockPass(runs, filter_probabilities, n_molecules, 1e-12)});
 
 		for (size_t s = 0; s < n_species; ++s) {
 			for (size_t m = 0; m < n_molecules; ++m) {

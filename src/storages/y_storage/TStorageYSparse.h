@@ -56,7 +56,7 @@ public:
 		// even for a chain with no iterations to thin.
 		_thinning_factor =
 		    std::max<size_t>(1, static_cast<size_t>(std::ceil(static_cast<double>(n_iterations) /
-		                                                      static_cast<double>(MAX_COUNTER))));
+			                                                  static_cast<double>(MAX_COUNTER))));
 		_total_counts = 0;
 		initialize_dimensions(dimensions);
 	}

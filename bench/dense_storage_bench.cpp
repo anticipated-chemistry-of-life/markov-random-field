@@ -612,13 +612,13 @@ TResult run_arma(const std::string &name, const TOptions &options, const TModelI
 	auto species_view  = [&](size_t c) { return TArmaCliqueColumn<TZs, true>(Z_s, c); };
 	auto molecule_view = [&](size_t c) { return TArmaCliqueColumn<TZm, false>(Z_m, c); };
 	auto walk          = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
-                    size_t n_cliques, size_t dimension, size_t iteration) {
-        const TCellUniforms uniforms(SEED, TCellStream::node_state, iteration, dimension);
-        auto bins   = process.bin_of();
-        auto kernel = [&](size_t /*c*/, auto &view) {
-            node_state_walk::update_clique(tree, process.grid, bins, uniforms, view);
-        };
-        (void)clique_traversal::run(n_cliques, view_factory, kernel);
+	                         size_t n_cliques, size_t dimension, size_t iteration) {
+		const TCellUniforms uniforms(SEED, TCellStream::node_state, iteration, dimension);
+		auto bins   = process.bin_of();
+		auto kernel = [&](size_t /*c*/, auto &view) {
+			node_state_walk::update_clique(tree, process.grid, bins, uniforms, view);
+		};
+		(void)clique_traversal::run(n_cliques, view_factory, kernel);
 	};
 	auto density = [&](auto &view_factory, const TPhylogeny &tree, const TProcess &process,
 	                   size_t n_cliques) {
@@ -745,12 +745,12 @@ int main(int argc, char **argv) {
 	const bool real = !options.species_tree.empty();
 	const TPhylogeny species =
 	    real ? read_phylogeny(options.species_tree)
-	         : synthetic_tree(scaled(LOTUS_SPECIES[0]), scaled(LOTUS_SPECIES[1]), LOTUS_SPECIES[2],
-	                          SEED + 1);
+		     : synthetic_tree(scaled(LOTUS_SPECIES[0]), scaled(LOTUS_SPECIES[1]), LOTUS_SPECIES[2],
+		                      SEED + 1);
 	const TPhylogeny molecule =
 	    real ? read_phylogeny(options.molecule_tree)
-	         : synthetic_tree(scaled(LOTUS_MOLECULE[0]), scaled(LOTUS_MOLECULE[1]),
-	                          LOTUS_MOLECULE[2], SEED + 2);
+		     : synthetic_tree(scaled(LOTUS_MOLECULE[0]), scaled(LOTUS_MOLECULE[1]),
+		                      LOTUS_MOLECULE[2], SEED + 2);
 
 	const TBinGrid bin_grid(options.n_bins);
 	const TProcess species_process(species, bin_grid, SEED + 3);

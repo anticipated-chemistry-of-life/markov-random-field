@@ -69,7 +69,7 @@ std::array<double, 8> brute_force_block(double p_s, double p_m, double omega,
 			for (const bool z_m : {false, true}) {
 				const double link = brute_force_prob_y_is_one(z_s, z_m, omega);
 				const double w    = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m) *
-				                 (y ? link : 1.0 - link) * data[static_cast<size_t>(y)];
+				                    (y ? link : 1.0 - link) * data[static_cast<size_t>(y)];
 				weight[state_index(y, z_s, z_m)] = w;
 				total += w;
 			}
@@ -567,7 +567,7 @@ TEST(FieldMath_Tests, block_probabilities_match_brute_force_enumeration) {
 			for (const double p_m : {0.1, 0.5, 0.8}) {
 				const auto got =
 				    block_probabilities<TLinkPolicy>(coretools::P(p_s), coretools::P(p_m),
-				                                     TErrorProbability(w), as_probabilities(data));
+					                                 TErrorProbability(w), as_probabilities(data));
 				const auto want = brute_force_block(p_s, p_m, w, data);
 				for (size_t i = 0; i < 8; ++i) {
 					EXPECT_NEAR(got[i], want[i], 1e-14) << "state " << i << ", omega = " << w
@@ -601,7 +601,7 @@ TEST(FieldMath_Tests, the_block_reduces_to_the_link_when_the_data_says_nothing) 
 			for (const double p_m : {0.3, 0.7}) {
 				const auto block =
 				    block_probabilities<TLinkPolicy>(coretools::P(p_s), coretools::P(p_m),
-				                                     TErrorProbability(w), as_probabilities(flat));
+					                                 TErrorProbability(w), as_probabilities(flat));
 				double prob_y_is_one = 0.0;
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
@@ -637,12 +637,12 @@ TEST(FieldMath_Tests, the_block_leaves_the_tree_priors_alone_when_the_data_says_
 			for (const double p_m : {0.25, 0.75}) {
 				const auto block =
 				    block_probabilities<TLinkPolicy>(coretools::P(p_s), coretools::P(p_m),
-				                                     TErrorProbability(w), as_probabilities(flat));
+					                                 TErrorProbability(w), as_probabilities(flat));
 				for (const bool z_s : {false, true}) {
 					for (const bool z_m : {false, true}) {
 						const double want = (z_s ? p_s : 1.0 - p_s) * (z_m ? p_m : 1.0 - p_m);
 						const double got  = block[state_index(false, z_s, z_m)] +
-						                   block[state_index(true, z_s, z_m)];
+						                    block[state_index(true, z_s, z_m)];
 						EXPECT_NEAR(got, want, 1e-14)
 						    << "omega = " << w << ", p_s = " << p_s << ", p_m = " << p_m
 						    << ", Z_s = " << z_s << ", Z_m = " << z_m;
@@ -732,8 +732,8 @@ TEST(FieldMath_Tests, the_draw_reproduces_the_eight_probabilities_over_many_unif
 			for (size_t i = 0; i < n_uniforms; ++i) {
 				const double uniform = uniform_on_grid(i, n_uniforms);
 				const auto draw      = draw_block<TLinkPolicy>(
-                    coretools::P(p_s), coretools::P(0.4), TErrorProbability(w),
-                    as_probabilities(data), TBlockStates{}, uniform);
+				    coretools::P(p_s), coretools::P(0.4), TErrorProbability(w),
+				    as_probabilities(data), TBlockStates{}, uniform);
 				++drawn[state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m)];
 			}
 
@@ -755,7 +755,7 @@ TEST(FieldMath_Tests, the_draw_rises_with_the_uniform) {
 		const double uniform = uniform_on_grid(i, 5000);
 		const auto draw =
 		    draw_block<TLinkPolicy>(coretools::P(0.3), coretools::P(0.6), TErrorProbability(0.1),
-		                            as_probabilities(data), TBlockStates{}, uniform);
+			                        as_probabilities(data), TBlockStates{}, uniform);
 		const size_t index = state_index(draw.drawn.y, draw.drawn.z_s, draw.drawn.z_m);
 		EXPECT_GE(index, previous) << "uniform = " << uniform;
 		previous = index;
@@ -775,7 +775,7 @@ TEST(FieldMath_Tests, the_draw_never_reaches_a_state_with_no_mass) {
 		    i < n_uniforms ? uniform_on_grid(i, n_uniforms) : std::nextafter(1.0, 0.0);
 		const auto draw =
 		    draw_block<TLinkPolicy>(coretools::P(0.9), coretools::P(0.9), TErrorProbability(0.01),
-		                            as_probabilities(data), TBlockStates{}, uniform);
+			                        as_probabilities(data), TBlockStates{}, uniform);
 		ASSERT_FALSE(draw.drawn.y) << "uniform = " << uniform;
 	}
 }
@@ -783,8 +783,8 @@ TEST(FieldMath_Tests, the_draw_never_reaches_a_state_with_no_mass) {
 TEST(FieldMath_Tests, the_draw_rejects_a_uniform_outside_the_unit_interval) {
 	const std::array<double, 2> flat = {1.0, 1.0};
 	const auto draw_at               = [&flat](double uniform) {
-        return draw_block<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
-		                                             as_probabilities(flat), TBlockStates{}, uniform);
+		return draw_block<TLinkPolicy>(coretools::P(0.5), coretools::P(0.5), TErrorProbability(0.1),
+		                               as_probabilities(flat), TBlockStates{}, uniform);
 	};
 	EXPECT_THROW(draw_at(1.0), std::invalid_argument);
 	EXPECT_THROW(draw_at(-1e-9), std::invalid_argument);
@@ -802,7 +802,7 @@ TEST(FieldMath_Tests, the_counter_move_names_the_cells_the_states_fall_in) {
 				const TBlockStates current{.y = y, .z_s = z_s, .z_m = z_m};
 				const auto draw =
 				    draw_block<TLinkPolicy>(coretools::P(0.4), coretools::P(0.6), omega,
-				                            as_probabilities(flat), current, 0.37);
+					                        as_probabilities(flat), current, 0.37);
 				// the cell it leaves is named by the states it was in
 				EXPECT_EQ(draw.from.bucket,
 				          bucket_written_out(TCell{.z_s = z_s, .z_m = z_m, .y = y}));
@@ -868,8 +868,8 @@ TEST(FieldMath_Tests, the_counter_moves_match_a_full_recomputation_after_many_dr
 		for (size_t i = 0; i < n_cells; ++i) {
 			const auto &scalar = scalars[i];
 			const auto draw    = draw_block<TLinkPolicy>(
-                coretools::P(scalar.p_s), coretools::P(scalar.p_m), omega,
-                as_probabilities(scalar.data), as_block_states(cells[i]), generator.next());
+			    coretools::P(scalar.p_s), coretools::P(scalar.p_m), omega,
+			    as_probabilities(scalar.data), as_block_states(cells[i]), generator.next());
 			// the two lines a traversal writes, and the only two
 			counters.remove(draw.from.bucket, draw.from.y);
 			counters.add(draw.to.bucket, draw.to.y);

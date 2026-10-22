@@ -44,8 +44,8 @@ TMassSpecRun make_run(std::vector<std::vector<TFeatureLikelihood>> features,
 TMassSpecRun make_overlapping_run() {
 	return make_run(
 	    {{TFeatureLikelihood(10, 100), TFeatureLikelihood(20, 120)},
-	     {TFeatureLikelihood(10, 90), TFeatureLikelihood(20, 80), TFeatureLikelihood(30, 70)},
-	     {TFeatureLikelihood(20, 60), TFeatureLikelihood(30, 50)}},
+		 {TFeatureLikelihood(10, 90), TFeatureLikelihood(20, 80), TFeatureLikelihood(30, 70)},
+		 {TFeatureLikelihood(20, 60), TFeatureLikelihood(30, 50)}},
 	    {50, 60, 70});
 }
 
@@ -237,7 +237,7 @@ TEST(TAssignmentUpdate_Tests, hastings_swap_with_unknown) {
 	// as a candidate, so feature 0 is the only possible driver of this move.
 	auto run = make_run(
 	    {{TFeatureLikelihood(10, 100), TFeatureLikelihood(20, 120)},
-	     {TFeatureLikelihood(10, 90), TFeatureLikelihood(20, 80), TFeatureLikelihood(30, 70)}},
+		 {TFeatureLikelihood(10, 90), TFeatureLikelihood(20, 80), TFeatureLikelihood(30, 70)}},
 	    {50, 60});
 	run.set_current_assignment(1, TFeatureLikelihood(20, 80));
 

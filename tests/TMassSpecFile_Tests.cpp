@@ -126,7 +126,7 @@ TEST(TMassSpecFile_Tests, a_skipped_molecule_sets_its_features_reference) {
 TEST(TMassSpecFile_Tests, a_feature_with_only_skipped_candidates_is_not_loaded_and_is_counted) {
 	const auto loaded =
 	    load(row("Ilex", "e1", "f1", "aspirin", "1") + row("Ilex", "e1", "f1", "morphine", "0.5") +
-	         row("Ilex", "e1", "f2", "caffeine", "1") + row("Quercus", "e1", "f1", "aspirin", "1"));
+		     row("Ilex", "e1", "f2", "caffeine", "1") + row("Quercus", "e1", "f1", "aspirin", "1"));
 
 	EXPECT_EQ(loaded.report.features_not_loaded, 2);
 	const auto &ilex = loaded.runs_per_species.at(0);
@@ -181,7 +181,7 @@ TEST(TMassSpecFile_Tests, a_score_that_is_not_a_positive_finite_number_is_an_err
 		expect_user_error(
 		    [&] {
 			    (void)load(row("Ilex", "e1", "f1", "caffeine", "1") +
-			               row("Ilex", "e1", "f1", "rutin", score));
+				           row("Ilex", "e1", "f1", "rutin", score));
 		    },
 		    "score '" + score + "'");
 	}

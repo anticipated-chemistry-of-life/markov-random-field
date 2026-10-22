@@ -28,7 +28,7 @@ TDataModel::TDataModel(std::vector<std::unique_ptr<TTree>> &trees, const TDataSo
 #endif
 #ifdef USE_MS_DATA
       _msms_data(trees, _markov_field, NUMBER_OF_MS_FILTERS, sources.mass_spec_filters,
-                 sources.contamination_proba),
+	             sources.contamination_proba),
       _mass_spec_filters(sources.mass_spec_filters),
       _contamination_proba(sources.contamination_proba),
 #endif
@@ -135,8 +135,8 @@ void TDataModel::end_block_update(TCompiledBlockData &&data) {
 	std::apply(
 	    [this]<typename... Passes>(Passes &&...pass) {
 		    (_source_of(std::type_identity<std::remove_cvref_t<Passes>>{})
-		         .end_block_update(std::forward<Passes>(pass)),
-		     ...);
+			     .end_block_update(std::forward<Passes>(pass)),
+			 ...);
 	    },
 	    std::move(data).take_passes());
 }

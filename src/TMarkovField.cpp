@@ -272,8 +272,8 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 
 	const field_math::TErrorProbability omega = _error_probability();
 	_link_counters                            = block_update::run<TLinkPolicy>(
-        _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
-        _trees.back()->phylogeny(), omega, model, field_uniforms);
+	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
+	    _trees.back()->phylogeny(), omega, model, field_uniforms);
 
 	// Each pass finishes its tally against the field the update left. Then each data source takes
 	// its pass back and installs the tally.

@@ -61,11 +61,15 @@ nlohmann_json = "*"
 libopenblas = { version = "*", build = "*openmp*" }
 # gperftools' CPU profiler, which the `profile` mode links (ACOL_PROFILING).
 gperftools = "*"
+clang-format = ">=23.1.4,<24"
 
 # On Linux the conda gcc brings its own libgomp; forcing llvm-openmp there would
 # flip _openmp_mutex to the llvm variant and break it.
 [target.osx.dependencies]
 llvm-openmp = "*"
+
+[tasks]
+fmt = "find src/ bench/ tests/ -iname '*.h' -o -iname '*.cpp' | xargs clang-format -i"
 
 [tasks.configure]
 args = [{ arg = "preset", default = "debug-ls" }]

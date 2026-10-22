@@ -112,9 +112,9 @@ using BlockModelColumn = std::remove_cvref_t<decltype(std::declval<T &>().begin_
 template<typename T>
 concept BlockModel =
     requires(T &model, BlockModelRow<T> &row, const BlockModelColumn<T> &column,
-             size_t species_leaf, size_t first_field_cell, size_t molecule_leaf,
-             bool species_parent, bool molecule_parent, const TLeafPairFactors &factors,
-             const field_math::TBlockStates &drawn) {
+	         size_t species_leaf, size_t first_field_cell, size_t molecule_leaf,
+	         bool species_parent, bool molecule_parent, const TLeafPairFactors &factors,
+	         const field_math::TBlockStates &drawn) {
 	    { model.begin_row(species_leaf, first_field_cell) } -> std::same_as<BlockModelRow<T>>;
 	    { model.begin_column(molecule_leaf) } -> std::same_as<BlockModelColumn<T>>;
 	    {
@@ -225,7 +225,7 @@ void update_cell(TRow<ModelRow> &row, const TColumn<ModelColumn> &column, Field 
 	// decide what it gets.
 	const auto draw =
 	    field_math::draw_block<Policy>(factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega,
-	                                   factors.cell_data, current, uniforms.at(field_cell));
+		                               factors.cell_data, current, uniforms.at(field_cell));
 
 	// Write each cell back where it was read from. A storage that holds the cell takes the write in
 	// place, and one that does not hands the cell back for a later insert.
@@ -296,11 +296,11 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 		const size_t first_field_cell = species_leaf * n_molecule_leaves;
 		rows.push_back(
 		    {.species_leaf            = species_leaf,
-		     .first_field_cell        = first_field_cell,
-		     .species_position        = row_term(Z_species, species_leaf),
-		     .species_parent_position = row_term(Z_species, species.parent_of(species_leaf)),
-		     .molecule_position       = row_term(Z_molecule, species_leaf),
-		     .model_row               = model.begin_row(species_leaf, first_field_cell)});
+			 .first_field_cell        = first_field_cell,
+			 .species_position        = row_term(Z_species, species_leaf),
+			 .species_parent_position = row_term(Z_species, species.parent_of(species_leaf)),
+			 .molecule_position       = row_term(Z_molecule, species_leaf),
+			 .model_row               = model.begin_row(species_leaf, first_field_cell)});
 	}
 	std::vector<field_math::TLinkCounters> counters(rows.size());
 	std::vector<TColumn<BlockModelColumn<Model>>> columns;
@@ -380,7 +380,7 @@ template<field_math::LinkPolicy Policy, typename Field, typename NodeState, Bloc
 #pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS)                            \
     schedule(dynamic) default(none)                                                                \
     shared(Y, Z_species, Z_molecule, species, molecule, omega, model, uniforms, per_row_counters,  \
-               field_inserts, species_inserts, molecule_inserts, n_rows, n_columns, n_bands)
+	           field_inserts, species_inserts, molecule_inserts, n_rows, n_columns, n_bands)
 	for (size_t band = 0; band < n_bands; ++band) {
 		const auto thread      = static_cast<size_t>(omp_get_thread_num());
 		const size_t first_row = band * BAND_ROWS;

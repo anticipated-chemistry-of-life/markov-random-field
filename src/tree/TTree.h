@@ -263,8 +263,8 @@ public:
 		// move with the thread count and the trace would stop being reproducible from its seed.
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
-            return node_state_density::log_density_of_clique(_topology(), transition_grid(c),
-			                                                       states, _bins());
+			return node_state_density::log_density_of_clique(_topology(), transition_grid(c),
+			                                                 states, _bins());
 		};
 		auto [per_clique, inserts] = clique_traversal::run(n_cliques(), view_factory, kernel);
 
@@ -288,7 +288,7 @@ public:
 
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {
-            _initialize_clique_from_children(c, states);
+			_initialize_clique_from_children(c, states);
 		};
 		const auto indices_to_insert = clique_traversal::run(n_cliques(), view_factory, kernel);
 
