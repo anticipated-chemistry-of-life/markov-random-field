@@ -4,14 +4,17 @@
 // It runs the node-state update, the Metropolis move on alpha, the Metropolis move on nu and the
 // Metropolis move on the branch lengths, in this order:
 //   1. Read every branch's current bin, and propose every clique's alpha.
-//   2. Parallel region: the node-state update (unless `FixZ`), then alpha's two scores per clique.
-//      One score is under the installed grid. The other is under the candidate grid, built from
-//      the proposed alpha and the accepted nu.
+//   2. Parallel region: the node-state update (unless `FixZ`), then each clique's transition counts
+//      (tree/transition_counts.h), and alpha's two scores read off them. One score is under the
+//      installed grid. The other is under the candidate grid, built from the proposed alpha and the
+//      accepted nu.
 //   3. Serial alpha decisions in clique order. The tree update installs each accepted candidate
 //      grid.
 //   4. Propose every clique's log nu.
-//   5. Parallel region: nu's candidate score per clique, under the grid built from the accepted
-//      alpha and the proposed nu. The installed score is the one the clique ended alpha on.
+//   5. Parallel loop: nu's candidate score per clique, read off the same counts under the grid
+//      built from the accepted alpha and the proposed nu. No node state is read: the walk does not
+//      run again and no bin has moved, so the counts are still the clique's. The installed score is
+//      the one the clique ended alpha on.
 //   6. Serial nu decisions in clique order. The tree update installs each accepted candidate grid.
 //   7. Draw this iteration's branch pairs, then each pair's coin in pair order, only where the bin
 //      grid leaves the direction free. Each pair's proposed bins follow the bin grid's step rule.
@@ -41,6 +44,7 @@
 #include "tree/clique/clique_traversal.h"
 #include "tree/node_state_density.h"
 #include "tree/node_state_walk.h"
+#include "tree/transition_counts.h"
 
 #include <algorithm>
 #include <array>
@@ -117,51 +121,6 @@ concept TreeMoves = requires(T &moves, const T &read_only_moves, size_t clique, 
 
 namespace detail {
 
-/// One clique's log-likelihood under each of two transition grids, in one pass over its nodes.
-///
-/// A root is scored against the stationary distribution, and every other node against its parent.
-/// The function adds the terms per node in node order. One pass reads each state once for both
-/// scores.
-template<CliqueStates States, BranchBins Bins, TransitionGridLike ProcessA,
-         TransitionGridLike ProcessB>
-[[nodiscard]] std::array<double, 2> clique_LL(const TPhylogeny &topology, const Bins &bin_of,
-                                              const States &states, const ProcessA &a,
-                                              const ProcessB &b) {
-	coretools::TSumLogProbability LL_a;
-	coretools::TSumLogProbability LL_b;
-	for (size_t node = 0; node < topology.n_nodes(); ++node) {
-		const bool state = states.is_one(node);
-		if (topology.is_root(node)) {
-			LL_a.add(a.stationary(state));
-			LL_b.add(b.stationary(state));
-		} else {
-			const size_t bin           = bin_of(node);
-			const bool state_of_parent = states.is_one(topology.parent_of(node));
-			LL_a.add(a.probability(bin, state_of_parent, state));
-			LL_b.add(b.probability(bin, state_of_parent, state));
-		}
-	}
-	return {LL_a.getSum(), LL_b.getSum()};
-}
-
-/// One clique's log-likelihood under one transition grid. This function adds the terms in the
-/// order `clique_LL` above adds them, so a score of the same grid is the same double.
-template<CliqueStates States, BranchBins Bins, TransitionGridLike Process>
-[[nodiscard]] double clique_LL(const TPhylogeny &topology, const Bins &bin_of,
-                               const States &states, const Process &process) {
-	coretools::TSumLogProbability LL;
-	for (size_t node = 0; node < topology.n_nodes(); ++node) {
-		const bool state = states.is_one(node);
-		if (topology.is_root(node)) {
-			LL.add(process.stationary(state));
-		} else {
-			const bool state_of_parent = states.is_one(topology.parent_of(node));
-			LL.add(process.probability(bin_of(node), state_of_parent, state));
-		}
-	}
-	return LL.getSum();
-}
-
 /// How many slots the branch-length ratio is summed in before it is reduced.
 ///
 /// A clique belongs to slot `c / cliques_per_slot` whatever thread runs it, and the slots are
@@ -216,7 +175,8 @@ template<bool FixZ, typename NodeState, CellUniforms Uniforms, TreeMoves Moves, 
 node_states_and_alpha(const TPhylogeny &topology, size_t n, NodeState &Z,
                       TTransitionGridTable &grids, const TBinGrid &bin_grid,
                       const Uniforms &uniforms, Moves &moves, const BinOf &bin_of,
-                      const ViewFactory &view_factory) {
+                      const ViewFactory &view_factory,
+                      transition_counts::TTransitionCountTable &counts) {
 	moves.propose_alphas();
 	std::vector<double> proposed_alpha(n);
 	std::vector<double> accepted_nu(n);
@@ -225,15 +185,19 @@ node_states_and_alpha(const TPhylogeny &topology, size_t n, NodeState &Z,
 		accepted_nu[c]    = std::exp(moves.accepted_log_nu(c));
 	}
 
-	// --- the node-state update, and alpha's two likelihoods ---
+	// --- the node-state update, the transition counts, and alpha's two likelihoods ---
 	auto kernel = [&](size_t c, TCliqueView<NodeState> &states) {
-		// The view lives across the scores below, so they read the states the walk assigns.
+		// The view lives across the count below, so it counts the states the walk assigns.
 		const auto installed = grids.at(c);
 		if constexpr (!FixZ) {
 			node_state_walk::update_clique(topology, installed, bin_of, uniforms, states);
 		}
-		return clique_LL(topology, bin_of, states, installed,
-		                 TTransitionGrid(proposed_alpha[c], accepted_nu[c], bin_grid));
+		const auto clique_counts = counts.of(c);
+		transition_counts::count_transitions(topology, bin_of, states, clique_counts);
+		return std::array<double, 2>{
+		    transition_counts::log_likelihood(clique_counts, installed),
+		    transition_counts::log_likelihood(
+		        clique_counts, TTransitionGrid(proposed_alpha[c], accepted_nu[c], bin_grid))};
 	};
 	auto [alpha_LL, inserts] = clique_traversal::run(n, view_factory, kernel);
 	if constexpr (!FixZ) {
@@ -256,11 +220,12 @@ node_states_and_alpha(const TPhylogeny &topology, size_t n, NodeState &Z,
 	return LL_after_alpha;
 }
 
-/// The nu move. `LL_after_alpha` is each clique's log-likelihood under its installed grid.
-template<typename NodeState, TreeMoves Moves, typename BinOf, typename ViewFactory>
-void nu(const TPhylogeny &topology, size_t n, TTransitionGridTable &grids,
-        const TBinGrid &bin_grid, Moves &moves, const BinOf &bin_of,
-        const ViewFactory &view_factory, const std::vector<double> &LL_after_alpha) {
+/// The nu move. `LL_after_alpha` is each clique's log-likelihood under its installed grid, and
+/// `counts` are each clique's transition counts as the alpha pass left them.
+template<TreeMoves Moves>
+void nu(size_t n, TTransitionGridTable &grids, const TBinGrid &bin_grid, Moves &moves,
+        const transition_counts::TTransitionCountTable &counts,
+        const std::vector<double> &LL_after_alpha) {
 	// --- nu's proposals, read in serial code after every alpha decision ---
 	moves.propose_log_nus();
 	std::vector<double> accepted_alpha(n);
@@ -271,13 +236,15 @@ void nu(const TPhylogeny &topology, size_t n, TTransitionGridTable &grids,
 	}
 
 	// --- nu's candidate likelihood ---
-	// The installed score is the one each clique ended alpha on, so this region scores one grid.
-	auto kernel = [&](size_t c, TCliqueView<NodeState> &states) {
-		return clique_LL(topology, bin_of, states,
-		                 TTransitionGrid(accepted_alpha[c], proposed_nu[c], bin_grid));
-	};
-	auto [nu_LL, inserts] = clique_traversal::run(n, view_factory, kernel);
-	DEBUG_ASSERT(no_deferred_inserts(inserts));
+	// The installed score is the one each clique ended alpha on, so this loop scores one grid. It
+	// reads the counts alone, so it opens no view and touches no node state.
+	std::vector<double> nu_LL(n);
+#pragma omp parallel for num_threads(ProgramOptions::NUMBER_OF_THREADS) default(none)              \
+    schedule(static) shared(n, counts, accepted_alpha, proposed_nu, bin_grid, nu_LL)
+	for (size_t c = 0; c < n; ++c) {
+		nu_LL[c] = transition_counts::log_likelihood(
+		    counts.of(c), TTransitionGrid(accepted_alpha[c], proposed_nu[c], bin_grid));
+	}
 
 	// --- nu's decisions ---
 	for (size_t c = 0; c < n; ++c) {
@@ -371,10 +338,12 @@ void run(const TPhylogeny &topology, const TCliqueSpace<> &cliques, NodeState &Z
 		return TCliqueView<NodeState>(Z, topology, cliques.index_of(c), cliques.dimension());
 	};
 
+	// One block of counts per clique, written by the alpha pass and read by the nu move. The next
+	// block update moves the leaves, so the counts last this tree update and no longer.
+	transition_counts::TTransitionCountTable counts(n, bin_grid.n_bins());
 	const std::vector<double> LL_after_alpha = detail::node_states_and_alpha<FixZ>(
-	    topology, n, Z, grids, bin_grid, uniforms, moves, bin_of, view_factory);
-	detail::nu<NodeState>(topology, n, grids, bin_grid, moves, bin_of, view_factory,
-	                      LL_after_alpha);
+	    topology, n, Z, grids, bin_grid, uniforms, moves, bin_of, view_factory, counts);
+	detail::nu(n, grids, bin_grid, moves, counts, LL_after_alpha);
 	detail::branch_lengths(topology, n, grids, bin_grid, moves, current_bin, view_factory);
 }
 

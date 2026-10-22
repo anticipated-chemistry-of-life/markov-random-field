@@ -161,8 +161,8 @@ enum class TCliqueWrites : uint8_t { internal_nodes, every_node };
 /// and the tree's own dimension, and maps a node to a cell by setting that dimension to the node.
 ///
 /// It reads one tree alone. A tree field is the leaf block of this very run of cells (ADR-0005),
-/// so the node-state walk, the alpha and nu moves after it, the branch-length likelihood and the
-/// density pass all address this and name neither the field nor the other tree.
+/// so the node-state walk, the alpha move after it, the branch-length likelihood and the density
+/// pass all address this and name neither the field nor the other tree.
 ///
 /// It satisfies the clique-column concept the node-state draw and the node-state density are
 /// written against. Those two headers reach a real node state through this. They reach a vector of

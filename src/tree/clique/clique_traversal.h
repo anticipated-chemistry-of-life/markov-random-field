@@ -1,7 +1,7 @@
 //
 // Runs a kernel over every clique of a tree, in parallel, one clique to a thread's share of work.
 //
-// TTree's own passes over its cliques -- the node-state walk, the alpha and nu moves, the
+// TTree's own passes over its cliques -- the node-state walk, the alpha move, the
 // branch-length likelihood, the density, the from-children start -- are five hand-written copies
 // of the same shape: open a parallel region, build a clique view, run some per-clique work, drain
 // the view's deferred inserts, and gather whatever the work returned in clique order. This is that
