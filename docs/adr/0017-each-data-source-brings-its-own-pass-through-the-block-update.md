@@ -59,4 +59,31 @@ The link counters keep their per-row slots and row-order merge. They are the blo
 
 ## Evidence
 
-To be filled in by the last change of this migration: the byte-identity run against `main`, and the block update's CPU time before and after.
+Both checks compare `main` before the first change of this migration (f95dad5) with `main` after the last one (316c97a). They run on the balanced 255/511-node dataset under model validation (`model_validation/s_balanced_255_m_balanced_511`, 128 × 256 leaf pairs). It has simulated LOTUS records and simple error model data. Every run is 200 iterations at `--fixedSeed 42`. The dataset has no mass spectrometry file. So both sides read the same throwaway one, which is not committed. It has 4 species leaves, 3 runs each, 4 features per run, and 5 molecule-leaf candidates per feature with calibration scores.
+
+**Byte identity.** Both binaries are `release-lsm` builds. Every run writes to the same output prefix, and the script moves its files aside. So even the files that echo the output path compare. The comparison leaves out `acol.log`, because it carries wall-clock timings.
+
+| threads | assignment update of mass spectrometry | before against before | before against after |
+|---|---|---|---|
+| 1 | as shipped | | 20 of 20 files identical |
+| 4 | as shipped | 2 of 20 files identical | 2 of 20 files identical |
+| 4 | on one thread, both sides | 20 of 20 files identical | 20 of 20 files identical |
+
+The runs write every trace they can: the parameter traces of the model and of both trees, the field trace and both node-state traces. The 20 files are those traces and the link-counter trace. They are also the joint density, the field posterior, both tree field posteriors, the posterior modes, the state posteriors, the mean and variance file, the config and the parameters.
+
+At 4 threads, `main` before the migration differs from itself. `TMSMSData::update_all_MS_assignments` draws from a per-thread generator. So the 4-thread comparison runs that assignment update on one thread on both sides. A throwaway one-line change to its `num_threads` does this. The block update still runs on 4 threads. Those 4-thread runs also equal the 1-thread runs, except `acol.parameters`, which echoes `--numThreads`.
+
+**CPU time.** Both binaries are `profile-lsm` builds. Each ran the same chain at 4 threads, without the field and node-state traces. The runs alternate before and after, five times each, at `CPUPROFILE_FREQUENCY=1000`. Each profile is symbolized with its own binary into a proto before any comparison. The block update's cumulative time is the profile focused on `^block_update::run$|^TMarkovField::_update_block$`:
+
+| run | before | after |
+|---|---|---|
+| 1 | 0.56 s | 0.47 s |
+| 2 | 0.67 s | 0.28 s |
+| 3 | 0.70 s | 0.47 s |
+| 4 | 0.68 s | 0.40 s |
+| 5 | 0.73 s | 0.47 s |
+| mean | 0.67 s | 0.42 s |
+
+The block update is no slower. `pprof -diff_base` on run 3 puts most of the drop on two costs the old block model paid in release builds. The first is LOTUS's present-cell recount in `TMarkovField::_update_block`. It was a `DEBUG_ASSERT`, and coretools evaluates that argument in every build (64 ms). The second is the lookup of LOTUS through `TDataModel::get_lotus` at every cell (67 ms). The recount now sits in LOTUS's end-pass hook under `#ifndef NDEBUG`. The fold leaves no frame of its own. `TBlockData` and the cell factor and record of every pass are inlined into `block_update::update_band`.
+
+These numbers have three limits. At 1 kHz the profiler loses signals while many threads are busy, so the absolute times undercount. Both sides ran under the same setting. At the default 100 Hz, three runs each gave 0.89, 0.42 and 0.41 s before, and 0.40, 0.49 and 0.46 s after. That is about 45 samples a run, too few to tell the two apart. The field of this dataset stays in cache. So the profile shows that the fold inlines back into the kernel. It does not show how the change behaves under the memory pressure of the full LOTUS data.
