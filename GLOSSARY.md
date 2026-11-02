@@ -206,6 +206,10 @@ _Avoid_: unassigned, null molecule, decoy
 The latent choice, for every feature of a run, of the candidate or the unknown molecule that explains it. Within one run a molecule explains at most one feature. A molecule is *detected* in a run when some feature is assigned to it.
 _Avoid_: annotation, match, identification
 
+**Assignment posterior**:
+For every feature of every run, the fraction of the counted iterations the feature's assignment spent on each of its candidates and on the unknown molecule. One file, `<prefix>_assignment_posterior.txt`, with one row per species, extract, feature and explanation, every candidate and the unknown molecule included, zero fractions too, so a feature's rows sum to 1. The unknown molecule is written under the reserved name `<unknown>`, which no molecule leaf may carry; the loader rejects a molecule tree that does. It counts on the iterations the posterior of the field counts and starts again at the end of the burn-in. `--write_assignment_posterior` decides whether a run holds one. `TAssignmentPosterior`, `src/mass_spec/`.
+_Avoid_: assignment probabilities, annotation scores
+
 **True assignment**:
 The assignment that generated a simulated data set, against which the inferred assignment is scored.
 _Avoid_: true explanation, ground truth assignment, correct assignment

@@ -49,7 +49,10 @@ struct TFeatureRows {
 /// The rows of one run, its features in the order the file first names them.
 struct TRunRows {
 	size_t species = 0;
+	std::string extract;
 	std::unordered_map<std::string, size_t> feature_of_id;
+	/// The id of each entry of `features`.
+	std::vector<std::string> feature_ids;
 	std::vector<TFeatureRows> features;
 };
 
@@ -84,15 +87,17 @@ struct TBin {
 }
 
 [[nodiscard]] TMassSpecRun build_run(const TRunRows &rows, double log_unknown_rate,
-                                     TLoadReport &report) {
+                                     TLoadReport &report, TRunLabels &labels) {
 	TMassSpecRun run;
 	run.set_filter_index(0);
 	std::vector<uint8_t> unknown_bins;
-	for (const auto &feature : rows.features) {
+	for (size_t f = 0; f < rows.features.size(); ++f) {
+		const auto &feature = rows.features[f];
 		if (feature.candidates.empty()) {
 			++report.features_not_loaded;
 			continue;
 		}
+		labels.feature_ids.push_back(rows.feature_ids[f]);
 		// the unknown weight is rho n_f, with n_f counting rows outside the molecule tree too
 		const double log_unknown =
 		    log_unknown_rate + std::log(static_cast<double>(feature.number_of_rows));
@@ -126,6 +131,13 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		throw coretools::TUserError("The unknown rate (--ms_unknown_rate) must be positive and "
 		                            "finite, but got ",
 		                            unknown_rate, ".");
+	}
+	for (const auto &molecule : molecule_leaves) {
+		if (molecule == UNKNOWN_MOLECULE_NAME) {
+			throw coretools::TUserError("The molecule tree has a leaf named '", molecule,
+			                            "', which is the name the unknown molecule is written "
+			                            "under in the assignment posterior. Rename the leaf.");
+		}
 	}
 	const auto species_index      = index_of_name(species_leaves);
 	const auto molecule_index     = index_of_name(molecule_leaves);
@@ -177,12 +189,17 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		}
 		const auto [run_it, new_run] =
 		    run_of_key.try_emplace({species_it->second, std::string(file.get(1))}, runs.size());
-		if (new_run) { runs.push_back(TRunRows{species_it->second, {}, {}}); }
+		if (new_run) {
+			runs.push_back(TRunRows{species_it->second, std::string(file.get(1)), {}, {}, {}});
+		}
 		auto &run = runs[run_it->second];
 
 		const auto [feature_it, new_feature] =
 		    run.feature_of_id.try_emplace(std::string(file.get(2)), run.features.size());
-		if (new_feature) { run.features.emplace_back(); }
+		if (new_feature) {
+			run.features.emplace_back();
+			run.feature_ids.emplace_back(file.get(2));
+		}
 		auto &feature = run.features[feature_it->second];
 
 		// a skipped molecule is no candidate, but it is one of the structures proposed for the
@@ -205,10 +222,15 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 	auto next_run = runs.begin();
 	for (size_t species = 0; species < species_leaves.size(); ++species) {
 		loaded.runs_per_species.push_back();
+		loaded.labels.push_back();
 		for (; next_run != runs.end() && next_run->species == species; ++next_run) {
-			auto run = build_run(*next_run, log_unknown_rate, loaded.report);
+			TRunLabels labels{next_run->extract, {}};
+			auto run = build_run(*next_run, log_unknown_rate, loaded.report, labels);
 			// a run whose every feature went unloaded observes nothing
-			if (!run.empty()) { loaded.runs_per_species.pushToLast(std::move(run)); }
+			if (!run.empty()) {
+				loaded.runs_per_species.pushToLast(std::move(run));
+				loaded.labels.pushToLast(std::move(labels));
+			}
 		}
 	}
 	return loaded;

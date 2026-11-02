@@ -115,13 +115,16 @@ double TDataModel::data_log_likelihood() const {
 }
 
 void TDataModel::update_markov_field() {
-	_markov_field.update(*this, _mrf_update_iteration++);
+	const size_t iteration = _mrf_update_iteration++;
+	_markov_field.update(*this, iteration);
 #ifdef USE_MS_DATA
 	// Updates the feature<->molecule assignments against the Y this iteration's block update just
 	// drew. This update does not change Y. The next block update reads the assignments it leaves.
 	// The joint density row of this iteration was written before it, so the row scores Y against
 	// the assignments its block update read.
 	_msms_data.update_all_MS_assignments();
+	// Counted on the iterations the posterior of Y counts, once the assignments have moved.
+	_msms_data.count_assignments(iteration);
 #endif
 }
 
@@ -248,6 +251,9 @@ TNotifierStats TDataModel::_collect_notifier_stats() const {
 
 void TDataModel::burninHasFinished() {
 	_markov_field.burninHasFinished();
+#ifdef USE_MS_DATA
+	_msms_data.burnin_has_finished();
+#endif
 	const auto stats = _collect_notifier_stats();
 	_notifier.notify_burnin_finished(stats.dim_names, stats.gamma_stats, stats.scalar_stats);
 }
@@ -263,6 +269,9 @@ void TDataModel::oneBurninHasFinished() {
 
 void TDataModel::MCMCHasFinished() {
 	_markov_field.MCMCHasFinished();
+#ifdef USE_MS_DATA
+	_msms_data.write_assignment_posterior(_prefix);
+#endif
 	const auto stats = _collect_notifier_stats();
 	_notifier.notify_mcmc_finished(stats.dim_names, stats.gamma_stats, stats.scalar_stats);
 }

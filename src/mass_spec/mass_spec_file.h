@@ -23,9 +23,16 @@
 #include "mass_spec/msms_run.h"
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mass_spec_file {
+
+/// The name the unknown molecule is written under in the assignment posterior, and the one the
+/// simulator's true assignment will use (a later ticket of #99). `<` cannot occur in an InChIKey
+/// or a SMILES, and the loader rejects a molecule leaf that carries it, so no molecule leaf can be
+/// mistaken for it.
+inline constexpr std::string_view UNKNOWN_MOLECULE_NAME = "<unknown>";
 
 /// What the loader left out, for the log.
 struct TLoadReport {
@@ -41,10 +48,19 @@ struct TLoadReport {
 	size_t clamped_unknowns    = 0;
 };
 
+/// The names the file gave one loaded run and its features.
+struct TRunLabels {
+	std::string extract;
+	/// One id per loaded feature, in the feature order of the run.
+	std::vector<std::string> feature_ids;
+};
+
 struct TLoaded {
 	/// The runs of each species leaf, in leaf-index order. Every assignment starts at the unknown
 	/// molecule, whose bin is per feature.
 	coretools::TNestedVector<TMassSpecRun> runs_per_species;
+	/// The labels of `runs_per_species`, run for run.
+	coretools::TNestedVector<TRunLabels> labels;
 	TLoadReport report;
 };
 
@@ -53,7 +69,8 @@ struct TLoaded {
 ///
 /// Throws TUserError on a bad header, on a duplicate (species, extract, feature, molecule) row, on
 /// a log density that is not a finite number (a missing one included), on a likelihood ratio
-/// whose log is not finite, and on a rho that is not positive and finite.
+/// whose log is not finite, on a rho that is not positive and finite, and on a molecule leaf named
+/// `UNKNOWN_MOLECULE_NAME`.
 [[nodiscard]] TLoaded load(const std::string &filename,
                            const std::vector<std::string> &species_leaves,
                            const std::vector<std::string> &molecule_leaves, double unknown_rate);

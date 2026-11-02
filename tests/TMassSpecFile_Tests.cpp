@@ -228,6 +228,42 @@ TEST(TMassSpecFile_Tests, two_extracts_are_two_runs_and_a_feature_id_is_one_feat
 	EXPECT_EQ(candidates(quercus[0], 0), (std::map<uint32_t, uint32_t>{{RUTIN, 0}}));
 }
 
+TEST(TMassSpecFile_Tests,
+     every_loaded_run_and_feature_is_labelled_with_the_names_the_file_gave_it) {
+	// f2 of Ilex/e1 has no candidate left, so it is not loaded and not labelled. The labels of
+	// the loaded features keep the order of the features inside the run.
+	const auto loaded =
+	    load(row("Ilex", "e1", "f9", "caffeine") + row("Ilex", "e1", "f2", "aspirin") +
+		     row("Ilex", "e1", "f1", "rutin") + row("Ilex", "e2", "f1", "theobromine") +
+		     row("Quercus", "e1", "f1", "rutin"));
+
+	const auto &ilex = loaded.labels.at(0);
+	ASSERT_EQ(ilex.size(), 2);
+	EXPECT_EQ(ilex[0].extract, "e1");
+	EXPECT_EQ(ilex[0].feature_ids, (std::vector<std::string>{"f9", "f1"}));
+	EXPECT_EQ(ilex[1].extract, "e2");
+	EXPECT_EQ(ilex[1].feature_ids, (std::vector<std::string>{"f1"}));
+
+	const auto &quercus = loaded.labels.at(1);
+	ASSERT_EQ(quercus.size(), 1);
+	EXPECT_EQ(quercus[0].extract, "e1");
+
+	// one label per run, one feature id per feature, in the order of the runs
+	ASSERT_EQ(loaded.runs_per_species.at(0).size(), 2);
+	EXPECT_EQ(loaded.runs_per_species.at(0)[0].number_of_features(), 2);
+}
+
+TEST(TMassSpecFile_Tests, a_molecule_leaf_named_like_the_unknown_molecule_is_an_error) {
+	const TTempFile file("ms.tsv", std::string(HEADER) + row("Ilex", "e1", "f1", "caffeine"));
+	expect_user_error(
+	    [&] {
+		    (void)mass_spec_file::load(
+		        file.path(), SPECIES,
+		        {"caffeine", std::string(mass_spec_file::UNKNOWN_MOLECULE_NAME)}, 0.1);
+	    },
+	    "a molecule leaf named like the unknown molecule");
+}
+
 TEST(TMassSpecFile_Tests, a_header_other_than_the_six_columns_in_order_is_an_error) {
 	const std::string body = "Ilex\te1\tf1\tcaffeine\t-1\t-2\n";
 	for (const std::string header :

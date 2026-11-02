@@ -85,6 +85,11 @@ public:
 	/// finite.
 	static inline double MS_UNKNOWN_RATE = 0.0;
 
+	/// Whether to write `<prefix>_assignment_posterior.txt`: the fraction of counted iterations
+	/// each feature spent on each of its candidates and on the unknown molecule. It costs a counter
+	/// per candidate of every feature, held for the whole chain, so it is off unless asked for.
+	static inline bool WRITE_ASSIGNMENT_POSTERIOR = false;
+
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
 	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0,2.0";
@@ -180,6 +185,7 @@ public:
 		MS_DATA_FILENAME = params.get<std::string>("ms_data", "");
 		// Required with the file, so `--help` and a missing `--ms_data` are reported on their own.
 		if (!MS_DATA_FILENAME.empty()) { MS_UNKNOWN_RATE = params.get<double>("ms_unknown_rate"); }
+		WRITE_ASSIGNMENT_POSTERIOR = params.exists("write_assignment_posterior");
 #endif
 	}
 
@@ -226,5 +232,13 @@ public:
 		             "unknown molecule's weight per structure proposed for a feature, so a "
 		             "feature's unknown weight is rho times its number of rows. Positive and "
 		             "finite. Required with --ms_data\n";
+		std::cout << "--write_assignment_posterior   Write <prefix>_assignment_posterior.txt "
+		             "(needs --ms_data): one row per species, extract, feature and explanation, "
+		             "with the fraction of the counted iterations the feature spent on each of "
+		             "its candidate molecules and on the unknown molecule, which is written under "
+		             "the reserved name '<unknown>' and so cannot be a molecule leaf. The "
+		             "fractions of a feature sum to 1. Counting uses the burn-in and the "
+		             "thinning of the posterior of Y. It costs a counter per candidate of every "
+		             "feature, so it is off unless asked for\n";
 	}
 };

@@ -6,6 +6,7 @@
 #include "coretools/Containers/TView.h"
 #include "coretools/Main/TError.h"
 #include "coretools/algorithms.h"
+#include "mass_spec/assignment_posterior.h"
 #include "mass_spec/block_pass.h"
 #include "mass_spec/msms_run.h"
 #include "stattools/ParametersObservations/TParameter.h"
@@ -54,6 +55,12 @@ private:
 	/// The buffer the filter probabilities are read into for a block update. The pass holds it
 	/// during the update and hands it back at the end, so that each update refills it in place.
 	std::vector<double> _block_filter_probabilities;
+
+	/// What the assignments spent their iterations on. Empty unless `--write_assignment_posterior`.
+	TAssignmentPosterior _assignment_posterior;
+	/// The names of the runs and features, kept for the posterior's file alone, so empty unless
+	/// `--write_assignment_posterior`.
+	coretools::TNestedVector<mass_spec_file::TRunLabels> _labels;
 
 	/// Private functions
 private:
@@ -176,4 +183,15 @@ public:
 	/// One Metropolis-Hastings update over every feature of every run of every species that has MS
 	/// data. See `TMassSpecRun::update_all_assignments`.
 	void update_all_MS_assignments();
+
+	/// Counts every feature's current assignment, on the iterations the posterior of Y counts. Does
+	/// nothing unless `--write_assignment_posterior`. `iteration` is the field's own, so both
+	/// posteriors count the same iterations.
+	void count_assignments(size_t iteration);
+
+	/// Forgets what was counted, as the burn-in ends, so that the posterior reports the chain.
+	void burnin_has_finished();
+
+	/// Writes `<prefix>_assignment_posterior.txt`, unless `--write_assignment_posterior` is off.
+	void write_assignment_posterior(const std::string &prefix) const;
 };

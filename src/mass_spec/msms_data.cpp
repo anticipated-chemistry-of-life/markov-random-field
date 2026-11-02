@@ -37,6 +37,7 @@ void TMSMSData::_load_runs() {
 	    mass_spec_file::load(filename, leaf_names(*_species_tree), leaf_names(*_molecules_tree),
 		                     ProgramOptions::MS_UNKNOWN_RATE);
 	_msms_data = std::move(loaded.runs_per_species);
+	if (ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) { _labels = std::move(loaded.labels); }
 
 	_species_has_ms_data.assign(_number_of_species, false);
 	_species_with_ms_data.clear();
@@ -118,6 +119,11 @@ TMSMSData::TMSMSData(const std::vector<std::unique_ptr<TTree>> &trees,
 	// once the trees are checked we can initialize the MSMS data
 	_dimensions_for_filters = {_number_of_filters, number_of_molecules};
 	_load_runs();
+	if (ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) {
+		// the field's own thinning factor, so both posteriors count the same iterations
+		_assignment_posterior.initialize(_msms_data,
+		                                 markov_field.get_Y_matrix().get_thinning_factor());
+	}
 
 	_proba_to_pass_filter = filter_proba;
 	_proba_contamination  = contamination_proba;
@@ -308,4 +314,21 @@ void TMSMSData::update_all_MS_assignments() {
 			}
 		}
 	}
+}
+
+void TMSMSData::count_assignments(size_t iteration) {
+	if (!ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) { return; }
+	_assignment_posterior.add_to_counter(iteration, _msms_data);
+}
+
+void TMSMSData::burnin_has_finished() {
+	if (!ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) { return; }
+	_assignment_posterior.reset_counts();
+}
+
+void TMSMSData::write_assignment_posterior(const std::string &prefix) const {
+	if (!ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) { return; }
+	::write_assignment_posterior(prefix + "_assignment_posterior.txt", _assignment_posterior,
+	                             _msms_data, _labels, leaf_names(*_species_tree),
+	                             leaf_names(*_molecules_tree));
 }
