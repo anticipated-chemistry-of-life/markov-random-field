@@ -195,7 +195,8 @@ section~\ref{sec:evidence} as a control.
 
 \subsection{Observation models}
 
-Two data sources sit above $\Ys$ (a third, mass spectrometry, is stubbed out).
+Three data sources sit above $\Ys$: LOTUS, a simple error model and mass spectrometry. The first
+two observe $\Ys$ cell by cell. Mass spectrometry carries latent assignments of its own.
 
 \paragraph{LOTUS.} $L_{ij} \in \{0,1\}$ records whether an occurrence was reported. With
 $o^{\mathrm{s}}_i = \log(1 + \text{papers}_i)$ and likewise $o^{\mathrm{m}}_j$, the
@@ -213,6 +214,19 @@ detection probability is
 
 \paragraph{Simple error model.} $D_{ij}$ reports $\Ys_{ij}$ flipped independently with
 probability $\varepsilon_{\mathrm{simple}}$.
+
+\paragraph{Mass spectrometry.} Each feature $f$ of a run is explained by one of the molecule
+leaves proposed for it, or by the unknown molecule $U$, which stands for every explanation
+outside the molecule tree. A proposed structure $j$ has a CSI:FingerID score $x_j$, with a
+density $g_1$ among correct identifications and $g_0$ among incorrect ones. If the rows of
+a feature are independent given the truth, a candidate $m$ carries the weight
+$g_1(x_m)/g_0(x_m)$, its \emph{likelihood ratio}, and the unknown molecule carries the
+weight $\rho\,n_f$, where $n_f$ counts every structure proposed for $f$, molecule leaf or
+not, and the \emph{unknown rate} $\rho$ is an input. The product $\prod_j g_0(x_j)$ is shared
+by every explanation of $f$ and cancels. A feature's weights enter the model in bins of
+$1/16$ nat below the largest weight of the feature, the unknown weight included, and the
+floor of the grid is $255/16$ nats. The weight is a weight, not a probability: it
+cancels from every field draw and every filter-probability move. See ADR-0018.
 
 %==========================================================================
 \section{What was wrong with the estimation}

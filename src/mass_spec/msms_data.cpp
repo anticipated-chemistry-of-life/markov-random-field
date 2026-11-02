@@ -35,7 +35,7 @@ void TMSMSData::_load_runs() {
 	}
 	auto loaded =
 	    mass_spec_file::load(filename, leaf_names(*_species_tree), leaf_names(*_molecules_tree),
-		                     ProgramOptions::MS_UNKNOWN_FRACTION);
+		                     ProgramOptions::MS_UNKNOWN_RATE);
 	_msms_data = std::move(loaded.runs_per_species);
 
 	_species_has_ms_data.assign(_number_of_species, false);
@@ -55,15 +55,18 @@ void TMSMSData::_load_runs() {
 	log.startIndent("Read the mass-spec file '", filename, "' (argument 'ms_data'):");
 	log.list("Loaded ", n_runs, " runs of ", _species_with_ms_data.size(), " species leaves, with ",
 	         n_features, " features. Every assignment starts at the unknown molecule.");
-	log.list("The unknown fraction is ", ProgramOptions::MS_UNKNOWN_FRACTION,
-	         " (argument 'ms_unknown_fraction').");
+	log.list("The unknown rate rho is ", ProgramOptions::MS_UNKNOWN_RATE,
+	         " (argument 'ms_unknown_rate'). A feature's unknown weight is rho times its number of "
+	         "rows.");
 	log.list("Skipped ", report.skipped_species, " distinct species that are not species leaves.");
 	log.list("Skipped ", report.skipped_molecules,
-	         " distinct molecules that are not molecule leaves. Their scores still set their "
-	         "features' reference.");
+	         " distinct molecules that are not molecule leaves. Their rows still count toward "
+	         "their features' unknown weight.");
 	log.list("Did not load ", report.features_not_loaded, " features that have no candidate left.");
-	log.list("Clamped ", report.clamped_candidates,
-	         " candidates whose relative calibration score is below the floor of the last bin.");
+	log.list("Clamped ", report.clamped_candidates, " candidates and the unknown molecule of ",
+	         report.clamped_unknowns,
+	         " features whose weight is below the floor of the last bin under their feature's "
+	         "largest weight.");
 	log.list("SIRIUS keeps at most 200 candidates per feature upstream, so a feature can lack "
 	         "its true molecule even when the molecule is a leaf.");
 	log.endIndent();
@@ -176,7 +179,7 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	coretools::TSumLogProbability p_new{};
 	coretools::TSumLogProbability p_old{};
 
-	// --- feature term: the relative calibration score of the assigned molecule; the unknown
+	// --- feature term: the binned weight of the assigned molecule; the unknown
 	// molecule's bin lives in the same assignment, so it reads the same way. ---
 	p_old.add(mass_spec_math::feature_term(move.old_a));
 	p_new.add(mass_spec_math::feature_term(move.new_a));

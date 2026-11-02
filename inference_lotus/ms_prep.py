@@ -1,16 +1,23 @@
-"""Turn the SIRIUS-side scores table into the mass-spec file acol reads.
+"""Turn the feature-probabilities export into the mass-spec file acol reads.
 
-The scores table has the columns ``species, extract_id, feature_id, inchikey_2d,
-calibration_score``. The output is a tab-separated file with the header
-``species extract feature molecule calibration_score``, which ``--ms_data`` takes.
+The export is ``feature_molecule_scores.csv``, the output of feature-probabilities'
+``queries/feature_molecule_scores.sql``. Its columns are ``species, extract_id,
+feature_id, inchikey_2d, log_correct_density, log_incorrect_density``. The output is a
+tab-separated file with the header
+``species extract feature molecule log_correct_density log_incorrect_density``, which
+``--ms_data`` takes.
 
 Spaces in species and molecule names become underscores, as in the trees
 ``data_prep.py`` writes. So names match the tree leaves exactly, and acol needs no
 naming rule of its own.
 
-The script keeps every row. A feature's reference is its best row, candidate or
-not, so acol must see the rows it later skips. The script reads every value as
-text, so a calibration score reaches acol exactly as SIRIUS wrote it.
+The script keeps every row. A feature's unknown weight scales with its number of rows,
+candidate or not, so acol must see the rows it later skips. The script reads every value
+as text, so a log density reaches acol exactly as feature-probabilities wrote it.
+
+The export leaves both densities empty for a proposed structure the fitted model never
+calibrated. The script stops on such a row instead of writing it, because acol cannot
+weigh a candidate it has no likelihood ratio for.
 """
 
 import click
@@ -21,8 +28,20 @@ SCORES_TO_MS_DATA = {
     "extract_id": "extract",
     "feature_id": "feature",
     "inchikey_2d": "molecule",
-    "calibration_score": "calibration_score",
+    "log_correct_density": "log_correct_density",
+    "log_incorrect_density": "log_incorrect_density",
 }
+
+DENSITY_COLUMNS = [name for name in SCORES_TO_MS_DATA.values() if name.startswith("log_")]
+
+
+def missing_density_rows(ms_data: pl.DataFrame) -> pl.DataFrame:
+    """The rows with an empty or null density in either column."""
+    is_missing = pl.any_horizontal(
+        pl.col(column).is_null() | (pl.col(column).str.strip_chars() == "")
+        for column in DENSITY_COLUMNS
+    )
+    return ms_data.filter(is_missing)
 
 
 @click.command()
@@ -31,7 +50,7 @@ SCORES_TO_MS_DATA = {
     type=click.Path(exists=True, dir_okay=False),
     default="feature_molecule_scores.csv",
     show_default=True,
-    help="SIRIUS-side scores table, comma-separated.",
+    help="feature-probabilities export, comma-separated.",
 )
 @click.option(
     "--out",
@@ -50,6 +69,13 @@ def main(scores: str, out: str) -> None:
             pl.col("molecule").str.replace_all(" ", "_"),
         )
     )
+    missing = missing_density_rows(ms_data)
+    if missing.height:
+        raise click.ClickException(
+            f"{missing.height} of {ms_data.height} rows in {scores} have no log density, "
+            "so the fitted model never calibrated them. First rows:\n"
+            f"{missing.head(5)}"
+        )
     ms_data.write_csv(out, separator="\t")
     print(f"wrote {ms_data.height} rows to {out}")
 

@@ -372,12 +372,13 @@ static constexpr std::array<double, 256> LOG_LINEAR_SPACE_PROBA_REVERSED = {
     -3.59535340e+00, -3.74950408e+00, -3.93182563e+00, -4.15496918e+00,
     -4.44265126e+00, -4.84811636e+00, -5.54126355e+00, std::numeric_limits<double>::lowest()};
 
-/// How many bins of the relative calibration score one nat spans. Bin `b` stands for a relative
-/// calibration score whose log is `-b / 16`. See ADR-0012.
+/// How many bins of a mass-spec weight one nat spans. Bin `b` stands for a weight whose log is
+/// `-b / 16` below its feature's largest weight. See ADR-0018.
 static constexpr double CALIBRATION_BINS_PER_NAT = 16.0;
 
-/// The relative calibration score each bin stands for, in linear space (CONTEXT.md, "Relative
-/// calibration score"). Bin 0 is a feature's best row. Bin 255 is the floor, `e^(-255/16)`.
+/// The weight each bin stands for relative to its feature's largest weight, in linear space. Bin 0
+/// is the largest weight, a candidate's likelihood ratio or the unknown weight. Bin 255 is the
+/// floor, `e^(-255/16)`.
 inline const std::array<double, 256> RELATIVE_CALIBRATION_SCORE = [] {
 	std::array<double, 256> scores{};
 	for (size_t b = 0; b < scores.size(); ++b) {

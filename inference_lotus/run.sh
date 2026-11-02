@@ -4,7 +4,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR/.."
 
 MODE="${ACOL_MODE:-release}"
-FLAGS="${ACOL_DATA_FLAGS:-l}"
+FLAGS="${ACOL_DATA_FLAGS:-lm}"
+# The unknown rate rho: the unknown molecule's weight per structure proposed for a feature
+# (ADR-0018). 1.4 is 122, the unknown weight ADR-0018 reads off the held-out odds, over the mean
+# of about 87 rows per feature there. It is an input, not an estimate.
+MS_UNKNOWN_RATE="${ACOL_MS_UNKNOWN_RATE:-1.4}"
 
 cd "$ROOT"
 pixi run build "$MODE-$FLAGS"
@@ -26,4 +30,5 @@ pixi run "$ACOL" infer \
     --molecules_paper_counts molecules_paper_counts.tsv \
     --iterations 5000 \
     --numThreads 32 \
-    --write_joint_log_prob_density
+    --ms_data ms_data.tsv \
+    --ms_unknown_rate "$MS_UNKNOWN_RATE"

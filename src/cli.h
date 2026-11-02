@@ -80,9 +80,10 @@ public:
 	/// The mass-spec file, empty when not given. A build with mass spec requires it.
 	static inline std::string MS_DATA_FILENAME;
 
-	/// The unknown fraction `c`: the relative calibration score of the unknown molecule, in
-	/// (0, 1]. The mass-spec loader checks the range.
-	static inline double MS_UNKNOWN_FRACTION = 0.1;
+	/// The unknown rate `rho`: the unknown molecule's weight per structure proposed for a feature.
+	/// Required with `--ms_data`, no default. The mass-spec loader checks that it is positive and
+	/// finite.
+	static inline double MS_UNKNOWN_RATE = 0.0;
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
@@ -176,8 +177,9 @@ public:
 
 #ifdef USE_MS_DATA
 		// Empty when not given. The mass-spec loader requires it, so `--help` still works without.
-		MS_DATA_FILENAME    = params.get<std::string>("ms_data", "");
-		MS_UNKNOWN_FRACTION = params.get<double>("ms_unknown_fraction", MS_UNKNOWN_FRACTION);
+		MS_DATA_FILENAME = params.get<std::string>("ms_data", "");
+		// Required with the file, so `--help` and a missing `--ms_data` are reported on their own.
+		if (!MS_DATA_FILENAME.empty()) { MS_UNKNOWN_RATE = params.get<double>("ms_unknown_rate"); }
 #endif
 	}
 
@@ -218,9 +220,11 @@ public:
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 		std::cout
 		    << "--ms_data                      Mass-spec file, tab-separated, with the header "
-		       "'species extract feature molecule calibration_score' (required in a build "
-		       "with mass spec, letter 'm')\n";
-		std::cout << "--ms_unknown_fraction          Relative calibration score of the unknown "
-		             "molecule, in (0,1]. Default 0.1\n";
+		       "'species extract feature molecule log_correct_density log_incorrect_density' "
+		       "(required in a build with mass spec, letter 'm')\n";
+		std::cout << "--ms_unknown_rate              Unknown rate rho of the mass-spec data: the "
+		             "unknown molecule's weight per structure proposed for a feature, so a "
+		             "feature's unknown weight is rho times its number of rows. Positive and "
+		             "finite. Required with --ms_data\n";
 	}
 };

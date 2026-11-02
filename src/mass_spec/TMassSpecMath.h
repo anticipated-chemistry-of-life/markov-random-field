@@ -11,8 +11,8 @@
 //     P(not detected | y = 1) = 1 - f  P(not detected | y = 0) = 1 - c
 //
 // which is `TMassSpecRun::probability_of_assignment`. Every run also carries a feature term. It is
-// the relative calibration score of the molecule each feature is assigned to (ADR-0012). It does
-// not read the field.
+// the binned weight of the molecule each feature is assigned to, a likelihood ratio or the unknown
+// weight, relative to the feature's largest weight (ADR-0018). It does not read the field.
 //
 // Conditional on the assignments, the source is therefore per-cell shaped. A cell's factor is the
 // product over the species' runs of its detection term. The whole log-likelihood is the sum of
@@ -43,9 +43,9 @@
 
 namespace mass_spec_math {
 
-/// The feature term of one feature: the relative calibration score of the molecule it is assigned
-/// to. It reads the assignment's bin. The unknown molecule carries its bin in the same place, so it
-/// reads the same way.
+/// The feature term of one feature: the weight of the molecule it is assigned to, relative to the
+/// feature's largest weight. It reads the assignment's bin. The unknown molecule carries its bin in
+/// the same place, so it reads the same way.
 [[nodiscard]] inline double feature_term(const TFeatureLikelihood &assignment) {
 	return RELATIVE_CALIBRATION_SCORE[assignment.get_binned_likelihood()];
 }

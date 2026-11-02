@@ -18,27 +18,31 @@
 namespace mass_spec_file {
 namespace {
 
-const std::vector<std::string> HEADER = {"species", "extract", "feature", "molecule",
-                                         "calibration_score"};
+const std::vector<std::string> HEADER = {
+    "species", "extract", "feature", "molecule", "log_correct_density", "log_incorrect_density"};
 
-/// A calibration score is a density, so it must be a positive finite number.
-[[nodiscard]] double parse_score(std::string_view text, const std::string &filename, size_t line) {
-	double score         = 0.0;
+/// A log density is any finite number: the densities are on the log scale, so there is no sign
+/// to enforce. A missing value, which the export writes for a structure its model never
+/// calibrated, fails the same way.
+[[nodiscard]] double parse_log_density(std::string_view text, std::string_view column,
+                                       const std::string &filename, size_t line) {
+	double value         = 0.0;
 	const auto end       = text.data() + text.size();
-	const auto [ptr, ec] = std::from_chars(text.data(), end, score);
-	if (ec != std::errc{} || ptr != end || !std::isfinite(score) || score <= 0.0) {
+	const auto [ptr, ec] = std::from_chars(text.data(), end, value);
+	if (ec != std::errc{} || ptr != end || !std::isfinite(value)) {
 		throw coretools::TUserError("Line ", line, " of the mass-spec file '", filename,
-		                            "' has the calibration score '", text,
-		                            "'. A calibration score must be a positive finite number.");
+		                            "' has the ", column, " '", text,
+		                            "'. A log density must be a "
+		                            "finite number.");
 	}
-	return score;
+	return value;
 }
 
 /// The rows of one feature, as read.
 struct TFeatureRows {
-	/// The best calibration score over all of the feature's rows, candidates or not.
-	double reference = 0.0;
-	/// (molecule leaf, calibration score) of every kept candidate.
+	/// Every row of the feature, molecule leaf or not. The unknown weight scales with it.
+	size_t number_of_rows = 0;
+	/// (molecule leaf, log likelihood ratio) of every kept candidate.
 	std::vector<std::pair<uint32_t, double>> candidates;
 };
 
@@ -57,38 +61,59 @@ index_of_name(const std::vector<std::string> &names) {
 	return index;
 }
 
-/// The last bin of the relative-calibration-score grid. A score below its floor takes it.
+/// The last bin of the grid. A weight further below its feature's largest than the grid reaches
+/// takes it.
 constexpr long LAST_BIN = RELATIVE_CALIBRATION_SCORE.size() - 1;
 
-/// The bin of a relative calibration score whose log is `log_ratio`, at most 0:
-/// `round(-16 log_ratio)`, unclamped. Callers pass a difference of logs rather than the log of a
-/// quotient, because the quotient of two valid scores can underflow to 0.
-[[nodiscard]] long bin_of(double log_ratio) {
-	return std::lround(-CALIBRATION_BINS_PER_NAT * log_ratio);
+struct TBin {
+	uint8_t bin;
+	/// The weight was further below the largest than the grid reaches, so `bin` is the last bin.
+	bool clamped;
+};
+
+/// The bin of a weight `nats_below` (at least 0) under its feature's largest weight:
+/// `round(16 nats_below)`, clamped to the last bin. Callers pass a difference of logs rather than
+/// the log of a quotient, because the quotient of two valid weights can overflow or underflow. The
+/// difference is capped before rounding, so that one as large as a double allows cannot overflow
+/// `lround`.
+[[nodiscard]] TBin bin_of(double nats_below) {
+	constexpr double FLOOR_NATS = (LAST_BIN + 1) / CALIBRATION_BINS_PER_NAT;
+	const long bin = std::lround(CALIBRATION_BINS_PER_NAT * std::min(nats_below, FLOOR_NATS));
+	if (bin > LAST_BIN) { return {static_cast<uint8_t>(LAST_BIN), true}; }
+	return {static_cast<uint8_t>(bin), false};
 }
 
-[[nodiscard]] TMassSpecRun build_run(const TRunRows &rows, uint8_t unknown_bin,
+[[nodiscard]] TMassSpecRun build_run(const TRunRows &rows, double log_unknown_rate,
                                      TLoadReport &report) {
 	TMassSpecRun run;
 	run.set_filter_index(0);
+	std::vector<uint8_t> unknown_bins;
 	for (const auto &feature : rows.features) {
 		if (feature.candidates.empty()) {
 			++report.features_not_loaded;
 			continue;
 		}
+		// the unknown weight is rho n_f, with n_f counting rows outside the molecule tree too
+		const double log_unknown =
+		    log_unknown_rate + std::log(static_cast<double>(feature.number_of_rows));
+		double log_largest = log_unknown;
+		for (const auto &[molecule, log_ratio] : feature.candidates) {
+			log_largest = std::max(log_largest, log_ratio);
+		}
+
 		std::vector<TFeatureLikelihood> likelihoods;
 		likelihoods.reserve(feature.candidates.size());
-		for (const auto &[molecule, score] : feature.candidates) {
-			long bin = bin_of(std::log(score) - std::log(feature.reference));
-			if (bin > LAST_BIN) {
-				bin = LAST_BIN;
-				++report.clamped_candidates;
-			}
-			likelihoods.emplace_back(molecule, static_cast<uint8_t>(bin));
+		for (const auto &[molecule, log_ratio] : feature.candidates) {
+			const auto [bin, clamped] = bin_of(log_largest - log_ratio);
+			report.clamped_candidates += clamped;
+			likelihoods.emplace_back(molecule, bin);
 		}
 		run.add_likelihood_vector(likelihoods);
+		const auto [unknown_bin, unknown_clamped] = bin_of(log_largest - log_unknown);
+		report.clamped_unknowns += unknown_clamped;
+		unknown_bins.push_back(unknown_bin);
 	}
-	run.set_probabilities_of_unknowns(std::vector<uint8_t>(run.number_of_features(), unknown_bin));
+	run.set_probabilities_of_unknowns(unknown_bins);
 	run.initialize_assignments_to_unknown();
 	return run;
 }
@@ -96,23 +121,21 @@ constexpr long LAST_BIN = RELATIVE_CALIBRATION_SCORE.size() - 1;
 } // namespace
 
 TLoaded load(const std::string &filename, const std::vector<std::string> &species_leaves,
-             const std::vector<std::string> &molecule_leaves, double unknown_fraction) {
-	if (!(unknown_fraction > 0.0 && unknown_fraction <= 1.0)) {
-		throw coretools::TUserError("The unknown fraction (--ms_unknown_fraction) must be in "
-		                            "(0, 1], but got ",
-		                            unknown_fraction, ".");
+             const std::vector<std::string> &molecule_leaves, double unknown_rate) {
+	if (!(unknown_rate > 0.0 && std::isfinite(unknown_rate))) {
+		throw coretools::TUserError("The unknown rate (--ms_unknown_rate) must be positive and "
+		                            "finite, but got ",
+		                            unknown_rate, ".");
 	}
-	const auto species_index  = index_of_name(species_leaves);
-	const auto molecule_index = index_of_name(molecule_leaves);
-	// an unknown fraction below the grid's floor takes the last bin, as a candidate would
-	const auto unknown_bin =
-	    static_cast<uint8_t>(std::min(bin_of(std::log(unknown_fraction)), LAST_BIN));
+	const auto species_index      = index_of_name(species_leaves);
+	const auto molecule_index     = index_of_name(molecule_leaves);
+	const double log_unknown_rate = std::log(unknown_rate);
 
 	coretools::TInputFile file(filename, coretools::FileType::Header, "\t");
 	if (file.header() != HEADER) {
 		throw coretools::TUserError("The mass-spec file '", filename,
 		                            "' must have the tab-separated header 'species extract feature "
-		                            "molecule calibration_score'.");
+		                            "molecule log_correct_density log_incorrect_density'.");
 	}
 
 	std::map<std::pair<size_t, std::string>, size_t> run_of_key;
@@ -123,7 +146,18 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 	for (; !file.empty(); file.popFront()) {
 		const std::string species_name(file.get(0));
 		const std::string molecule_name(file.get(3));
-		const double score  = parse_score(file.get(4), filename, file.curLine());
+		const double log_correct =
+		    parse_log_density(file.get(4), HEADER[4], filename, file.curLine());
+		const double log_incorrect =
+		    parse_log_density(file.get(5), HEADER[5], filename, file.curLine());
+		// two finite densities can still differ by more than a double holds
+		const double log_ratio = log_correct - log_incorrect;
+		if (!std::isfinite(log_ratio)) {
+			throw coretools::TUserError("Line ", file.curLine(), " of the mass-spec file '",
+			                            filename,
+			                            "' has a likelihood ratio that is not a finite "
+			                            "number on the log scale.");
+		}
 		std::string row_key = species_name;
 		for (const size_t column : {1, 2, 3}) {
 			row_key.push_back('\t');
@@ -151,14 +185,15 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		if (new_feature) { run.features.emplace_back(); }
 		auto &feature = run.features[feature_it->second];
 
-		// a skipped molecule is no candidate, but its score still sets the reference
-		feature.reference      = std::max(feature.reference, score);
+		// a skipped molecule is no candidate, but it is one of the structures proposed for the
+		// feature, so it still counts toward the unknown weight
+		++feature.number_of_rows;
 		const auto molecule_it = molecule_index.find(molecule_name);
 		if (molecule_it == molecule_index.end()) {
 			skipped_molecules.insert(molecule_name);
 			continue;
 		}
-		feature.candidates.emplace_back(molecule_it->second, score);
+		feature.candidates.emplace_back(molecule_it->second, log_ratio);
 	}
 
 	TLoaded loaded;
@@ -171,7 +206,7 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 	for (size_t species = 0; species < species_leaves.size(); ++species) {
 		loaded.runs_per_species.push_back();
 		for (; next_run != runs.end() && next_run->species == species; ++next_run) {
-			auto run = build_run(*next_run, unknown_bin, loaded.report);
+			auto run = build_run(*next_run, log_unknown_rate, loaded.report);
 			// a run whose every feature went unloaded observes nothing
 			if (!run.empty()) { loaded.runs_per_species.pushToLast(std::move(run)); }
 		}

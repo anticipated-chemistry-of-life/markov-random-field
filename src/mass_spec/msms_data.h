@@ -162,7 +162,7 @@ public:
 	/// Log-likelihood ratio (new - old) of a proposed assignment move in a single run. Y and the
 	/// mass-spec filter/contamination parameters are held fixed; only the terms that the move
 	/// changes are scored:
-	///   * the feature term(s): the relative calibration score of the assigned molecule, read
+	///   * the feature term(s): the binned weight of the assigned molecule, read
 	///     through `RELATIVE_CALIBRATION_SCORE`. The unknown molecule's bin reads the same way;
 	///   * the filter/contamination term(s) for the real molecules whose "is assigned" status flips
 	///     (none flip for either swap type, so only feature terms change there), via
