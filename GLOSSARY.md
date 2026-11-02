@@ -186,9 +186,17 @@ _Avoid_: peak, signal, spectrum, ion
 A molecule leaf proposed as the explanation of one feature. A molecule that is not a leaf of the molecule tree is not a candidate.
 _Avoid_: hit, annotation, match
 
-**Calibration score**:
-A candidate's density under a kernel density estimate, fitted on correct identifications, over the CSI:FingerID score and the feature's ion mass. Being a density, its absolute scale carries nothing; only ratios between the candidates of one feature do.
-_Avoid_: probability, likelihood, confidence, PHRED score
+**Correct density**:
+A candidate's density under the distribution of (CSI:FingerID score, ion mass) among correct identifications. Its absolute scale carries nothing; only its ratio to the incorrect density does.
+_Avoid_: calibration score (former name), probability, confidence
+
+**Incorrect density**:
+A candidate's density under the distribution of (CSI:FingerID score, ion mass) among incorrect identifications.
+_Avoid_: null density, background density, decoy density
+
+**Likelihood ratio**:
+A candidate's correct density divided by its incorrect density. It is all the model reads of a candidate's score: within one feature, a candidate's weight is its prior times its likelihood ratio. Not a probability, and not bounded by 1.
+_Avoid_: calibration score, relative calibration score, PHRED score
 
 **Unknown molecule**:
 The explanation of a feature by no candidate: a molecule outside the molecule tree, or no molecule at all. Any number of features may be assigned to it at once.
@@ -198,10 +206,14 @@ _Avoid_: unassigned, null molecule, decoy
 The latent choice, for every feature of a run, of the candidate or the unknown molecule that explains it. Within one run a molecule explains at most one feature. A molecule is *detected* in a run when some feature is assigned to it.
 _Avoid_: annotation, match, identification
 
-**Relative calibration score**:
-A candidate's calibration score divided by the best calibration score among all of its feature's rows, candidates or not; so at most 1. The unknown molecule's is the unknown fraction. It is all the model reads of a calibration score, since every ratio the assignment moves take is between scores of one feature.
-_Avoid_: normalised score, feature likelihood, PHRED score
+**True assignment**:
+The assignment that generated a simulated data set, against which the inferred assignment is scored.
+_Avoid_: true explanation, ground truth assignment, correct assignment
 
-**Unknown fraction**:
-The relative calibration score of the unknown molecule, the same for every feature. Written `c`, in `(0, 1]`.
-_Avoid_: unknown probability, unknown prior
+**Unknown weight**:
+The weight of the unknown molecule in one feature, on the same scale as the candidates' likelihood ratios: the unknown rate times the number of structures proposed for that feature, candidates or not. It grows with that number because each proposed structure's share of the prior shrinks as more are proposed.
+_Avoid_: unknown fraction (former name), unknown probability, unknown prior
+
+**Unknown rate**:
+The unknown weight per proposed structure, the same for every feature. Written `ρ`.
+_Avoid_: unknown fraction, unknown probability, unknown prior

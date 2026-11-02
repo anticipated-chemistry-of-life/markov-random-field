@@ -1,5 +1,7 @@
 # Mass-spec scores enter only relative to their feature's best row
 
+_Superseded by [ADR-0018](0018-mass-spec-candidates-enter-by-likelihood-ratio.md): a candidate now enters by its likelihood ratio, and the unknown weight is the unknown rate times the feature's number of proposed structures. The 1/16-nat grid and the within-feature argument below still hold; the best-row reference and the fixed unknown fraction do not._
+
 The mass-spec file gives every candidate of a feature a calibration score (CONTEXT.md, "Calibration score"). A calibration score is a density under a kernel density estimate, fitted on correct identifications, over the CSI:FingerID score and the feature's ion mass. Its absolute scale depends on the bandwidth and on the ion mass of the feature. Two features' scores are therefore not comparable, and a score alone says nothing.
 
 The model reads a calibration score only as a **relative calibration score**: the score divided by the best score among all of its feature's rows (`src/mass_spec/mass_spec_file.cpp`). The best row of a feature is 1. The unknown molecule gets one fixed relative calibration score, the unknown fraction `c` (`--ms_unknown_fraction`, default 0.1). So `c = 0.1` reads "the unknown molecule is one tenth as likely as the feature's best row", in every feature.
