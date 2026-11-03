@@ -13,6 +13,16 @@ Reports, and does not by default gate on:
 - **movement**, because a chain that never left its initialisation can otherwise
   masquerade as recovery when the branch lengths start flat.
 
+On the LOTUS+MS scenarios it also scores the mass-spec half of the model:
+
+- **field**: AUC and a reliability table of P(Y=1) against the true Y, for species
+  with runs and species without. Reported, no threshold.
+- **filter probabilities**: 90% credible-interval coverage, stratified by the number
+  of runs the molecule is present in.
+- **kappa**: coverage.
+
+A coverage passes inside the 95% binomial band around 0.9 (`recovery.coverage_band`).
+
 Thresholds are deliberately absent: rung 1 pins the field *and* the internal
 states, so whatever it scores is the empirical ceiling, and the gates for the
 looser rungs should be set relative to that rather than guessed in advance. Pass
@@ -23,11 +33,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+from dataclasses import asdict
 
 import click
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
+
+from src.independent import mass_spec, recovery
 
 CREDIBLE_MASS = 0.95
 
@@ -174,6 +187,95 @@ def _scalar(trace: pd.DataFrame, truth: dict[str, float], name: str) -> dict:
     }
 
 
+def _mass_spec_scores(
+    base: pathlib.Path, rung_dir: pathlib.Path, meta: dict, trace: pd.DataFrame
+) -> dict:
+    """Field, filter-probability and kappa recovery on a LOTUS+MS scenario."""
+    truth_y = pd.read_csv(base / "simulated_Y.txt", sep="\t")
+    posterior_path = rung_dir / "acol_Y_posterior.tsv"
+    if not posterior_path.exists():
+        raise click.ClickException(f"No Y posterior at {posterior_path}.")
+    posterior = pd.read_csv(posterior_path, sep="\t")
+
+    data = pd.read_csv(base / mass_spec.DATA_FILE, sep="\t", usecols=["species"])
+    species_with_runs = set(data["species"].astype(str))
+    runs_per_species = meta["mass_spec"]["n_runs"] // len(species_with_runs)
+
+    parameters = pd.read_csv(base / "simulated_parameters.txt", sep="\t")
+    parameters = dict(zip(parameters["name"].astype(str), parameters["value"]))
+    prefix = f"{mass_spec.FILTER_PARAMETER}_"
+    filters = [
+        n for n in parameters if n.startswith(prefix) and n in trace.columns
+    ]
+    molecules = [n[len(prefix) :] for n in filters]
+
+    field = recovery.field_scores(truth_y, posterior, species_with_runs)
+    filter_rows = recovery.coverage_by_runs(
+        trace[filters].to_numpy(),
+        np.array([float(parameters[n]) for n in filters]),
+        recovery.runs_present(truth_y, species_with_runs, runs_per_species, molecules),
+    )
+
+    kappa_name = mass_spec.CONTAMINATION_PARAMETER
+    kappa: dict = {"present": kappa_name in trace.columns}
+    if kappa["present"]:
+        draws = trace[[kappa_name]].to_numpy()
+        truth = float(parameters[kappa_name])
+        tail = (1.0 - recovery.CREDIBLE_MASS) / 2.0
+        lower, upper = np.quantile(draws[:, 0], [tail, 1.0 - tail])
+        covered = bool(recovery.is_covered(draws, np.array([truth]))[0])
+        # One interval is one Bernoulli trial, and every band at n=1 is [0, 1]: a
+        # miss would pass. So kappa passes when its interval holds the truth.
+        kappa.update(
+            truth=truth,
+            mean=float(draws.mean()),
+            lower=float(lower),
+            upper=float(upper),
+            covered=covered,
+            passes=covered,
+        )
+
+    return {
+        "field": {key: asdict(score) for key, score in field.items()},
+        "filter_probabilities": {
+            "n": len(filters),
+            "strata": [asdict(row) for row in filter_rows],
+        },
+        "kappa": kappa,
+    }
+
+
+def _report_mass_spec(scores: dict) -> None:
+    click.echo("\n  -- mass spec --")
+    for key, label in (("with_runs", "with runs"), ("without_runs", "without runs")):
+        block = scores["field"][key]
+        click.echo(
+            f"  field, species {label:<12} AUC {block['auc']:5.3f}   (n={block['n']} cells)"
+        )
+        click.echo(f"    {'P(Y=1) bin':<12} {'n':>7} {'mean pred':>10} {'observed':>9}")
+        for row in block["reliability"]:
+            click.echo(
+                f"    [{row['low']:.1f}, {row['high']:.1f}) {row['n']:>7} "
+                f"{row['predicted']:>10.3f} {row['observed']:>9.3f}"
+            )
+
+    click.echo("  filter probabilities, 90% interval coverage by runs present:")
+    for row in scores["filter_probabilities"]["strata"]:
+        low, high = recovery.coverage_band(row["n"])
+        click.echo(
+            f"    runs {row['label']:<5} {'PASS' if row['passes'] else 'FAIL'}  "
+            f"coverage {row['coverage']:6.1%}  band [{low:.1%}, {high:.1%}]  "
+            f"(n={row['n']})"
+        )
+
+    kappa = scores["kappa"]
+    if kappa["present"]:
+        click.echo(
+            f"  kappa  {'PASS' if kappa['passes'] else 'FAIL'}  truth {kappa['truth']:.4f}  "
+            f"mean {kappa['mean']:.4f}  90% [{kappa['lower']:.4f}, {kappa['upper']:.4f}]"
+        )
+
+
 def _report(summary: dict) -> None:
     click.echo(f"\n=== {summary['rung']} ===")
 
@@ -214,6 +316,9 @@ def _report(summary: dict) -> None:
                 f"mean {block['mean']:+.4f}  "
                 f"95% [{block['lower']:+.4f}, {block['upper']:+.4f}]"
             )
+
+    if "mass_spec" in summary:
+        _report_mass_spec(summary["mass_spec"])
 
     for warning in summary["warnings"]:
         click.echo(f"  ! {warning}")
@@ -295,6 +400,9 @@ def main(scenario_dir: str, rung: str, gates: str | None) -> None:
             "mean_log_nu": _scalar(trace, truth, f"{tree}_mean_log_nu"),
             "var_log_nu": _scalar(trace, truth, f"{tree}_var_log_nu"),
         }
+
+    if "mass_spec" in meta:
+        summary["mass_spec"] = _mass_spec_scores(base, rung_dir, meta, trace)
 
     _report(summary)
 

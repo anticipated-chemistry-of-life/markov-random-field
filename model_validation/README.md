@@ -141,6 +141,29 @@ passes `--ms_data` and `--ms_unknown_rate` at its true value, plus
 in none of them, and ρ is the only mass-spec truth a run is told.
 `validate_independent.py` still scores alpha, log nu and the branch lengths on them.
 
+#### Mass-spec scores
+
+On a LOTUS+MS scenario `validate_independent.py` adds a `-- mass spec --` block,
+scored by `src/independent/recovery.py` from `simulated_Y.txt`,
+`simulated_parameters.txt` and the rung's `acol_Y_posterior.tsv` and `acol_trace.txt`:
+
+- **Field.** AUC of P(Y=1) against the true Y, and a reliability table (ten equal bins:
+  mean predicted, observed frequency, count), each for species with runs and species
+  without. A cell the posterior file omits was never a one and counts as 0. Reported,
+  no threshold.
+- **Filter probabilities.** 90% credible-interval coverage over the molecule leaves,
+  stratified by the number of runs the molecule is present in (the runs of the species
+  whose true Y carries it): `0`, `1`, `2`, `3-9`, `10+`; empty strata are skipped.
+- **κ.** Whether its 90% interval holds the truth.
+- **Pass rule.** A filter-probability stratum passes when its coverage lies inside the
+  95% binomial band around 0.9, the central 95% of Binomial(n, 0.9) over n. The band
+  is two-sided, so over-wide intervals fail as well as over-confident ones. κ is a
+  single interval, and the band at n = 1 is [0, 1], which a miss would also pass; κ
+  therefore passes when its interval holds the truth.
+
+Pass and fail are printed and written to `validation_summary.json` under `mass_spec`;
+they do not set the exit code. Scenarios without mass spec are scored exactly as before.
+
 ### Remarks
 
 - **The branch-length budget is conserved.** Bins must sum to
