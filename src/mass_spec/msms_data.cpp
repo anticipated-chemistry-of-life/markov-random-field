@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -243,10 +244,14 @@ double TMSMSData::calculate_LL_ratio_for_assignment_move(size_t species_idx,
 	for (size_t k = 0; k < n_added; ++k) {
 		const uint32_t m = added[k];
 		if (contains(removed, n_removed, m)) { continue; }
-		const bool y      = y_present(m);
-		const double filt = filter_prob(m);
+		const bool y        = y_present(m);
+		const double filt   = filter_prob(m);
+		const double detect = TMassSpecRun::probability_of_assignment(y, true, filt, cont);
+		// A present molecule whose filter probability is 0 (index 0, a reachable state) cannot be
+		// detected, so the proposed state is impossible. TSumLogProbability takes (0, 1] only.
+		if (detect == 0.0) { return -std::numeric_limits<double>::infinity(); }
 		p_old.add(TMassSpecRun::probability_of_assignment(y, false, filt, cont));
-		p_new.add(TMassSpecRun::probability_of_assignment(y, true, filt, cont));
+		p_new.add(detect);
 	}
 
 	return p_new.getSum() - p_old.getSum();
