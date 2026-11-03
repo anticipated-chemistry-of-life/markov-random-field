@@ -187,6 +187,35 @@ def _scalar(trace: pd.DataFrame, truth: dict[str, float], name: str) -> dict:
     }
 
 
+def _assignment_scores(
+    base: pathlib.Path, rung_dir: pathlib.Path
+) -> recovery.AssignmentScore:
+    """Check the assignment posterior against the data file, then score it."""
+    path = rung_dir / "acol_assignment_posterior.txt"
+    if not path.exists():
+        raise click.ClickException(
+            f"No assignment posterior at {path}. The rung must pass "
+            "--write_assignment_posterior."
+        )
+    posterior = pd.read_csv(path, sep="\t", dtype={"species": str, "extract": str, "feature": str, "molecule": str})
+    data = pd.read_csv(
+        base / mass_spec.DATA_FILE,
+        sep="\t",
+        usecols=[*recovery.FEATURE_KEY, "molecule"],
+        dtype=str,
+    )
+    truth = pd.read_csv(
+        base / mass_spec.ASSIGNMENT_FILE,
+        sep="\t",
+        dtype={"species": str, "extract": str, "feature": str, "molecule": str},
+    )
+    try:
+        recovery.check_assignment_format(data, posterior)
+        return recovery.assignment_scores(truth, posterior)
+    except recovery.AssignmentFormatError as error:
+        raise click.ClickException(f"{path}: {error}") from error
+
+
 def _mass_spec_scores(
     base: pathlib.Path, rung_dir: pathlib.Path, meta: dict, trace: pd.DataFrame
 ) -> dict:
@@ -235,8 +264,11 @@ def _mass_spec_scores(
             passes=covered,
         )
 
+    assignment = _assignment_scores(base, rung_dir)
+
     return {
         "field": {key: asdict(score) for key, score in field.items()},
+        "assignment": asdict(assignment),
         "filter_probabilities": {
             "n": len(filters),
             "strata": [asdict(row) for row in filter_rows],
@@ -258,6 +290,19 @@ def _report_mass_spec(scores: dict) -> None:
                 f"    [{row['low']:.1f}, {row['high']:.1f}) {row['n']:>7} "
                 f"{row['predicted']:>10.3f} {row['observed']:>9.3f}"
             )
+
+    a = scores["assignment"]
+    click.echo(f"  assignment posterior (n={a['n']} features):")
+    click.echo(f"    accuracy of the posterior mode        {a['accuracy']:6.1%}")
+    click.echo(f"    mean posterior on the true assignment {a['mean_true']:6.3f}")
+    click.echo(
+        f"    mean unknown posterior, unknown features   {a['mean_unknown_of_unknown_features']:6.3f}"
+        f"   (n={a['n_unknown_features']})"
+    )
+    click.echo(
+        f"    mean unknown posterior, molecule features  {a['mean_unknown_of_molecule_features']:6.3f}"
+        f"   (n={a['n_molecule_features']})"
+    )
 
     click.echo("  filter probabilities, 90% interval coverage by runs present:")
     for row in scores["filter_probabilities"]["strata"]:

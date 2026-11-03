@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binom, rankdata
 
+from .mass_spec import UNKNOWN
+
 NOMINAL_COVERAGE = 0.9
 BAND_MASS = 0.95
 CREDIBLE_MASS = 0.9
@@ -157,4 +159,139 @@ def runs_present(
     species_count = carried.groupby("molecules").size()
     return (
         species_count.reindex(molecules, fill_value=0).to_numpy() * runs_per_species
+    )
+
+
+# --------------------------------------------------------------------------
+# The assignment posterior
+# --------------------------------------------------------------------------
+
+FEATURE_KEY = ["species", "extract", "feature"]
+SUM_TOLERANCE = 1e-9
+"""The C++ writes each fraction as the shortest text that reads back exactly, so a
+feature's fractions sum to 1 to rounding of the sum alone."""
+
+
+class AssignmentFormatError(ValueError):
+    """The assignment posterior does not match the MS data file."""
+
+
+def _feature_label(key: tuple) -> str:
+    species, extract, feature = key
+    return f"feature {feature!r} (species {species!r}, extract {extract!r})"
+
+
+def check_assignment_format(data: pd.DataFrame, posterior: pd.DataFrame) -> None:
+    """Every (run, feature) of `data` is present with all its candidates and the unknown
+    molecule, nothing else is, and each feature's fractions are in [0, 1] and sum to 1.
+
+    `data` is the MS data file (one row per candidate); `posterior` the C++ file.
+    Raises `AssignmentFormatError`, naming the first offending feature.
+    """
+    expected: dict[tuple, set[str]] = {}
+    for *key, molecule in data[FEATURE_KEY + ["molecule"]].itertuples(index=False):
+        expected.setdefault(tuple(key), set()).add(str(molecule))
+    for candidates in expected.values():
+        candidates.add(UNKNOWN)
+
+    seen: dict[tuple, list[str]] = {}
+    for *key, molecule in posterior[FEATURE_KEY + ["molecule"]].itertuples(index=False):
+        seen.setdefault(tuple(key), []).append(str(molecule))
+
+    for key in expected:
+        if key not in seen:
+            raise AssignmentFormatError(
+                f"Assignment posterior has no rows for {_feature_label(key)}."
+            )
+    for key, molecules in seen.items():
+        if key not in expected:
+            raise AssignmentFormatError(
+                f"Assignment posterior has rows for {_feature_label(key)}, "
+                "which the MS data file does not have."
+            )
+        if len(molecules) != len(set(molecules)):
+            raise AssignmentFormatError(
+                f"Assignment posterior repeats a molecule for {_feature_label(key)}."
+            )
+        missing = expected[key] - set(molecules)
+        if missing:
+            raise AssignmentFormatError(
+                f"Assignment posterior for {_feature_label(key)} lacks "
+                f"{sorted(missing)}."
+            )
+        extra = set(molecules) - expected[key]
+        if extra:
+            raise AssignmentFormatError(
+                f"Assignment posterior for {_feature_label(key)} has {sorted(extra)}, "
+                "which are not its candidates."
+            )
+
+    fractions = posterior["fraction"].astype(float)
+    for key, group in posterior.assign(fraction=fractions).groupby(FEATURE_KEY, sort=False):
+        values = group["fraction"].to_numpy()
+        if not ((values >= 0) & (values <= 1)).all():
+            raise AssignmentFormatError(
+                f"Assignment posterior for {_feature_label(key)} has a fraction "
+                "outside [0, 1]."
+            )
+        total = float(values.sum())
+        if abs(total - 1.0) > SUM_TOLERANCE:
+            raise AssignmentFormatError(
+                f"Assignment posterior for {_feature_label(key)} sums to {total!r}, "
+                "not 1."
+            )
+
+
+@dataclass(frozen=True)
+class AssignmentScore:
+    n: int
+    """Features scored."""
+    accuracy: float
+    """Fraction of features whose posterior mode is the true explanation."""
+    mean_true: float
+    """Mean posterior mass on the true explanation."""
+    n_unknown_features: int
+    mean_unknown_of_unknown_features: float
+    """Mean posterior on the unknown molecule, over features that are truly unknown."""
+    n_molecule_features: int
+    mean_unknown_of_molecule_features: float
+    """Mean posterior on the unknown molecule, over features of a detected molecule."""
+
+
+def assignment_scores(truth: pd.DataFrame, posterior: pd.DataFrame) -> AssignmentScore:
+    """How well the assignment posterior recovers the true assignment.
+
+    Both frames are in the C++ layout (`species extract feature molecule fraction`),
+    the truth with fraction 1 on the true explanation. The mode of a tie is the
+    first row the file lists.
+    """
+    merged = truth.merge(
+        posterior, on=FEATURE_KEY + ["molecule"], suffixes=("_true", "_posterior")
+    )
+    if len(merged) != len(truth):
+        raise AssignmentFormatError("The posterior does not hold every true row.")
+
+    grouped = merged.groupby(FEATURE_KEY, sort=False)
+    is_true = merged["fraction_true"] == 1
+    mode_is_true = grouped["fraction_posterior"].transform("idxmax") == merged.index
+    mode_hit = (mode_is_true & is_true).groupby([merged[k] for k in FEATURE_KEY]).any()
+
+    mass_on_truth = merged["fraction_posterior"].where(is_true, 0.0)
+    mean_true = mass_on_truth.groupby([merged[k] for k in FEATURE_KEY]).sum()
+
+    unknown = merged[merged["molecule"] == UNKNOWN].set_index(FEATURE_KEY)
+    unknown_truth = unknown["fraction_true"] == 1
+    unknown_mass = unknown["fraction_posterior"]
+
+    def mean(values: pd.Series) -> float:
+        return float(values.mean()) if len(values) else float("nan")
+
+    return AssignmentScore(
+        n=len(mean_true),
+        accuracy=float(mode_hit.mean()),
+        mean_true=float(mean_true.mean()),
+        n_unknown_features=int(unknown_truth.sum()),
+        mean_unknown_of_unknown_features=mean(unknown_mass[unknown_truth]),
+        n_molecule_features=int((~unknown_truth).sum()),
+        mean_unknown_of_molecule_features=mean(unknown_mass[~unknown_truth]),
     )

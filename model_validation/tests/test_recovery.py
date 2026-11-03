@@ -110,3 +110,119 @@ def test_a_molecule_is_present_in_every_run_of_every_species_that_carries_it():
         truth, species_with_runs={"a"}, runs_per_species=2, molecules=["x", "y"]
     )
     assert runs.tolist() == [2, 0]
+
+
+# --------------------------------------------------------------------------
+# The assignment posterior
+# --------------------------------------------------------------------------
+
+UNKNOWN = "<unknown>"
+KEY = ["species", "extract", "feature"]
+
+
+def _assignment(rows):
+    """`rows`: (feature, molecule, value) for one species and extract."""
+    return pd.DataFrame(
+        [("sp", "e", f, m, v) for f, m, v in rows], columns=KEY + ["molecule", "fraction"]
+    )
+
+
+def _data(rows):
+    """The data file lists candidates only, never the unknown molecule."""
+    return pd.DataFrame(
+        [("sp", "e", f, m) for f, m in rows], columns=KEY + ["molecule"]
+    )
+
+
+# Feature f1 is molecule A out of {A, B}; f2 is unknown, candidates {A, B};
+# f3 is molecule B out of {A, B}.
+TRUTH = _assignment(
+    [
+        ("f1", "A", 1), ("f1", "B", 0), ("f1", UNKNOWN, 0),
+        ("f2", "A", 0), ("f2", "B", 0), ("f2", UNKNOWN, 1),
+        ("f3", "A", 0), ("f3", "B", 1), ("f3", UNKNOWN, 0),
+    ]
+)  # fmt: skip
+DATA = _data([(f, m) for f in ("f1", "f2", "f3") for m in ("A", "B")])
+
+
+def _posterior(f1, f2, f3):
+    rows = []
+    for f, (a, b, u) in zip(("f1", "f2", "f3"), (f1, f2, f3)):
+        rows += [(f, "A", a), (f, "B", b), (f, UNKNOWN, u)]
+    return _assignment(rows)
+
+
+def test_assignment_scores_are_worked_by_hand():
+    # f1: mode A (right), mass on truth 0.6, unknown 0.1.
+    # f2: mode unknown (right), mass on truth 0.5, unknown 0.5.
+    # f3: mode A (wrong), mass on truth 0.25, unknown 0.25.
+    posterior = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.5), (0.5, 0.25, 0.25))
+    s = recovery.assignment_scores(TRUTH, posterior)
+    assert s.n == 3
+    assert s.accuracy == pytest.approx(2 / 3)
+    assert s.mean_true == pytest.approx((0.6 + 0.5 + 0.25) / 3)
+    # Unknown posterior: the unknown feature f2 alone; molecule features f1, f3.
+    assert s.mean_unknown_of_unknown_features == pytest.approx(0.5)
+    assert s.n_unknown_features == 1
+    assert s.mean_unknown_of_molecule_features == pytest.approx((0.1 + 0.25) / 2)
+    assert s.n_molecule_features == 2
+
+
+def test_a_perfect_posterior_scores_one_everywhere_it_should():
+    s = recovery.assignment_scores(TRUTH, TRUTH.copy())
+    assert (s.accuracy, s.mean_true) == (1.0, 1.0)
+    assert s.mean_unknown_of_unknown_features == 1.0
+    assert s.mean_unknown_of_molecule_features == 0.0
+
+
+def test_a_scenario_without_unknown_features_has_no_unknown_feature_score():
+    truth = TRUTH[TRUTH["feature"] != "f2"]
+    posterior = _posterior((0.6, 0.3, 0.1), (0, 0, 1), (0.5, 0.25, 0.25))
+    posterior = posterior[posterior["feature"] != "f2"]
+    s = recovery.assignment_scores(truth, posterior)
+    assert s.n_unknown_features == 0
+    assert np.isnan(s.mean_unknown_of_unknown_features)
+
+
+GOOD = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.5), (0.5, 0.25, 0.25))
+
+
+def test_a_well_formed_posterior_passes_the_format_check():
+    recovery.check_assignment_format(DATA, GOOD)
+
+
+def test_a_missing_feature_is_named():
+    bad = GOOD[GOOD["feature"] != "f2"]
+    with pytest.raises(recovery.AssignmentFormatError, match="f2"):
+        recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_missing_candidate_is_named():
+    bad = GOOD[~((GOOD["feature"] == "f3") & (GOOD["molecule"] == "B"))]
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f3.*B"):
+        recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_missing_unknown_row_is_named():
+    bad = GOOD[~((GOOD["feature"] == "f1") & (GOOD["molecule"] == UNKNOWN))]
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f1.*<unknown>"):
+        recovery.check_assignment_format(DATA, bad)
+
+
+def test_an_extra_row_is_named():
+    extra = _assignment([("f1", "C", 0.0)])
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f1.*C"):
+        recovery.check_assignment_format(DATA, pd.concat([GOOD, extra]))
+
+
+def test_a_feature_that_does_not_sum_to_one_is_named():
+    bad = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.4), (0.5, 0.25, 0.25))
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f2.*sum"):
+        recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_fraction_outside_zero_one_is_named():
+    bad = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.5), (1.5, -0.5, 0.0))
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f3"):
+        recovery.check_assignment_format(DATA, bad)

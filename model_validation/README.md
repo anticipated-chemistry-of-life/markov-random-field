@@ -144,13 +144,24 @@ in none of them, and ρ is the only mass-spec truth a run is told.
 #### Mass-spec scores
 
 On a LOTUS+MS scenario `validate_independent.py` adds a `-- mass spec --` block,
-scored by `src/independent/recovery.py` from `simulated_Y.txt`,
-`simulated_parameters.txt` and the rung's `acol_Y_posterior.tsv` and `acol_trace.txt`:
+scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_ms_assignment.tsv`,
+`simulated_parameters.txt` and the rung's `acol_Y_posterior.tsv`, `acol_assignment_posterior.txt` and `acol_trace.txt`:
 
 - **Field.** AUC of P(Y=1) against the true Y, and a reliability table (ten equal bins:
   mean predicted, observed frequency, count), each for species with runs and species
   without. A cell the posterior file omits was never a one and counts as 0. Reported,
   no threshold.
+- **Assignment.** From `acol_assignment_posterior.txt` against
+  `simulated_ms_assignment.tsv`, over every (run, feature): the accuracy of the
+  posterior mode against the true explanation (a candidate molecule, or the unknown
+  molecule); the mean posterior mass on the true explanation; and the mean posterior
+  on the unknown molecule, reported separately for truly unknown features and for
+  features of a detected molecule (a good fit is high on the first, low on the
+  second). Reported, no threshold. Before scoring, the file's format is checked
+  against `simulated_ms_data.tsv`: every (run, feature) is present with all its
+  candidates and `<unknown>`, nothing else is, every fraction lies in [0, 1] and
+  each feature sums to 1. A malformed or incomplete file fails the validation
+  with a message naming the feature.
 - **Filter probabilities.** 90% credible-interval coverage over the molecule leaves,
   stratified by the number of runs the molecule is present in (the runs of the species
   whose true Y carries it): `0`, `1`, `2`, `3-9`, `10+`; empty strata are skipped.
