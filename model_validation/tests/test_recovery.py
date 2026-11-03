@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.independent import recovery
+from src.independent import mass_spec, recovery
 
 
 def test_the_band_around_nine_tenths_of_a_hundred_covers_84_to_95():
@@ -116,8 +116,8 @@ def test_a_molecule_is_present_in_every_run_of_every_species_that_carries_it():
 # The assignment posterior
 # --------------------------------------------------------------------------
 
-UNKNOWN = "<unknown>"
-KEY = ["species", "extract", "feature"]
+UNKNOWN = mass_spec.UNKNOWN
+KEY = recovery.FEATURE_KEY
 
 
 def _assignment(rows):
@@ -161,7 +161,7 @@ def test_assignment_scores_are_worked_by_hand():
     s = recovery.assignment_scores(TRUTH, posterior)
     assert s.n == 3
     assert s.accuracy == pytest.approx(2 / 3)
-    assert s.mean_true == pytest.approx((0.6 + 0.5 + 0.25) / 3)
+    assert s.mean_on_true_assignment == pytest.approx((0.6 + 0.5 + 0.25) / 3)
     # Unknown posterior: the unknown feature f2 alone; molecule features f1, f3.
     assert s.mean_unknown_of_unknown_features == pytest.approx(0.5)
     assert s.n_unknown_features == 1
@@ -171,7 +171,7 @@ def test_assignment_scores_are_worked_by_hand():
 
 def test_a_perfect_posterior_scores_one_everywhere_it_should():
     s = recovery.assignment_scores(TRUTH, TRUTH.copy())
-    assert (s.accuracy, s.mean_true) == (1.0, 1.0)
+    assert (s.accuracy, s.mean_on_true_assignment) == (1.0, 1.0)
     assert s.mean_unknown_of_unknown_features == 1.0
     assert s.mean_unknown_of_molecule_features == 0.0
 
@@ -226,3 +226,17 @@ def test_a_fraction_outside_zero_one_is_named():
     bad = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.5), (1.5, -0.5, 0.0))
     with pytest.raises(recovery.AssignmentFormatError, match=r"f3"):
         recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_fraction_that_is_not_a_number_is_named():
+    bad = GOOD.astype({"fraction": object})
+    bad.loc[bad.index[7], "fraction"] = "abc"
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f3"):
+        recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_tied_mode_goes_to_the_first_row_the_posterior_lists():
+    # f1 ties A and B at 0.45; the posterior lists A first and A is true.
+    tied = _posterior((0.45, 0.45, 0.1), (0, 0, 1), (0, 1, 0))
+    reordered_truth = TRUTH.iloc[[1, 0, *range(2, len(TRUTH))]]
+    assert recovery.assignment_scores(reordered_truth, tied).accuracy == 1.0

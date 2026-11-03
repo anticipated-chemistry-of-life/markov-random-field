@@ -153,8 +153,8 @@ scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_ms_as
   no threshold.
 - **Assignment.** From `acol_assignment_posterior.txt` against
   `simulated_ms_assignment.tsv`, over every (run, feature): the accuracy of the
-  posterior mode against the true explanation (a candidate molecule, or the unknown
-  molecule); the mean posterior mass on the true explanation; and the mean posterior
+  posterior mode against the true assignment (a candidate molecule, or the unknown
+  molecule); the mean posterior mass on the true assignment; and the mean posterior
   on the unknown molecule, reported separately for truly unknown features and for
   features of a detected molecule (a good fit is high on the first, low on the
   second). Reported, no threshold. Before scoring, the file's format is checked

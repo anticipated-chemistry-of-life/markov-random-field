@@ -17,6 +17,9 @@ On the LOTUS+MS scenarios it also scores the mass-spec half of the model:
 
 - **field**: AUC and a reliability table of P(Y=1) against the true Y, for species
   with runs and species without. Reported, no threshold.
+- **assignment**: accuracy of the assignment posterior mode, the mean posterior on the
+  true assignment, and the mean unknown posterior for unknown features and for
+  features of a detected molecule. The posterior's format is checked first.
 - **filter probabilities**: 90% credible-interval coverage, stratified by the number
   of runs the molecule is present in.
 - **kappa**: coverage.
@@ -197,18 +200,13 @@ def _assignment_scores(
             f"No assignment posterior at {path}. The rung must pass "
             "--write_assignment_posterior."
         )
-    posterior = pd.read_csv(path, sep="\t", dtype={"species": str, "extract": str, "feature": str, "molecule": str})
+    names = {column: str for column in (*recovery.FEATURE_KEY, "molecule")}
+    # `fraction` stays unparsed here: a bad cell is reported by feature, not by pandas.
+    posterior = pd.read_csv(path, sep="\t", dtype=names)
     data = pd.read_csv(
-        base / mass_spec.DATA_FILE,
-        sep="\t",
-        usecols=[*recovery.FEATURE_KEY, "molecule"],
-        dtype=str,
+        base / mass_spec.DATA_FILE, sep="\t", usecols=list(names), dtype=names
     )
-    truth = pd.read_csv(
-        base / mass_spec.ASSIGNMENT_FILE,
-        sep="\t",
-        dtype={"species": str, "extract": str, "feature": str, "molecule": str},
-    )
+    truth = pd.read_csv(base / mass_spec.ASSIGNMENT_FILE, sep="\t", dtype=names)
     try:
         recovery.check_assignment_format(data, posterior)
         return recovery.assignment_scores(truth, posterior)
@@ -291,17 +289,17 @@ def _report_mass_spec(scores: dict) -> None:
                 f"{row['predicted']:>10.3f} {row['observed']:>9.3f}"
             )
 
-    a = scores["assignment"]
-    click.echo(f"  assignment posterior (n={a['n']} features):")
-    click.echo(f"    accuracy of the posterior mode        {a['accuracy']:6.1%}")
-    click.echo(f"    mean posterior on the true assignment {a['mean_true']:6.3f}")
+    assignment = scores["assignment"]
+    click.echo(f"  assignment posterior (n={assignment['n']} features):")
+    click.echo(f"    accuracy of the posterior mode        {assignment['accuracy']:6.1%}")
+    click.echo(f"    mean posterior on the true assignment {assignment['mean_on_true_assignment']:6.3f}")
     click.echo(
-        f"    mean unknown posterior, unknown features   {a['mean_unknown_of_unknown_features']:6.3f}"
-        f"   (n={a['n_unknown_features']})"
+        f"    mean unknown posterior, unknown features   {assignment['mean_unknown_of_unknown_features']:6.3f}"
+        f"   (n={assignment['n_unknown_features']})"
     )
     click.echo(
-        f"    mean unknown posterior, molecule features  {a['mean_unknown_of_molecule_features']:6.3f}"
-        f"   (n={a['n_molecule_features']})"
+        f"    mean unknown posterior, molecule features  {assignment['mean_unknown_of_molecule_features']:6.3f}"
+        f"   (n={assignment['n_molecule_features']})"
     )
 
     click.echo("  filter probabilities, 90% interval coverage by runs present:")

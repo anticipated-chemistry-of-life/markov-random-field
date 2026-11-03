@@ -1,4 +1,5 @@
-"""Scores for how well inference recovers the field and the detection parameters.
+"""Scores for how well inference recovers the field, the detection parameters and
+the assignment.
 
 Pure functions over arrays and frames, so the validator script only reads files.
 """
@@ -226,7 +227,8 @@ def check_assignment_format(data: pd.DataFrame, posterior: pd.DataFrame) -> None
                 "which are not its candidates."
             )
 
-    fractions = posterior["fraction"].astype(float)
+    # Unparseable text becomes NaN, which the range check below reports by feature.
+    fractions = pd.to_numeric(posterior["fraction"], errors="coerce")
     for key, group in posterior.assign(fraction=fractions).groupby(FEATURE_KEY, sort=False):
         values = group["fraction"].to_numpy()
         if not ((values >= 0) & (values <= 1)).all():
@@ -247,9 +249,9 @@ class AssignmentScore:
     n: int
     """Features scored."""
     accuracy: float
-    """Fraction of features whose posterior mode is the true explanation."""
-    mean_true: float
-    """Mean posterior mass on the true explanation."""
+    """Fraction of features whose posterior mode is the true assignment."""
+    mean_on_true_assignment: float
+    """Mean posterior mass on the true assignment."""
     n_unknown_features: int
     mean_unknown_of_unknown_features: float
     """Mean posterior on the unknown molecule, over features that are truly unknown."""
@@ -262,14 +264,19 @@ def assignment_scores(truth: pd.DataFrame, posterior: pd.DataFrame) -> Assignmen
     """How well the assignment posterior recovers the true assignment.
 
     Both frames are in the C++ layout (`species extract feature molecule fraction`),
-    the truth with fraction 1 on the true explanation. The mode of a tie is the
+    the truth with fraction 1 on the true assignment. The mode of a tie is the
     first row the file lists.
     """
-    merged = truth.merge(
-        posterior, on=FEATURE_KEY + ["molecule"], suffixes=("_true", "_posterior")
+    merged = posterior.merge(
+        truth, on=FEATURE_KEY + ["molecule"], suffixes=("_posterior", "_true")
     )
     if len(merged) != len(truth):
-        raise AssignmentFormatError("The posterior does not hold every true row.")
+        lacking = truth.merge(posterior, on=FEATURE_KEY + ["molecule"], how="left", indicator=True)
+        first = lacking[lacking["_merge"] == "left_only"].iloc[0]
+        raise AssignmentFormatError(
+            f"Assignment posterior lacks {first['molecule']!r} of "
+            f"{_feature_label(tuple(first[FEATURE_KEY]))}, a row of the true assignment."
+        )
 
     grouped = merged.groupby(FEATURE_KEY, sort=False)
     is_true = merged["fraction_true"] == 1
@@ -277,7 +284,7 @@ def assignment_scores(truth: pd.DataFrame, posterior: pd.DataFrame) -> Assignmen
     mode_hit = (mode_is_true & is_true).groupby([merged[k] for k in FEATURE_KEY]).any()
 
     mass_on_truth = merged["fraction_posterior"].where(is_true, 0.0)
-    mean_true = mass_on_truth.groupby([merged[k] for k in FEATURE_KEY]).sum()
+    mean_on_true_assignment = mass_on_truth.groupby([merged[k] for k in FEATURE_KEY]).sum()
 
     unknown = merged[merged["molecule"] == UNKNOWN].set_index(FEATURE_KEY)
     unknown_truth = unknown["fraction_true"] == 1
@@ -287,9 +294,9 @@ def assignment_scores(truth: pd.DataFrame, posterior: pd.DataFrame) -> Assignmen
         return float(values.mean()) if len(values) else float("nan")
 
     return AssignmentScore(
-        n=len(mean_true),
+        n=len(mean_on_true_assignment),
         accuracy=float(mode_hit.mean()),
-        mean_true=float(mean_true.mean()),
+        mean_on_true_assignment=float(mean_on_true_assignment.mean()),
         n_unknown_features=int(unknown_truth.sum()),
         mean_unknown_of_unknown_features=mean(unknown_mass[unknown_truth]),
         n_molecule_features=int((~unknown_truth).sum()),
