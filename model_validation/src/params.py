@@ -112,7 +112,8 @@ class ParameterGenerator:
         if alpha is not None:
             values = [alpha] * n
         else:
-            values = np.random.beta(0.5, 0.5, size=n).tolist()
+            # The C++'s own prior on alpha (PriorOnAlpha, src/Types.h); issue #108.
+            values = np.random.uniform(0.0, 1.0, size=n).tolist()
         self._alpha = pd.DataFrame(
             {
                 "name": [

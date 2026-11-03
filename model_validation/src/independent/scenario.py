@@ -109,7 +109,9 @@ def _draw_tree(
     config: ScenarioConfig,
 ) -> TreeTruth:
     """Draw one tree's parameters, then its whole node state under them."""
-    alphas = rng.beta(0.5, 0.5, size=n_cliques)
+    # The C++'s own prior on alpha (PriorOnAlpha, src/Types.h). Drawing from any
+    # other biases the recovered log nu: see issue #108.
+    alphas = rng.uniform(0.0, 1.0, size=n_cliques)
     log_nus = rng.normal(config.mean_log_nu, np.sqrt(config.var_log_nu), size=n_cliques)
     nus = np.exp(log_nus)
     if nus.max() >= F.STATIONARY_NU_THRESHOLD:
