@@ -93,6 +93,54 @@ to the shape of the link, to the error probability and to the orientation of a
 leaf block. The field rate and the reference draw pin those. The module header
 says so at more length.
 
+### The LOTUS+MS scenarios
+
+```bash
+uv run python simulate_independent.py --mass_spec dense     # independent_y_s255_m255_seed42_ms_dense
+uv run python simulate_independent.py --mass_spec sparse    # independent_y_s255_m255_seed42_ms_sparse
+```
+
+Each is the scenario above plus simulated mass-spec data, drawn by
+`src/independent/mass_spec.py` after everything else, so adding `--mass_spec`
+leaves the rest of a seed's scenario unchanged. The story is the model's own
+([ADR-0018](../docs/adr/0018-mass-spec-candidates-enter-by-likelihood-ratio.md)),
+so a recovery failure points at the code and not at misspecification.
+
+- **Layouts.** `dense`: two runs per species leaf. `sparse`: eight species, chosen
+  at random, with one run each. Both use 255-node trees and one filter.
+- **Detection.** A present molecule is detected in a run with its filter
+  probability, an absent one with κ = 0.01. Filter probabilities are drawn uniformly
+  on the byte grid, `i / 255` for `i` in 0..254. Each detected molecule produces
+  exactly one feature.
+- **Unknown features.** Each run also gets Poisson(λ) unknown features. λ is the
+  expected number of molecule features per run under the true Y, filter
+  probabilities and κ, so about half of all features are unknown. ρ = λ / the
+  number of molecule leaves.
+- **Candidates.** n_f ~ Uniform{1..20} for both kinds of feature. A molecule
+  feature lists its true molecule plus other molecule leaves; an unknown feature
+  lists molecule leaves only. Both draw uniformly without replacement, so every
+  proposed structure is a molecule leaf.
+- **Scores.** A wrong row scores x ~ Uniform(0,1), a true row x ~ Beta(5,1). The
+  log correct density is ln 5 + 4 ln x and the log incorrect density is 0.
+
+Truth files, all under the `simulated_` prefix that picks the stattools reader:
+
+| File | Holds |
+| --- | --- |
+| `simulated_ms_data.tsv` | The data, in the loader's six columns. The only mass-spec file an inference run reads. |
+| `simulated_ms_assignment.tsv` | The true assignment, in the layout of the C++ assignment posterior: `species extract feature molecule fraction`, one row per candidate and one for the unknown molecule (`<unknown>`), fraction 1 on the true explanation and 0 elsewhere. |
+| `simulated_parameters.txt` | Also `filter_proba_<molecule leaf>` (the byte index the C++ stores; the probability is the index over 255), `contamination_proba` (κ), `ms_lambda` (λ) and `ms_unknown_rate` (ρ). |
+
+The mass-spec truth is not added to `truth_<tree>.txt`, which `validate_independent.py`
+reads its tree scores from, and `meta.json` gains a `mass_spec` entry with the counts.
+
+The rungs are the same three, on the `lm` build, named
+`rung1_pin_field_and_states`, `rung2_pin_field` and `rung3_from_data_lm`. Every one
+passes `--ms_data` and `--ms_unknown_rate` at its true value, plus
+`--write_assignment_posterior`. Assignments, filter probabilities and κ are pinned
+in none of them, and ρ is the only mass-spec truth a run is told.
+`validate_independent.py` still scores alpha, log nu and the branch lengths on them.
+
 ### Remarks
 
 - **The branch-length budget is conserved.** Bins must sum to

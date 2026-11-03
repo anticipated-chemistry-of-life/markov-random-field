@@ -18,6 +18,7 @@ from src.independent import enumeration as E
 from src.independent import field as F
 from src.independent import io
 from src.independent import link as L
+from src.independent import mass_spec
 from src.independent import scenario
 from src.independent.data import research_effort, simulate_simple_error
 from src.independent.indexing import build_tree_index
@@ -838,3 +839,183 @@ def test_a_clique_that_names_no_leaf_of_the_other_tree_is_refused():
 def test_a_model_beyond_enumeration_is_refused():
     with pytest.raises(ValueError, match="intractable"):
         E.enumerate_binary_arrays((8, 4))
+
+
+# --------------------------------------------------------------------------
+# The LOTUS+MS scenarios
+# --------------------------------------------------------------------------
+
+
+def _ms_scenario(tmp: str, layout: str = "dense", **overrides):
+    """A small seeded scenario with mass-spec data.
+
+    The molecule tree needs at least as many leaves as the longest candidate list,
+    so it is larger than `_small_scenario`'s.
+    """
+    out = pathlib.Path(tmp) / "scenario"
+    config = scenario.ScenarioConfig(
+        n_species_nodes=63,
+        n_molecule_nodes=63,
+        mass_spec=mass_spec.LAYOUTS[layout],
+        **overrides,
+    )
+    return out, config, scenario.build_scenario(out, config)
+
+
+def _ms_files(out: pathlib.Path):
+    data = pd.read_csv(out / mass_spec.DATA_FILE, sep="\t")
+    truth = pd.read_csv(out / mass_spec.ASSIGNMENT_FILE, sep="\t")
+    return data, truth
+
+
+FEATURE = ["species", "extract", "feature"]
+
+
+def test_every_molecule_feature_lists_its_true_molecule():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        data, truth = _ms_files(out)
+
+    assigned = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)]
+    assert len(assigned) > 0
+    listed = data.merge(assigned, on=FEATURE + ["molecule"])
+    assert len(listed) == len(assigned)
+
+
+def test_no_molecule_explains_two_features_of_one_run():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        _, truth = _ms_files(out)
+
+    assigned = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)]
+    assert not assigned.duplicated(["species", "extract", "molecule"]).any()
+
+
+def test_each_feature_has_exactly_one_explanation_and_unknown_features_list_only_wrong_rows():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        _, truth = _ms_files(out)
+
+    per_feature = truth.groupby(FEATURE)["fraction"].sum()
+    assert (per_feature == 1).all()
+    unknown = truth[(truth["molecule"] == mass_spec.UNKNOWN) & (truth["fraction"] == 1)]
+    assert len(unknown) > 0
+    rows = truth.merge(unknown[FEATURE], on=FEATURE)
+    wrong = rows[rows["molecule"] != mass_spec.UNKNOWN]
+    assert len(wrong) > 0
+    assert (wrong["fraction"] == 0).all()
+
+
+def test_the_number_of_proposed_structures_is_between_1_and_20_for_both_kinds():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        data, truth = _ms_files(out)
+
+    n_f = data.groupby(FEATURE).size().rename("n_f").reset_index()
+    is_unknown = (
+        truth[truth["molecule"] == mass_spec.UNKNOWN][FEATURE + ["fraction"]]
+        .rename(columns={"fraction": "unknown"})
+    )
+    merged = n_f.merge(is_unknown, on=FEATURE)
+    for kind in (0, 1):
+        sizes = merged[merged["unknown"] == kind]["n_f"]
+        assert len(sizes) > 0
+        assert sizes.min() >= 1
+        assert sizes.max() <= 20
+    assert (merged["n_f"] == 20).any() and (merged["n_f"] == 1).any()
+
+
+def test_rho_is_lambda_over_the_molecule_leaves_and_lambda_follows_the_true_field():
+    """lambda is recomputed here from the written field, filter probabilities and
+    kappa, none of which the simulator hands back."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        species, molecules = _indices_of(out)
+        field = io.read_field(out / "simulated_Y.txt", molecules.n_leaves)
+        values = pd.read_csv(out / scenario.SIMULATE_PARAMETERS, sep="\t")
+        values = dict(zip(values["name"].astype(str), values["value"].astype(float)))
+        data, _ = _ms_files(out)
+
+    index = np.array([values[f"filter_proba_{n}"] for n in molecules.leaf_names()])
+    kappa = values["contamination_proba"]
+    assert kappa == 0.01
+    assert ((index >= 0) & (index <= 254) & (index == index.astype(int))).all()
+
+    # Dense: every species leaf has runs, so every run's expectation counts.
+    expected = np.where(field, index / 255.0, kappa).sum(axis=1).mean()
+    assert values["ms_lambda"] == pytest.approx(expected)
+    assert values["ms_unknown_rate"] == pytest.approx(
+        values["ms_lambda"] / molecules.n_leaves
+    )
+
+
+def test_the_true_assignment_is_keyed_by_the_features_of_the_data_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        data, truth = _ms_files(out)
+
+    data_rows = set(map(tuple, data[FEATURE + ["molecule"]].to_numpy()))
+    truth_rows = set(map(tuple, truth[FEATURE + ["molecule"]].to_numpy()))
+    unknown_rows = {r for r in truth_rows if r[3] == mass_spec.UNKNOWN}
+    assert truth_rows - unknown_rows == data_rows
+    assert {r[:3] for r in unknown_rows} == {r[:3] for r in data_rows}
+
+
+def test_about_half_of_all_features_are_unknown():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp)
+        _, truth = _ms_files(out)
+
+    unknown = truth[truth["molecule"] == mass_spec.UNKNOWN]["fraction"]
+    assert unknown.mean() == pytest.approx(0.5, abs=0.05)
+
+
+def test_the_dense_layout_has_two_runs_per_species_leaf():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, "dense")
+        species, _ = _indices_of(out)
+        data, _ = _ms_files(out)
+
+    runs = data[["species", "extract"]].drop_duplicates()
+    assert set(runs["species"]) == set(species.leaf_names())
+    assert (runs.groupby("species").size() == 2).all()
+
+
+def test_the_sparse_layout_has_eight_species_with_one_run_each():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, "sparse")
+        data, _ = _ms_files(out)
+
+    runs = data[["species", "extract"]].drop_duplicates()
+    assert runs["species"].nunique() == 8
+    assert (runs.groupby("species").size() == 1).all()
+
+
+def test_the_ms_rungs_hand_the_binary_the_data_and_the_true_rate_and_nothing_else_of_the_truth():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, meta = _ms_scenario(tmp)
+        bodies = {p.name: p.read_text() for p in sorted(out.glob("rung*.sh"))}
+
+    assert set(bodies) == {f"{name}.sh" for name, _, _, _ in scenario.MS_RUNGS}
+    rho = meta["mass_spec"]["unknown_rate"]
+    for name, body in bodies.items():
+        assert f"--ms_data {mass_spec.DATA_FILE}" in body, name
+        assert f"--ms_unknown_rate {rho!r}" in body, name
+        # Only the data file is read: the assignment, the filter probabilities and
+        # kappa are inferred in every rung.
+        for truth in (mass_spec.ASSIGNMENT_FILE, scenario.SIMULATE_PARAMETERS):
+            assert truth not in body, name
+        for parameter in (mass_spec.FILTER_PARAMETER, mass_spec.CONTAMINATION_PARAMETER):
+            assert f"--{parameter}" not in body, name
+        assert 'FLAGS="lm"' in body, name
+
+
+def test_a_scenario_without_mass_spec_writes_no_mass_spec_files_or_flags():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp)
+        names = {p.name for p in out.iterdir()}
+        bodies = [p.read_text() for p in out.glob("*.sh")]
+
+    assert mass_spec.DATA_FILE not in names
+    assert mass_spec.ASSIGNMENT_FILE not in names
+    assert not any("--ms_data" in body for body in bodies)

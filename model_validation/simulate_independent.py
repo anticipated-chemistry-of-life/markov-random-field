@@ -14,7 +14,8 @@ import pathlib
 
 import click
 
-from src.independent.scenario import RUNGS, ScenarioConfig, build_scenario
+from src.independent.mass_spec import LAYOUTS
+from src.independent.scenario import ScenarioConfig, build_scenario, rungs_of
 
 
 @click.command()
@@ -78,12 +79,21 @@ from src.independent.scenario import RUNGS, ScenarioConfig, build_scenario
     help="Start the chain on the true branch lengths instead of flat ones.",
 )
 @click.option(
+    "--mass_spec",
+    "layout",
+    type=click.Choice(sorted(LAYOUTS)),
+    default=None,
+    help="Add simulated mass-spec data (LOTUS+MS) in this layout: dense is two runs "
+    "per species leaf, sparse is eight species with one run each. The rungs then "
+    "run on the 'lm' build.",
+)
+@click.option(
     "--out",
     type=click.Path(),
     default=None,
     help="Output directory (default: independent_y_s<n>_m<n>_seed<seed>).",
 )
-def main(out: str | None, **kwargs) -> None:
+def main(out: str | None, layout: str | None, **kwargs) -> None:
     """Write a complete scenario: truth, observations, and per-rung run scripts."""
     config = ScenarioConfig(
         seed=kwargs["seed"],
@@ -99,6 +109,7 @@ def main(out: str | None, **kwargs) -> None:
         burnin=kwargs["burnin"],
         n_burnin_rounds=kwargs["n_burnin_rounds"],
         true_branch_lengths=kwargs["true_branch_lengths"],
+        mass_spec=LAYOUTS[layout] if layout else None,
     )
 
     if out is None:
@@ -106,6 +117,8 @@ def main(out: str | None, **kwargs) -> None:
             f"independent_y_s{config.n_species_nodes}"
             f"_m{config.n_molecule_nodes}_seed{config.seed}"
         )
+        if layout:
+            out += f"_ms_{layout}"
     path = pathlib.Path(out)
     meta = build_scenario(path, config)
 
@@ -129,10 +142,18 @@ def main(out: str | None, **kwargs) -> None:
         f"  {meta['lotus_records']} LOTUS records, "
         f"{meta['simple_data_disagreements']} simple-error disagreements"
     )
+    if "mass_spec" in meta:
+        ms = meta["mass_spec"]
+        click.echo(
+            f"  {ms['layout']} mass spec: {ms['n_runs']} runs of "
+            f"{ms['n_species_with_runs']} species, {ms['n_features']} features "
+            f"({ms['n_unknown_features']} unknown), lambda "
+            f"{ms['expected_features_per_run']:.2f}, rho {ms['unknown_rate']:.4g}"
+        )
     if not meta["true_branch_lengths"]:
         click.echo("  branch lengths start flat: the chain has to find them")
     click.echo("\nRun in order, stopping at the first failure:")
-    for name, _, _, _ in RUNGS:
+    for name, _, _, _ in rungs_of(config):
         click.echo(
             f"  bash {path}/{name}.sh && "
             f"uv run python validate_independent.py {path} {name}"

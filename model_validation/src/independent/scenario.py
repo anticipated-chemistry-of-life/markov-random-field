@@ -32,6 +32,7 @@ from ..tree import Tree, TreeType
 from . import field as F
 from . import io
 from . import link as L
+from . import mass_spec as M
 from .data import sample_paper_counts, simulate_lotus, simulate_simple_error
 from .indexing import TreeIndex, build_tree_index
 
@@ -71,6 +72,8 @@ class ScenarioConfig:
     Flat is the default: it makes the chain find the branch lengths rather than
     start on them, so 'never left the initialisation' cannot pass as recovery.
     """
+    mass_spec: M.Layout | None = None
+    """Add the mass-spec data source in this layout, and run every rung on LOTUS+MS."""
 
 
 @dataclass
@@ -164,6 +167,11 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         config.gamma,
         config.error_rate,
     )
+    ms_truth = (
+        M.simulate(rng, latent_field, config.mass_spec)
+        if config.mass_spec is not None
+        else None
+    )
 
     # -- write ----------------------------------------------------------------
     def lengths_of(truth: TreeTruth) -> np.ndarray:
@@ -202,9 +210,14 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
     molecule_values = _tree_truth_values("molecules", molecule_truth, species, config)
     io.write_parameters(out / "truth_species.txt", species_values)
     io.write_parameters(out / "truth_molecules.txt", molecule_values)
-    io.write_parameters(
-        out / SIMULATE_PARAMETERS, {**species_values, **molecule_values}
-    )
+    values_for_cpp = {**species_values, **molecule_values}
+    # The mass-spec truth joins the file below, but never the per-tree truth files
+    # the validator reads its tree scores from.
+    if ms_truth is not None:
+        values_for_cpp.update(M.truth_values(ms_truth, molecules))
+        M.write_data(out / M.DATA_FILE, ms_truth, species, molecules)
+        M.write_assignment(out / M.ASSIGNMENT_FILE, ms_truth, species, molecules)
+    io.write_parameters(out / SIMULATE_PARAMETERS, values_for_cpp)
 
     io.write_field(out / "simulated_Y.txt", latent_field, species, molecules)
     io.write_node_states(
@@ -256,9 +269,22 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         "species_bins": species_truth.bins.tolist(),
         "molecule_bins": molecule_truth.bins.tolist(),
     }
+    if ms_truth is not None:
+        meta["mass_spec"] = {
+            "layout": ms_truth.layout.name,
+            "n_runs": ms_truth.n_runs,
+            "n_species_with_runs": len(ms_truth.species_with_runs),
+            "n_features": len(ms_truth.features),
+            "n_unknown_features": sum(
+                f.true_molecule is None for f in ms_truth.features
+            ),
+            "contamination": ms_truth.contamination,
+            "expected_features_per_run": ms_truth.expected_features_per_run,
+            "unknown_rate": ms_truth.unknown_rate,
+        }
     (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
-    _write_scripts(out, config)
+    _write_scripts(out, config, ms_truth)
     return meta
 
 
@@ -365,11 +391,34 @@ RUNGS = [
     ("rung3_from_data_ls", "ls", "", 4),
 ]
 
+# The same three rungs on LOTUS+MS. Assignments, filter probabilities and kappa
+# are inferred in all of them: the rungs pin only what the other scenarios pin.
+MS_RUNGS = [
+    ("rung1_pin_field_and_states", "lm", f"{PIN_FIELD} {PIN_STATES}", 0),
+    ("rung2_pin_field", "lm", PIN_FIELD, 1),
+    ("rung3_from_data_lm", "lm", "", 2),
+]
 
-def _write_scripts(out: pathlib.Path, config: ScenarioConfig) -> None:
-    for name, flags, extra, offset in RUNGS:
+
+def rungs_of(config: ScenarioConfig) -> list[tuple[str, str, str, int]]:
+    return RUNGS if config.mass_spec is None else MS_RUNGS
+
+
+def _write_scripts(
+    out: pathlib.Path, config: ScenarioConfig, ms_truth: M.MassSpecTruth | None
+) -> None:
+    # The MS data file and rho are all an inference run gets of the mass-spec truth.
+    ms_flags = (
+        f"--ms_data {M.DATA_FILE} --ms_unknown_rate {ms_truth.unknown_rate!r} "
+        "--write_assignment_posterior"
+        if ms_truth is not None
+        else ""
+    )
+    for name, flags, extra, offset in rungs_of(config):
         path = out / f"{name}.sh"
-        path.write_text(_infer_script(name, flags, extra, config, offset))
+        path.write_text(
+            _infer_script(name, flags, f"{extra} {ms_flags}".strip(), config, offset)
+        )
         path.chmod(0o755)
 
     # The C++ simulator, run under the very parameters the reference drew its own
