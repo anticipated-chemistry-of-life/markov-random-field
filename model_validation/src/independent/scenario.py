@@ -323,10 +323,12 @@ SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 ROOT="$SCRIPT_DIR/../.."
 
 MODE="${{ACOL_MODE:-release}}"
+THREADS="${{ACOL_THREADS:-all}}"
 FLAGS="{flags}"
 
 cd "$ROOT"
-pixi run build "$MODE-$FLAGS"
+# Several rungs run side by side must not build into one directory at once.
+[[ -n "${{ACOL_NO_BUILD:-}}" ]] || pixi run build "$MODE-$FLAGS"
 ACOL="$ROOT/build/$MODE-$FLAGS/acol"
 
 cd "$SCRIPT_DIR"
@@ -334,25 +336,14 @@ cd "$SCRIPT_DIR"
 
 
 def _infer_script(
-    name: str,
-    flags: str,
-    extra: str,
-    config: ScenarioConfig,
-    seed_offset: int,
-    threads: str = "all",
+    name: str, flags: str, extra: str, config: ScenarioConfig, seed_offset: int
 ) -> str:
     """A complete, standalone script: preamble plus one inference run."""
-    return _PREAMBLE.format(flags=flags) + _infer_command(
-        name, extra, config, seed_offset, threads
-    )
+    return _PREAMBLE.format(flags=flags) + _infer_command(name, extra, config, seed_offset)
 
 
 def _infer_command(
-    name: str,
-    extra: str,
-    config: ScenarioConfig,
-    seed_offset: int,
-    threads: str = "all",
+    name: str, extra: str, config: ScenarioConfig, seed_offset: int
 ) -> str:
     """Just the invocation, so several can share one preamble."""
     return (
@@ -373,7 +364,7 @@ def _infer_command(
         f"    --burnin {config.burnin} \\\n"
         f"    --numBurnin {config.n_burnin_rounds} \\\n"
         f"    --fixedSeed {config.seed + seed_offset} \\\n"
-        f"    --numThreads {threads} \\\n"
+        f'    --numThreads "$THREADS" \\\n'
         f"    --writeBurnin \\\n"
         f"    --write_joint_log_prob_density"
         + (f" \\\n    {extra}" if extra else "")

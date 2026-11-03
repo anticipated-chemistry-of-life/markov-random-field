@@ -47,6 +47,22 @@ exact posterior falls outside the band on about half of all seeds (#112). Branch
 lengths are never gated: once the node states are freed, a calibrated posterior
 on seed 42 ranks them at a Spearman of about 0.1-0.2, against rung 1's 0.88 (#110).
 
+`validate_replicates.py` is the log ν check for rungs 2 and 3. It scores one rung
+in many scenarios, one per seed, and gates each tree's mean alpha and log ν
+coverage in standard errors of the scenarios' own scatter, as `compare_fields.py`
+does. A shortfall every scenario shares fails it; one unlucky seed does not. The
+rung scripts read `ACOL_THREADS` (default `all`) and skip their build when
+`ACOL_NO_BUILD` is set, so several can run side by side:
+
+```bash
+for s in $(seq 1 16); do uv run python simulate_independent.py --seed "$s"; done
+pixi run build release-s
+printf '%s\n' independent_y_s255_m255_seed{1..16} |
+    xargs -P 16 -I{} env ACOL_NO_BUILD=1 ACOL_THREADS=4 bash {}/rung2_pin_field.sh
+uv run python validate_replicates.py rung2_pin_field \
+    independent_y_s255_m255_seed{1..16} --gate 3
+```
+
 `visualize.py` plots a rung's inference output against the truth. Its filename
 options default to what the C++ binary writes for a scenario simulated by that
 same binary; an independent scenario names its simulation output differently, so

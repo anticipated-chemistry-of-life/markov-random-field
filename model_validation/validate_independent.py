@@ -410,17 +410,8 @@ def _apply_gates(summary: dict) -> bool:
     return not failures
 
 
-@click.command()
-@click.argument("scenario_dir", type=click.Path(exists=True, file_okay=False))
-@click.argument("rung")
-@click.option(
-    "--gates",
-    is_flag=True,
-    help="Exit 1 unless every gated coverage lies inside its band.",
-)
-def main(scenario_dir: str, rung: str, gates: bool) -> None:
-    """Score RUNG's output inside SCENARIO_DIR against the simulated truth."""
-    base = pathlib.Path(scenario_dir)
+def score(base: pathlib.Path, rung: str) -> dict:
+    """Score RUNG's output inside BASE against the simulated truth."""
     rung_dir = base / rung
     if not (rung_dir / "acol_trace.txt").exists():
         raise click.ClickException(
@@ -460,10 +451,23 @@ def main(scenario_dir: str, rung: str, gates: bool) -> None:
 
     if "mass_spec" in meta:
         summary["mass_spec"] = _mass_spec_scores(base, rung_dir, meta, trace)
+    return summary
 
+
+@click.command()
+@click.argument("scenario_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("rung")
+@click.option(
+    "--gates",
+    is_flag=True,
+    help="Exit 1 unless every gated coverage lies inside its band.",
+)
+def main(scenario_dir: str, rung: str, gates: bool) -> None:
+    """Score RUNG's output inside SCENARIO_DIR against the simulated truth."""
+    summary = score(pathlib.Path(scenario_dir), rung)
     _report(summary)
 
-    out_path = rung_dir / "validation_summary.json"
+    out_path = pathlib.Path(scenario_dir) / rung / "validation_summary.json"
     out_path.write_text(json.dumps(summary, indent=2) + "\n")
     click.echo(f"\n  summary written to {out_path}")
 
