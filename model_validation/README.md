@@ -38,13 +38,14 @@ pinned field and each tree walks the nodes above them; rung 3 infers everything
 from observations, against the simple error model alone, then LOTUS alone, then
 both. What `--Y.update false` and `--Z.update false` hold is ADR-0019's.
 
-`validate_independent.py` reports by default; pass `--gates` to make it exit 1
-unless every alpha and log ν coverage lies inside its binomial band. The gate is
-absolute, the same at every rung, and not relative to rung 1: rung 1 knows every
-node state, which no later rung can match. Branch lengths are the clearest case.
-Once the node states are freed, a calibrated posterior on seed 42 ranks them at a
-Spearman of about 0.1-0.2, against rung 1's 0.88, so they are reported and not
-gated (#110).
+`validate_independent.py` reports by default; pass `--gates` to make it exit 1 if
+a gated coverage lies outside its binomial band. The gate is absolute, not
+relative to rung 1: rung 1 knows every node state, which no later rung can match.
+Alpha is gated at every rung. Log ν is gated only at rung 1: once the node states
+are inferred, one shared var log ν sets every clique's interval at once, and an
+exact posterior falls outside the band on about half of all seeds (#112). Branch
+lengths are never gated: once the node states are freed, a calibrated posterior
+on seed 42 ranks them at a Spearman of about 0.1-0.2, against rung 1's 0.88 (#110).
 
 `visualize.py` plots a rung's inference output against the truth. Its filename
 options default to what the C++ binary writes for a scenario simulated by that

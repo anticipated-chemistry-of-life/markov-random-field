@@ -27,14 +27,20 @@ On the LOTUS+MS scenarios it also scores the mass-spec half of the model:
   of runs the molecule is present in.
 - **kappa**: coverage.
 
-`--gates` exits 1 unless every alpha and log nu coverage lies inside its band. The
-gate is absolute, so it means the same thing at every rung: a calibrated posterior
-passes however little the rung's data say. Branch lengths are reported and not
-gated, because no fixed threshold suits every rung. Once node states are inferred,
-the internal states are summed out and the leaves are seen only through the field;
-on seed 42 the per-branch posterior is then nearly flat but calibrated, and an exact
-pruning reference that knows every other parameter's truth reaches a Spearman of
-only 0.22-0.35, against rung 1's 0.88 (#110).
+`--gates` exits 1 unless a coverage lies outside its band. Alpha is gated at every
+rung. Log nu is gated only at a rung that pins the node states. Once node states
+are inferred, each clique's log nu is weakly identified and one shared var log nu
+sets every clique's interval at once, so the cliques are no longer independent
+trials. Across 32 simulated seeds an exact posterior at rung 2's information then
+has a coverage sd of 0.052-0.065, against the band's binomial 0.027, and falls
+outside the band on about half of them (#112). Alpha has no shared parameter, and
+its band holds at every rung.
+
+Branch lengths are reported and not gated, because no fixed threshold suits every
+rung. Once node states are inferred, the internal states are summed out and the
+leaves are seen only through the field; on seed 42 the per-branch posterior is then
+nearly flat but calibrated, and an exact pruning reference that knows every other
+parameter's truth reaches a Spearman of only 0.22-0.35, against rung 1's 0.88 (#110).
 """
 
 from __future__ import annotations
@@ -48,7 +54,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from src.independent import mass_spec, recovery
+from src.independent import mass_spec, recovery, scenario
 
 TREES = ("species", "molecules")
 
@@ -320,6 +326,18 @@ def _report_mass_spec(scores: dict) -> None:
         )
 
 
+def _pins_node_states(rung: str) -> bool:
+    """Whether the scenario's rung of this name holds both trees' node states."""
+    return any(
+        name == rung and scenario.PIN_STATES in flags
+        for name, _, flags, _ in (*scenario.RUNGS, *scenario.MS_RUNGS)
+    )
+
+
+def _gated(summary: dict, label: str) -> bool:
+    return label == "alpha" or summary["node_states_pinned"]
+
+
 def _report(summary: dict) -> None:
     click.echo(f"\n=== {summary['rung']} ===")
 
@@ -331,8 +349,9 @@ def _report(summary: dict) -> None:
                 click.echo(f"  {label:<16} absent from trace")
                 continue
             band = recovery.coverage_band(block["n"])
+            verdict = "PASS" if block["passes"] else "FAIL"
             click.echo(
-                f"  {label:<16} {'PASS' if block['passes'] else 'FAIL'}  "
+                f"  {label:<16} {verdict if _gated(summary, label) else 'info'}  "
                 f"coverage {block['coverage']:6.1%}  band [{band[0]:.1%}, {band[1]:.1%}]  "
                 f"rmse {block['rmse']:7.4f}  bias {block['bias']:+7.4f}  "
                 f"corr {block['correlation']:5.3f}  moved {block['moved']:5.1%}"
@@ -371,12 +390,12 @@ def _report(summary: dict) -> None:
 
 
 def _apply_gates(summary: dict) -> bool:
-    """Every alpha and log nu coverage must lie inside its binomial band."""
+    """Alpha coverage, and log nu coverage where the node states are pinned, in band."""
     failures = []
     for tree in TREES:
         for key in ("alpha", "log_nu"):
             block = summary[tree][key]
-            if block["n"] and not block["passes"]:
+            if block["n"] and _gated(summary, key) and not block["passes"]:
                 low, high = recovery.coverage_band(block["n"])
                 failures.append(
                     f"{tree} {key} coverage {block['coverage']:.1%} is outside its band "
@@ -397,7 +416,7 @@ def _apply_gates(summary: dict) -> bool:
 @click.option(
     "--gates",
     is_flag=True,
-    help="Exit 1 unless every alpha and log nu coverage lies inside its band.",
+    help="Exit 1 unless every gated coverage lies inside its band.",
 )
 def main(scenario_dir: str, rung: str, gates: bool) -> None:
     """Score RUNG's output inside SCENARIO_DIR against the simulated truth."""
@@ -428,6 +447,7 @@ def main(scenario_dir: str, rung: str, gates: bool) -> None:
         "scenario": str(base),
         "retained_samples": len(trace),
         "warnings": warnings,
+        "node_states_pinned": _pins_node_states(rung),
     }
     for tree in TREES:
         summary[tree] = {
