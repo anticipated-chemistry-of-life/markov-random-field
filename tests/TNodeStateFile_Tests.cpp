@@ -313,7 +313,7 @@ TYPED_TEST(NodeStateFile, the_chain_start_fills_the_leaf_rows_an_old_file_does_n
 	auto Y = make_storage<Field>(trees.field_shape());
 	leaf_layer_start::start_the_field_at(records, Y);
 	const auto counters =
-	    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
+	    leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 	EXPECT_EQ(counters.total(), Y.total_size_of_container_space());
 
 	for (const auto &species_leaf : {"frog", "newt"}) {

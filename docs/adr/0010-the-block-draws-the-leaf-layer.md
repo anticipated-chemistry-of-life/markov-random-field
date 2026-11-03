@@ -1,5 +1,7 @@
 # Each tree stops above its leaves, and the block draws the leaf layer
 
+_What `--fix_Y` and `--fix_Z` hold is superseded by [ADR-0019](0019-holding-a-variable-conditions-the-block-on-it.md): holding a variable conditions the block on it, so `--fix_Y` holds the field alone and `--fix_Z` holds every node of both node states, leaves included. That retires the paragraph on the two flags under the decision and the note on the `--fix_Z` log line among the changes after the revert. The rest of this record stands._
+
 ADR-0008 retired the eight-state **block update** and drew the leaf layer one variable at a time. It also named what it did not know: "if the cost is judged unacceptable", four things could be done about it. Issue #69 measured the cost. This record is that judgement.
 
 **The block comes back as the leaf-layer update.** The field, the species tree field and the molecule tree field at one leaf pair are drawn from all eight combinations at once, and a tree's node-state walk stops above its leaves.

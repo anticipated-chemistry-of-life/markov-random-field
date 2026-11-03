@@ -47,6 +47,7 @@
 #include "gtest/gtest.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -564,6 +565,213 @@ TYPED_TEST(BlockUpdate, counters_tally_the_configuration_it_left) {
 				EXPECT_EQ(kept.count(bucket, y), expected.count(bucket, y));
 			}
 		}
+	}
+}
+
+// -------------------------------------------------------------------------
+// Holding the field, or holding both tree fields
+// -------------------------------------------------------------------------
+
+/// Trees and data that say nothing, so what a draw follows is the link alone. Holding one variable
+/// then leaves the other two the link's conditional on it, and nothing else.
+class TNeutralModel {
+public:
+	struct TRow {};
+	[[nodiscard]] static TRow begin_row(size_t /*species_leaf*/, size_t /*first_field_cell*/) {
+		return {};
+	}
+	using TColumn = TFreeModel::TColumn;
+	[[nodiscard]] static TColumn begin_column(size_t /*molecule_leaf*/) { return {}; }
+	[[nodiscard]] static block_update::TLeafPairFactors factors(const TRow &, const TColumn &,
+	                                                            size_t molecule_leaf,
+	                                                            bool species_parent,
+	                                                            bool molecule_parent) {
+		return neutral_tree_factors(0, molecule_leaf, species_parent, molecule_parent);
+	}
+	static void prepare_for_traversal() {}
+	static void record(TRow &, size_t, const block_update::TLeafPairFactors &,
+	                   const field_math::TBlockStates &) {}
+	static void end_row(const TRow &) {}
+};
+
+static_assert(block_update::BlockModel<TNeutralModel>,
+              "The neutral model must answer what the block update asks a model.");
+
+/// The AND link written out from its definition: each tree field reads its own state with
+/// probability 1 - omega, and the field is one when both corrupted reads are.
+double and_link_prob_y_is_one(bool z_s, bool z_m) {
+	return (z_s ? 1.0 - OMEGA : OMEGA) * (z_m ? 1.0 - OMEGA : OMEGA);
+}
+
+/// `count` successes out of independent trials with these probabilities, within five standard
+/// deviations of what they expect. The uniforms are fixed, so this is deterministic. Only the
+/// pairings with thousands of leaf pairs give it power; the smallest ones hold a handful.
+void expect_binomially_close(size_t count, const std::vector<double> &probabilities) {
+	double mean     = 0.0;
+	double variance = 0.0;
+	for (const double p : probabilities) {
+		mean += p;
+		variance += p * (1.0 - p);
+	}
+	EXPECT_LE(std::abs(static_cast<double>(count) - mean), 5.0 * std::sqrt(variance))
+	    << count << " successes where " << mean << " were expected";
+}
+
+/// A held field stays where it is while both tree fields still move. The forcing model drives every
+/// leaf pair to `target_at`, so a field that moved would read the target's. Where the target's
+/// field is the other state, the data rules the held one out entirely: the update must not ask the
+/// data to decide a field it does not draw.
+TYPED_TEST(BlockUpdate, a_held_field_stays_and_the_tree_fields_are_drawn) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+		const std::vector<uint8_t> field_before = states_of(Y);
+
+		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
+		const TCellUniforms uniforms(4242, TCellStream::field, 0);
+		(void)block_update::run<TLinkPolicy, block_update::THeld::field>(
+		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		    field_math::TErrorProbability(OMEGA), model, uniforms);
+
+		EXPECT_EQ(states_of(Y), field_before);
+		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
+				const auto target = target_at(s, m);
+				EXPECT_EQ(Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m})),
+				          target.z_s);
+				EXPECT_EQ(Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space({s, m})),
+				          target.z_m);
+				// what each data source is told the leaf pair holds is the field it was held at
+				EXPECT_EQ(model.visit(s, m).drawn.y, Y.is_one(IndexArray{s, m}));
+			}
+		}
+	}
+}
+
+/// Given a held field, the tree fields are drawn from the link's conditional on it. Under trees
+/// that say nothing, the four tree field pairs are equally likely a priori, so a pair's
+/// probability given the field is its link probability for that field state, normalised: `P(y = 1
+/// | pair)` where the field is one -- those sum to one over the four pairs -- and `(1 - P(y = 1 |
+/// pair)) / 3` where it is zero.
+TYPED_TEST(BlockUpdate, a_held_field_conditions_the_tree_field_draw) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+
+		TNeutralModel model;
+		const TCellUniforms uniforms(4242, TCellStream::field, 17);
+		(void)block_update::run<TLinkPolicy, block_update::THeld::field>(
+		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		    field_math::TErrorProbability(OMEGA), model, uniforms);
+
+		for (const bool z_s : {false, true}) {
+			for (const bool z_m : {false, true}) {
+				SCOPED_TRACE("tree fields " + std::to_string(z_s) + "," + std::to_string(z_m));
+				const double at_a_one  = and_link_prob_y_is_one(z_s, z_m);
+				const double at_a_zero = (1.0 - at_a_one) / 3.0;
+				std::vector<double> probabilities;
+				size_t n_drawn = 0;
+				for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+					for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+						probabilities.push_back(Y.is_one(IndexArray{s, m}) ? at_a_one : at_a_zero);
+						n_drawn += static_cast<size_t>(
+						    Z_species.is_one(
+						        Z_species.get_linear_index_in_container_space({s, m})) == z_s &&
+						    Z_molecule.is_one(
+						        Z_molecule.get_linear_index_in_container_space({s, m})) == z_m);
+					}
+				}
+				expect_binomially_close(n_drawn, probabilities);
+			}
+		}
+	}
+}
+
+/// Held tree fields stay where they are -- every node of both node states, the leaf blocks
+/// included -- while the field still moves. The forcing model drives every tree field to the
+/// target's, so a tree field that moved would read it.
+TYPED_TEST(BlockUpdate, held_tree_fields_stay_and_the_field_is_drawn) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+		const std::vector<uint8_t> species_before  = states_of(Z_species);
+		const std::vector<uint8_t> molecule_before = states_of(Z_molecule);
+
+		TForcingModel model(pair.species.n_leaves(), pair.molecule.n_leaves());
+		const TCellUniforms uniforms(4242, TCellStream::field, 0);
+		(void)block_update::run<TLinkPolicy, block_update::THeld::tree_fields>(
+		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		    field_math::TErrorProbability(OMEGA), model, uniforms);
+
+		EXPECT_EQ(states_of(Z_species), species_before);
+		EXPECT_EQ(states_of(Z_molecule), molecule_before);
+		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+				SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
+				EXPECT_EQ(Y.is_one(IndexArray{s, m}), target_at(s, m).y);
+			}
+		}
+	}
+}
+
+/// Given held tree fields, the field is drawn from the link's conditional on them: one with
+/// probability `(1 - omega)^k omega^(2 - k)` at a leaf pair where `k` tree fields are one, whatever
+/// the trees say about those tree fields.
+TYPED_TEST(BlockUpdate, held_tree_fields_condition_the_field_draw) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto &pair : tree_pairs()) {
+		SCOPED_TRACE(pair.name);
+		auto Y          = make_storage<Field>(field_shape(pair));
+		auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+		auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+		seed_ones(Y, 1);
+		seed_ones(Z_species, 2);
+		seed_ones(Z_molecule, 3);
+
+		TNeutralModel model;
+		const TCellUniforms uniforms(4242, TCellStream::field, 19);
+		(void)block_update::run<TLinkPolicy, block_update::THeld::tree_fields>(
+		    Y, Z_species, Z_molecule, pair.species, pair.molecule,
+		    field_math::TErrorProbability(OMEGA), model, uniforms);
+
+		std::vector<double> probabilities;
+		size_t n_field_one = 0;
+		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+				probabilities.push_back(and_link_prob_y_is_one(
+				    Z_species.is_one(Z_species.get_linear_index_in_container_space({s, m})),
+				    Z_molecule.is_one(Z_molecule.get_linear_index_in_container_space({s, m}))));
+				n_field_one += static_cast<size_t>(Y.is_one(IndexArray{s, m}));
+			}
+		}
+		expect_binomially_close(n_field_one, probabilities);
 	}
 }
 

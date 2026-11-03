@@ -3,7 +3,8 @@
 //
 // The block update draws the field and both tree fields together, so the three of them start
 // together too. The start is two steps. The field takes the LOTUS records, and both tree fields
-// take the field. CONTEXT.md names the concept under *Chain start*, and ADR-0005 argues it.
+// take the field -- each but a tree field the run supplied, which stays as it was read (ADR-0019).
+// GLOSSARY.md names the concept under *Chain start*, and ADR-0005 argues it.
 //
 // Both steps read and write through the storage concepts and hold no tree. One suite therefore
 // asserts them over every backend pairing, and not over the one pairing a chain is built with.
@@ -50,15 +51,24 @@ void start_the_field_at(const Records &records, Field &field) {
 	}
 }
 
-/// How many species leaves the copy below takes at a time. See `hold_tree_fields_at_the_field`.
+/// How many species leaves the copy below takes at a time. See `start_tree_fields_at_the_field`.
 inline constexpr size_t BAND_ROWS = 64;
 
-/// Puts both tree fields at the field, and returns the six counters over the whole of it.
+/// Which tree fields the run supplied (`--set_<tree>_Z`). A supplied tree field is the run's to
+/// decide, so the start keeps it as it was read rather than putting it at the field.
+struct TSuppliedTreeFields {
+	bool species  = false;
+	bool molecule = false;
+};
+
+/// Puts every tree field the run did not supply at the field, and returns the six counters over
+/// the leaf layer that leaves.
 ///
-/// The tally is degenerate by construction. Both tree fields read the field, so every leaf pair
-/// falls in bucket 0 or in bucket 2, and bucket 1 holds nothing. The AND diagnostic therefore says
-/// nothing about it. That is the truth of this configuration and not an approximation of it. What
-/// a caller does about it is the caller's business.
+/// With no tree field supplied the tally is degenerate by construction. Both tree fields read the
+/// field, so every leaf pair falls in bucket 0 or in bucket 2, and bucket 1 holds nothing. The AND
+/// diagnostic therefore says nothing about it. That is the truth of this configuration and not an
+/// approximation of it. What a caller does about it is the caller's business. A supplied tree field
+/// reads what it was read as, so its leaf pairs land wherever it and the field put them.
 ///
 /// Every cell is set once and the tally is a sum of integers, so the order the cells are visited
 /// in is free, and it is chosen for the species node state: that keeps its cliques contiguous
@@ -66,9 +76,9 @@ inline constexpr size_t BAND_ROWS = 64;
 /// field row read it a line per cell. Cells are named by subscript, which a node state laid out
 /// either way turns into a position with no division.
 template<typename Link, FieldStorage Field, BinaryStorage NodeState>
-[[nodiscard]] field_math::TLinkCounters hold_tree_fields_at_the_field(const Field &field,
-                                                                      NodeState &species_field,
-                                                                      NodeState &molecule_field) {
+[[nodiscard]] field_math::TLinkCounters
+start_tree_fields_at_the_field(const Field &field, NodeState &species_field,
+                               NodeState &molecule_field, TSuppliedTreeFields supplied = {}) {
 	static_assert(NUMBER_OF_TREES == 2, "the field is a species leaf by a molecule leaf");
 	// The leaf block of each node state is the field: rows are species leaves, columns molecule
 	// leaves. Each node state knows one of the two counts; the other dimension is its own tree's.
@@ -91,13 +101,15 @@ template<typename Link, FieldStorage Field, BinaryStorage NodeState>
 				const IndexArray cell{row, column};
 				// Only a cell that disagrees is written. A sparse node state does not hold every
 				// cell, and inserting one that already reads as zero would grow it for nothing.
-				if (species_field.is_one(cell) != y) {
-					(void)write_or_defer(species_field, cell, y, species_inserts);
+				const bool z_s = supplied.species ? species_field.is_one(cell) : y;
+				const bool z_m = supplied.molecule ? molecule_field.is_one(cell) : y;
+				if (species_field.is_one(cell) != z_s) {
+					(void)write_or_defer(species_field, cell, z_s, species_inserts);
 				}
-				if (molecule_field.is_one(cell) != y) {
-					(void)write_or_defer(molecule_field, cell, y, molecule_inserts);
+				if (molecule_field.is_one(cell) != z_m) {
+					(void)write_or_defer(molecule_field, cell, z_m, molecule_inserts);
 				}
-				counters.add(Link::bucket(y, y), y);
+				counters.add(Link::bucket(z_s, z_m), y);
 			}
 		}
 	}

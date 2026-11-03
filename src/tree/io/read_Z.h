@@ -39,15 +39,11 @@ void read_Z_cells_from_file(const std::string &filename,
 /// Read a node-state file written by write_Z_to_file into `Z`, setting every cell the file reports
 /// as present. See read_Z_cells_from_file for how a row becomes a cell, and for what is rejected.
 ///
-/// A file written under the old model names only internal nodes in its own column. It still loads,
-/// because resolution is by name. It leaves every leaf row at zero, and the chain start fills
-/// them: it puts both tree fields at the field once the file is read
-/// (TMarkovField::_start_the_chain). So an old file is a warm start for the internals, which is
-/// all such a file ever held.
-///
-/// The leaf rows of a file written now are read the same way, and the chain start writes over them
-/// too. A written node state is the run's record of one, and not yet a full warm start. ADR-0004's
-/// closing consequence and #40 carry the argument.
+/// The leaf rows are read like every other row, and the chain start keeps them: a supplied node
+/// state is the run's to decide, tree field included (ADR-0019). A file written under the old model
+/// names only internal nodes in its own column. It still loads, because resolution is by name, and
+/// it leaves every leaf row at zero. Under --fix_Z that zero is held; otherwise the first block
+/// update draws the leaf layer.
 template<BinaryStorage NodeState>
 void read_Z_from_file(const std::string &filename, NodeState &Z,
                       const std::vector<TNodeStateColumn> &columns,

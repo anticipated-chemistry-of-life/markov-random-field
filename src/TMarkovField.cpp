@@ -34,18 +34,21 @@ TMarkovField::TMarkovField(size_t n_iterations, std::vector<std::unique_ptr<TTre
     : _trees(Trees), _prefix(std::move(_prefix)), _simulate(simulate), _omega(omega) {
 	using namespace coretools::instances;
 
-	// read: fix Y or Z?
+	// read: fix Y or Z? Holding one of the block's variables conditions the block on it: the block
+	// still draws whatever is left of the leaf pair, given what is held (ADR-0019).
 	_fix_Y = ProgramOptions::FIX_Y;
-	if (_fix_Y) {
-		// The block draws the field and both tree fields together, so holding one holds all three.
-		logfile().list("Will fix Y, and with it both tree fields, during the MCMC.");
-	}
 	_fix_Z = ProgramOptions::FIX_Z;
+	if (_fix_Y) {
+		logfile().list(_fix_Z ? "Will fix Y during the MCMC."
+		                      : "Will fix Y during the MCMC. Both tree fields still move: the "
+		                        "block update draws them given it.");
+	}
 	if (_fix_Z) {
-		// Every node above the leaves. The leaf layer is the block's, and the block still draws
-		// it, so both tree fields move under this flag (ADR-0010).
-		logfile().list("Will fix Z during the MCMC, every node above the leaves. Both tree "
-		               "fields still move: the block update draws them with the field.");
+		logfile().list(_fix_Y ? "Will fix Z during the MCMC, every node of both trees, the leaves "
+		                        "included. The block update draws nothing."
+		                      : "Will fix Z during the MCMC, every node of both trees, the leaves "
+		                        "included. The field still moves: the block update draws it "
+		                        "given both tree fields.");
 	}
 
 	// initialize Y: one dimension per tree, sized by that tree's leaf count. The loop is bounded by
@@ -198,14 +201,15 @@ void TMarkovField::_report_link_diagnostic() const {
 	logfile().endIndent();
 }
 
-/// A held field holds both tree fields with it, because the block draws all three together.
-///
-/// The tree fields take the field's own states. Under the AND link that is the configuration the
-/// field is most likely to have come from, and it is what the internal nodes are built from
-/// (TTree::initialize_Z_from_children). Before the block, that walk read the field itself.
-void TMarkovField::_hold_tree_fields_at_the_field() {
-	_link_counters = leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(
-	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z());
+/// The tree fields the run did not supply take the field's own states. Under the AND link that is
+/// the configuration the field is most likely to have come from, and it is what the internal nodes
+/// are built from (TTree::initialize_Z_from_children). Before the block, that walk read the field
+/// itself. A tree field the run supplied stays as it was read (ADR-0019).
+void TMarkovField::_start_tree_fields_at_the_field() {
+	_link_counters = leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(
+	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(),
+	    {.species  = _trees.front()->node_state_was_supplied(),
+		 .molecule = _trees.back()->node_state_was_supplied()});
 }
 
 void TMarkovField::_throw_if_the_fixed_field_is_empty() const {
@@ -216,17 +220,20 @@ void TMarkovField::_throw_if_the_fixed_field_is_empty() const {
 
 /// The chain start, which CONTEXT.md names and ADR-0005 argues.
 ///
-/// The field takes the LOTUS records. Both tree fields take the field. Each tree then initialises
-/// every internal node from its children. With no record anywhere the start is all zeros.
+/// The field takes the LOTUS records. Each tree field the run did not supply takes the field. Each
+/// tree the run did not supply then initialises every internal node from its children. With no
+/// record anywhere the start is all zeros.
 ///
 /// A field the run gave stands as it is. --set_Y is the start the run asked for, and --fix_Y holds
 /// one for the whole chain. --fix_Y without a file leaves the field empty, which this reports as
-/// the user error it is.
+/// the user error it is. A node state the run gave (--set_<tree>_Z) stands as it is too, its leaf
+/// block included, and --fix_Z holds it for the whole chain (ADR-0019).
 ///
-/// The six counters this leaves are degenerate. Bucket 1 holds nothing, so the AND diagnostic says
-/// nothing about them. That is accepted. The first block update recounts every leaf pair and
-/// replaces the tally. A fixed field runs no block update, so its degenerate tally stands for the
-/// whole chain -- which is the truth of a field both tree fields match exactly.
+/// With no node state supplied, the six counters this leaves are degenerate. Bucket 1 holds
+/// nothing, so the AND diagnostic says nothing about them. That is accepted. The first block update
+/// recounts every leaf pair and replaces the tally. A run that holds both the field and the node
+/// states runs no block update, so the tally this leaves stands for the whole chain -- which is
+/// the truth of the leaf layer it holds.
 void TMarkovField::_start_the_chain([[maybe_unused]] const TDataModel &data_model) {
 	using namespace coretools::instances;
 
@@ -239,9 +246,11 @@ void TMarkovField::_start_the_chain([[maybe_unused]] const TDataModel &data_mode
 		leaf_layer_start::start_the_field_at(data_model.get_lotus().get_L(), _Y);
 #endif
 	}
-	_hold_tree_fields_at_the_field();
-	logfile().list("The chain starts with the field and both tree fields at one in ",
-	               _Y.number_of_ones(), " of ", _Y.total_size_of_container_space(), " cells.");
+	_start_tree_fields_at_the_field();
+	logfile().list("The chain starts with the field at one in ", _Y.number_of_ones(), " of ",
+	               _Y.total_size_of_container_space(),
+	               " cells, and every tree field the run did "
+	               "not supply at the field.");
 
 	for (auto &tree : _trees) { tree->initialize_Z_from_children(); }
 }
@@ -251,11 +260,11 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 		_open_Y_trace_file();
 	}
 
-	if (_fix_Y) {
+	if (_fix_Y && _fix_Z) {
 		_throw_if_the_fixed_field_is_empty();
-		// The block draws the two tree fields with the field, so holding one holds all three. The
-		// leaf layer never moves after this, and one tally stands for the whole chain; the chain's
-		// start is where it was built (_start_the_chain).
+		// The block has nothing left to draw: the field is held, and so are both tree fields. The
+		// leaf layer never moves, and one tally stands for the whole chain; the chain's start is
+		// where it was built (_start_the_chain).
 		//
 		// The error probability still moves against that tally, so the trace still carries it.
 		_trace_link_counters(iteration);
@@ -266,14 +275,24 @@ void TMarkovField::_update_block(TDataModel &data_model, size_t iteration) {
 	// (see run_seed).
 	const TCellUniforms field_uniforms(run_seed(), TCellStream::field, iteration);
 
-	// Each data source hands out its pass, and the model folds them.
+	// Each data source hands out its pass, and the model folds them. A held field still goes
+	// through the passes: each source tallies against the field the update leaves, held or not.
 	TCompiledBlockData data = data_model.begin_block_update();
 	TBlockModel model(_trees, data);
 
 	const field_math::TErrorProbability omega = _error_probability();
-	_link_counters                            = block_update::run<TLinkPolicy>(
-	    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
-	    _trees.back()->phylogeny(), omega, model, field_uniforms);
+	const auto run_block                      = [&]<block_update::THeld Held>() {
+		return block_update::run<TLinkPolicy, Held>(
+		    _Y, _trees.front()->get_Z(), _trees.back()->get_Z(), _trees.front()->phylogeny(),
+		    _trees.back()->phylogeny(), omega, model, field_uniforms);
+	};
+	if (_fix_Y) {
+		_link_counters = run_block.template operator()<block_update::THeld::field>();
+	} else if (_fix_Z) {
+		_link_counters = run_block.template operator()<block_update::THeld::tree_fields>();
+	} else {
+		_link_counters = run_block.template operator()<block_update::THeld::nothing>();
+	}
 
 	// Each pass finishes its tally against the field the update left. Then each data source takes
 	// its pass back and installs the tally.
@@ -296,7 +315,8 @@ void TMarkovField::update(TDataModel &data_model, size_t iteration) {
 	}
 
 	// The block update is the whole of the leaf layer's turn: it draws the field and both tree
-	// fields together. Then each tree walks its own internal nodes, and then the parameters move.
+	// fields together, or whatever of them the run does not hold. Then each tree walks its own
+	// internal nodes, and then the parameters move.
 	_update_block(data_model, iteration);
 	if (_fix_Z) {
 		_update_all_Z<true>(iteration);

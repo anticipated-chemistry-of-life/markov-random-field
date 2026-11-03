@@ -110,18 +110,19 @@ private:
 	/// wrong, which is a finding rather than a defect, so this throws nothing and fails nothing.
 	void _report_link_diagnostic() const;
 
-	/// The chain start: the field at the LOTUS records, both tree fields at the field, and every
-	/// internal node at what its children make most likely.
+	/// The chain start: the field at the LOTUS records, every tree field the run did not supply at
+	/// the field, and every internal node of a tree the run did not supply at what its children
+	/// make most likely.
 	void _start_the_chain(const TDataModel &data_model);
 
 	/// A fixed field has to come from somewhere. Throws when the run fixed the field and gave it
 	/// no states, which is a user error rather than a chain to run.
 	void _throw_if_the_fixed_field_is_empty() const;
 
-	/// Puts both tree fields at the field, and tallies the six counters over them. The chain's
-	/// start needs it, and so does the fixed field, which has no block update to write all three
-	/// and leave the tally behind as it goes.
-	void _hold_tree_fields_at_the_field();
+	/// Puts every tree field the run did not supply at the field, and tallies the six counters over
+	/// the leaf layer that leaves. The chain's start needs it, and so does a run that holds the
+	/// field and both node states, which has no block update to leave the tally behind.
+	void _start_tree_fields_at_the_field();
 
 	void _simulate_Y();
 

@@ -32,9 +32,11 @@ Issue #44 builds it, along with the rest of the ladder.
 
 Run the rungs in order and stop at the first failure. Each pins strictly less
 than the one before, so a failure localises the fault: rung 1 pins the field and
-both trees' node states and is close to closed form; rung 2 adds the Z Gibbs
-update; rung 3 infers everything from observations, against the simple error model
-alone, then LOTUS alone, then both.
+both trees' node states, leaves included, and is close to closed form; rung 2
+frees the node states, so the block update draws both tree fields given the
+pinned field and each tree walks the nodes above them; rung 3 infers everything
+from observations, against the simple error model alone, then LOTUS alone, then
+both. What `--Y.update false` and `--Z.update false` hold is ADR-0019's.
 
 Rung 1 is also the empirical ceiling. Its scores are what the looser rungs should
 be judged against, which is why `validate_independent.py` reports rather than

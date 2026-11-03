@@ -129,9 +129,8 @@ void TTree::_initialize_Z(IndexArray num_leaves_per_tree,
 	_Z.initialize_dimensions(node_state_dimensions(num_leaves_per_tree, _dimension, _topology()),
 	                         _dimension);
 
-	const std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
-	if (coretools::instances::parameters().exists(set_Z_cli_command)) {
-		read_Z_from_file(coretools::instances::parameters().get(set_Z_cli_command), _Z,
+	if (node_state_was_supplied()) {
+		read_Z_from_file(coretools::instances::parameters().get(node_state_option()), _Z,
 		                 node_state_columns(all_trees), _dimension);
 	}
 }

@@ -278,13 +278,22 @@ public:
 		return coretools::containerSum(per_clique);
 	}
 
+	/// The option that supplies this tree's node state from a file.
+	[[nodiscard]] std::string node_state_option() const { return "set_" + get_tree_name() + "_Z"; }
+
+	/// Whether the run supplied this tree's node state (`--set_<tree>_Z`). A supplied node state is
+	/// the run's to decide, leaves included: the chain start neither puts its tree field at the
+	/// field nor initialises its internal nodes (ADR-0019).
+	[[nodiscard]] bool node_state_was_supplied() const {
+		return coretools::instances::parameters().exists(node_state_option());
+	}
+
 	/// Starts every internal node of this tree at the state its children make most likely. One
 	/// forward pass over each clique. This is initialisation and not a sampler move. It runs once,
 	/// before the chain's first update, and reads the tree field the chain start wrote
 	/// (TMarkovField::_start_the_chain). A node state the run supplied stays as it is.
 	void initialize_Z_from_children() {
-		std::string set_Z_cli_command = "set_" + get_tree_name() + "_Z";
-		if (coretools::instances::parameters().exists(set_Z_cli_command)) { return; }
+		if (node_state_was_supplied()) { return; }
 
 		auto view_factory = [this](size_t c) { return _clique_view(c); };
 		auto kernel       = [this](size_t c, TNodeStateCliqueView &states) {

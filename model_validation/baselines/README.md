@@ -25,10 +25,11 @@ manifests do not move.
 
 ## Why two rungs
 
-**Rung 1** pins the field and both trees' internal states, so only the parameter
-updates move. It is the tightest run: closest to closed form, and quickest.
+**Rung 1** pins the field and both trees' node states, leaves included, so only
+the parameter updates move. It is the tightest run: closest to closed form, and
+quickest.
 
-**Rung 2** pins the field and infers the internal states, and it is not optional.
+**Rung 2** pins the field and infers the node states, and it is not optional.
 Under rung 1's `--Z.update false` the clique loop skips the node-state walk
 outright, and under `--set_<tree>_Z` the bottom-up initialisation returns before
 doing anything -- so a rung-1-only gate would pass a change to either of them

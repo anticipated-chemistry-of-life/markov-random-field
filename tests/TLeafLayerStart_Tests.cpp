@@ -13,8 +13,10 @@
 #include "storages/TSparse.h"
 #include "gtest/gtest.h"
 
+#include <array>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -85,7 +87,7 @@ TYPED_TEST(LeafLayerStart, starts_all_three_at_the_records) {
 
 		leaf_layer_start::start_the_field_at(records, Y);
 		const auto counters =
-		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
+		    leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 		EXPECT_EQ(counters.total(), Y.total_size_of_container_space());
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
@@ -122,7 +124,7 @@ TYPED_TEST(LeafLayerStart, with_no_records_everything_starts_at_zero) {
 
 		leaf_layer_start::start_the_field_at(records, Y);
 		const auto counters =
-		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
+		    leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
 			for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
@@ -159,7 +161,7 @@ TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 
 		leaf_layer_start::start_the_field_at(records, Y);
 		const auto counters =
-		    leaf_layer_start::hold_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
+		    leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(Y, Z_species, Z_molecule);
 
 		size_t n_reported = 0;
 		for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
@@ -176,6 +178,67 @@ TYPED_TEST(LeafLayerStart, tallies_the_counters_it_leaves_degenerate) {
 		EXPECT_EQ(counters.count(0, true), 0U);
 		EXPECT_EQ(counters.count(1, false), 0U);
 		EXPECT_EQ(counters.count(1, true), 0U);
+	}
+}
+
+/// A tree field the run supplied stays as it was read, and the other one still takes the field. The
+/// tally is of the leaf layer the start leaves, so a supplied tree field that disagrees with the
+/// field lands in bucket 1 -- the tally is not degenerate once a run supplies one.
+TYPED_TEST(LeafLayerStart, keeps_a_supplied_tree_field_and_tallies_against_it) {
+	using Field     = typename TestFixture::Field;
+	using NodeState = typename TestFixture::NodeState;
+
+	for (const auto supplied :
+	     {leaf_layer_start::TSuppliedTreeFields{.species = true},
+	      leaf_layer_start::TSuppliedTreeFields{.molecule = true},
+	      leaf_layer_start::TSuppliedTreeFields{.species = true, .molecule = true}}) {
+		SCOPED_TRACE("species supplied " + std::to_string(supplied.species) +
+		             ", molecule supplied " + std::to_string(supplied.molecule));
+		for (const auto &pair : tree_pairs()) {
+			SCOPED_TRACE(pair.name);
+			auto records    = TSparseBinary(field_shape(pair));
+			auto Y          = make_storage<Field>(field_shape(pair));
+			auto Z_species  = make_node_state<NodeState>(species_shape(pair), 0);
+			auto Z_molecule = make_node_state<NodeState>(molecule_shape(pair), 1);
+			seed_records(records);
+			seed_ones(Z_species, 2);
+			seed_ones(Z_molecule, 3);
+
+			const auto read = [](const NodeState &Z, size_t s, size_t m) {
+				return Z.is_one(Z.get_linear_index_in_container_space(IndexArray{s, m}));
+			};
+			std::vector<std::array<bool, 2>> supplied_states;
+			for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+				for (size_t m = 0; m < pair.molecule.n_leaves(); ++m) {
+					supplied_states.push_back({read(Z_species, s, m), read(Z_molecule, s, m)});
+				}
+			}
+
+			leaf_layer_start::start_the_field_at(records, Y);
+			const auto counters = leaf_layer_start::start_tree_fields_at_the_field<TLinkPolicy>(
+			    Y, Z_species, Z_molecule, supplied);
+
+			field_math::TLinkCounters expected;
+			size_t cell = 0;
+			for (size_t s = 0; s < pair.species.n_leaves(); ++s) {
+				for (size_t m = 0; m < pair.molecule.n_leaves(); ++m, ++cell) {
+					SCOPED_TRACE("leaf pair " + std::to_string(s) + "," + std::to_string(m));
+					const bool y   = records_hold(records, s, m);
+					const bool z_s = supplied.species ? supplied_states[cell][0] : y;
+					const bool z_m = supplied.molecule ? supplied_states[cell][1] : y;
+					EXPECT_EQ(read(Z_species, s, m), z_s);
+					EXPECT_EQ(read(Z_molecule, s, m), z_m);
+					expected.add(static_cast<size_t>(z_s) + static_cast<size_t>(z_m), y);
+				}
+			}
+			ASSERT_GT(expected.count(1, false) + expected.count(1, true), 0U)
+			    << "no supplied tree field disagrees with the field, so the tally is not tested";
+			for (size_t bucket = 0; bucket < field_math::TLinkCounters::n_buckets; ++bucket) {
+				for (const bool y : {false, true}) {
+					EXPECT_EQ(counters.count(bucket, y), expected.count(bucket, y));
+				}
+			}
+		}
 	}
 }
 

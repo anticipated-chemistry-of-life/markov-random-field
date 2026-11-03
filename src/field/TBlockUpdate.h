@@ -3,7 +3,8 @@
 //
 // A leaf pair carries three variables. They are drawn together, from all eight combinations at
 // once, because single-variable draws leave the triple metastable. ADR-0005 carries the argument,
-// and field/TFieldMath.h carries the arithmetic.
+// and field/TFieldMath.h carries the arithmetic. A run may hold the field or both tree fields; the
+// draw is then of what is left, given what is held (`THeld`, ADR-0019).
 //
 // This file is the loop and nothing else. The probabilities and the counter move come from the
 // kernel. The cells are read and written one at a time, straight from the storages
@@ -68,6 +69,18 @@ struct TLeafPairFactors {
 	/// The cell data factor: {P(obs | Y = 0), P(obs | Y = 1)}, every compiled-in data source's
 	/// answer for this cell multiplied together.
 	field_math::TCellDataFactor cell_data;
+};
+
+/// What the block holds where it is, and so does not draw. The block draws the leaf pair's three
+/// variables jointly, so holding one of them is conditioning the draw on it: the other two are
+/// drawn from their joint given the held one. ADR-0019 carries the argument.
+enum class THeld {
+	/// Every variable is drawn: the eight-state block.
+	nothing,
+	/// The field is held, and both tree fields are drawn given it.
+	field,
+	/// Both tree fields are held, and the field is drawn given them.
+	tree_fields,
 };
 
 /// The type a model's `begin_row` hands back. Named here so that the concept below can ask for an
@@ -169,6 +182,26 @@ template<typename ModelColumn> struct TColumn {
 	ModelColumn model_column;
 };
 
+/// The factors a leaf pair's draw takes, given what the block holds.
+///
+/// A held variable enters as the indicator of the state it holds, so every block state that would
+/// move it has no mass, and the draw is the joint of the other two given it -- the conditional the
+/// eight-state kernel already computes, with nothing new to get wrong. A held field makes the data
+/// a constant: whatever the data says about the field state it is not in never reaches the draw,
+/// which is what lets a field held at a value the data rules out still be drawn around.
+template<THeld Held>
+[[nodiscard]] TLeafPairFactors factors_given_held(TLeafPairFactors factors,
+                                                  const field_math::TBlockStates &current) {
+	const auto indicator = [](bool state) { return coretools::P(state ? 1.0 : 0.0); };
+	if constexpr (Held == THeld::field) {
+		factors.cell_data = {indicator(!current.y), indicator(current.y)};
+	} else if constexpr (Held == THeld::tree_fields) {
+		factors.prob_z_s_is_one = indicator(current.z_s);
+		factors.prob_z_m_is_one = indicator(current.z_m);
+	}
+	return factors;
+}
+
 /// Draws one leaf pair: the field cell and both tree field cells at it.
 ///
 /// It reads five cells -- the three the draw moves, and the two tree parents -- and writes back the
@@ -184,8 +217,8 @@ template<typename ModelColumn> struct TColumn {
 ///
 /// A write reaches the storage in place, or comes back as a deferred insert. That is the only exit
 /// a write inside a parallel region may take (ADR-0006).
-template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model,
-         typename ModelRow, typename ModelColumn>
+template<field_math::LinkPolicy Policy, THeld Held, typename Field, typename NodeState,
+         BlockModel Model, typename ModelRow, typename ModelColumn>
 void update_cell(TRow<ModelRow> &row, const TColumn<ModelColumn> &column, Field &Y,
                  NodeState &Z_species, NodeState &Z_molecule,
                  const field_math::TErrorProbability &omega, Model &model,
@@ -222,10 +255,13 @@ void update_cell(TRow<ModelRow> &row, const TColumn<ModelColumn> &column, Field 
 	    .z_m = Z_molecule.is_one_at(row.molecule_position + column.molecule_position)};
 
 	// The cell names the uniform it draws, so the thread that happens to reach this cell does not
-	// decide what it gets.
-	const auto draw =
-	    field_math::draw_block<Policy>(factors.prob_z_s_is_one, factors.prob_z_m_is_one, omega,
-		                               factors.cell_data, current, uniforms.at(field_cell));
+	// decide what it gets. A held variable reaches the draw as the indicator of its state, and the
+	// model's own factors still go to `record` below: a data source keeps the score of the field
+	// state the leaf pair holds, held or drawn.
+	const TLeafPairFactors drawn_from = factors_given_held<Held>(factors, current);
+	const auto draw                   = field_math::draw_block<Policy>(
+	    drawn_from.prob_z_s_is_one, drawn_from.prob_z_m_is_one, omega, drawn_from.cell_data,
+	    current, uniforms.at(field_cell));
 
 	// Write each cell back where it was read from. A storage that holds the cell takes the write in
 	// place, and one that does not hands the cell back for a later insert.
@@ -273,7 +309,8 @@ inline constexpr size_t TILE_COLUMNS = 128;
 /// after another would: each row's tally and bookkeeping see the same cells in the same order, and
 /// each is handed over once when the band ends -- the tally into the row's slot, the model's into
 /// the model's own.
-template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
+template<field_math::LinkPolicy Policy, THeld Held, typename Field, typename NodeState,
+         BlockModel Model>
 void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Field &Y,
                  NodeState &Z_species, NodeState &Z_molecule, const TPhylogeny &species,
                  const TPhylogeny &molecule, const field_math::TErrorProbability &omega,
@@ -319,9 +356,9 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 		}
 		for (size_t r = 0; r < rows.size(); ++r) {
 			for (const auto &column : columns) {
-				update_cell<Policy>(rows[r], column, Y, Z_species, Z_molecule, omega, model,
-				                    uniforms, counters[r], field_inserts, species_inserts,
-				                    molecule_inserts);
+				update_cell<Policy, Held>(rows[r], column, Y, Z_species, Z_molecule, omega, model,
+				                          uniforms, counters[r], field_inserts, species_inserts,
+				                          molecule_inserts);
 			}
 		}
 	}
@@ -340,7 +377,8 @@ void update_band(size_t first_row, size_t end_row, size_t n_molecule_leaves, Fie
 /// the schedule is this file's own business. It is `schedule(dynamic)` over bands: there are a
 /// few hundred of them, too few for a static split to come out even, and a band holding a species
 /// with mass-spec runs costs more than one without.
-template<field_math::LinkPolicy Policy, typename Field, typename NodeState, BlockModel Model>
+template<field_math::LinkPolicy Policy, THeld Held = THeld::nothing, typename Field,
+         typename NodeState, BlockModel Model>
 [[nodiscard]] field_math::TLinkCounters run(Field &Y, NodeState &Z_species, NodeState &Z_molecule,
                                             const TPhylogeny &species, const TPhylogeny &molecule,
                                             const field_math::TErrorProbability &omega,
@@ -384,10 +422,10 @@ template<field_math::LinkPolicy Policy, typename Field, typename NodeState, Bloc
 	for (size_t band = 0; band < n_bands; ++band) {
 		const auto thread      = static_cast<size_t>(omp_get_thread_num());
 		const size_t first_row = band * BAND_ROWS;
-		update_band<Policy>(first_row, std::min(first_row + BAND_ROWS, n_rows), n_columns, Y,
-		                    Z_species, Z_molecule, species, molecule, omega, model, uniforms,
-		                    per_row_counters, field_inserts[thread].value,
-		                    species_inserts[thread].value, molecule_inserts[thread].value);
+		update_band<Policy, Held>(first_row, std::min(first_row + BAND_ROWS, n_rows), n_columns, Y,
+		                          Z_species, Z_molecule, species, molecule, omega, model, uniforms,
+		                          per_row_counters, field_inserts[thread].value,
+		                          species_inserts[thread].value, molecule_inserts[thread].value);
 	}
 
 	// The inserts every thread deferred, in one batch per container. A dense container is handed
