@@ -3,11 +3,14 @@
 Both trees are scored. Each draws its own node state and each is inferred, so a
 validator that read one of them would be blind to half the model (ADR-0005).
 
-Reports, and does not by default gate on:
+Reports:
 
 - **coverage** for `alpha` and `log_nu` — the fraction of a tree's cliques whose
-  95% credible interval contains the truth. Coverage catches both bias and
-  over-confident posteriors; RMSE alone catches only the first.
+  central 90% credible interval contains the truth, against the 95% binomial band
+  around 0.9 (`recovery.coverage_band`). Coverage catches both bias and
+  over-confident posteriors; RMSE alone catches only the first. The interval and
+  the band come from one place, `recovery`: a 95% interval scored against a band
+  centred on 0.9 passes posteriors that are too wide and fails calibrated ones (#110).
 - **Spearman and mean absolute error** for branch lengths, which are discrete and
   budget-constrained, so a credible interval is a strange object for them.
 - **movement**, because a chain that never left its initialisation can otherwise
@@ -24,12 +27,14 @@ On the LOTUS+MS scenarios it also scores the mass-spec half of the model:
   of runs the molecule is present in.
 - **kappa**: coverage.
 
-A coverage passes inside the 95% binomial band around 0.9 (`recovery.coverage_band`).
-
-Thresholds are deliberately absent: rung 1 pins the field *and* the internal
-states, so whatever it scores is the empirical ceiling, and the gates for the
-looser rungs should be set relative to that rather than guessed in advance. Pass
-`--gates <rung1-summary.json>` once you have it.
+`--gates` exits 1 unless every alpha and log nu coverage lies inside its band. The
+gate is absolute, so it means the same thing at every rung: a calibrated posterior
+passes however little the rung's data say. Branch lengths are reported and not
+gated, because no fixed threshold suits every rung. Once node states are inferred,
+the internal states are summed out and the leaves are seen only through the field;
+on seed 42 the per-branch posterior is then nearly flat but calibrated, and an exact
+pruning reference that knows every other parameter's truth reaches a Spearman of
+only 0.22-0.35, against rung 1's 0.88 (#110).
 """
 
 from __future__ import annotations
@@ -44,9 +49,6 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from src.independent import mass_spec, recovery
-
-CREDIBLE_MASS = 0.95
-
 
 TREES = ("species", "molecules")
 
@@ -131,15 +133,14 @@ def _coverage(trace: pd.DataFrame, truth: dict[str, float], prefix: str) -> dict
         return {"n": 0}
 
     values = trace[names].to_numpy()
-    tail = (1.0 - CREDIBLE_MASS) / 2.0
-    lower, upper = np.quantile(values, [tail, 1.0 - tail], axis=0)
     actual = np.array([truth[n] for n in names])
     mean = values.mean(axis=0)
 
-    inside = (actual >= lower) & (actual <= upper)
+    coverage = float(recovery.is_covered(values, actual).mean())
     return {
         "n": len(names),
-        "coverage": float(inside.mean()),
+        "coverage": coverage,
+        "passes": recovery.coverage_passes(coverage, len(names)),
         "rmse": float(np.sqrt(np.mean((mean - actual) ** 2))),
         "bias": float(np.mean(mean - actual)),
         "correlation": float(np.corrcoef(mean, actual)[0, 1])
@@ -178,7 +179,7 @@ def _scalar(trace: pd.DataFrame, truth: dict[str, float], name: str) -> dict:
     if name not in trace.columns or name not in truth:
         return {"present": False}
     values = trace[name].to_numpy()
-    tail = (1.0 - CREDIBLE_MASS) / 2.0
+    tail = (1.0 - recovery.CREDIBLE_MASS) / 2.0
     lower, upper = np.quantile(values, [tail, 1.0 - tail])
     return {
         "present": True,
@@ -329,8 +330,10 @@ def _report(summary: dict) -> None:
             if not block["n"]:
                 click.echo(f"  {label:<16} absent from trace")
                 continue
+            band = recovery.coverage_band(block["n"])
             click.echo(
-                f"  {label:<16} coverage {block['coverage']:6.1%}  "
+                f"  {label:<16} {'PASS' if block['passes'] else 'FAIL'}  "
+                f"coverage {block['coverage']:6.1%}  band [{band[0]:.1%}, {band[1]:.1%}]  "
                 f"rmse {block['rmse']:7.4f}  bias {block['bias']:+7.4f}  "
                 f"corr {block['correlation']:5.3f}  moved {block['moved']:5.1%}"
                 f"   (n={block['n']})"
@@ -357,7 +360,7 @@ def _report(summary: dict) -> None:
             click.echo(
                 f"  {tree + '_' + scalar:<22} {mark} truth {block['truth']:+.4f}  "
                 f"mean {block['mean']:+.4f}  "
-                f"95% [{block['lower']:+.4f}, {block['upper']:+.4f}]"
+                f"{recovery.CREDIBLE_MASS:.0%} [{block['lower']:+.4f}, {block['upper']:+.4f}]"
             )
 
     if "mass_spec" in summary:
@@ -367,28 +370,20 @@ def _report(summary: dict) -> None:
         click.echo(f"  ! {warning}")
 
 
-def _apply_gates(summary: dict, gates_path: pathlib.Path) -> bool:
-    """Compare against a reference rung's scores, allowing a margin."""
-    reference = json.loads(gates_path.read_text())
+def _apply_gates(summary: dict) -> bool:
+    """Every alpha and log nu coverage must lie inside its binomial band."""
     failures = []
-
     for tree in TREES:
         for key in ("alpha", "log_nu"):
-            here, there = summary[tree][key], reference[tree][key]
-            if here["n"] and there["n"] and here["coverage"] < there["coverage"] - 0.10:
+            block = summary[tree][key]
+            if block["n"] and not block["passes"]:
+                low, high = recovery.coverage_band(block["n"])
                 failures.append(
-                    f"{tree} {key} coverage {here['coverage']:.1%} is more than "
-                    f"10 points below the reference {there['coverage']:.1%}"
+                    f"{tree} {key} coverage {block['coverage']:.1%} is outside its band "
+                    f"[{low:.1%}, {high:.1%}] (n={block['n']})"
                 )
 
-        here, there = summary[tree]["branch_lengths"], reference[tree]["branch_lengths"]
-        if here["n"] and there["n"] and here["spearman"] < there["spearman"] - 0.15:
-            failures.append(
-                f"{tree} branch-length spearman {here['spearman']:.3f} is well below "
-                f"the reference {there['spearman']:.3f}"
-            )
-
-    click.echo(f"\n  gates vs {gates_path.name}:")
+    click.echo("\n  gates:")
     for failure in failures:
         click.echo(f"    FAIL {failure}")
     if not failures:
@@ -401,11 +396,10 @@ def _apply_gates(summary: dict, gates_path: pathlib.Path) -> bool:
 @click.argument("rung")
 @click.option(
     "--gates",
-    type=click.Path(exists=True),
-    default=None,
-    help="A previous rung's summary JSON to score this one against.",
+    is_flag=True,
+    help="Exit 1 unless every alpha and log nu coverage lies inside its band.",
 )
-def main(scenario_dir: str, rung: str, gates: str | None) -> None:
+def main(scenario_dir: str, rung: str, gates: bool) -> None:
     """Score RUNG's output inside SCENARIO_DIR against the simulated truth."""
     base = pathlib.Path(scenario_dir)
     rung_dir = base / rung
@@ -453,7 +447,7 @@ def main(scenario_dir: str, rung: str, gates: str | None) -> None:
     out_path.write_text(json.dumps(summary, indent=2) + "\n")
     click.echo(f"\n  summary written to {out_path}")
 
-    if gates and not _apply_gates(summary, pathlib.Path(gates)):
+    if gates and not _apply_gates(summary):
         raise SystemExit(1)
 
 

@@ -14,7 +14,7 @@ The three rungs are run in the order written and abandoned at the first failure.
 Each pins strictly less than the one before, so a failure localises the fault:
 
 1. field *and* node states pinned — only the parameter updates move, so this is
-   close to closed form and sets the empirical ceiling for the other two.
+   close to closed form.
 2. field pinned, node states inferred — adds the node-state Gibbs update.
 3. nothing pinned, inferred from observations — the production path, run against
    the simple error model alone, then LOTUS alone, then both. A scenario with
