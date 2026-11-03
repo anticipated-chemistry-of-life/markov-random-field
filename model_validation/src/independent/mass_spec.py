@@ -95,10 +95,6 @@ class MassSpecTruth:
     def n_runs(self) -> int:
         return len(self.species_with_runs) * self.layout.runs_per_species
 
-    @property
-    def filter_probabilities(self) -> np.ndarray:
-        return self.filter_indices / 255.0
-
 
 def simulate(
     rng: np.random.Generator,
@@ -262,10 +258,12 @@ def write_assignment(
 
 
 def truth_values(truth: MassSpecTruth, molecules: TreeIndex) -> dict[str, object]:
-    """The true parameters under the names the C++ trace gives them.
+    """The true parameters, for `simulated_parameters.txt`.
 
-    A filter probability is the byte index the C++ stores; the probability is the
-    index over 255.
+    `filter_proba_<leaf>` and `contamination_proba` are the names the C++ trace
+    gives its parameters. `ms_unknown_rate` is the name of the C++ option rho is
+    passed by, and `ms_lambda` has no C++ counterpart. A filter probability is the
+    byte index the C++ stores; the probability is the index over 255.
     """
     values: dict[str, object] = {
         f"{FILTER_PARAMETER}_{name}": int(index)

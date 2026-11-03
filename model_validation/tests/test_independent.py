@@ -876,8 +876,15 @@ def test_every_molecule_feature_lists_its_true_molecule():
         out, _, _ = _ms_scenario(tmp)
         data, truth = _ms_files(out)
 
-    assigned = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)]
-    assert len(assigned) > 0
+    # Every feature that is not unknown has exactly one true row, and that row is
+    # one of the structures the data file lists for it.
+    unknown = truth[truth["molecule"] == mass_spec.UNKNOWN]
+    molecule_features = unknown[unknown["fraction"] == 0][FEATURE]
+    assert len(molecule_features) > 0
+    assigned = truth[
+        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)
+    ].merge(molecule_features, on=FEATURE)
+    assert len(assigned) == len(molecule_features)
     listed = data.merge(assigned, on=FEATURE + ["molecule"])
     assert len(listed) == len(assigned)
 
