@@ -91,7 +91,7 @@ TModel::TModel(size_t n_iterations, const std::string &prefix, bool simulate)
           {_prefix, coretools::str::toString(ProgramOptions::ERROR_PROBABILITY_PRIOR_RATE)})
 #ifdef USE_LOTUS
       ,
-      _gamma("gamma", &_prior_on_gamma, {_prefix}),
+      _gamma("gamma", &_prior_on_gamma, {_prefix, ProgramOptions::GAMMA_PRIOR_PARAMETERS}),
       _error_rate("epsilon", &_prior_on_error_rate,
                   {_prefix, ProgramOptions::EPSILON_PRIOR_PARAMETERS})
 #endif

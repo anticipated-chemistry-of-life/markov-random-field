@@ -57,15 +57,15 @@ using TypeBinnedBranchLengths = coretools::UnsignedInt8WithMax<0>;
 using TypeFilterProbability   = coretools::UnsignedInt8WithMax<coretools::toHash("filter_proba")>;
 using TypeContaminationProbability = coretools::ZeroOneOpen;
 
-// Gamma
-// Weakly-informative Gamma(shape=alpha, rate=beta) prior on the detection rate.
-// Counts enter as log(paper_count+1) (median c̄≈1.61), so gamma*=ln2/c̄≈0.43 gives
-// detection 1-exp(-gamma·c̄)=0.5 at the median. Gamma(2, 4.6) -> mean=alpha/beta≈0.43,
-// mode=(alpha-1)/beta≈0.22, with negligible mass on the saturation corner (gamma≫1)
-// that lets the field collapse against detection. Hyperparameters set via
-// --gamma.priorParameters "<alpha>,<beta>".
-// TODO : verify this Claude bullshit
-using PriorOnGamma = stattools::prior::TUniformFixed<stattools::TParameterBase, TypeGamma, 1>;
+// Gamma, the detection rate of LOTUS, one per tree
+// The prior is Gamma(shape, rate), with mean shape / rate. The default Gamma(1, 1) is an
+// exponential of mean 1. Set it with --gamma_prior_parameters "<shape>,<rate>".
+//
+// The prior must be proper. Paper counts enter as log(count + 1), so with count >= 1 a side's
+// detection 1 - exp(-gamma log(count + 1)) is above 0.999 once gamma passes 10. From there the
+// likelihood no longer changes with gamma, and a flat prior on (0, inf) puts infinite mass on
+// that plateau. Once Y is free, the field can follow gamma there and the chain drifts up (#114).
+using PriorOnGamma = stattools::prior::TGammaFixed<stattools::TParameterBase, TypeGamma, 1>;
 using SpecGamma =
     stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
 

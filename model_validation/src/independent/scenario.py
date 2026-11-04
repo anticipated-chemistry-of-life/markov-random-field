@@ -368,6 +368,10 @@ def _infer_command(
         # does not pin epsilon and omega apart, so that prior pushes epsilon far
         # above a truth of 0.001 (#113). Beta(1, b) has mean 1 / (1 + b).
         f"    --epsilon_prior_parameters 1,{1.0 / config.error_rate - 1.0} \\\n"
+        # A flat prior on gamma is improper: detection saturates above gamma of about
+        # 10, so the likelihood is flat there, and once Y is free the chain walks into
+        # that plateau (#114). Gamma(1, r) has mean 1 / r.
+        f"    --gamma_prior_parameters 1,{1.0 / config.gamma} \\\n"
         f"    --iterations {config.iterations} \\\n"
         f"    --burnin {config.burnin} \\\n"
         f"    --numBurnin {config.n_burnin_rounds} \\\n"

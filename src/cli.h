@@ -96,6 +96,10 @@ public:
 	/// default is uniform on (0, 1). Beta(1, b) has mean 1 / (1 + b).
 	static inline std::string EPSILON_PRIOR_PARAMETERS = "1.0,1.0";
 
+	/// The parameters 'shape,rate' of the Gamma prior on the LOTUS detection rate gamma, one for
+	/// every tree. The default is an exponential of mean 1. The mean is shape / rate.
+	static inline std::string GAMMA_PRIOR_PARAMETERS = "1.0,1.0";
+
 	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0,2.0";
 
 	static inline size_t NUM_ITERATIONS = 20000;
@@ -175,6 +179,13 @@ public:
 			                            "epsilon. Use --epsilon_prior_parameters instead.");
 		}
 
+		GAMMA_PRIOR_PARAMETERS =
+		    params.get<std::string>("gamma_prior_parameters", GAMMA_PRIOR_PARAMETERS);
+		if (params.exists("gamma.priorParameters")) {
+			throw coretools::TUserError("--gamma.priorParameters does not reach the prior on "
+			                            "gamma. Use --gamma_prior_parameters instead.");
+		}
+
 		GAMMA = params.get<double>("gamma", GAMMA);
 
 		ALPHA = params.get<double>("alpha", ALPHA);
@@ -238,6 +249,9 @@ public:
 		std::cout << "--epsilon_prior_parameters     Parameters 'alpha,beta' of the Beta prior on "
 		             "the LOTUS false-record rate epsilon. Default '1,1', uniform on (0,1). "
 		             "Beta(1,b) has mean 1/(1+b)\n";
+		std::cout << "--gamma_prior_parameters       Parameters 'shape,rate' of the Gamma prior on "
+		             "the LOTUS detection rate gamma. Default '1,1', an exponential of mean 1. "
+		             "The mean is shape/rate\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 		std::cout

@@ -643,6 +643,22 @@ def test_every_rung_infers_epsilon_under_a_prior_whose_mean_is_the_truth(error_r
         assert alpha / (alpha + beta) == pytest.approx(error_rate, rel=1e-12), name
 
 
+@pytest.mark.parametrize("gamma", [1.1, 0.4])
+def test_every_rung_infers_gamma_under_a_prior_whose_mean_is_the_truth(gamma):
+    """Detection saturates once gamma is above about 10, so the likelihood is
+    flat out there. Once Y is free, the chain walks into that plateau unless the
+    prior closes it (#114). Gamma(shape, rate) has mean shape / rate."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp, gamma=gamma)
+        bodies = {p.name: p.read_text() for p in sorted(out.glob("rung*.sh"))}
+
+    for name, body in bodies.items():
+        priors = re.findall(r"--gamma_prior_parameters (\S+),(\S+)", body)
+        assert len(priors) == 1, name
+        shape, rate = (float(v) for v in priors[0])
+        assert shape / rate == pytest.approx(gamma, rel=1e-12), name
+
+
 # --------------------------------------------------------------------------
 # Observation models
 # --------------------------------------------------------------------------
