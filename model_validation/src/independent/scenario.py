@@ -364,6 +364,10 @@ def _infer_command(
         # posterior variance: against a truth of 0.05 it barely moves omega at rung 1
         # and drives it towards 0 at rung 3 (#111).
         f"    --error_probability_prior_rate {1.0 / config.error_probability} \\\n"
+        # The C++'s default prior on epsilon is uniform. Once Y is free, LOTUS alone
+        # does not pin epsilon and omega apart, so that prior pushes epsilon far
+        # above a truth of 0.001 (#113). Beta(1, b) has mean 1 / (1 + b).
+        f"    --epsilon_prior_parameters 1,{1.0 / config.error_rate - 1.0} \\\n"
         f"    --iterations {config.iterations} \\\n"
         f"    --burnin {config.burnin} \\\n"
         f"    --numBurnin {config.n_burnin_rounds} \\\n"

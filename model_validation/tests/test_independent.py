@@ -627,6 +627,22 @@ def test_every_rung_infers_omega_under_a_prior_whose_mean_is_the_truth(omega):
         assert 1.0 / float(rates[0]) == pytest.approx(omega, rel=1e-12), name
 
 
+@pytest.mark.parametrize("error_rate", [0.001, 0.01])
+def test_every_rung_infers_epsilon_under_a_prior_whose_mean_is_the_truth(error_rate):
+    """The C++'s default prior on epsilon is Beta(1, 1), whose mean 0.5 is far
+    above a truth of 0.001. Once Y is free, LOTUS alone does not pin epsilon and
+    omega apart, so that prior decides where the posterior sits (#113)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp, error_rate=error_rate)
+        bodies = {p.name: p.read_text() for p in sorted(out.glob("rung*.sh"))}
+
+    for name, body in bodies.items():
+        priors = re.findall(r"--epsilon_prior_parameters (\S+),(\S+)", body)
+        assert len(priors) == 1, name
+        alpha, beta = (float(v) for v in priors[0])
+        assert alpha / (alpha + beta) == pytest.approx(error_rate, rel=1e-12), name
+
+
 # --------------------------------------------------------------------------
 # Observation models
 # --------------------------------------------------------------------------

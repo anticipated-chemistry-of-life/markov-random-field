@@ -69,9 +69,14 @@ using PriorOnGamma = stattools::prior::TUniformFixed<stattools::TParameterBase, 
 using SpecGamma =
     stattools::ParamSpec<TypeGamma, stattools::Hash<coretools::toHash("gamma")>, PriorOnGamma>;
 
-// Epsilon
-using PriorOnErrorRate =
-    stattools::prior::TUniformFixed<stattools::TParameterBase, TypeErrorRate, 1>;
+// Epsilon, the false-record rate of LOTUS
+// The rate at which LOTUS records a pair whose Y is 0. The prior is Beta(alpha, beta). The default
+// Beta(1, 1) is uniform on (0, 1). Beta(1, beta) has mean 1 / (1 + beta) and, near 0, the shape of
+// an exponential of rate beta - 1. Set it with --epsilon_prior_parameters "<alpha>,<beta>".
+//
+// Once Y is free, LOTUS alone does not pin epsilon and omega apart: many false records fit about as
+// well as a high omega does. The prior then decides where the posterior sits (#113).
+using PriorOnErrorRate = stattools::prior::TBetaFixed<stattools::TParameterBase, TypeErrorRate, 1>;
 using SpecErrorRate =
     stattools::ParamSpec<TypeErrorRate, stattools::Hash<coretools::toHash("epsilon")>,
 	                     PriorOnErrorRate>;

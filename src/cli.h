@@ -92,6 +92,10 @@ public:
 
 	static inline std::string_view FIXED_PRIOR_ON_MASS_SPEC_CONTAMINATION_PROBA = "0.3,5.0";
 
+	/// The parameters 'alpha,beta' of the Beta prior on the LOTUS false-record rate epsilon. The
+	/// default is uniform on (0, 1). Beta(1, b) has mean 1 / (1 + b).
+	static inline std::string EPSILON_PRIOR_PARAMETERS = "1.0,1.0";
+
 	static inline std::string_view FIXED_PRIOR_ON_VAR_LOG_NU = "1.0,2.0";
 
 	static inline size_t NUM_ITERATIONS = 20000;
@@ -162,6 +166,15 @@ public:
 			                            ERROR_PROBABILITY_PRIOR_RATE, ".");
 		}
 
+		EPSILON_PRIOR_PARAMETERS =
+		    params.get<std::string>("epsilon_prior_parameters", EPSILON_PRIOR_PARAMETERS);
+		// stattools reads '<name>.priorParameters' into the definition only after a fixed prior
+		// has taken its parameters from it, so the prior would silently stay uniform.
+		if (params.exists("epsilon.priorParameters")) {
+			throw coretools::TUserError("--epsilon.priorParameters does not reach the prior on "
+			                            "epsilon. Use --epsilon_prior_parameters instead.");
+		}
+
 		GAMMA = params.get<double>("gamma", GAMMA);
 
 		ALPHA = params.get<double>("alpha", ALPHA);
@@ -222,6 +235,9 @@ public:
 		             "Simulated truth when simulating, starting value when inferring\n";
 		std::cout << "--error_probability_prior_rate Rate of the exponential prior on omega "
 		             "(> 0). A rate of 20 puts the prior mean at 0.05\n";
+		std::cout << "--epsilon_prior_parameters     Parameters 'alpha,beta' of the Beta prior on "
+		             "the LOTUS false-record rate epsilon. Default '1,1', uniform on (0,1). "
+		             "Beta(1,b) has mean 1/(1+b)\n";
 		std::cout << "--ms_proba_move_to_unknown     Probability of proposing to move an assigned "
 		             "MS feature back to the unknown molecule (in (0,1))\n";
 		std::cout
