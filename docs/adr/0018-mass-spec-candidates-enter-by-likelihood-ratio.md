@@ -22,6 +22,8 @@ Each weight is binned relative to the largest weight in its feature, the unknown
 
 ## Rows outside the molecule tree
 
+_Superseded by [ADR-0020](0020-outside-structures-enter-the-unknown-weight-by-likelihood-ratio.md): an outside structure's likelihood ratio, times the outside rate, is now part of the unknown weight._
+
 A proposed structure that is not a molecule leaf counts toward $n_f$ and nothing else. Exactly, its likelihood ratio belongs to the unknown weight, since the unknown molecule stands for every explanation outside the tree. Adding it needs a prior for such rows, which is not settled. Simulated data has no such rows, so the limitation costs nothing there. On real data it understates the unknown weight whenever a strong match lies outside the tree. It must be resolved before the model is run on real data.
 
 ## Considered options

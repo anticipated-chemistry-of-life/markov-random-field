@@ -182,20 +182,28 @@ _Avoid_: extraction (as a noun for the protocol), method, protocol
 One signal a run detected, unique within that run and not across runs. It is explained by exactly one candidate or by the unknown molecule.
 _Avoid_: peak, signal, spectrum, ion
 
+**Proposed structure**:
+One molecular structure listed for one feature, with its score. A feature's proposed structures are its candidates and its outside structures.
+_Avoid_: row, hit, annotation
+
 **Candidate**:
-A molecule leaf proposed as the explanation of one feature. A molecule that is not a leaf of the molecule tree is not a candidate.
+A proposed structure that is a molecule leaf. A molecule that is not a leaf of the molecule tree is not a candidate.
 _Avoid_: hit, annotation, match
 
+**Outside structure**:
+A proposed structure that is not a molecule leaf. It has no cell in the field, so it can only be part of the unknown molecule.
+_Avoid_: off-tree row, non-leaf row, external candidate
+
 **Correct density**:
-A candidate's density under the distribution of (CSI:FingerID score, ion mass) among correct identifications. Its absolute scale carries nothing; only its ratio to the incorrect density does.
+A proposed structure's density under the distribution of (CSI:FingerID score, ion mass) among correct identifications. Its absolute scale carries nothing; only its ratio to the incorrect density does.
 _Avoid_: calibration score (former name), probability, confidence
 
 **Incorrect density**:
-A candidate's density under the distribution of (CSI:FingerID score, ion mass) among incorrect identifications.
+A proposed structure's density under the distribution of (CSI:FingerID score, ion mass) among incorrect identifications.
 _Avoid_: null density, background density, decoy density
 
 **Likelihood ratio**:
-A candidate's correct density divided by its incorrect density. It is all the model reads of a candidate's score: within one feature, a candidate's weight is its prior times its likelihood ratio. Not a probability, and not bounded by 1.
+A proposed structure's correct density divided by its incorrect density. It is all the model reads of a score: within one feature, a candidate's weight is its prior times its likelihood ratio, and an outside structure's weight is the outside rate times its likelihood ratio. Not a probability, and not bounded by 1.
 _Avoid_: calibration score, relative calibration score, PHRED score
 
 **Unknown molecule**:
@@ -207,7 +215,7 @@ The latent choice, for every feature of a run, of the candidate or the unknown m
 _Avoid_: annotation, match, identification
 
 **Assignment posterior**:
-For every feature of every run, the fraction of the counted iterations the feature's assignment spent on each of its candidates and on the unknown molecule. One file, `<prefix>_assignment_posterior.txt`, with one row per species, extract, feature and explanation, every candidate and the unknown molecule included, zero fractions too, so a feature's rows sum to 1. The unknown molecule is written under the reserved name `<unknown>`, which no molecule leaf may carry; the loader rejects a molecule tree that does. It counts on the iterations the posterior of the field counts and starts again at the end of the burn-in. `--write_assignment_posterior` decides whether a run holds one. `TAssignmentPosterior`, `src/mass_spec/`.
+For every feature of every run, the fraction of the counted iterations the feature's assignment spent on each of its candidates and on the unknown molecule. The unknown molecule's fraction is divided: each outside structure gets its share of the unknown weight, and the remainder is written under the reserved name `<unlisted>`. One file, `<prefix>_assignment_posterior.txt`, with one row per species, extract, feature and explanation, zero fractions included, so a feature's rows sum to 1. No molecule leaf may carry the reserved name; the loader rejects a molecule tree that does. It counts on the iterations the posterior of the field counts and starts again at the end of the burn-in. `--write_assignment_posterior` decides whether a run holds one. `TAssignmentPosterior`, `src/mass_spec/`.
 _Avoid_: assignment probabilities, annotation scores
 
 **True assignment**:
@@ -215,9 +223,13 @@ The assignment that generated a simulated data set, against which the inferred a
 _Avoid_: true explanation, ground truth assignment, correct assignment
 
 **Unknown weight**:
-The weight of the unknown molecule in one feature, on the same scale as the candidates' likelihood ratios: the unknown rate times the number of structures proposed for that feature, candidates or not. It grows with that number because each proposed structure's share of the prior shrinks as more are proposed.
+The weight of the unknown molecule in one feature, on the same scale as the candidates' likelihood ratios: the unknown rate times the number of proposed structures of that feature, plus the outside rate times the sum of its outside structures' likelihood ratios. The first part grows with the number of proposed structures because each one's share of the prior shrinks as more are proposed.
 _Avoid_: unknown fraction (former name), unknown probability, unknown prior
 
 **Unknown rate**:
-The unknown weight per proposed structure, the same for every feature. Written `ρ`.
+The weight, per proposed structure, of an explanation that is not among the proposed structures: a structure that was not listed, or no molecule at all. The same for every feature. Written `ρ`.
 _Avoid_: unknown fraction, unknown probability, unknown prior
+
+**Outside rate**:
+The detection odds of the molecule of an outside structure: the counterpart, for a molecule without a field cell, of a candidate's detection odds. The same for every feature. Written `τ`.
+_Avoid_: outside probability, outside prior, off-tree rate
