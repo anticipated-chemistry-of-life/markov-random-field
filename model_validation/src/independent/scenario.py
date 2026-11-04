@@ -360,6 +360,10 @@ def _infer_command(
         f"    --gamma {config.gamma} \\\n"
         f"    --epsilon {config.error_rate} \\\n"
         f"    --error_probability {config.error_probability} \\\n"
+        # The C++'s default prior has mean 0.005. Its pull on omega grows with the
+        # posterior variance: against a truth of 0.05 it barely moves omega at rung 1
+        # and drives it towards 0 at rung 3 (#111).
+        f"    --error_probability_prior_rate {1.0 / config.error_probability} \\\n"
         f"    --iterations {config.iterations} \\\n"
         f"    --burnin {config.burnin} \\\n"
         f"    --numBurnin {config.n_burnin_rounds} \\\n"

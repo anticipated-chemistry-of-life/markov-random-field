@@ -103,7 +103,7 @@ using SpecEpsilonSimpleModel =
 //
 // The prior is an exponential truncated to that interval, so it is concentrated near small values:
 // an error probability near a half says the tree fields carry almost nothing. The default rate of
-// 20 puts the prior mean at 0.05, and truncation moves it by 2e-5. Set it with
+// 200 puts the prior mean at 0.005, and truncation moves it by less than 1e-4. Set it with
 // --error_probability_prior_rate.
 using TypeErrorProbability = coretools::MinMaxVariable<coretools::toHash("omega")>;
 using PriorOnErrorProbability =

@@ -7,6 +7,7 @@ disagreement between them would say nothing about which side is wrong.
 from __future__ import annotations
 
 import pathlib
+import re
 import tempfile
 
 import numpy as np
@@ -607,6 +608,23 @@ def test_no_run_script_neutralises_a_tree():
             continue
         for parameter in ("alpha", "log_nu", "mean_log_nu", "var_log_nu"):
             assert f"--molecules_{parameter} " not in body, f"{name} pins {parameter}"
+
+
+@pytest.mark.parametrize("omega", [0.05, 0.005])
+def test_every_rung_infers_omega_under_a_prior_whose_mean_is_the_truth(omega):
+    """The C++'s default prior on omega has mean 0.005. Left at that default
+    against a truth of 0.05, the prior pulls omega's posterior down by about
+    rate x variance, which goes from 0.0006 at rung 1 to about 0.04 at rung 3,
+    and it takes alpha's coverage with it (#111)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _small_scenario(tmp, error_probability=omega)
+        bodies = {p.name: p.read_text() for p in sorted(out.glob("rung*.sh"))}
+
+    for name, body in bodies.items():
+        rates = re.findall(r"--error_probability_prior_rate (\S+)", body)
+        assert len(rates) == 1, name
+        # Truncation to (0, 0.5) moves the mean by less than 1e-4 at these rates.
+        assert 1.0 / float(rates[0]) == pytest.approx(omega, rel=1e-12), name
 
 
 # --------------------------------------------------------------------------
