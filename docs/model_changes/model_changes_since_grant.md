@@ -14,7 +14,7 @@ Every claim about the current model points to an ADR or a source file. Where the
 | Leaf-level variables | One shared set $\mathcal{Y}$, a leaf of every clique of both trees | Each tree has its own leaf-level **tree field** ($Z^s$, $Z^m$). The **field** $Y$ is a noisy AND of the two | ADR-0002, ADR-0005 |
 | Joint density | $\prod_d \prod_{c\in\mathcal{C}_d}\phi(c)$, not normalised | A directed factorisation with normalising constant exactly 1 | ADR-0005 |
 | New parameter | none | $\omega$, the tree-field error probability, in $(0, 0.5)$ | ADR-0005 |
-| Tree process | Two-state CTMC, per-clique $\alpha_c$, $\nu_c$, matrix exponential | Same process, closed-form $e^{\Lambda t}$, hierarchical prior on $\log\nu_c$ | ADR-0003, `model_notes/model.tex` |
+| Tree process | Two-state CTMC, per-clique $\alpha_c$, $\nu_c$, matrix exponential | Same process, closed-form $e^{\Lambda t}$, hierarchical prior on $\log\nu_c$ | ADR-0003, `docs/model_notes/model.tex` |
 | Branch lengths | $\sum_n b(n)=1$; grid on $[0, 0.1]$, $K=100$ | Mean branch length $=1$; grid $\delta(k+\tfrac12)$, $\delta = 2/(K+1)$, default $K=10$ | `TBinGrid.h` |
 | Rate discretisation | Precompute a grid of rate values | Not done. The closed form, and transition counts, make it unnecessary | ADR-0003, ADR-0016 |
 | LOTUS | $R_{ms}=(1-e^{-\gamma_0P_m})(1-e^{-\gamma_1Q_s})$, raw paper counts | Same form on $\log(1+\text{count})$; proper Gamma prior on each $\gamma$, Beta prior on $\epsilon$ | `TLotusMath.h`, `Types.h` |
@@ -64,7 +64,7 @@ What changed around the process:
 - **Branch-length constraint.** The supplementary fixes $\sum_n b(n)=1$ on a grid over $[0, 0.1]$ with $K=100$. The code fixes the **mean** grid branch length to 1 (commit `ff782c2`). Bin $k$ stands for length $\delta(k+\tfrac12)$ with $\delta=2/(K+1)$. The bins of a tree always sum to the **branch-length budget** $n_{\text{branches}}K/2$. The supplementary's paired $\pm1$ moves keep that sum. The default is $K=10$ (`--n_bins`).
 - **Rate discretisation** (supplementary §"Discretization of rate parameters") was not built. Instead, the $\alpha$ and $\nu$ moves score a clique from its $4K+2$ transition counts (ADR-0016).
 - **Priors.** $\alpha_c\sim U(0,1)$. $\log\nu_c\sim\mathcal{N}(\mu_{\log\nu},\sigma^2_{\log\nu})$, with $\mu_{\log\nu}$ (uniform prior) and $\sigma^2_{\log\nu}$ (fixed Gamma prior, `1,2`) inferred per tree. Branch bins have a uniform prior (`src/Types.h`, `src/TCore.cpp`). The grant names no priors.
-- **Identifiability.** Only $\nu_c t$ enters $P_c$, so $\nu$ is identified only through the branch-length budget (`model_notes/model.tex`, §Identifiability).
+- **Identifiability.** Only $\nu_c t$ enters $P_c$, so $\nu$ is identified only through the branch-length budget (`docs/model_notes/model.tex`, §Identifiability).
 
 ---
 
@@ -82,14 +82,14 @@ $$
 \sum_{Y,Z^s,Z^m}p_s(Y,Z^s\mid\theta_s)\,p_m(Y,Z^m\mid\theta_m)=\sum_Y p_s(Y)\,p_m(Y)=C(\theta_s,\theta_m)\neq 1.
 $$
 
-$C$ moves with the parameters and is a sum over $2^{SM}$ fields. Scoring the $\alpha$ and $\nu$ moves on the product alone samples $p(\theta)\,C(\theta)$, and $C$ grows as $\nu$ falls. Measured results (ADR-0002; `model_notes/model.tex` §2):
+$C$ moves with the parameters and is a sum over $2^{SM}$ fields. Scoring the $\alpha$ and $\nu$ moves on the product alone samples $p(\theta)\,C(\theta)$, and $C$ grows as $\nu$ falls. Measured results (ADR-0002; `docs/model_notes/model.tex` §2):
 
 - With the molecule tree neutral, $C$ is constant and the bias is zero. Away from neutrality the optimum of $\log\nu$ sits 0.58 below the truth on a 2×2 field and 1.38 below on a 4×4 one.
 - On larger runs, $\log\nu\to-18$, $Y$ froze at all zeros, and the error rates absorbed the whole data set. Priors cannot stop this: the field term gained about $5.6\times10^4$ log units.
 
 ### 4.2 Interim fixes (superseded)
 
-Before ADR-0005, `model_notes/model.tex` records a maximum pseudo-likelihood scheme ("Phase 1": internal nodes; "Phase 2": leaf conditionals) and an exact block draw of $Z$. These are no longer in `src/`. Read those sections of `model.tex` as history.
+Before ADR-0005, `docs/model_notes/model.tex` records a maximum pseudo-likelihood scheme ("Phase 1": internal nodes; "Phase 2": leaf conditionals) and an exact block draw of $Z$. These are no longer in `src/`. Read those sections of `model.tex` as history.
 
 ### 4.3 Now: each tree owns its leaf level, and the field reconciles them (ADR-0005)
 
@@ -317,7 +317,7 @@ The grant does not mention validation. The repository now has:
 
 ## 11. Sources that disagree with the code
 
-- `model_notes/model.tex` §§3–6 (pseudo-likelihood, $Z$-only block, `--single_site_Z`, `--no_leaf_pseudo_likelihood`) describe the model before ADR-0005. None of it is in `src/`.
+- `docs/model_notes/model.tex` §§3–6 (pseudo-likelihood, $Z$-only block, `--single_site_Z`, `--no_leaf_pseudo_likelihood`) describe the model before ADR-0005. None of it is in `src/`.
 - The `src/cli.h` comment on `ERROR_PROBABILITY_PRIOR_RATE` says "a rate of 20 puts the prior mean at 0.05". The default is 200 (mean 0.005), which `src/Types.h` states correctly.
 - `inference_lotus/feature_molecule_scores.csv` (untracked) still has the old `calibration_score` column, which ADR-0018 replaced with the two log densities.
 
