@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -76,6 +76,8 @@ class ScenarioConfig:
     """
     mass_spec: M.Layout | None = None
     """Add the mass-spec data source in this layout, and run every rung on LOTUS+MS."""
+    ms_options: M.MassSpecOptions = field(default_factory=M.MassSpecOptions)
+    """The mass-spec draw settings; only read when `mass_spec` is set."""
 
 
 @dataclass
@@ -172,7 +174,7 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
         config.error_rate,
     )
     ms_truth = (
-        M.simulate(rng, latent_field, config.mass_spec)
+        M.simulate(rng, latent_field, config.mass_spec, config.ms_options)
         if config.mass_spec is not None
         else None
     )

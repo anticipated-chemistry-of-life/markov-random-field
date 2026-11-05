@@ -1076,3 +1076,52 @@ def test_a_scenario_without_mass_spec_writes_no_mass_spec_files_or_flags():
     assert mass_spec.DATA_FILE not in names
     assert mass_spec.ASSIGNMENT_FILE not in names
     assert not any("--ms_data" in body for body in bodies)
+
+
+def _with_options(**options):
+    return {"ms_options": mass_spec.MassSpecOptions(**options)}
+
+
+def test_the_longest_candidate_list_is_an_option():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, **_with_options(max_candidates=3))
+        data, _ = _ms_files(out)
+
+    lengths = data.groupby(FEATURE).size()
+    assert lengths.max() == 3
+    assert lengths.min() == 1
+
+
+def test_the_written_incorrect_density_is_an_option():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, **_with_options(log_incorrect_density=-1.5))
+        data, _ = _ms_files(out)
+
+    assert (data["log_incorrect_density"] == -1.5).all()
+
+
+def test_the_correct_score_distribution_is_an_option():
+    # Beta(1, 1) is flat, so the log correct density is 0 at every score.
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, **_with_options(correct_shape=1.0))
+        data, _ = _ms_files(out)
+
+    assert (data["log_correct_density"] == 0.0).all()
+
+
+def test_the_incorrect_score_distribution_is_an_option():
+    # Beta(1000, 1) puts a wrong row's log score within 1e-2 of 0 unless u < e**-10,
+    # where the Beta(2, 1) log density is ln 2.
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(
+            tmp, **_with_options(correct_shape=2.0, incorrect_shape=1000.0)
+        )
+        data, truth = _ms_files(out)
+
+    true_rows = truth[
+        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)
+    ][FEATURE + ["molecule"]]
+    marked = data.merge(true_rows, on=FEATURE + ["molecule"], how="left", indicator=True)
+    wrong = marked[marked["_merge"] == "left_only"]
+    assert len(wrong) > 0
+    assert np.allclose(wrong["log_correct_density"], np.log(2.0), atol=1e-2)

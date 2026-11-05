@@ -9,13 +9,14 @@ shares no code with the C++:
 * each run also gets Poisson(lambda) *unknown* features, lambda being the expected
   number of molecule features per run under the true field, filter probabilities
   and kappa. So about half of all features are unknown, as on real data;
-* every feature proposes n_f ~ Uniform{1..20} structures, the same distribution
+* every feature proposes n_f ~ Uniform{1..20} structures by default, the same distribution
   for both kinds, so the list length carries no evidence and the unknown weight
   rho * n_f is exact. A molecule feature lists its true molecule plus other
   molecule leaves, an unknown feature lists molecule leaves only; both draw
   uniformly without replacement. Every proposed structure is a molecule leaf;
-* a wrong row scores x ~ Uniform(0,1) and a true row x ~ Beta(5,1), so the log
-  correct density is ln 5 + 4 ln x and the log incorrect density is 0.
+* by default a wrong row scores x ~ Uniform(0,1) and a true row x ~ Beta(5,1), so the log
+  correct density is ln 5 + 4 ln x and the log incorrect density is 0. All of these draw
+  settings are the fields of `MassSpecOptions`.
 
 rho = lambda / (number of molecule leaves): a consequence of the story, not a
 choice. The inference run is given rho and nothing else of this module's truth.
@@ -37,14 +38,26 @@ ASSIGNMENT_FILE = "simulated_ms_assignment.tsv"
 UNKNOWN = "<unknown>"
 """The reserved name the C++ writes the unknown molecule under."""
 
-MAX_CANDIDATES = 20
 CONTAMINATION = 0.01
 N_FILTER_LEVELS = 255
 """Filter probabilities live on the byte grid `i / 255`, `i` in `0..254`: the C++
 caps the index at 254 (`MAX_FILTER_PROBABILITY_INDEX`), so exactly 1 is not a level."""
 
-CORRECT_SHAPE = 5.0
-"""A true row scores Beta(CORRECT_SHAPE, 1): its density is `5 x^4`."""
+
+@dataclass(frozen=True)
+class MassSpecOptions:
+    """The draw settings of the mass-spec half, with the values the scenarios use by default."""
+
+    max_candidates: int = 20
+    """A feature proposes `n_f ~ Uniform{1..max_candidates}` structures."""
+    correct_shape: float = 5.0
+    """A true row scores Beta(correct_shape, 1): its density is `correct_shape x^(correct_shape - 1)`,
+    and `log_correct_density` is that density's log at every row's score."""
+    incorrect_shape: float = 1.0
+    """A wrong row scores Beta(incorrect_shape, 1); 1 is Uniform(0, 1)."""
+    log_incorrect_density: float = 0.0
+    """The `log_incorrect_density` column as written. 0 is a flat density."""
+
 
 FILTER_PARAMETER = "filter_proba"
 CONTAMINATION_PARAMETER = "contamination_proba"
@@ -84,6 +97,7 @@ class Feature:
 @dataclass
 class MassSpecTruth:
     layout: Layout
+    options: MassSpecOptions
     filter_indices: np.ndarray
     contamination: float
     expected_features_per_run: float
@@ -100,6 +114,7 @@ def simulate(
     rng: np.random.Generator,
     field: np.ndarray,
     layout: Layout,
+    options: MassSpecOptions = MassSpecOptions(),
     contamination: float = CONTAMINATION,
 ) -> MassSpecTruth:
     """Draw the filter probabilities, then every run's features, under `field`.
@@ -107,9 +122,9 @@ def simulate(
     `field` is `[species_leaf, molecule_leaf]`.
     """
     n_species, n_molecules = field.shape
-    if n_molecules < MAX_CANDIDATES:
+    if n_molecules < options.max_candidates:
         raise ValueError(
-            f"A feature can propose {MAX_CANDIDATES} structures, so the molecule "
+            f"A feature can propose {options.max_candidates} structures, so the molecule "
             f"tree needs that many leaves; it has {n_molecules}."
         )
     if layout.n_species_with_runs is None:
@@ -144,12 +159,13 @@ def simulate(
             for number, source in enumerate(rng.permutation(sources)):
                 features.append(
                     _draw_feature(
-                        rng, int(species), f"extract_{run + 1}", f"feature_{number}",
-                        int(source), n_molecules,
+                        rng, options, int(species), f"extract_{run + 1}",
+                        f"feature_{number}", int(source), n_molecules,
                     )
                 )
     return MassSpecTruth(
         layout=layout,
+        options=options,
         filter_indices=filter_indices,
         contamination=contamination,
         expected_features_per_run=expected,
@@ -161,6 +177,7 @@ def simulate(
 
 def _draw_feature(
     rng: np.random.Generator,
+    options: MassSpecOptions,
     species: int,
     extract: str,
     feature: str,
@@ -168,7 +185,7 @@ def _draw_feature(
     n_molecules: int,
 ) -> Feature:
     """One feature of molecule `source`, or an unknown one when `source` is -1."""
-    n_candidates = int(rng.integers(1, MAX_CANDIDATES + 1))
+    n_candidates = int(rng.integers(1, options.max_candidates + 1))
     if source < 0:
         candidates = rng.choice(n_molecules, n_candidates, replace=False)
     else:
@@ -180,14 +197,19 @@ def _draw_feature(
 
     # (0, 1], so no score is exactly 0 and no log density is infinite.
     u = 1.0 - rng.random(n_candidates)
-    # Beta(5, 1) by its inverse CDF; a wrong row is the uniform itself.
-    x = np.where(candidates == source, u ** (1.0 / CORRECT_SHAPE), u)
+    # Each score is its distribution's inverse CDF at u, Beta(shape, 1): u ** (1 / shape).
+    x = np.where(
+        candidates == source,
+        u ** (1.0 / options.correct_shape),
+        u ** (1.0 / options.incorrect_shape),
+    )
     return Feature(
         species=species,
         extract=extract,
         feature=feature,
         candidates=candidates,
-        log_correct=np.log(CORRECT_SHAPE) + (CORRECT_SHAPE - 1.0) * np.log(x),
+        log_correct=np.log(options.correct_shape)
+        + (options.correct_shape - 1.0) * np.log(x),
         true_molecule=None if source < 0 else source,
     )
 
@@ -198,7 +220,7 @@ def write_data(
     species: TreeIndex,
     molecules: TreeIndex,
 ) -> None:
-    """The loader's six columns. The incorrect density is flat, so its log is 0."""
+    """The loader's six columns, the incorrect density as the options set it."""
     species_names = species.leaf_names()
     molecule_names = np.array(molecules.leaf_names())
     frames = [
@@ -209,7 +231,7 @@ def write_data(
                 "feature": f.feature,
                 "molecule": molecule_names[f.candidates],
                 "log_correct_density": f.log_correct,
-                "log_incorrect_density": 0.0,
+                "log_incorrect_density": truth.options.log_incorrect_density,
             }
         )
         for f in truth.features

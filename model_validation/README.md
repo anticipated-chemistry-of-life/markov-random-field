@@ -144,6 +144,8 @@ so a recovery failure points at the code and not at misspecification.
   proposed structure is a molecule leaf.
 - **Scores.** A wrong row scores x ~ Uniform(0,1), a true row x ~ Beta(5,1). The
   log correct density is ln 5 + 4 ln x and the log incorrect density is 0.
+  These are the defaults of `MassSpecOptions` (`ScenarioConfig.ms_options`):
+  `max_candidates`, `correct_shape`, `incorrect_shape`, `log_incorrect_density`.
 
 Truth files, all under the `simulated_` prefix that picks the stattools reader:
 
