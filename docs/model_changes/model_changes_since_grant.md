@@ -247,7 +247,7 @@ and $(1,1)$ for a species without runs. This pair is multiplied into the block u
 | $\rho$ | `--ms_unknown_rate` | scalar | **input**, not estimated (ADR-0018). Source: a fit on held-out ground truth, which is a lower bound |
 | $\tau$ | `--ms_outside_rate` | scalar | **input**, not estimated (ADR-0020). Required with `--ms_data`, no default, finite and $\ge 0$. Plug-in value from a pilot run, checked against $\{0.01, 0.1, 1\}$ |
 
-Output: `--write_assignment_posterior` writes, for each feature, the fraction of iterations it spent on each candidate and on $U$. ADR-0020 splits $U$'s share across outside structures plus a remainder under `<unlisted>`; the output does not do this yet (#115).
+Output: `--write_assignment_posterior` writes, for each feature, the fraction of iterations it spent on each candidate, and splits $U$'s share (ADR-0020): each outside structure $j$ gets $P(U)\,\tau\Lambda_j/W_{U,f}$, and the remainder $P(U)\,\rho\,n_f/W_{U,f}$ goes under the reserved name `<unlisted>`. There is no `<unknown>` row.
 
 ### 6.6 How the unknown weight evolved
 
@@ -308,7 +308,7 @@ The grant does not mention validation. The repository now has:
 
 ## 10. Open items
 
-- ADR-0020 (outside structures in $W_{U,f}$) is in the loader. The assignment posterior still writes $U$ as one row, without the outside rows and `<unlisted>` (#115).
+- ADR-0020 (outside structures in $W_{U,f}$) is in the loader and the assignment posterior writer. The simulator, which has no outside structures yet, still has to get its pool and its rung scripts (#115).
 - $\rho$ and $\tau$ are inputs. Estimating them is deferred.
 - Outside structures are exempt from "one molecule per feature per run". This misspecification is accepted (ADR-0020).
 - Only one filter is loaded. Per-protocol $\eta_{km}$ exists in the parameter layout, but the file format cannot express it yet.

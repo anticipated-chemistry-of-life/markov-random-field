@@ -59,7 +59,7 @@ FEATURES = (
     ("s2", "feature_0", ("m2", "m4"), None),
 )
 EXTRACT = "extract_1"
-UNKNOWN = "<unknown>"
+UNLISTED = "<unlisted>"
 
 FILTER_INDICES = {"m1": 100, "m2": 200, "m3": 50, "m4": 150}
 CONTAMINATION = 0.01
@@ -183,17 +183,18 @@ def write_scenario(
 
 
 def _assignment_frame(*, molecule_mass: float, unknown_mass: float) -> pd.DataFrame:
-    """One row per candidate and one for the unknown molecule, for every feature.
+    """One row per candidate and one for `<unlisted>`, for every feature.
 
     A feature of a molecule puts `molecule_mass` on that molecule and the rest on the
     unknown molecule. An unknown feature puts `unknown_mass` on the unknown molecule
-    and the rest on its first candidate. Both at 1 are the true assignment.
+    and the rest on its first candidate. Both at 1 are the true assignment. No feature
+    lists an outside structure, so `<unlisted>` is the whole unknown molecule.
     """
     rows = []
     for species, feature, candidates, truth in FEATURES:
-        explanations = [*candidates, UNKNOWN]
-        true = UNKNOWN if truth is None else truth
-        other = UNKNOWN if truth is not None else candidates[0]
+        explanations = [*candidates, UNLISTED]
+        true = UNLISTED if truth is None else truth
+        other = UNLISTED if truth is not None else candidates[0]
         mass = unknown_mass if truth is None else molecule_mass
         for molecule in explanations:
             fraction = (

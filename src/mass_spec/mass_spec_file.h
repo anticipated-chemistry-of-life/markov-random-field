@@ -32,11 +32,16 @@
 
 namespace mass_spec_file {
 
-/// The name the unknown molecule is written under in the assignment posterior, and the one the
-/// simulator's true assignment will use (a later ticket of #99). `<` cannot occur in an InChIKey
-/// or a SMILES, and the loader rejects a molecule leaf that carries it, so no molecule leaf can be
-/// mistaken for it.
+/// The name of the unknown molecule. The assignment posterior does not write it: it divides the
+/// unknown molecule's fraction into the outside structures and `UNLISTED_MOLECULE_NAME`. The name
+/// stays reserved. `<` cannot occur in an InChIKey or a SMILES, and the loader rejects a molecule
+/// leaf that carries it, so no molecule leaf can be mistaken for it.
 inline constexpr std::string_view UNKNOWN_MOLECULE_NAME = "<unknown>";
+
+/// The name of the row that carries what is left of the unknown molecule's fraction once each
+/// outside structure has its share: a structure the list does not hold, or no molecule at all.
+/// Reserved like `UNKNOWN_MOLECULE_NAME`.
+inline constexpr std::string_view UNLISTED_MOLECULE_NAME = "<unlisted>";
 
 /// What the loader left out, for the log.
 struct TLoadReport {
@@ -55,11 +60,25 @@ struct TLoadReport {
 	size_t clamped_unknowns    = 0;
 };
 
-/// The names the file gave one loaded run and its features.
+/// What the assignment posterior writer needs of one loaded feature beyond its candidates: its
+/// outside structures and the log of rho n_f. The moves never read these.
+struct TFeatureOutside {
+	/// The molecule name of each outside structure, as the file gave it.
+	std::vector<std::string> molecules;
+	/// log(tau LR_j) of each outside structure, exact and not binned. -inf at tau = 0.
+	std::vector<double> log_weights;
+	/// log(rho n_f): the part of the unknown weight that is not an outside structure.
+	double log_rho_n_f = 0.0;
+};
+
+/// The names the file gave one loaded run and its features, and the weights the posterior writer
+/// splits the unknown molecule's fraction by.
 struct TRunLabels {
 	std::string extract;
 	/// One id per loaded feature, in the feature order of the run.
 	std::vector<std::string> feature_ids;
+	/// The outside structures of each loaded feature, in the same order as `feature_ids`.
+	std::vector<TFeatureOutside> outside;
 };
 
 struct TLoaded {
@@ -78,7 +97,8 @@ struct TLoaded {
 /// Throws TUserError on a bad header, on a duplicate (species, extract, feature, molecule) row, on
 /// a log density that is not a finite number (a missing one included), on a likelihood ratio
 /// whose log is not finite, on a rho that is not positive and finite, on a tau that is negative or
-/// not finite, and on a molecule leaf named `UNKNOWN_MOLECULE_NAME`.
+/// not finite, and on a molecule leaf named `UNKNOWN_MOLECULE_NAME` or
+/// `UNLISTED_MOLECULE_NAME`.
 [[nodiscard]] TLoaded load(const std::string &filename,
                            const std::vector<std::string> &species_leaves,
                            const std::vector<std::string> &molecule_leaves, double unknown_rate,

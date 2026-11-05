@@ -46,6 +46,8 @@ struct TFeatureRows {
 	std::vector<std::pair<uint32_t, double>> candidates;
 	/// The log likelihood ratio of every outside structure of the feature.
 	std::vector<double> outside_log_ratios;
+	/// The molecule name of each entry of `outside_log_ratios`.
+	std::vector<std::string> outside_molecules;
 };
 
 /// The rows of one run, its features in the order the file first names them.
@@ -102,14 +104,15 @@ struct TBin {
 	return largest + std::log(sum);
 }
 
-[[nodiscard]] TMassSpecRun build_run(const TRunRows &rows, double log_unknown_rate,
+/// Moves the outside structure names of `rows` into `labels`.
+[[nodiscard]] TMassSpecRun build_run(TRunRows &rows, double log_unknown_rate,
                                      double log_outside_rate, TLoadReport &report,
                                      TRunLabels &labels) {
 	TMassSpecRun run;
 	run.set_filter_index(0);
 	std::vector<uint8_t> unknown_bins;
 	for (size_t f = 0; f < rows.features.size(); ++f) {
-		const auto &feature = rows.features[f];
+		auto &feature = rows.features[f];
 		if (feature.candidates.empty()) {
 			++report.features_not_loaded;
 			continue;
@@ -118,12 +121,20 @@ struct TBin {
 		// The unknown weight is rho n_f + tau sum LR_outside. n_f counts every row of the
 		// feature. The sum runs in log space, so a large ratio cannot overflow. A tau of 0 has
 		// the log -inf, and log_add_exp(x, -inf) is exactly x.
-		double log_unknown =
+		TFeatureOutside outside;
+		outside.log_rho_n_f =
 		    log_unknown_rate + std::log(static_cast<double>(feature.number_of_rows));
+		outside.molecules = std::move(feature.outside_molecules);
+		outside.log_weights.reserve(feature.outside_log_ratios.size());
+		for (const double log_ratio : feature.outside_log_ratios) {
+			outside.log_weights.push_back(log_outside_rate + log_ratio);
+		}
+		double log_unknown = outside.log_rho_n_f;
 		if (!feature.outside_log_ratios.empty()) {
 			log_unknown = log_add_exp(log_unknown,
 			                          log_outside_rate + log_sum_exp(feature.outside_log_ratios));
 		}
+		labels.outside.push_back(std::move(outside));
 		report.outside_structures += feature.outside_log_ratios.size();
 		double log_largest = log_unknown;
 		for (const auto &[molecule, log_ratio] : feature.candidates) {
@@ -163,10 +174,10 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		                            outside_rate, ".");
 	}
 	for (const auto &molecule : molecule_leaves) {
-		if (molecule == UNKNOWN_MOLECULE_NAME) {
+		if (molecule == UNKNOWN_MOLECULE_NAME || molecule == UNLISTED_MOLECULE_NAME) {
 			throw coretools::TUserError("The molecule tree has a leaf named '", molecule,
-			                            "', which is the name the unknown molecule is written "
-			                            "under in the assignment posterior. Rename the leaf.");
+			                            "', which is a name reserved for the unknown molecule in "
+			                            "the assignment posterior. Rename the leaf.");
 		}
 	}
 	const auto species_index      = index_of_name(species_leaves);
@@ -240,6 +251,7 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		if (molecule_it == molecule_index.end()) {
 			skipped_molecules.insert(molecule_name);
 			feature.outside_log_ratios.push_back(log_ratio);
+			feature.outside_molecules.push_back(molecule_name);
 			continue;
 		}
 		feature.candidates.emplace_back(molecule_it->second, log_ratio);
@@ -256,7 +268,7 @@ TLoaded load(const std::string &filename, const std::vector<std::string> &specie
 		loaded.runs_per_species.push_back();
 		loaded.labels.push_back();
 		for (; next_run != runs.end() && next_run->species == species; ++next_run) {
-			TRunLabels labels{next_run->extract, {}};
+			TRunLabels labels{next_run->extract, {}, {}};
 			auto run =
 			    build_run(*next_run, log_unknown_rate, log_outside_rate, loaded.report, labels);
 			// a run whose every feature went unloaded observes nothing

@@ -279,8 +279,10 @@ public:
 		std::cout << "--write_assignment_posterior   Write <prefix>_assignment_posterior.txt "
 		             "(needs --ms_data): one row per species, extract, feature and explanation, "
 		             "with the fraction of the counted iterations the feature spent on each of "
-		             "its candidate molecules and on the unknown molecule, which is written under "
-		             "the reserved name '<unknown>' and so cannot be a molecule leaf. The "
+		             "its candidate molecules. The fraction spent on the unknown molecule is "
+		             "divided: each outside structure gets a row with its share of the unknown "
+		             "weight, and the remainder is written under the reserved name '<unlisted>'. "
+		             "'<unlisted>' and '<unknown>' cannot be molecule leaves. The "
 		             "fractions of a feature sum to 1. Counting uses the burn-in and the "
 		             "thinning of the posterior of Y. It costs a counter per candidate of every "
 		             "feature, so it is off unless asked for\n";

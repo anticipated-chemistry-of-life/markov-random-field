@@ -155,7 +155,7 @@ Truth files, all under the `simulated_` prefix that picks the stattools reader:
 | File | Holds |
 | --- | --- |
 | `simulated_ms_data.tsv` | The data, in the loader's six columns. The only mass-spec file an inference run reads. |
-| `simulated_ms_assignment.tsv` | The true assignment, in the layout of the C++ assignment posterior: `species extract feature molecule fraction`, one row per candidate and one for the unknown molecule (`<unknown>`), fraction 1 on the true explanation and 0 elsewhere. |
+| `simulated_ms_assignment.tsv` | The true assignment, in the layout of the C++ assignment posterior: `species extract feature molecule fraction`, one row per candidate and one for `<unlisted>`, fraction 1 on the true explanation and 0 elsewhere. A feature with no molecule has its 1 on `<unlisted>`. |
 | `simulated_parameters.txt` | Also `filter_proba_<molecule leaf>` (the byte index the C++ stores; the probability is the index over 255), `contamination_proba` (κ), `ms_lambda` (λ) and `ms_unknown_rate` (ρ). |
 
 The mass-spec truth is not added to `truth_<tree>.txt`, which `validate_independent.py`
@@ -187,16 +187,21 @@ scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_lotus
   posterior omits counts as 0. The validator writes the score to `validation_summary.json`
   as `field_false_presence`. Reported, no threshold.
 - **Assignment.** From `acol_assignment_posterior.txt` against
-  `simulated_ms_assignment.tsv`, over every (run, feature): the accuracy of the
-  posterior mode against the true assignment (a candidate molecule, or the unknown
-  molecule); the mean posterior mass on the true assignment; and the mean posterior
-  on the unknown molecule, reported separately for truly unknown features and for
-  features of a detected molecule (a good fit is high on the first, low on the
-  second). Reported, no threshold. Before scoring, the file's format is checked
-  against `simulated_ms_data.tsv`: every (run, feature) is present with all its
-  candidates and `<unknown>`, nothing else is, every fraction lies in [0, 1] and
-  each feature sums to 1. A malformed or incomplete file fails the validation
-  with a message naming the feature.
+  `simulated_ms_assignment.tsv`, over every (run, feature). The posterior has a row for
+  each proposed structure of a feature and one named `<unlisted>`; it has no `<unknown>`
+  row. A proposed structure that is not a molecule leaf is an outside structure, and
+  P(unknown) is the sum of the outside structure rows and `<unlisted>`. The scores are
+  the accuracy of the posterior mode against the true assignment (a candidate molecule,
+  an outside structure, or `<unlisted>`); the mean posterior mass on the true
+  assignment, a truth that is an outside structure being scored on its own row; and
+  the mean P(unknown), reported separately for features whose truth is the unknown
+  molecule (an outside structure or `<unlisted>`) and for features of a detected
+  molecule (a good fit is high on the first, low on the second). Reported, no
+  threshold. Before scoring, the file's format is checked against
+  `simulated_ms_data.tsv`: every (run, feature) is present with all its proposed
+  structures and `<unlisted>`, nothing else is, every fraction lies in [0, 1] and each
+  feature sums to 1. A malformed or incomplete file fails the validation with a
+  message naming the feature.
 - **Filter probabilities.** 90% credible-interval coverage over the molecule leaves,
   stratified by the number of runs the molecule is present in (the runs of the species
   whose true Y carries it): `0`, `1`, `2`, `3-9`, `10+`; empty strata are skipped.

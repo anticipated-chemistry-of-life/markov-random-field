@@ -1,15 +1,18 @@
 //
 // How often each feature of each run was explained by each of its candidates and by the unknown
-// molecule.
+// molecule, and what the unknown molecule's share is made of.
 //
 // The posterior of Y counts a cell on one iteration in its thinning factor and starts again
 // when the burn-in ends. This counts the assignments on the same iterations and clears at the same
 // point, so that both report the same chain and their denominators agree.
 //
 // A feature's slots are its candidates, in the order the run lists them (ascending molecule leaf),
-// followed by one slot for the unknown molecule. Every slot is written, including the ones that
-// were never counted, so a file holds a row for each explanation a feature could take and its
-// fractions sum to 1.
+// followed by one slot for the unknown molecule. The writer divides the unknown molecule's
+// fraction P(U) with the exact weights the loader kept (ADR-0020): each outside structure j gets
+// P(U) tau LR_j / W_U, and the row `<unlisted>` gets P(U) rho n_f / W_U. Every row is written,
+// including the ones that were never counted, so a file holds a row for each explanation a
+// feature could take and its fractions sum to 1. The chain counts nothing more than the slots:
+// the split costs no state.
 //
 
 #pragma once
@@ -106,9 +109,9 @@ public:
 };
 
 /// Writes `filename`: one row per (species, extract, feature, explanation), with the fraction of
-/// the counted iterations the feature spent on that explanation. Every candidate and the unknown
-/// molecule have a row, zero fractions included. The unknown molecule is written under
-/// `mass_spec_file::UNKNOWN_MOLECULE_NAME`.
+/// the counted iterations the feature spent on that explanation. Every candidate, every outside
+/// structure and the row `mass_spec_file::UNLISTED_MOLECULE_NAME` have a row, zero fractions
+/// included. The unknown molecule has no row of its own.
 ///
 /// @param runs           the runs the posterior counted
 /// @param labels         the names of those runs and their features (`mass_spec_file::TLoaded`)

@@ -203,7 +203,7 @@ def _scalar(trace: pd.DataFrame, truth: dict[str, float], name: str) -> dict:
 
 
 def _assignment_scores(
-    base: pathlib.Path, rung_dir: pathlib.Path
+    base: pathlib.Path, rung_dir: pathlib.Path, molecule_leaves: set[str]
 ) -> recovery.AssignmentScore:
     """Check the assignment posterior against the data file, then score it."""
     path = rung_dir / "acol_assignment_posterior.txt"
@@ -221,7 +221,7 @@ def _assignment_scores(
     truth = pd.read_csv(base / mass_spec.ASSIGNMENT_FILE, sep="\t", dtype=names)
     try:
         recovery.check_assignment_format(data, posterior)
-        return recovery.assignment_scores(truth, posterior)
+        return recovery.assignment_scores(truth, posterior, molecule_leaves)
     except recovery.AssignmentFormatError as error:
         raise click.ClickException(f"{path}: {error}") from error
 
@@ -278,7 +278,9 @@ def _mass_spec_scores(
             passes=covered,
         )
 
-    assignment = _assignment_scores(base, rung_dir)
+    assignment = _assignment_scores(
+        base, rung_dir, {n[len(prefix) :] for n in parameters if n.startswith(prefix)}
+    )
 
     return {
         "field": {key: asdict(score) for key, score in field.items()},

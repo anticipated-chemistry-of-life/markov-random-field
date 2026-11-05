@@ -928,11 +928,11 @@ def test_every_molecule_feature_lists_its_true_molecule():
 
     # Every feature that is not unknown has exactly one true row, and that row is
     # one of the structures the data file lists for it.
-    unknown = truth[truth["molecule"] == mass_spec.UNKNOWN]
+    unknown = truth[truth["molecule"] == mass_spec.UNLISTED]
     molecule_features = unknown[unknown["fraction"] == 0][FEATURE]
     assert len(molecule_features) > 0
     assigned = truth[
-        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)
+        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNLISTED)
     ].merge(molecule_features, on=FEATURE)
     assert len(assigned) == len(molecule_features)
     listed = data.merge(assigned, on=FEATURE + ["molecule"])
@@ -944,7 +944,7 @@ def test_no_molecule_explains_two_features_of_one_run():
         out, _, _ = _ms_scenario(tmp)
         _, truth = _ms_files(out)
 
-    assigned = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)]
+    assigned = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNLISTED)]
     assert not assigned.duplicated(["species", "extract", "molecule"]).any()
 
 
@@ -955,10 +955,10 @@ def test_each_feature_has_exactly_one_explanation_and_unknown_features_list_only
 
     per_feature = truth.groupby(FEATURE)["fraction"].sum()
     assert (per_feature == 1).all()
-    unknown = truth[(truth["molecule"] == mass_spec.UNKNOWN) & (truth["fraction"] == 1)]
+    unknown = truth[(truth["molecule"] == mass_spec.UNLISTED) & (truth["fraction"] == 1)]
     assert len(unknown) > 0
     rows = truth.merge(unknown[FEATURE], on=FEATURE)
-    wrong = rows[rows["molecule"] != mass_spec.UNKNOWN]
+    wrong = rows[rows["molecule"] != mass_spec.UNLISTED]
     assert len(wrong) > 0
     assert (wrong["fraction"] == 0).all()
 
@@ -970,7 +970,7 @@ def test_the_number_of_proposed_structures_is_between_1_and_20_for_both_kinds():
 
     n_f = data.groupby(FEATURE).size().rename("n_f").reset_index()
     is_unknown = (
-        truth[truth["molecule"] == mass_spec.UNKNOWN][FEATURE + ["fraction"]]
+        truth[truth["molecule"] == mass_spec.UNLISTED][FEATURE + ["fraction"]]
         .rename(columns={"fraction": "unknown"})
     )
     merged = n_f.merge(is_unknown, on=FEATURE)
@@ -1013,7 +1013,7 @@ def test_the_true_assignment_is_keyed_by_the_features_of_the_data_file():
 
     data_rows = set(map(tuple, data[FEATURE + ["molecule"]].to_numpy()))
     truth_rows = set(map(tuple, truth[FEATURE + ["molecule"]].to_numpy()))
-    unknown_rows = {r for r in truth_rows if r[3] == mass_spec.UNKNOWN}
+    unknown_rows = {r for r in truth_rows if r[3] == mass_spec.UNLISTED}
     assert truth_rows - unknown_rows == data_rows
     assert {r[:3] for r in unknown_rows} == {r[:3] for r in data_rows}
 
@@ -1023,7 +1023,7 @@ def test_about_half_of_all_features_are_unknown():
         out, _, _ = _ms_scenario(tmp)
         _, truth = _ms_files(out)
 
-    unknown = truth[truth["molecule"] == mass_spec.UNKNOWN]["fraction"]
+    unknown = truth[truth["molecule"] == mass_spec.UNLISTED]["fraction"]
     assert unknown.mean() == pytest.approx(0.5, abs=0.05)
 
 
@@ -1121,7 +1121,7 @@ def test_the_incorrect_score_distribution_is_an_option():
         data, truth = _ms_files(out)
 
     true_rows = truth[
-        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNKNOWN)
+        (truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNLISTED)
     ][FEATURE + ["molecule"]]
     marked = data.merge(true_rows, on=FEATURE + ["molecule"], how="left", indicator=True)
     wrong = marked[marked["_merge"] == "left_only"]

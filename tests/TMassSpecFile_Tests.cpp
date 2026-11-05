@@ -330,6 +330,17 @@ TEST(TMassSpecFile_Tests,
 	EXPECT_EQ(loaded.runs_per_species.at(0)[0].number_of_features(), 2);
 }
 
+TEST(TMassSpecFile_Tests, a_molecule_leaf_named_like_the_unlisted_row_is_an_error) {
+	const TTempFile file("ms.tsv", std::string(HEADER) + row("Ilex", "e1", "f1", "caffeine"));
+	expect_user_error(
+	    [&] {
+		    (void)mass_spec_file::load(
+		        file.path(), SPECIES,
+		        {"caffeine", std::string(mass_spec_file::UNLISTED_MOLECULE_NAME)}, 0.1, 0.0);
+	    },
+	    "a molecule leaf named like the unlisted row");
+}
+
 TEST(TMassSpecFile_Tests, a_molecule_leaf_named_like_the_unknown_molecule_is_an_error) {
 	const TTempFile file("ms.tsv", std::string(HEADER) + row("Ilex", "e1", "f1", "caffeine"));
 	expect_user_error(

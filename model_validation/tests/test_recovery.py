@@ -116,8 +116,9 @@ def test_a_molecule_is_present_in_every_run_of_every_species_that_carries_it():
 # The assignment posterior
 # --------------------------------------------------------------------------
 
-UNKNOWN = mass_spec.UNKNOWN
+UNLISTED = mass_spec.UNLISTED
 KEY = recovery.FEATURE_KEY
+LEAVES = {"A", "B"}
 
 
 def _assignment(rows):
@@ -128,19 +129,20 @@ def _assignment(rows):
 
 
 def _data(rows):
-    """The data file lists candidates only, never the unknown molecule."""
+    """The data file lists every proposed structure, never `<unlisted>`."""
     return pd.DataFrame(
         [("sp", "e", f, m) for f, m in rows], columns=KEY + ["molecule"]
     )
 
 
 # Feature f1 is molecule A out of {A, B}; f2 is unknown, candidates {A, B};
-# f3 is molecule B out of {A, B}.
+# f3 is molecule B out of {A, B}. No feature lists an outside structure, so `<unlisted>`
+# carries the unknown molecule's whole fraction.
 TRUTH = _assignment(
     [
-        ("f1", "A", 1), ("f1", "B", 0), ("f1", UNKNOWN, 0),
-        ("f2", "A", 0), ("f2", "B", 0), ("f2", UNKNOWN, 1),
-        ("f3", "A", 0), ("f3", "B", 1), ("f3", UNKNOWN, 0),
+        ("f1", "A", 1), ("f1", "B", 0), ("f1", UNLISTED, 0),
+        ("f2", "A", 0), ("f2", "B", 0), ("f2", UNLISTED, 1),
+        ("f3", "A", 0), ("f3", "B", 1), ("f3", UNLISTED, 0),
     ]
 )  # fmt: skip
 DATA = _data([(f, m) for f in ("f1", "f2", "f3") for m in ("A", "B")])
@@ -149,16 +151,16 @@ DATA = _data([(f, m) for f in ("f1", "f2", "f3") for m in ("A", "B")])
 def _posterior(f1, f2, f3):
     rows = []
     for f, (a, b, u) in zip(("f1", "f2", "f3"), (f1, f2, f3)):
-        rows += [(f, "A", a), (f, "B", b), (f, UNKNOWN, u)]
+        rows += [(f, "A", a), (f, "B", b), (f, UNLISTED, u)]
     return _assignment(rows)
 
 
 def test_assignment_scores_are_worked_by_hand():
     # f1: mode A (right), mass on truth 0.6, unknown 0.1.
-    # f2: mode unknown (right), mass on truth 0.5, unknown 0.5.
+    # f2: mode unlisted (right), mass on truth 0.5, unknown 0.5.
     # f3: mode A (wrong), mass on truth 0.25, unknown 0.25.
     posterior = _posterior((0.6, 0.3, 0.1), (0.25, 0.25, 0.5), (0.5, 0.25, 0.25))
-    s = recovery.assignment_scores(TRUTH, posterior)
+    s = recovery.assignment_scores(TRUTH, posterior, LEAVES)
     assert s.n == 3
     assert s.accuracy == pytest.approx(2 / 3)
     assert s.mean_on_true_assignment == pytest.approx((0.6 + 0.5 + 0.25) / 3)
@@ -169,8 +171,53 @@ def test_assignment_scores_are_worked_by_hand():
     assert s.n_molecule_features == 2
 
 
+# g1 truly is the outside structure X; g2 is molecule A. Both list X, which is not a leaf.
+OUTSIDE_TRUTH = _assignment(
+    [
+        ("g1", "A", 0), ("g1", "B", 0), ("g1", "X", 1), ("g1", UNLISTED, 0),
+        ("g2", "A", 1), ("g2", "B", 0), ("g2", "X", 0), ("g2", UNLISTED, 0),
+    ]
+)  # fmt: skip
+
+
+def _outside_posterior(g1, g2):
+    rows = []
+    for f, (a, b, x, u) in zip(("g1", "g2"), (g1, g2)):
+        rows += [(f, "A", a), (f, "B", b), (f, "X", x), (f, UNLISTED, u)]
+    return _assignment(rows)
+
+
+def test_a_truth_that_is_an_outside_structure_is_scored_on_its_own_row():
+    # g1: mode X (right), mass on truth 0.5, unknown 0.5 + 0.3 = 0.8.
+    # g2: mode A (right), mass on truth 0.5, unknown 0.2 + 0.2 = 0.4.
+    posterior = _outside_posterior((0.1, 0.1, 0.5, 0.3), (0.5, 0.1, 0.2, 0.2))
+    s = recovery.assignment_scores(OUTSIDE_TRUTH, posterior, LEAVES)
+    assert s.accuracy == 1.0
+    assert s.mean_on_true_assignment == pytest.approx(0.5)
+    # An outside structure is the unknown molecule, so g1 is an unknown feature.
+    assert s.n_unknown_features == 1
+    assert s.mean_unknown_of_unknown_features == pytest.approx(0.8)
+    assert s.n_molecule_features == 1
+    assert s.mean_unknown_of_molecule_features == pytest.approx(0.4)
+
+
+def test_the_mode_of_an_outside_feature_may_be_another_row_than_its_truth():
+    # g1's unknown mass is 0.7 but the largest row is A, so the mode misses the truth X.
+    posterior = _outside_posterior((0.3, 0.0, 0.2, 0.5), (0.5, 0.1, 0.2, 0.2))
+    s = recovery.assignment_scores(OUTSIDE_TRUTH, posterior, LEAVES)
+    assert s.accuracy == pytest.approx(0.5)
+    assert s.mean_on_true_assignment == pytest.approx((0.2 + 0.5) / 2)
+
+
+def test_a_truth_row_the_posterior_lacks_is_named():
+    posterior = _outside_posterior((0.1, 0.1, 0.5, 0.3), (0.5, 0.1, 0.2, 0.2))
+    posterior = posterior[~((posterior["feature"] == "g1") & (posterior["molecule"] == "X"))]
+    with pytest.raises(recovery.AssignmentFormatError, match=r"lacks 'X' of feature 'g1'"):
+        recovery.assignment_scores(OUTSIDE_TRUTH, posterior, LEAVES)
+
+
 def test_a_perfect_posterior_scores_one_everywhere_it_should():
-    s = recovery.assignment_scores(TRUTH, TRUTH.copy())
+    s = recovery.assignment_scores(TRUTH, TRUTH.copy(), LEAVES)
     assert (s.accuracy, s.mean_on_true_assignment) == (1.0, 1.0)
     assert s.mean_unknown_of_unknown_features == 1.0
     assert s.mean_unknown_of_molecule_features == 0.0
@@ -180,7 +227,7 @@ def test_a_scenario_without_unknown_features_has_no_unknown_feature_score():
     truth = TRUTH[TRUTH["feature"] != "f2"]
     posterior = _posterior((0.6, 0.3, 0.1), (0, 0, 1), (0.5, 0.25, 0.25))
     posterior = posterior[posterior["feature"] != "f2"]
-    s = recovery.assignment_scores(truth, posterior)
+    s = recovery.assignment_scores(truth, posterior, LEAVES)
     assert s.n_unknown_features == 0
     assert np.isnan(s.mean_unknown_of_unknown_features)
 
@@ -204,10 +251,20 @@ def test_a_missing_candidate_is_named():
         recovery.check_assignment_format(DATA, bad)
 
 
-def test_a_missing_unknown_row_is_named():
-    bad = GOOD[~((GOOD["feature"] == "f1") & (GOOD["molecule"] == UNKNOWN))]
-    with pytest.raises(recovery.AssignmentFormatError, match=r"f1.*<unknown>"):
+def test_a_missing_unlisted_row_is_named():
+    bad = GOOD[~((GOOD["feature"] == "f1") & (GOOD["molecule"] == UNLISTED))]
+    with pytest.raises(recovery.AssignmentFormatError, match=r"f1.*<unlisted>"):
         recovery.check_assignment_format(DATA, bad)
+
+
+def test_a_missing_outside_structure_row_is_named():
+    # The data file lists X for g1, which is no leaf, so the posterior owes a row for it.
+    data = _data([("g1", "A"), ("g1", "X")])
+    good = _assignment([("g1", "A", 0.5), ("g1", "X", 0.25), ("g1", UNLISTED, 0.25)])
+    recovery.check_assignment_format(data, good)
+    bad = good[good["molecule"] != "X"]
+    with pytest.raises(recovery.AssignmentFormatError, match=r"g1.*X"):
+        recovery.check_assignment_format(data, bad)
 
 
 def test_an_extra_row_is_named():
@@ -239,4 +296,4 @@ def test_a_tied_mode_goes_to_the_first_row_the_posterior_lists():
     # f1 ties A and B at 0.45; the posterior lists A first and A is true.
     tied = _posterior((0.45, 0.45, 0.1), (0, 0, 1), (0, 1, 0))
     reordered_truth = TRUTH.iloc[[1, 0, *range(2, len(TRUTH))]]
-    assert recovery.assignment_scores(reordered_truth, tied).accuracy == 1.0
+    assert recovery.assignment_scores(reordered_truth, tied, LEAVES).accuracy == 1.0

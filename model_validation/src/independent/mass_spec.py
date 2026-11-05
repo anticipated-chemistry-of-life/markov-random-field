@@ -35,8 +35,10 @@ from .indexing import TreeIndex
 DATA_FILE = "simulated_ms_data.tsv"
 ASSIGNMENT_FILE = "simulated_ms_assignment.tsv"
 
-UNKNOWN = "<unknown>"
-"""The reserved name the C++ writes the unknown molecule under."""
+UNLISTED = "<unlisted>"
+"""The reserved name the C++ writes the rest of the unknown molecule's fraction under, after
+each outside structure has its share. The true assignment puts a feature with no
+molecule there."""
 
 CONTAMINATION = 0.01
 N_FILTER_LEVELS = 255
@@ -248,8 +250,8 @@ def write_assignment(
     """The true assignment, in the layout of the C++ assignment posterior.
 
     One row per species, extract, feature and explanation -- every candidate and
-    the unknown molecule -- with the fraction 1 on the true explanation and 0
-    elsewhere, so the two files join row by row.
+    `<unlisted>`, which carries the features with no molecule -- with the fraction 1
+    on the true explanation and 0 elsewhere, so the files join row by row.
     """
     species_names = species.leaf_names()
     molecule_names = molecules.leaf_names()
@@ -270,7 +272,7 @@ def write_assignment(
                 species_names[f.species],
                 f.extract,
                 f.feature,
-                UNKNOWN,
+                UNLISTED,
                 int(f.true_molecule is None),
             )
         )

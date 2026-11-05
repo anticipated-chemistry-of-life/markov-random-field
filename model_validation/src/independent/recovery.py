@@ -6,13 +6,14 @@ Pure functions over arrays and frames, so the validator script only reads files.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from scipy.stats import binom, rankdata
 
-from .mass_spec import UNKNOWN
+from .mass_spec import UNLISTED
 
 NOMINAL_COVERAGE = 0.9
 BAND_MASS = 0.95
@@ -230,17 +231,18 @@ def _feature_label(key: tuple) -> str:
 
 
 def check_assignment_format(data: pd.DataFrame, posterior: pd.DataFrame) -> None:
-    """Every (run, feature) of `data` is present with all its candidates and the unknown
-    molecule, nothing else is, and each feature's fractions are in [0, 1] and sum to 1.
+    """Every (run, feature) of `data` is present with all its proposed structures and
+    `<unlisted>`, nothing else is, and each feature's fractions are in [0, 1] and sum to 1.
 
-    `data` is the MS data file (one row per candidate); `posterior` the C++ file.
+    `data` is the MS data file (one row per proposed structure, candidate or outside);
+    `posterior` the C++ file, which has one row per proposed structure and `<unlisted>`.
     Raises `AssignmentFormatError`, naming the first offending feature.
     """
     expected: dict[tuple, set[str]] = {}
     for *key, molecule in data[FEATURE_KEY + ["molecule"]].itertuples(index=False):
         expected.setdefault(tuple(key), set()).add(str(molecule))
     for candidates in expected.values():
-        candidates.add(UNKNOWN)
+        candidates.add(UNLISTED)
 
     seen: dict[tuple, list[str]] = {}
     for *key, molecule in posterior[FEATURE_KEY + ["molecule"]].itertuples(index=False):
@@ -301,41 +303,55 @@ class AssignmentScore:
     """Mean posterior mass on the true assignment."""
     n_unknown_features: int
     mean_unknown_of_unknown_features: float
-    """Mean posterior on the unknown molecule, over features that are truly unknown."""
+    """Mean posterior on the unknown molecule, over features whose truth is the unknown
+    molecule: an outside structure, or no molecule (`<unlisted>`)."""
     n_molecule_features: int
     mean_unknown_of_molecule_features: float
     """Mean posterior on the unknown molecule, over features of a detected molecule."""
 
 
-def assignment_scores(truth: pd.DataFrame, posterior: pd.DataFrame) -> AssignmentScore:
+def assignment_scores(
+    truth: pd.DataFrame, posterior: pd.DataFrame, molecule_leaves: Collection[str]
+) -> AssignmentScore:
     """How well the assignment posterior recovers the true assignment.
 
     Both frames are in the C++ layout (`species extract feature molecule fraction`),
-    the truth with fraction 1 on the true assignment. The mode of a tie is the
-    first row the file lists.
+    the truth with fraction 1 on the true assignment. The truth need not list a row for
+    every row of the posterior: one it leaves out is 0. A truth row the posterior lacks
+    is an error. The mode of a tie is the first row the file lists.
+
+    A row whose molecule is not in `molecule_leaves` is the unknown molecule's: an
+    outside structure, or `<unlisted>`. P(unknown) is the sum of those rows, and a truth
+    on one of them is an unknown feature. A truth that is an outside structure is scored
+    on its own row, as one that is a molecule leaf is.
     """
-    merged = posterior.merge(
-        truth, on=FEATURE_KEY + ["molecule"], suffixes=("_posterior", "_true")
+    lacking = truth.merge(
+        posterior, on=FEATURE_KEY + ["molecule"], how="left", indicator=True
     )
-    if len(merged) != len(truth):
-        lacking = truth.merge(posterior, on=FEATURE_KEY + ["molecule"], how="left", indicator=True)
-        first = lacking[lacking["_merge"] == "left_only"].iloc[0]
+    lacking = lacking[lacking["_merge"] == "left_only"]
+    if len(lacking):
+        first = lacking.iloc[0]
         raise AssignmentFormatError(
             f"Assignment posterior lacks {first['molecule']!r} of "
             f"{_feature_label(tuple(first[FEATURE_KEY]))}, a row of the true assignment."
         )
+    merged = posterior.merge(
+        truth, on=FEATURE_KEY + ["molecule"], how="left", suffixes=("_posterior", "_true")
+    )
+    merged["fraction_true"] = merged["fraction_true"].fillna(0)
 
+    key = [merged[k] for k in FEATURE_KEY]
     grouped = merged.groupby(FEATURE_KEY, sort=False)
     is_true = merged["fraction_true"] == 1
     mode_is_true = grouped["fraction_posterior"].transform("idxmax") == merged.index
-    mode_hit = (mode_is_true & is_true).groupby([merged[k] for k in FEATURE_KEY]).any()
+    mode_hit = (mode_is_true & is_true).groupby(key).any()
 
     mass_on_truth = merged["fraction_posterior"].where(is_true, 0.0)
-    mean_on_true_assignment = mass_on_truth.groupby([merged[k] for k in FEATURE_KEY]).sum()
+    mean_on_true_assignment = mass_on_truth.groupby(key).sum()
 
-    unknown = merged[merged["molecule"] == UNKNOWN].set_index(FEATURE_KEY)
-    unknown_truth = unknown["fraction_true"] == 1
-    unknown_mass = unknown["fraction_posterior"]
+    is_unknown_row = ~merged["molecule"].isin(set(molecule_leaves))
+    unknown_mass = merged["fraction_posterior"].where(is_unknown_row, 0.0).groupby(key).sum()
+    unknown_truth = (is_unknown_row & is_true).groupby(key).any()
 
     def mean(values: pd.Series) -> float:
         return float(values.mean()) if len(values) else float("nan")

@@ -1,6 +1,8 @@
 #include "mass_spec/assignment_posterior.h"
 #include "coretools/Files/TOutputFile.h"
+#include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -28,7 +30,7 @@ void write_assignment_posterior(const std::string &filename, const TAssignmentPo
 		throw coretools::TDevError("The assignment posterior counted no iteration, so it has no "
 		                           "fractions to write.");
 	}
-	const std::string unknown(mass_spec_file::UNKNOWN_MOLECULE_NAME);
+	const std::string unlisted(mass_spec_file::UNLISTED_MOLECULE_NAME);
 	const std::vector<std::string> header = {"species", "extract", "feature", "molecule",
 	                                         "fraction"};
 	coretools::TOutputFile file(filename, header, "\t");
@@ -43,15 +45,35 @@ void write_assignment_posterior(const std::string &filename, const TAssignmentPo
 			size_t offset      = 0;
 			for (size_t f = 0; f < run.number_of_features(); ++f) {
 				const auto candidates = run.get_likelihoods_for_feature(f);
-				const auto row        = [&](const std::string &molecule, uint32_t count) {
-					file.writeln(
-					    species_leaves[species], label.extract, label.feature_ids[f], molecule,
-					    fraction_text(static_cast<double>(count) / static_cast<double>(total)));
+				const auto row        = [&](const std::string &molecule, double fraction) {
+					file.writeln(species_leaves[species], label.extract, label.feature_ids[f],
+					             molecule, fraction_text(fraction));
+				};
+				const auto fraction_of = [&](uint32_t count) {
+					return static_cast<double>(count) / static_cast<double>(total);
 				};
 				for (size_t c = 0; c < candidates.size(); ++c) {
-					row(molecule_leaves[candidates[c].get_molecule_index()], counts[offset + c]);
+					row(molecule_leaves[candidates[c].get_molecule_index()],
+					    fraction_of(counts[offset + c]));
 				}
-				row(unknown, counts[offset + candidates.size()]);
+
+				// P(U) is the unknown molecule's fraction. The split of P(U) follows the exact
+				// weights, not the bins. Each share is exp(log weight - log W_U), so a weight
+				// too large for a double still divides.
+				const auto &outside = label.outside[f];
+				double log_largest  = outside.log_rho_n_f;
+				for (const double w : outside.log_weights) {
+					log_largest = std::max(log_largest, w);
+				}
+				double sum = std::exp(outside.log_rho_n_f - log_largest);
+				for (const double w : outside.log_weights) { sum += std::exp(w - log_largest); }
+				const double log_unknown_weight = log_largest + std::log(sum);
+				const double p_unknown          = fraction_of(counts[offset + candidates.size()]);
+				for (size_t j = 0; j < outside.molecules.size(); ++j) {
+					row(outside.molecules[j],
+					    p_unknown * std::exp(outside.log_weights[j] - log_unknown_weight));
+				}
+				row(unlisted, p_unknown * std::exp(outside.log_rho_n_f - log_unknown_weight));
 				offset += candidates.size() + 1;
 			}
 		}
