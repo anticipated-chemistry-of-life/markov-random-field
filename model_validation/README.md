@@ -139,12 +139,13 @@ so a recovery failure points at the code and not at misspecification.
   exactly one feature.
 - **Unknown features.** Each run also gets Poisson(λ) unknown features. λ is the
   expected number of molecule features per run under the true Y, filter
-  probabilities and κ, so about half of all features are unknown. ρ = λ / the
-  number of molecule leaves.
+  probabilities and κ, so about half of all features are unknown (without an
+  [outside pool](#outside-structures)). ρ = λ / the number of molecule leaves, or
+  over the leaves and the outside pool together when there is one.
 - **Candidates.** n_f ~ Uniform{1..20} for both kinds of feature. A molecule
   feature lists its true molecule plus other molecule leaves; an unknown feature
-  lists molecule leaves only. Both draw uniformly without replacement, so every
-  proposed structure is a molecule leaf.
+  lists molecule leaves only. Both draw uniformly without replacement, so without
+  an [outside pool](#outside-structures) every proposed structure is a molecule leaf.
 - **Scores.** A wrong row scores x ~ Uniform(0,1), a true row x ~ Beta(5,1). The
   log correct density is ln 5 + 4 ln x and the log incorrect density is 0.
   These are the defaults of `MassSpecOptions` (`ScenarioConfig.ms_options`):
@@ -156,18 +157,85 @@ Truth files, all under the `simulated_` prefix that picks the stattools reader:
 | --- | --- |
 | `simulated_ms_data.tsv` | The data, in the loader's six columns. The only mass-spec file an inference run reads. |
 | `simulated_ms_assignment.tsv` | The true assignment, in the layout of the C++ assignment posterior: `species extract feature molecule fraction`, one row per candidate and one for `<unlisted>`, fraction 1 on the true explanation and 0 elsewhere. A feature with no molecule has its 1 on `<unlisted>`. |
-| `simulated_parameters.txt` | Also `filter_proba_<molecule leaf>` (the byte index the C++ stores; the probability is the index over 255), `contamination_proba` (κ), `ms_lambda` (λ) and `ms_unknown_rate` (ρ). |
+| `simulated_parameters.txt` | Also `filter_proba_<molecule leaf>` (the byte index the C++ stores; the probability is the index over 255), `contamination_proba` (κ), `ms_lambda` (λ) and `ms_unknown_rate` (ρ). With an outside pool, also `ms_outside_pool`, `ms_outside_detection` and `ms_outside_rate`, [below](#outside-structures). |
 
 The mass-spec truth is not added to `truth_<tree>.txt`, which `validate_independent.py`
 reads its tree scores from, and `meta.json` gains a `mass_spec` entry with the counts.
 
 The rungs are the same three, on the `lm` build, named
 `rung1_pin_field_and_states`, `rung2_pin_field` and `rung3_from_data_lm`. Every one
-passes `--ms_data` and `--ms_unknown_rate` at its true value, `--ms_outside_rate 0`
-(these scenarios have no outside structures), plus
-`--write_assignment_posterior`. Assignments, filter probabilities and κ are pinned
-in none of them, and ρ is the only mass-spec truth a run is told.
-`validate_independent.py` still scores alpha, log nu and the branch lengths on them.
+passes `--ms_data`, `--ms_unknown_rate` and `--ms_outside_rate` at their true values
+(τ is 0 when the pool is empty), plus `--write_assignment_posterior`. Assignments,
+filter probabilities and κ are pinned in none of them, and ρ and τ are the only
+mass-spec truth a run is told. `validate_independent.py` still scores alpha, log nu
+and the branch lengths on them.
+
+#### Outside structures
+
+```bash
+uv run python simulate_independent.py --mass_spec dense --outside_pool 512   # ..._ms_dense_outside
+uv run python simulate_independent.py --mass_spec sparse --outside_pool 512  # ..._ms_sparse_outside
+```
+
+The scenario's pool is 4 times the 128 molecule leaves. `--outside_pool` defaults to 0, and
+with 0 every file of the scenario is byte-identical to what it was before the option
+existed. With a pool, the scenario name gains the suffix `_outside`. The glob of the
+well-specified family, `..._ms_dense`, does not match it, so the replicate tools find each
+family by its own pattern.
+
+- **Outside molecules.** The pool holds `outside_0 … outside_<P-1>`, which are no node of
+  the molecule tree. In each run, each outside molecule is detected with probability p_o,
+  and each detection makes one feature that lists it, with a score from the correct
+  density, as a molecule feature lists its molecule. p_o is set to 2λ / P, so a run has
+  about twice as many outside features as molecule features. The simulator stops if that
+  p_o is 1 or more.
+- **Decoys.** Every decoy row of every feature is drawn uniformly, without replacement, from
+  the molecule leaves and the pool together. The share of decoy rows that are outside
+  structures is P / (P + M), 80% at 4 times.
+- **Unknown features.** As before: Poisson(λ) per run, listing decoys only. The outside
+  features and the unknown features together are what the unknown molecule explains.
+- **Truth.** The true assignment names the outside molecule on an outside feature, so it has
+  fraction 1 on a row that is no molecule leaf. `simulated_parameters.txt` also holds
+  `ms_outside_pool` (P), `ms_outside_detection` (p_o) and `ms_outside_rate` (τ), and its
+  `ms_unknown_rate` is the ρ below.
+- **Contrast rung.** `rung3_from_data_lm_tau0.sh` is rung 3 under rung 3's seed with
+  `--ms_outside_rate 0`, the model of ADR-0018. Only a scenario with a pool gets it. Score it
+  with `validate_independent.py` like any rung, and set it against rung 3 with the
+  [difference report](#difference-report), `--baseline-rung rung3_from_data_lm`.
+
+**The ρ and the τ at which the model is exact.** Let N = M + P be the number of structures
+a decoy can be, and let a feature of n rows be a set of n structures. In the process, n is
+drawn without regard to the source of the feature. A feature of a source, a leaf or an
+outside molecule, lists it and n − 1 decoys drawn from the other N − 1 structures, so one
+list has probability P(n) / C(N−1, n−1). An unknown feature lists n decoys drawn from N, so
+its list has probability P(n) / C(N, n). Scores multiply in g₁ for the source row and g₀ for
+every other row. The ratio of the two list probabilities is
+
+C(N, n) / C(N−1, n−1) = N / n,
+
+the same for a leaf as for an outside molecule. On the prior side, a leaf m has the odds
+q_m / (1 − q_m) of having a feature (ADR-0018), an outside molecule the odds
+p_o / (1 − p_o), and the Poisson(λ) unknown features give each unknown feature the weight λ.
+Multiply every explanation of a feature by n / N, and the weights are
+
+- a leaf m: q_m / (1 − q_m) · LR_m, as the model has them;
+- an outside structure j: p_o / (1 − p_o) · LR_j;
+- the unknown molecule with no outside structure: (λ / N) · n.
+
+The model's unknown weight is ρ n_f + τ Σ LR_j. So
+
+**ρ = λ / (M + P) and τ = p_o / (1 − p_o).**
+
+τ has the expected form. ρ is not λ / M: decoys now come from M + P structures, so a given
+structure is on an unknown feature's list with probability n / (M + P). With no pool,
+ρ = λ / M as before. These are the values the simulator writes.
+
+The model is exact at these values except in one place, which ADR-0020 accepts. In the
+process an outside molecule has at most one feature in a run. The model keeps the rule for
+leaves and exempts the unknown molecule from it, so two features of a run can both take the
+same outside structure. A second feature lists a given outside molecule as a decoy with
+probability n / (M + P), but it scores high on it only when the molecule is that feature's
+own, so the weight the model gives to the double use should be small. The gates measure it.
 
 #### Mass-spec scores
 
@@ -197,8 +265,11 @@ scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_lotus
   the mean P(unknown), reported separately for features whose truth is the unknown
   molecule (an outside structure or `<unlisted>`) and for features of a detected
   molecule (a good fit is high on the first, low on the second). Reported, no
-  threshold. Before scoring, the file's format is checked against
-  `simulated_ms_data.tsv`: every (run, feature) is present with all its proposed
+  threshold. The C++ loads no feature that lists no molecule leaf, and writes no rows for
+  it, so the validator leaves such a feature out of the data and the truth before it
+  scores (`recovery.loaded_features`). With an outside pool that is a real share of the
+  features. Before scoring, the file's format is checked against
+  `simulated_ms_data.tsv`: every loaded (run, feature) is present with all its proposed
   structures and `<unlisted>`, nothing else is, every fraction lies in [0, 1] and each
   feature sums to 1. A malformed or incomplete file fails the validation with a
   message naming the feature.

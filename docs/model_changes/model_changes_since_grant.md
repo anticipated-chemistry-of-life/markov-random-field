@@ -308,7 +308,7 @@ The grant does not mention validation. The repository now has:
 
 ## 10. Open items
 
-- ADR-0020 (outside structures in $W_{U,f}$) is in the loader and the assignment posterior writer. The simulator, which has no outside structures yet, still has to get its pool and its rung scripts (#115).
+- ADR-0020 (outside structures in $W_{U,f}$) is in the loader, the assignment posterior writer and the simulator. The simulator's outside pool is exact at $\rho=\lambda/(M+P)$ and $\tau=p_o/(1-p_o)$ (`model_validation/README.md`, "Outside structures"); the rung scripts pass them, and a contrast rung passes $\tau=0$ (#120). The scenarios that are misspecified on purpose are still to come (#115).
 - $\rho$ and $\tau$ are inputs. Estimating them is deferred.
 - Outside structures are exempt from "one molecule per feature per run". This misspecification is accepted (ADR-0020).
 - Only one filter is loaded. Per-protocol $\eta_{km}$ exists in the parameter layout, but the file format cannot express it yet.

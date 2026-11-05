@@ -230,6 +230,22 @@ def _feature_label(key: tuple) -> str:
     return f"feature {feature!r} (species {species!r}, extract {extract!r})"
 
 
+def loaded_features(
+    frame: pd.DataFrame, molecule_leaves: Collection[str]
+) -> pd.DataFrame:
+    """The rows of the features that the C++ loads: those with a molecule leaf among their
+    proposed structures.
+
+    A feature that proposes outside structures only has no candidate. The loader drops it,
+    so the assignment posterior has no rows for it. With a large outside pool that is a
+    real share of the features. `frame` is the MS data file or the true assignment.
+    """
+    has_leaf = frame["molecule"].isin(set(molecule_leaves)).groupby(
+        [frame[k] for k in FEATURE_KEY]
+    ).transform("any")
+    return frame[has_leaf]
+
+
 def check_assignment_format(data: pd.DataFrame, posterior: pd.DataFrame) -> None:
     """Every (run, feature) of `data` is present with all its proposed structures and
     `<unlisted>`, nothing else is, and each feature's fractions are in [0, 1] and sum to 1.

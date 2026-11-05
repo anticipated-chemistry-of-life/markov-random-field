@@ -219,6 +219,10 @@ def _assignment_scores(
         base / mass_spec.DATA_FILE, sep="\t", usecols=list(names), dtype=names
     )
     truth = pd.read_csv(base / mass_spec.ASSIGNMENT_FILE, sep="\t", dtype=names)
+    # The C++ loads no feature without a molecule leaf among its structures, and writes no
+    # rows for it. It cannot be scored and the posterior owes it nothing.
+    data = recovery.loaded_features(data, molecule_leaves)
+    truth = recovery.loaded_features(truth, molecule_leaves)
     try:
         recovery.check_assignment_format(data, posterior)
         return recovery.assignment_scores(truth, posterior, molecule_leaves)

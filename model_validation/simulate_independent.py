@@ -14,8 +14,14 @@ import pathlib
 
 import click
 
-from src.independent.mass_spec import LAYOUTS
-from src.independent.scenario import ScenarioConfig, build_scenario, rungs_of
+from src.independent.mass_spec import LAYOUTS, MassSpecOptions
+from src.independent.scenario import (
+    OUTSIDE_CONTRAST_NAME,
+    OUTSIDE_SUFFIX,
+    ScenarioConfig,
+    build_scenario,
+    rungs_of,
+)
 
 
 @click.command()
@@ -88,6 +94,17 @@ from src.independent.scenario import ScenarioConfig, build_scenario, rungs_of
     "run on the 'lm' build.",
 )
 @click.option(
+    "--outside_pool",
+    type=click.IntRange(min=0),
+    default=0,
+    show_default=True,
+    help="With --mass_spec: the number of outside molecules (ADR-0020), which have no "
+    "leaf in the tree. Each is detected per run at the p_o that makes outside features "
+    "twice the molecule features, and decoy rows draw from the leaves and the pool "
+    "together. The reported scenario uses 4 times the molecule leaves. 0 is none, and "
+    "leaves the scenario as it was.",
+)
+@click.option(
     "--out",
     type=click.Path(),
     default=None,
@@ -95,6 +112,8 @@ from src.independent.scenario import ScenarioConfig, build_scenario, rungs_of
 )
 def main(out: str | None, layout: str | None, **kwargs) -> None:
     """Write a complete scenario: truth, observations, and per-rung run scripts."""
+    if kwargs["outside_pool"] and not layout:
+        raise click.UsageError("--outside_pool needs --mass_spec.")
     config = ScenarioConfig(
         seed=kwargs["seed"],
         n_species_nodes=kwargs["number_of_species"],
@@ -110,6 +129,7 @@ def main(out: str | None, layout: str | None, **kwargs) -> None:
         n_burnin_rounds=kwargs["n_burnin_rounds"],
         true_branch_lengths=kwargs["true_branch_lengths"],
         mass_spec=LAYOUTS[layout] if layout else None,
+        ms_options=MassSpecOptions(outside_pool=kwargs["outside_pool"]),
     )
 
     if out is None:
@@ -119,6 +139,8 @@ def main(out: str | None, layout: str | None, **kwargs) -> None:
         )
         if layout:
             out += f"_ms_{layout}"
+        if config.ms_options.outside_pool:
+            out += OUTSIDE_SUFFIX
     path = pathlib.Path(out)
     meta = build_scenario(path, config)
 
@@ -150,10 +172,17 @@ def main(out: str | None, layout: str | None, **kwargs) -> None:
             f"({ms['n_unknown_features']} unknown), lambda "
             f"{ms['expected_features_per_run']:.2f}, rho {ms['unknown_rate']:.4g}"
         )
+        if "outside_pool" in ms:
+            click.echo(
+                f"  outside pool {ms['outside_pool']}: {ms['n_outside_features']} outside "
+                f"features, p_o {ms['outside_detection']:.4g}, true tau {ms['outside_rate']:.4g}"
+            )
     if not meta["true_branch_lengths"]:
         click.echo("  branch lengths start flat: the chain has to find them")
     click.echo("\nRun in order, stopping at the first failure:")
     for name, _, _, _ in rungs_of(config):
+        if name == OUTSIDE_CONTRAST_NAME:
+            click.echo("\nThe contrast, rung 3 at tau = 0, is a separate run:")
         click.echo(
             f"  bash {path}/{name}.sh && "
             f"uv run python validate_independent.py {path} {name}"

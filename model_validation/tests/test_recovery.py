@@ -297,3 +297,26 @@ def test_a_tied_mode_goes_to_the_first_row_the_posterior_lists():
     tied = _posterior((0.45, 0.45, 0.1), (0, 0, 1), (0, 1, 0))
     reordered_truth = TRUTH.iloc[[1, 0, *range(2, len(TRUTH))]]
     assert recovery.assignment_scores(reordered_truth, tied, LEAVES).accuracy == 1.0
+
+
+def test_a_feature_that_lists_no_molecule_leaf_is_not_loaded_and_has_no_posterior_rows():
+    # h1 lists leaf A and outside X; h2 lists outside X and Y only, so the C++ drops it.
+    data = _data([("h1", "A"), ("h1", "X"), ("h2", "X"), ("h2", "Y")])
+    truth = _assignment(
+        [("h1", "A", 0), ("h1", "X", 1), ("h1", UNLISTED, 0),
+         ("h2", "X", 0), ("h2", "Y", 1), ("h2", UNLISTED, 0)]
+    )  # fmt: skip
+    posterior = _assignment([("h1", "A", 0.2), ("h1", "X", 0.5), ("h1", UNLISTED, 0.3)])
+
+    loaded_data = recovery.loaded_features(data, LEAVES)
+    loaded_truth = recovery.loaded_features(truth, LEAVES)
+
+    assert set(loaded_data["feature"]) == {"h1"} and len(loaded_data) == 2
+    assert set(loaded_truth["feature"]) == {"h1"} and len(loaded_truth) == 3
+    recovery.check_assignment_format(loaded_data, posterior)
+    assert recovery.assignment_scores(loaded_truth, posterior, LEAVES).n == 1
+    # A posterior with rows for h2 would be written for a feature the C++ never loads.
+    with pytest.raises(recovery.AssignmentFormatError, match="h2"):
+        recovery.check_assignment_format(
+            loaded_data, pd.concat([posterior, _assignment([("h2", UNLISTED, 1.0)])])
+        )

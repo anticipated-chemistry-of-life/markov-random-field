@@ -8,18 +8,22 @@ shares no code with the C++:
 * each detected molecule produces exactly one feature;
 * each run also gets Poisson(lambda) *unknown* features, lambda being the expected
   number of molecule features per run under the true field, filter probabilities
-  and kappa. So about half of all features are unknown, as on real data;
+  and kappa. So about half of all features are unknown, as on real data, unless there is an
+  outside pool, which adds outside features;
 * every feature proposes n_f ~ Uniform{1..20} structures by default, the same distribution
   for both kinds, so the list length carries no evidence and the unknown weight
-  rho * n_f is exact. A molecule feature lists its true molecule plus other
-  molecule leaves, an unknown feature lists molecule leaves only; both draw
-  uniformly without replacement. Every proposed structure is a molecule leaf;
+  rho * n_f is exact. A molecule feature lists its true molecule plus decoys, an unknown
+  feature decoys only; both draw uniformly without replacement. Decoys are molecule
+  leaves, and with an outside pool (`MassSpecOptions.outside_pool`, ADR-0020) the pool's
+  outside molecules too. Each outside molecule is detected in a run with probability p_o
+  and each detection makes one feature that lists it;
 * by default a wrong row scores x ~ Uniform(0,1) and a true row x ~ Beta(5,1), so the log
   correct density is ln 5 + 4 ln x and the log incorrect density is 0. All of these draw
   settings are the fields of `MassSpecOptions`.
 
-rho = lambda / (number of molecule leaves): a consequence of the story, not a
-choice. The inference run is given rho and nothing else of this module's truth.
+rho = lambda / N, N being the number of molecule leaves plus the pool, and tau = p_o / (1 - p_o):
+a consequence of the story, not a choice (the README derives them). The inference run is
+given rho and tau and nothing else of this module's truth.
 """
 
 from __future__ import annotations
@@ -40,7 +44,12 @@ UNLISTED = "<unlisted>"
 each outside structure has its share. The true assignment puts a feature with no
 molecule there."""
 
+OUTSIDE_PREFIX = "outside_"
+"""The name of an outside molecule is this prefix and its number in the pool."""
+
 CONTAMINATION = 0.01
+OUTSIDE_FEATURE_RATIO = 2.0
+"""Outside features per molecule feature, near the real export's ratio."""
 N_FILTER_LEVELS = 255
 """Filter probabilities live on the byte grid `i / 255`, `i` in `0..254`: the C++
 caps the index at 254 (`MAX_FILTER_PROBABILITY_INDEX`), so exactly 1 is not a level."""
@@ -59,12 +68,18 @@ class MassSpecOptions:
     """A wrong row scores Beta(incorrect_shape, 1); 1 is Uniform(0, 1)."""
     log_incorrect_density: float = 0.0
     """The `log_incorrect_density` column as written. 0 is a flat density."""
+    outside_pool: int = 0
+    """The number of outside molecules (ADR-0020): molecules with no leaf in the tree, that
+    a feature can list. 0 is no outside structure at all, and leaves every draw as it was."""
 
 
 FILTER_PARAMETER = "filter_proba"
 CONTAMINATION_PARAMETER = "contamination_proba"
 LAMBDA_PARAMETER = "ms_lambda"
 UNKNOWN_RATE_PARAMETER = "ms_unknown_rate"
+OUTSIDE_POOL_PARAMETER = "ms_outside_pool"
+OUTSIDE_DETECTION_PARAMETER = "ms_outside_detection"
+OUTSIDE_RATE_PARAMETER = "ms_outside_rate"
 
 
 @dataclass(frozen=True)
@@ -90,7 +105,7 @@ class Feature:
     extract: str
     feature: str
     candidates: np.ndarray
-    """Molecule leaf numbers of the proposed structures."""
+    """Structure numbers of the proposed structures: molecule leaves, then outside molecules."""
     log_correct: np.ndarray
     true_molecule: int | None
     """`None`: an unknown feature, which has no true row."""
@@ -104,8 +119,24 @@ class MassSpecTruth:
     contamination: float
     expected_features_per_run: float
     unknown_rate: float
+    outside_detection: float
+    """p_o: the probability that an outside molecule is detected in a run. 0 without a pool."""
     features: list[Feature]
     species_with_runs: np.ndarray
+
+    @property
+    def outside_rate(self) -> float:
+        """tau, the outside rate under which the model is exact: the odds p_o / (1 - p_o)."""
+        return self.outside_detection / (1.0 - self.outside_detection)
+
+    @property
+    def n_outside_features(self) -> int:
+        """The features whose true structure is an outside molecule."""
+        n_leaves = len(self.filter_indices)
+        return sum(
+            f.true_molecule is not None and f.true_molecule >= n_leaves
+            for f in self.features
+        )
 
     @property
     def n_runs(self) -> int:
@@ -124,10 +155,11 @@ def simulate(
     `field` is `[species_leaf, molecule_leaf]`.
     """
     n_species, n_molecules = field.shape
-    if n_molecules < options.max_candidates:
+    n_structures = n_molecules + options.outside_pool
+    if n_structures < options.max_candidates:
         raise ValueError(
             f"A feature can propose {options.max_candidates} structures, so the molecule "
-            f"tree needs that many leaves; it has {n_molecules}."
+            f"leaves and the outside pool need that many together; they have {n_structures}."
         )
     if layout.n_species_with_runs is None:
         species_with_runs = np.arange(n_species)
@@ -151,18 +183,36 @@ def simulate(
     if expected <= 0.0:
         raise ValueError("No molecule can be detected, so there is nothing to simulate.")
 
+    # Every outside molecule is detected in a run with probability p_o, and p_o is set
+    # so that a run has OUTSIDE_FEATURE_RATIO times as many outside features as the
+    # molecule features it expects.
+    outside_detection = 0.0
+    if options.outside_pool > 0:
+        outside_detection = OUTSIDE_FEATURE_RATIO * expected / options.outside_pool
+        if outside_detection >= 1.0:
+            raise ValueError(
+                f"The outside pool of {options.outside_pool} is too small for "
+                f"{OUTSIDE_FEATURE_RATIO:g} times the {expected:.1f} molecule features "
+                f"a run expects: every outside molecule would be detected."
+            )
+
     features: list[Feature] = []
     for row, species in enumerate(species_with_runs):
         for run in range(layout.runs_per_species):
             detected = np.flatnonzero(rng.random(n_molecules) < p_detect[row])
-            sources = np.concatenate(
-                [detected, np.full(rng.poisson(expected), -1)]
-            ).astype(int)
+            parts = [detected]
+            if options.outside_pool > 0:
+                parts.append(
+                    n_molecules
+                    + np.flatnonzero(rng.random(options.outside_pool) < outside_detection)
+                )
+            parts.append(np.full(rng.poisson(expected), -1))
+            sources = np.concatenate(parts).astype(int)
             for number, source in enumerate(rng.permutation(sources)):
                 features.append(
                     _draw_feature(
                         rng, options, int(species), f"extract_{run + 1}",
-                        f"feature_{number}", int(source), n_molecules,
+                        f"feature_{number}", int(source), n_structures,
                     )
                 )
     return MassSpecTruth(
@@ -171,7 +221,8 @@ def simulate(
         filter_indices=filter_indices,
         contamination=contamination,
         expected_features_per_run=expected,
-        unknown_rate=expected / n_molecules,
+        unknown_rate=expected / n_structures,
+        outside_detection=outside_detection,
         features=features,
         species_with_runs=species_with_runs,
     )
@@ -184,14 +235,18 @@ def _draw_feature(
     extract: str,
     feature: str,
     source: int,
-    n_molecules: int,
+    n_structures: int,
 ) -> Feature:
-    """One feature of molecule `source`, or an unknown one when `source` is -1."""
+    """One feature of structure `source`, or an unknown one when `source` is -1.
+
+    Structures are numbered molecule leaves first, then the outside pool. A feature draws
+    its decoys uniformly from all of them.
+    """
     n_candidates = int(rng.integers(1, options.max_candidates + 1))
     if source < 0:
-        candidates = rng.choice(n_molecules, n_candidates, replace=False)
+        candidates = rng.choice(n_structures, n_candidates, replace=False)
     else:
-        others = np.delete(np.arange(n_molecules), source)
+        others = np.delete(np.arange(n_structures), source)
         candidates = np.concatenate(
             [[source], rng.choice(others, n_candidates - 1, replace=False)]
         )
@@ -216,6 +271,16 @@ def _draw_feature(
     )
 
 
+def structure_names(molecules: TreeIndex, outside_pool: int) -> np.ndarray:
+    """The name of every structure number: the molecule leaves, then the outside pool.
+
+    An outside molecule is named `outside_<i>`, which no tree node is.
+    """
+    return np.array(
+        molecules.leaf_names() + [f"{OUTSIDE_PREFIX}{i}" for i in range(outside_pool)]
+    )
+
+
 def write_data(
     path: pathlib.Path,
     truth: MassSpecTruth,
@@ -224,7 +289,7 @@ def write_data(
 ) -> None:
     """The loader's six columns, the incorrect density as the options set it."""
     species_names = species.leaf_names()
-    molecule_names = np.array(molecules.leaf_names())
+    molecule_names = structure_names(molecules, truth.options.outside_pool)
     frames = [
         pd.DataFrame(
             {
@@ -254,7 +319,7 @@ def write_assignment(
     on the true explanation and 0 elsewhere, so the files join row by row.
     """
     species_names = species.leaf_names()
-    molecule_names = molecules.leaf_names()
+    molecule_names = structure_names(molecules, truth.options.outside_pool)
     rows = []
     for f in truth.features:
         for molecule in f.candidates:
@@ -296,4 +361,9 @@ def truth_values(truth: MassSpecTruth, molecules: TreeIndex) -> dict[str, object
     values[CONTAMINATION_PARAMETER] = truth.contamination
     values[LAMBDA_PARAMETER] = truth.expected_features_per_run
     values[UNKNOWN_RATE_PARAMETER] = truth.unknown_rate
+    # Only a scenario with a pool names them, so that one without is as it was.
+    if truth.options.outside_pool > 0:
+        values[OUTSIDE_POOL_PARAMETER] = truth.options.outside_pool
+        values[OUTSIDE_DETECTION_PARAMETER] = truth.outside_detection
+        values[OUTSIDE_RATE_PARAMETER] = truth.outside_rate
     return values

@@ -52,6 +52,11 @@ INITIAL_VALUE_MARKERS = (
 )
 SIMULATE_PARAMETERS = "simulated_parameters.txt"
 
+OUTSIDE_SUFFIX = "_outside"
+"""The scenario name's suffix when the scenario has an outside pool, after `_ms_<layout>`.
+`independent_y_s255_m255_seed1_ms_dense_outside` is not matched by the glob of the
+well-specified family, `..._ms_dense`, so the replicate tools find each family by its own."""
+
 
 @dataclass
 class ScenarioConfig:
@@ -288,6 +293,15 @@ def build_scenario(out: pathlib.Path, config: ScenarioConfig) -> dict:
             "expected_features_per_run": ms_truth.expected_features_per_run,
             "unknown_rate": ms_truth.unknown_rate,
         }
+        if config.ms_options.outside_pool > 0:
+            meta["mass_spec"].update(
+                {
+                    "outside_pool": config.ms_options.outside_pool,
+                    "outside_detection": ms_truth.outside_detection,
+                    "outside_rate": ms_truth.outside_rate,
+                    "n_outside_features": ms_truth.n_outside_features,
+                }
+            )
     (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
     _write_scripts(out, config, ms_truth)
@@ -408,26 +422,40 @@ MS_RUNGS = [
     ("rung3_from_data_lm", "lm", "", 2),
 ]
 
+# Rung 3 again with tau = 0, which is the model before ADR-0020. It runs under rung 3's
+# seed, so the two runs differ in tau alone. Only a scenario with an outside pool gets it.
+OUTSIDE_CONTRAST_NAME = "rung3_from_data_lm_tau0"
+OUTSIDE_CONTRAST_RUNG = (OUTSIDE_CONTRAST_NAME, "lm", "", 2)
+
 
 def rungs_of(config: ScenarioConfig) -> list[tuple[str, str, str, int]]:
-    return RUNGS if config.mass_spec is None else MS_RUNGS
+    if config.mass_spec is None:
+        return RUNGS
+    if config.ms_options.outside_pool > 0:
+        return [*MS_RUNGS, OUTSIDE_CONTRAST_RUNG]
+    return MS_RUNGS
 
 
 def _write_scripts(
     out: pathlib.Path, config: ScenarioConfig, ms_truth: M.MassSpecTruth | None
 ) -> None:
-    # The MS data file and rho are all an inference run gets of the mass-spec truth.
-    ms_flags = (
-        f"--ms_data {M.DATA_FILE} --ms_unknown_rate {ms_truth.unknown_rate!r} "
-        "--ms_outside_rate 0 --write_assignment_posterior"
-        if ms_truth is not None
-        else ""
-    )
-    for name, flags, extra, offset in rungs_of(config):
-        path = out / f"{name}.sh"
-        path.write_text(
-            _infer_script(name, flags, f"{extra} {ms_flags}".strip(), config, offset)
+    # The MS data file, rho and tau are all an inference run gets of the mass-spec truth.
+    # Only the contrast rung is told another tau. An empty pool has tau 0, written `0`.
+    def ms_flags(outside_rate: float) -> str:
+        assert ms_truth is not None
+        tau = repr(outside_rate) if outside_rate else "0"
+        return (
+            f"--ms_data {M.DATA_FILE} --ms_unknown_rate {ms_truth.unknown_rate!r} "
+            f"--ms_outside_rate {tau} --write_assignment_posterior"
         )
+
+    for name, flags, extra, offset in rungs_of(config):
+        tail = extra
+        if ms_truth is not None:
+            tau = 0.0 if name == OUTSIDE_CONTRAST_NAME else ms_truth.outside_rate
+            tail = f"{extra} {ms_flags(tau)}".strip()
+        path = out / f"{name}.sh"
+        path.write_text(_infer_script(name, flags, tail, config, offset))
         path.chmod(0o755)
 
     # The C++ simulator, run under the very parameters the reference drew its own

@@ -6,6 +6,7 @@ disagreement between them would say nothing about which side is wrong.
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import re
 import tempfile
@@ -1127,3 +1128,172 @@ def test_the_incorrect_score_distribution_is_an_option():
     wrong = marked[marked["_merge"] == "left_only"]
     assert len(wrong) > 0
     assert np.allclose(wrong["log_correct_density"], np.log(2.0), atol=1e-2)
+
+
+# --------------------------------------------------------------------------
+# Outside structures (ADR-0020)
+# --------------------------------------------------------------------------
+
+# SHA-256 of the files of a 63-node, seed 42 scenario, taken before the outside pool
+# existed. A pool of 0 is the default, and it must leave these files as they were.
+PRE_OUTSIDE_POOL_HASHES = {
+    "dense": {
+        mass_spec.DATA_FILE: "631d5074aa95d661dd7db51c176b4441971e4273c8b4da6b6a4c5d6e40b3461f",
+        mass_spec.ASSIGNMENT_FILE: "75f73b8202545803366b32a064c63eed5dfc26479e5e6d5dafed5727c370df5f",
+        scenario.SIMULATE_PARAMETERS: "c3a8aec57d086cb78362e3c11880c1d486451fd14a9921c7b48765ee4712c266",
+        "meta.json": "53428487eee9c13da33c86a79c2322947f9ecc32136cc333fee0f714a0835b5f",
+        "rung3_from_data_lm.sh": "c0cc58299f79c2e74e806dd8d732d7052de60db83c2c4e4ecc1f91eaa41797df",
+    },
+    "sparse": {
+        mass_spec.DATA_FILE: "d9e9df14358df841d6f3e420c8683fb115d6bfb9e28245e172029659c9c620fa",
+        mass_spec.ASSIGNMENT_FILE: "f4e8cca9b8a83653c4149ebe4aeddce8655de63d0b96c02c7ded2aa2910314b6",
+        scenario.SIMULATE_PARAMETERS: "b34a40d089d73b7e6c8b0e4629e2dc3a9c7d3eb2d76d3000285846b9a1a2f8a6",
+        "meta.json": "6d9ce4116f758931b670c44ae382efd748eb5af1dd624147f0469b994a6011a7",
+        "rung3_from_data_lm.sh": "9df045dc890510c8e979e883e398efb649eb3cd6e017e6c4cd60eb42c64e0a3c",
+    },
+}
+
+
+@pytest.mark.parametrize("layout", ["dense", "sparse"])
+def test_an_empty_outside_pool_leaves_the_scenario_files_byte_identical(layout):
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _ms_scenario(tmp, layout)
+        hashes = {
+            name: hashlib.sha256((out / name).read_bytes()).hexdigest()
+            for name in PRE_OUTSIDE_POOL_HASHES[layout]
+        }
+
+    assert hashes == PRE_OUTSIDE_POOL_HASHES[layout]
+
+
+N_LEAVES_63 = 32
+"""Leaves of the 63-node molecule tree the MS tests use."""
+
+
+def _outside_scenario(tmp: str, layout: str = "dense", pool: int = 4 * N_LEAVES_63):
+    return _ms_scenario(tmp, layout, **_with_options(outside_pool=pool))
+
+
+def _outside_rows(data: pd.DataFrame, out: pathlib.Path) -> pd.Series:
+    """Whether each row of the data file lists a structure that is no molecule leaf."""
+    _, molecules = _indices_of(out)
+    return ~data["molecule"].isin(molecules.leaf_names())
+
+
+def _true_rows(data: pd.DataFrame, truth: pd.DataFrame) -> pd.Series:
+    true = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNLISTED)]
+    marked = data.merge(
+        true[FEATURE + ["molecule"]], on=FEATURE + ["molecule"], how="left", indicator=True
+    )
+    return (marked["_merge"] == "both").to_numpy()
+
+
+def test_the_decoy_rows_are_drawn_from_the_leaves_and_the_outside_pool_together():
+    pool = 4 * N_LEAVES_63
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _outside_scenario(tmp, pool=pool)
+        data, truth = _ms_files(out)
+        outside = _outside_rows(data, out).to_numpy()
+
+    decoys = ~_true_rows(data, truth)
+    assert decoys.sum() > 5_000
+    assert outside[decoys].mean() == pytest.approx(pool / (pool + N_LEAVES_63), abs=0.02)
+
+
+def test_outside_features_list_their_true_outside_molecule_and_number_twice_the_molecule_features():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _outside_scenario(tmp)
+        data, truth = _ms_files(out)
+        _, molecules = _indices_of(out)
+
+    true = truth[(truth["fraction"] == 1) & (truth["molecule"] != mass_spec.UNLISTED)]
+    is_outside = ~true["molecule"].isin(molecules.leaf_names())
+    outside_features, molecule_features = true[is_outside], true[~is_outside]
+    assert len(outside_features) > 0
+
+    # The true outside molecule is one of the structures its feature lists, and it is
+    # an outside molecule of the pool, not a leaf or an invented name.
+    listed = data.merge(outside_features, on=FEATURE + ["molecule"])
+    assert len(listed) == len(outside_features)
+    assert outside_features["molecule"].str.startswith(mass_spec.OUTSIDE_PREFIX).all()
+
+    assert len(outside_features) / len(molecule_features) == pytest.approx(2.0, rel=0.1)
+    # An outside molecule is detected at most once per run, like a leaf.
+    assert not outside_features.duplicated(["species", "extract", "molecule"]).any()
+
+
+def _parameters_of(out: pathlib.Path) -> dict[str, float]:
+    values = pd.read_csv(out / scenario.SIMULATE_PARAMETERS, sep="\t")
+    return dict(zip(values["name"].astype(str), values["value"].astype(float)))
+
+
+def _outside_rate_of(body: str) -> float:
+    (rate,) = re.findall(r"--ms_outside_rate (\S+)", body)
+    return float(rate)
+
+
+def test_the_parameters_file_holds_the_pool_and_the_rho_and_tau_the_model_is_exact_at():
+    """The README derives both. They are recomputed here from the written field and
+    filter probabilities, the pool and the ratio of outside to molecule features."""
+    pool = 4 * N_LEAVES_63
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _outside_scenario(tmp, pool=pool)
+        _, molecules = _indices_of(out)
+        field = io.read_field(out / "simulated_Y.txt", molecules.n_leaves)
+        values = _parameters_of(out)
+
+    index = np.array([values[f"filter_proba_{n}"] for n in molecules.leaf_names()])
+    lam = np.where(field, index / 255.0, values["contamination_proba"]).sum(axis=1).mean()
+    p_o = 2.0 * lam / pool
+
+    assert values["ms_outside_pool"] == pool
+    assert values["ms_outside_detection"] == pytest.approx(p_o)
+    assert values["ms_outside_rate"] == pytest.approx(p_o / (1.0 - p_o))
+    # Decoys come from the leaves and the pool together, so an unknown feature lists
+    # each of the N structures alike and rho is lambda over N, not over the leaves.
+    assert values["ms_unknown_rate"] == pytest.approx(lam / (pool + molecules.n_leaves))
+
+
+def test_the_outside_rungs_pass_the_true_tau_and_the_contrast_rung_passes_zero():
+    with tempfile.TemporaryDirectory() as tmp:
+        out, _, _ = _outside_scenario(tmp)
+        tau = _parameters_of(out)["ms_outside_rate"]
+        bodies = {p.name: p.read_text() for p in sorted(out.glob("rung*.sh"))}
+
+    contrast = "rung3_from_data_lm_tau0.sh"
+    assert set(bodies) == {f"{name}.sh" for name, _, _, _ in scenario.MS_RUNGS} | {contrast}
+    assert tau > 0
+    for name, body in bodies.items():
+        expected = 0.0 if name == contrast else tau
+        assert _outside_rate_of(body) == pytest.approx(expected, rel=1e-12), name
+    # The contrast run is rung 3 and differs from it in tau alone.
+    rung3 = bodies["rung3_from_data_lm.sh"]
+    expected = re.sub(r"--ms_outside_rate \S+", "--ms_outside_rate 0", rung3)
+    assert bodies[contrast] == expected.replace("rung3_from_data_lm", "rung3_from_data_lm_tau0")
+
+
+def test_a_scenario_with_a_pool_has_its_own_name_that_the_well_specified_glob_misses():
+    import fnmatch
+
+    from click.testing import CliRunner
+
+    from simulate_independent import main
+
+    args = ["--number_of_species", "63", "--number_of_molecules", "63", "--mass_spec", "dense"]
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        plain = runner.invoke(main, args)
+        pooled = runner.invoke(main, [*args, "--outside_pool", "128"])
+        names = sorted(p.name for p in pathlib.Path(".").iterdir())
+        no_ms = runner.invoke(main, ["--outside_pool", "128"])
+
+    assert plain.exit_code == 0 and pooled.exit_code == 0, (plain.output, pooled.output)
+    assert names == [
+        "independent_y_s63_m63_seed42_ms_dense",
+        "independent_y_s63_m63_seed42_ms_dense_outside",
+    ]
+    well_specified = "independent_y_s63_m63_seed*_ms_dense"
+    assert [n for n in names if fnmatch.fnmatch(n, well_specified)] == names[:1]
+    assert "tau" in pooled.output
+    # A pool is a mass-spec option.
+    assert no_ms.exit_code != 0
