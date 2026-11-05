@@ -160,7 +160,8 @@ reads its tree scores from, and `meta.json` gains a `mass_spec` entry with the c
 
 The rungs are the same three, on the `lm` build, named
 `rung1_pin_field_and_states`, `rung2_pin_field` and `rung3_from_data_lm`. Every one
-passes `--ms_data` and `--ms_unknown_rate` at its true value, plus
+passes `--ms_data` and `--ms_unknown_rate` at its true value, `--ms_outside_rate 0`
+(these scenarios have no outside structures), plus
 `--write_assignment_posterior`. Assignments, filter probabilities and κ are pinned
 in none of them, and ρ is the only mass-spec truth a run is told.
 `validate_independent.py` still scores alpha, log nu and the branch lengths on them.

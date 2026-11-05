@@ -9,6 +9,10 @@ FLAGS="${ACOL_DATA_FLAGS:-lm}"
 # (ADR-0018). 1.4 is 122, the unknown weight ADR-0018 reads off the held-out odds, over the mean
 # of about 87 rows per feature there. It is an input, not an estimate.
 MS_UNKNOWN_RATE="${ACOL_MS_UNKNOWN_RATE:-1.4}"
+# The outside rate tau: the factor on an outside structure's likelihood ratio in the unknown
+# weight of its feature (ADR-0020). No data set measures it and it has no default. Take it from a
+# pilot run and check it against 0.01, 0.1 and 1.
+MS_OUTSIDE_RATE="${ACOL_MS_OUTSIDE_RATE:?set ACOL_MS_OUTSIDE_RATE to the outside rate tau (ADR-0020)}"
 
 cd "$ROOT"
 pixi run build "$MODE-$FLAGS"
@@ -31,4 +35,5 @@ pixi run "$ACOL" infer \
     --iterations 5000 \
     --numThreads 32 \
     --ms_data ms_data.tsv \
-    --ms_unknown_rate "$MS_UNKNOWN_RATE"
+    --ms_unknown_rate "$MS_UNKNOWN_RATE" \
+    --ms_outside_rate "$MS_OUTSIDE_RATE"

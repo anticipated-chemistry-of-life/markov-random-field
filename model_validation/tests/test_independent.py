@@ -1058,6 +1058,8 @@ def test_the_ms_rungs_hand_the_binary_the_data_and_the_true_rate_and_nothing_els
     for name, body in bodies.items():
         assert f"--ms_data {mass_spec.DATA_FILE}" in body, name
         assert f"--ms_unknown_rate {rho!r}" in body, name
+        # The scenarios have no outside structures, so tau is 0 in every rung.
+        assert "--ms_outside_rate 0 " in body, name
         # Only the data file is read: the assignment, the filter probabilities and
         # kappa are inferred in every rung.
         for truth in (mass_spec.ASSIGNMENT_FILE, scenario.SIMULATE_PARAMETERS):

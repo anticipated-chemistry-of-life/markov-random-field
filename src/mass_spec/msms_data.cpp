@@ -36,7 +36,7 @@ void TMSMSData::_load_runs() {
 	}
 	auto loaded =
 	    mass_spec_file::load(filename, leaf_names(*_species_tree), leaf_names(*_molecules_tree),
-		                     ProgramOptions::MS_UNKNOWN_RATE);
+		                     ProgramOptions::MS_UNKNOWN_RATE, ProgramOptions::MS_OUTSIDE_RATE);
 	_msms_data = std::move(loaded.runs_per_species);
 	if (ProgramOptions::WRITE_ASSIGNMENT_POSTERIOR) { _labels = std::move(loaded.labels); }
 
@@ -58,12 +58,18 @@ void TMSMSData::_load_runs() {
 	log.list("Loaded ", n_runs, " runs of ", _species_with_ms_data.size(), " species leaves, with ",
 	         n_features, " features. Every assignment starts at the unknown molecule.");
 	log.list("The unknown rate rho is ", ProgramOptions::MS_UNKNOWN_RATE,
-	         " (argument 'ms_unknown_rate'). A feature's unknown weight is rho times its number of "
-	         "rows.");
+	         " (argument 'ms_unknown_rate'). The outside rate tau is ",
+	         ProgramOptions::MS_OUTSIDE_RATE, " (argument 'ms_outside_rate').");
+	log.list("A feature's unknown weight is rho times its number of proposed structures, plus tau "
+	         "times the likelihood ratios of its outside structures.");
+	log.list("The loaded features have ", report.outside_structures,
+	         " outside structures. Their likelihood ratios enter the unknown weights, scaled by "
+	         "tau.");
 	log.list("Skipped ", report.skipped_species, " distinct species that are not species leaves.");
 	log.list("Skipped ", report.skipped_molecules,
-	         " distinct molecules that are not molecule leaves. Their rows still count toward "
-	         "their features' unknown weight.");
+	         " distinct molecules that are not molecule leaves. In a loaded feature, such a "
+	         "structure counts toward the number of proposed structures. Its likelihood ratio "
+	         "enters the unknown weight, scaled by tau.");
 	log.list("Did not load ", report.features_not_loaded, " features that have no candidate left.");
 	log.list("Clamped ", report.clamped_candidates, " candidates and the unknown molecule of ",
 	         report.clamped_unknowns,

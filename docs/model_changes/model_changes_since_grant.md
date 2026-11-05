@@ -245,9 +245,9 @@ and $(1,1)$ for a species without runs. This pair is multiplied into the block u
 | $\eta_{km}$ | `filter_proba` | filters × molecule leaves | grid $i/255$, $i\in\{0,\ldots,254\}$, uniform prior, starts at $128/255$ |
 | $\kappa$ | `contamination_proba` | scalar | Beta(0.3, 5), starts at 0.001 |
 | $\rho$ | `--ms_unknown_rate` | scalar | **input**, not estimated (ADR-0018). Source: a fit on held-out ground truth, which is a lower bound |
-| $\tau$ | `--ms_outside_rate` | scalar | **input**, not estimated (ADR-0020). Plug-in value from a pilot run, checked against $\{0.01, 0.1, 1\}$. **Decided, not yet in the code (#115)** |
+| $\tau$ | `--ms_outside_rate` | scalar | **input**, not estimated (ADR-0020). Required with `--ms_data`, no default, finite and $\ge 0$. Plug-in value from a pilot run, checked against $\{0.01, 0.1, 1\}$ |
 
-Output: `--write_assignment_posterior` writes, for each feature, the fraction of iterations it spent on each candidate and on $U$. Under ADR-0020, $U$'s share is split across outside structures plus a remainder under `<unlisted>`.
+Output: `--write_assignment_posterior` writes, for each feature, the fraction of iterations it spent on each candidate and on $U$. ADR-0020 splits $U$'s share across outside structures plus a remainder under `<unlisted>`; the output does not do this yet (#115).
 
 ### 6.6 How the unknown weight evolved
 
@@ -256,7 +256,7 @@ Output: `--write_assignment_posterior` writes, for each feature, the fraction of
 | June 2026 (`605e2a8`) | "PHRED-like" binned probability | — | first implementation |
 | ADR-0012 (2026-10-15) | correct density divided by the feature's best row | fixed fraction $c=0.1$ | only one density (correct) was available |
 | ADR-0018 (2026-11-02) | $\Lambda=g_1/g_0$ | $\rho\,n_f$ | best-row division is exact only if $g_0$ is flat. It is not, and the held-out evaluation confirmed it |
-| ADR-0020 (2026-11-04, code pending) | $\Lambda$ | $\rho\,n_f+\tau\sum_{\text{outside}}\Lambda_j$ | in the real export 82% of proposed structures are outside structures, and 73% of features have an outside structure as their best match |
+| ADR-0020 (2026-11-04) | $\Lambda$ | $\rho\,n_f+\tau\sum_{\text{outside}}\Lambda_j$ | in the real export 82% of proposed structures are outside structures, and 73% of features have an outside structure as their best match |
 
 ### 6.7 Why not MEMO
 
@@ -308,7 +308,7 @@ The grant does not mention validation. The repository now has:
 
 ## 10. Open items
 
-- ADR-0020 (outside structures in $W_{U,f}$) is decided, but the code still uses $W_{U,f}=\rho\,n_f$ (#115). There is no `--ms_outside_rate` in `src/` yet.
+- ADR-0020 (outside structures in $W_{U,f}$) is in the loader. The assignment posterior still writes $U$ as one row, without the outside rows and `<unlisted>` (#115).
 - $\rho$ and $\tau$ are inputs. Estimating them is deferred.
 - Outside structures are exempt from "one molecule per feature per run". This misspecification is accepted (ADR-0020).
 - Only one filter is loaded. Per-protocol $\eta_{km}$ exists in the parameter layout, but the file format cannot express it yet.

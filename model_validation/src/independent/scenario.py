@@ -419,7 +419,7 @@ def _write_scripts(
     # The MS data file and rho are all an inference run gets of the mass-spec truth.
     ms_flags = (
         f"--ms_data {M.DATA_FILE} --ms_unknown_rate {ms_truth.unknown_rate!r} "
-        "--write_assignment_posterior"
+        "--ms_outside_rate 0 --write_assignment_posterior"
         if ms_truth is not None
         else ""
     )

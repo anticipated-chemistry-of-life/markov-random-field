@@ -40,10 +40,12 @@ std::string row(const std::string &species, const std::string &extract, const st
 
 /// Loads `rows` under the standard header, with the leaves above. The default unknown rate puts
 /// the unknown weight of a feature of up to nine rows below 1, so a row of likelihood ratio 1
-/// takes bin 0.
-mass_spec_file::TLoaded load(const std::string &rows, double unknown_rate = 0.1) {
+/// takes bin 0. The default outside rate of 0 is ADR-0018: outside structures only count toward
+/// n_f.
+mass_spec_file::TLoaded load(const std::string &rows, double unknown_rate = 0.1,
+                             double outside_rate = 0.0) {
 	const TTempFile file("ms.tsv", std::string(HEADER) + rows);
-	return mass_spec_file::load(file.path(), SPECIES, MOLECULES, unknown_rate);
+	return mass_spec_file::load(file.path(), SPECIES, MOLECULES, unknown_rate, outside_rate);
 }
 
 /// The bin of the unknown molecule in one feature.
@@ -134,6 +136,81 @@ TEST(TMassSpecFile_Tests, the_unknown_bin_is_per_feature) {
 	EXPECT_EQ(unknown_bin(run, 0), 37);
 	EXPECT_EQ(unknown_bin(run, 1), 0);
 	EXPECT_EQ(candidates(run, 1), (std::map<uint32_t, uint32_t>{{QUERCETIN, 37}}));
+}
+
+TEST(TMassSpecFile_Tests, the_unknown_weight_adds_the_outside_rate_times_every_outside_ratio) {
+	// rho = 1, tau = 0.5, n_f = 3: the candidate's ratio is 1, and the two outside structures'
+	// are 4 and 2. The unknown weight is 1 * 3 + 0.5 * (4 + 2) = 6, so the candidate sits
+	// round(16 ln 6) = 29 below it. Without the outside ratios the weight would be 3 and the bin
+	// round(16 ln 3) = 18.
+	const auto loaded = load(row("Ilex", "e1", "f1", "caffeine") +
+	                             row("Ilex", "e1", "f1", "aspirin", std::log(4.0)) +
+	                             row("Ilex", "e1", "f1", "morphine", std::log(2.0)),
+	                         1.0, 0.5);
+
+	const auto &run = loaded.runs_per_species.at(0)[0];
+	EXPECT_EQ(unknown_bin(run, 0), 0);
+	EXPECT_EQ(candidates(run, 0), (std::map<uint32_t, uint32_t>{{CAFFEINE, 29}}));
+}
+
+TEST(TMassSpecFile_Tests,
+     an_outside_rate_of_zero_gives_the_bins_of_a_file_with_no_outside_structures) {
+	// rho = 1 and n_f = 3 in both files, so the unknown weight is 3 and caffeine sits
+	// round(16 ln 3) = 18 below it. The first file has two outside structures, one of ratio e^8
+	// and one of e^-3. The second has no outside structure: its two other structures are molecule
+	// leaves of ratio e^-20, far below the unknown weight, so they move neither the largest weight
+	// nor the bin of caffeine.
+	const auto with_outside =
+	    load(row("Ilex", "e1", "f1", "caffeine") + row("Ilex", "e1", "f1", "aspirin", 8.0) +
+		         row("Ilex", "e1", "f1", "morphine", -3.0),
+		     1.0, 0.0);
+	const auto without_outside =
+	    load(row("Ilex", "e1", "f1", "caffeine") + row("Ilex", "e1", "f1", "quercetin", -20.0) +
+		         row("Ilex", "e1", "f1", "rutin", -20.0),
+		     1.0, 0.0);
+
+	for (const auto *loaded : {&with_outside, &without_outside}) {
+		const auto &run = loaded->runs_per_species.at(0)[0];
+		EXPECT_EQ(unknown_bin(run, 0), 0);
+		EXPECT_EQ(candidates(run, 0).at(CAFFEINE), 18);
+	}
+}
+
+TEST(TMassSpecFile_Tests, a_dominant_outside_match_gives_the_unknown_molecule_bin_0) {
+	// rho = 0.1, tau = 1, n_f = 2: the unknown weight is 0.2 + e^10, so ln of it is 10 to within
+	// 1e-5, and the candidate of ratio 1 sits round(16 * 10) = 160 below it.
+	const auto loaded = load(
+	    row("Ilex", "e1", "f1", "caffeine") + row("Ilex", "e1", "f1", "aspirin", 10.0), 0.1, 1.0);
+
+	const auto &run = loaded.runs_per_species.at(0)[0];
+	EXPECT_EQ(unknown_bin(run, 0), 0);
+	EXPECT_EQ(candidates(run, 0), (std::map<uint32_t, uint32_t>{{CAFFEINE, 160}}));
+}
+
+TEST(TMassSpecFile_Tests, an_outside_ratio_too_large_for_a_double_does_not_overflow_the_weight) {
+	// e^800 is infinite as a double. On the log scale it is an ordinary number: the unknown
+	// molecule takes bin 0 and the candidate falls past the floor.
+	const auto loaded = load(
+	    row("Ilex", "e1", "f1", "caffeine") + row("Ilex", "e1", "f1", "aspirin", 800.0), 0.1, 1.0);
+
+	const auto &run = loaded.runs_per_species.at(0)[0];
+	EXPECT_EQ(unknown_bin(run, 0), 0);
+	EXPECT_EQ(candidates(run, 0), (std::map<uint32_t, uint32_t>{{CAFFEINE, 255}}));
+	EXPECT_EQ(loaded.report.clamped_candidates, 1);
+	EXPECT_EQ(loaded.report.clamped_unknowns, 0);
+}
+
+TEST(TMassSpecFile_Tests, the_report_counts_the_outside_structures_of_loaded_features_only) {
+	// Ilex f1 has two outside structures and Quercus f1 one. Ilex f2 has no candidate, so it is not
+	// loaded and its outside structure enters no weight. Zea is not a species leaf.
+	const auto loaded =
+	    load(row("Ilex", "e1", "f1", "caffeine") + row("Ilex", "e1", "f1", "aspirin") +
+		         row("Ilex", "e1", "f1", "morphine") + row("Ilex", "e1", "f2", "aspirin") +
+		         row("Quercus", "e1", "f1", "rutin") + row("Quercus", "e1", "f1", "ibuprofen") +
+		         row("Zea", "e1", "f1", "caffeine") + row("Zea", "e1", "f1", "aspirin"),
+		     0.1, 0.5);
+
+	EXPECT_EQ(loaded.report.outside_structures, 3);
 }
 
 TEST(TMassSpecFile_Tests, a_weight_below_the_floor_takes_bin_255_and_counts_as_clamped) {
@@ -259,7 +336,7 @@ TEST(TMassSpecFile_Tests, a_molecule_leaf_named_like_the_unknown_molecule_is_an_
 	    [&] {
 		    (void)mass_spec_file::load(
 		        file.path(), SPECIES,
-		        {"caffeine", std::string(mass_spec_file::UNKNOWN_MOLECULE_NAME)}, 0.1);
+		        {"caffeine", std::string(mass_spec_file::UNKNOWN_MOLECULE_NAME)}, 0.1, 0.0);
 	    },
 	    "a molecule leaf named like the unknown molecule");
 }
@@ -274,8 +351,9 @@ TEST(TMassSpecFile_Tests, a_header_other_than_the_six_columns_in_order_is_an_err
 	      "species\textract\tfeature\tmolecule\tlog_correct_density\n",
 	      "species\textract\tfeature\tmolecule\tlog_correct_density\tlog_incorrect_density\tx\n"}) {
 		const TTempFile file("ms.tsv", header + body);
-		expect_user_error([&] { (void)mass_spec_file::load(file.path(), SPECIES, MOLECULES, 0.1); },
-		                  "header " + header);
+		expect_user_error(
+		    [&] { (void)mass_spec_file::load(file.path(), SPECIES, MOLECULES, 0.1, 0.0); },
+		    "header " + header);
 	}
 }
 
@@ -318,5 +396,13 @@ TEST(TMassSpecFile_Tests, an_unknown_rate_that_is_not_positive_and_finite_is_an_
 	for (const double unknown_rate : {0.0, -0.1, std::nan(""), HUGE_VAL, -HUGE_VAL}) {
 		expect_user_error([&] { (void)load(row("Ilex", "e1", "f1", "caffeine"), unknown_rate); },
 		                  "rho = " + std::to_string(unknown_rate));
+	}
+}
+
+TEST(TMassSpecFile_Tests, an_outside_rate_that_is_negative_or_not_finite_is_an_error) {
+	for (const double outside_rate : {-0.1, -HUGE_VAL, HUGE_VAL, std::nan("")}) {
+		expect_user_error(
+		    [&] { (void)load(row("Ilex", "e1", "f1", "caffeine"), 0.1, outside_rate); },
+		    "tau = " + std::to_string(outside_rate));
 	}
 }

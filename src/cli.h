@@ -85,6 +85,11 @@ public:
 	/// finite.
 	static inline double MS_UNKNOWN_RATE = 0.0;
 
+	/// The outside rate `tau`: the factor on an outside structure's likelihood ratio in the unknown
+	/// weight of its feature (ADR-0020). Required with `--ms_data`, no default. The mass-spec
+	/// loader checks that it is at least 0 and finite.
+	static inline double MS_OUTSIDE_RATE = 0.0;
+
 	/// Whether to write `<prefix>_assignment_posterior.txt`: the fraction of counted iterations
 	/// each feature spent on each of its candidates and on the unknown molecule. It costs a counter
 	/// per candidate of every feature, held for the whole chain, so it is off unless asked for.
@@ -208,7 +213,10 @@ public:
 		// Empty when not given. The mass-spec loader requires it, so `--help` still works without.
 		MS_DATA_FILENAME = params.get<std::string>("ms_data", "");
 		// Required with the file, so `--help` and a missing `--ms_data` are reported on their own.
-		if (!MS_DATA_FILENAME.empty()) { MS_UNKNOWN_RATE = params.get<double>("ms_unknown_rate"); }
+		if (!MS_DATA_FILENAME.empty()) {
+			MS_UNKNOWN_RATE = params.get<double>("ms_unknown_rate");
+			MS_OUTSIDE_RATE = params.get<double>("ms_outside_rate");
+		}
 		WRITE_ASSIGNMENT_POSTERIOR = params.exists("write_assignment_posterior");
 #endif
 	}
@@ -259,9 +267,15 @@ public:
 		       "'species extract feature molecule log_correct_density log_incorrect_density' "
 		       "(required in a build with mass spec, letter 'm')\n";
 		std::cout << "--ms_unknown_rate              Unknown rate rho of the mass-spec data: the "
-		             "unknown molecule's weight per structure proposed for a feature, so a "
-		             "feature's unknown weight is rho times its number of rows. Positive and "
+		             "unknown molecule's weight per structure proposed for a feature. A feature's "
+		             "unknown weight is rho times its number of proposed structures, plus tau "
+		             "times the likelihood ratios of its outside structures. Positive and "
 		             "finite. Required with --ms_data\n";
+		std::cout << "--ms_outside_rate              Outside rate tau of the mass-spec data: the "
+		             "factor on the likelihood ratio of each outside structure in the unknown "
+		             "weight of its feature. An outside structure is a proposed structure that "
+		             "is not a molecule leaf. At least 0 and finite. At 0 the unknown weight is "
+		             "rho times the number of proposed structures. Required with --ms_data\n";
 		std::cout << "--write_assignment_posterior   Write <prefix>_assignment_posterior.txt "
 		             "(needs --ms_data): one row per species, extract, feature and explanation, "
 		             "with the fraction of the counted iterations the feature spent on each of "
