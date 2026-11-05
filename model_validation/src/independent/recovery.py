@@ -125,6 +125,21 @@ class FieldScore:
     reliability: list[ReliabilityRow]
 
 
+def _posterior_on_cells(truth: pd.DataFrame, posterior: pd.DataFrame) -> pd.DataFrame:
+    """The cells of `truth` with their posterior P(Y=1) as `fraction_of_one`.
+
+    The C++ Y posterior lists only the cells that carry one. Any other cell was never a
+    one, so its fraction is 0.
+    """
+    merged = truth[["species", "molecules", "Y_state"]].merge(
+        posterior[["species", "molecules", "fraction_of_one"]],
+        on=["species", "molecules"],
+        how="left",
+    )
+    merged["fraction_of_one"] = merged["fraction_of_one"].fillna(0.0)
+    return merged
+
+
 def field_scores(
     truth: pd.DataFrame, posterior: pd.DataFrame, species_with_runs: set[str]
 ) -> dict[str, FieldScore]:
@@ -133,12 +148,7 @@ def field_scores(
     `truth` lists every cell with its `Y_state`. `posterior` is the C++ Y posterior,
     which lists only the cells that carry one: any other cell was never a one.
     """
-    merged = truth[["species", "molecules", "Y_state"]].merge(
-        posterior[["species", "molecules", "fraction_of_one"]],
-        on=["species", "molecules"],
-        how="left",
-    )
-    merged["fraction_of_one"] = merged["fraction_of_one"].fillna(0.0)
+    merged = _posterior_on_cells(truth, posterior)
     has_runs = merged["species"].isin(species_with_runs).to_numpy()
 
     scores = {}
@@ -147,6 +157,43 @@ def field_scores(
         p = merged["fraction_of_one"].to_numpy()[mask]
         scores[key] = FieldScore(int(mask.sum()), auc(y, p), reliability_table(y, p))
     return scores
+
+
+@dataclass(frozen=True)
+class FalsePresence:
+    n: int
+    """Cells scored."""
+    mean: float
+    """Mean posterior P(Y=1) over them. NaN when there are none."""
+
+
+def false_presence(
+    truth: pd.DataFrame,
+    posterior: pd.DataFrame,
+    lotus: pd.DataFrame,
+    species_with_runs: set[str],
+) -> FalsePresence:
+    """The field's posterior on the absent cells that only a run observes.
+
+    A cell counts when its truth is 0, it has no LOTUS record, and its species has at
+    least one run. In a LOTUS+MS run nothing else observes such a cell, so a rise of
+    this mean between two runs is false presence that mass spectrometry put into the
+    field. `truth` lists every cell with its `Y_state`, `posterior` is the C++ Y
+    posterior, and `lotus` lists the cells that have a record.
+    """
+    merged = _posterior_on_cells(truth, posterior)
+    cells = pd.MultiIndex.from_frame(merged[["species", "molecules"]])
+    has_record = cells.isin(pd.MultiIndex.from_frame(lotus[["species", "molecules"]]))
+    counted = (
+        (merged["Y_state"] == 0)
+        & merged["species"].isin(species_with_runs)
+        & ~has_record
+    )
+    posterior_on_counted = merged.loc[counted, "fraction_of_one"]
+    return FalsePresence(
+        n=int(counted.sum()),
+        mean=float(posterior_on_counted.mean()) if counted.any() else float("nan"),
+    )
 
 
 def runs_present(

@@ -63,6 +63,9 @@ uv run python validate_replicates.py rung2_pin_field \
     independent_y_s255_m255_seed{1..16} --gate 3
 ```
 
+`validate_replicates.py` has a second mode, the [difference report](#difference-report),
+for the scenarios that are misspecified on purpose.
+
 `visualize.py` plots a rung's inference output against the truth. Its filename
 options default to what the C++ binary writes for a scenario simulated by that
 same binary; an independent scenario names its simulation output differently, so
@@ -169,13 +172,20 @@ in none of them, and ρ is the only mass-spec truth a run is told.
 #### Mass-spec scores
 
 On a LOTUS+MS scenario `validate_independent.py` adds a `-- mass spec --` block,
-scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_ms_assignment.tsv`,
-`simulated_parameters.txt` and the rung's `acol_Y_posterior.tsv`, `acol_assignment_posterior.txt` and `acol_trace.txt`:
+scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_lotus.tsv`,
+`simulated_ms_assignment.tsv`, `simulated_parameters.txt` and the rung's `acol_Y_posterior.tsv`,
+`acol_assignment_posterior.txt` and `acol_trace.txt`:
 
 - **Field.** AUC of P(Y=1) against the true Y, and a reliability table (ten equal bins:
   mean predicted, observed frequency, count), each for species with runs and species
   without. A cell the posterior file omits was never a one and counts as 0. Reported,
   no threshold.
+- **Field false presence.** The mean P(Y=1) over the cells whose truth is 0, that have no
+  LOTUS record, and that lie in species with at least one run. In a LOTUS+MS run only a
+  run of its species observes such a cell. A rise of the score between two runs is
+  therefore false presence that mass spectrometry put into the field. A cell the
+  posterior omits counts as 0. The validator writes the score to `validation_summary.json`
+  as `field_false_presence`. Reported, no threshold.
 - **Assignment.** From `acol_assignment_posterior.txt` against
   `simulated_ms_assignment.tsv`, over every (run, feature): the accuracy of the
   posterior mode against the true assignment (a candidate molecule, or the unknown
@@ -199,6 +209,42 @@ scored by `src/independent/recovery.py` from `simulated_Y.txt`, `simulated_ms_as
 
 Pass and fail are printed and written to `validation_summary.json` under `mass_spec`;
 they do not set the exit code. Scenarios without mass spec are scored exactly as before.
+
+#### Difference report
+
+A scenario that is misspecified on purpose has no truth that its run must recover. It gets a
+size of bias, not a pass or a fail. `validate_replicates.py` prints that size in its second
+mode. The mode takes a scenario family and a baseline family with the same seeds and layout.
+For each score it prints the mean over the seeds, the baseline's mean and the difference. It
+has no gate, and `--gate` is an error with it.
+
+```bash
+# A family at rung 3 against its baseline family.
+uv run python validate_replicates.py rung3_from_data_lm \
+    independent_y_s255_m255_seed{1..16}_ms_dense_<suffix> \
+    --baseline 'independent_y_s255_m255_seed*_ms_dense'
+
+# Rung 2 (the field pinned to the truth) against rung 3 of one family.
+uv run python validate_replicates.py rung2_pin_field \
+    independent_y_s255_m255_seed{1..16}_ms_dense \
+    --baseline-rung rung3_from_data_lm
+```
+
+- `--baseline` is a glob for the baseline family's scenario directories. Quote it, so that
+  the tool expands it and not the shell. The seed in each scenario's `meta.json` pairs the
+  scenario with its baseline. The tool leaves out a match that holds no scenario, and a
+  match whose seed is no scenario's seed. A scenario seed with no match is an error. So are
+  two matches of one seed, and a match whose layout is not its scenario's.
+- `--baseline-rung` is the baseline's rung. It defaults to the rung of the scenarios.
+  Without `--baseline`, the baseline is that rung of the same scenarios.
+- The scores are: the assignment calibration (the mean posterior on the true assignment, and
+  the mean unknown posterior on unknown features), field false presence, the AUC of the field
+  for species with runs and for species without, the alpha and log nu coverage of each tree,
+  the kappa coverage (1 when its 90% interval holds the truth, so its mean is the share of
+  seeds that do), and the filter-probability coverage in each stratum of runs present.
+- A score that no seed has in both families gets no row. A seed that lacks a score in either
+  family drops out of both means of that score, so the two means average the same seeds.
+  The `seeds` column counts the seeds that remain.
 
 ### Remarks
 

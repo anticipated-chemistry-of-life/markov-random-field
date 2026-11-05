@@ -1,9 +1,14 @@
-"""The validator's per-clique coverage and the gates built on it."""
+"""The validator's per-clique coverage, the gates built on it, and its field false-presence score."""
 
 from __future__ import annotations
 
+import re
+
+import ms_fixture
 import numpy as np
 import pandas as pd
+import pytest
+from click.testing import CliRunner
 
 import validate_independent as validate
 from src.independent import recovery
@@ -79,3 +84,34 @@ def test_only_the_rung_that_pins_the_node_states_pins_them():
     assert validate._pins_node_states("rung1_pin_field_and_states")
     for rung in ("rung2_pin_field", "rung3_from_data_s", "rung3_from_data_lm"):
         assert not validate._pins_node_states(rung)
+
+
+def test_field_false_presence_counts_only_absent_cells_with_no_lotus_record_in_species_with_runs(
+    tmp_path,
+):
+    # The fixture lists five such cells: (s1,m2) 0.1, (s1,m4) 0.2, (s2,m1) 0.3,
+    # (s2,m4) 0.4, and (s2,m3), which the posterior omits and so is 0. They mean 0.2.
+    # Three kinds of cell sit at high posterior and must stay out of the score: a
+    # present cell, an absent cell with a false LOTUS record, and an absent cell in a
+    # species with no run.
+    base = ms_fixture.write_scenario(tmp_path / "scenario")
+    ms_fixture.write_rung(base, "rung3_from_data_lm")
+
+    summary = validate.score(base, "rung3_from_data_lm")
+
+    false_presence = summary["mass_spec"]["field_false_presence"]
+    assert false_presence["n"] == 5
+    assert false_presence["mean"] == pytest.approx(0.2)
+
+
+def test_the_validator_prints_the_field_false_presence_of_a_mass_spec_rung(tmp_path):
+    base = ms_fixture.write_scenario(tmp_path / "scenario")
+    ms_fixture.write_rung(base, "rung3_from_data_lm")
+
+    result = CliRunner().invoke(validate.main, [str(base), "rung3_from_data_lm"])
+
+    assert result.exit_code == 0, result.output
+    printed = re.search(r"field false presence\s+(\d+\.\d+)\s+\(n=(\d+)", result.output)
+    assert printed, result.output
+    assert float(printed.group(1)) == pytest.approx(0.2, abs=1e-3)
+    assert int(printed.group(2)) == 5

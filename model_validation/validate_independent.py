@@ -20,6 +20,11 @@ On the LOTUS+MS scenarios it also scores the mass-spec half of the model:
 
 - **field**: AUC and a reliability table of P(Y=1) against the true Y, for species
   with runs and species without. Reported, no threshold.
+- **field false presence**: the mean posterior P(Y=1) on the cells whose truth is 0,
+  that have no LOTUS record, and that lie in species with at least one run. In a
+  LOTUS+MS run only a run of its species observes such a cell, so a rise of the score
+  between two runs is false presence that mass spectrometry put into the field.
+  Reported, no threshold.
 - **assignment**: accuracy of the assignment posterior mode, the mean posterior on the
   true assignment, and the mean unknown posterior for unknown features and for
   features of a detected molecule. The posterior's format is checked first.
@@ -230,6 +235,7 @@ def _mass_spec_scores(
     if not posterior_path.exists():
         raise click.ClickException(f"No Y posterior at {posterior_path}.")
     posterior = pd.read_csv(posterior_path, sep="\t")
+    lotus = pd.read_csv(base / "simulated_lotus.tsv", sep="\t")
 
     data = pd.read_csv(base / mass_spec.DATA_FILE, sep="\t", usecols=["species"])
     species_with_runs = set(data["species"].astype(str))
@@ -244,6 +250,9 @@ def _mass_spec_scores(
     molecules = [n[len(prefix) :] for n in filters]
 
     field = recovery.field_scores(truth_y, posterior, species_with_runs)
+    false_presence = recovery.false_presence(
+        truth_y, posterior, lotus, species_with_runs
+    )
     filter_rows = recovery.coverage_by_runs(
         trace[filters].to_numpy(),
         np.array([float(parameters[n]) for n in filters]),
@@ -273,6 +282,7 @@ def _mass_spec_scores(
 
     return {
         "field": {key: asdict(score) for key, score in field.items()},
+        "field_false_presence": asdict(false_presence),
         "assignment": asdict(assignment),
         "filter_probabilities": {
             "n": len(filters),
@@ -295,6 +305,12 @@ def _report_mass_spec(scores: dict) -> None:
                 f"    [{row['low']:.1f}, {row['high']:.1f}) {row['n']:>7} "
                 f"{row['predicted']:>10.3f} {row['observed']:>9.3f}"
             )
+
+    false_presence = scores["field_false_presence"]
+    click.echo(
+        f"  field false presence {false_presence['mean']:7.4f}   "
+        f"(n={false_presence['n']} cells: absent, no LOTUS record, species with runs)"
+    )
 
     assignment = scores["assignment"]
     click.echo(f"  assignment posterior (n={assignment['n']} features):")
